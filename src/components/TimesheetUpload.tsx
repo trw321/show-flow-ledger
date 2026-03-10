@@ -12,6 +12,7 @@ interface ParsedTimeEntry {
   jobName?: string;
   description: string;
   rate?: number;
+  mealPenalties?: number;
 }
 
 export default function TimesheetUpload() {
