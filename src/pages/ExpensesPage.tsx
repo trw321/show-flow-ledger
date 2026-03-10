@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useData } from '@/lib/DataContext';
 import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
+import StatementUpload from '@/components/StatementUpload';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -72,13 +73,16 @@ export default function ExpensesPage() {
         title="Expenses"
         description={`Total: $${total.toLocaleString()}`}
         action={
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild><Button size="sm"><Plus size={16} className="mr-1" /> New Expense</Button></DialogTrigger>
+          <div className="flex gap-2">
+            <StatementUpload />
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild><Button size="sm"><Plus size={16} className="mr-1" /> New Expense</Button></DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle className="text-mono">New Expense</DialogTitle></DialogHeader>
               <ExpenseForm jobs={jobs} onSubmit={(exp) => { addExpense(exp); setOpen(false); }} />
             </DialogContent>
           </Dialog>
+          </div>
         }
       />
 
