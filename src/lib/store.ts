@@ -170,11 +170,30 @@ export function useAppData() {
     setData(prev => ({ ...prev, equipment: prev.equipment.filter(e => e.id !== id) }));
   }, []);
 
+  const addTimeEntry = useCallback((entry: Omit<TimeEntry, 'id' | 'createdAt'>) => {
+    setData(prev => ({
+      ...prev,
+      timeEntries: [...prev.timeEntries, { ...entry, id: crypto.randomUUID(), createdAt: new Date().toISOString() }],
+    }));
+  }, []);
+
+  const updateTimeEntry = useCallback((id: string, updates: Partial<TimeEntry>) => {
+    setData(prev => ({
+      ...prev,
+      timeEntries: prev.timeEntries.map(t => t.id === id ? { ...t, ...updates } : t),
+    }));
+  }, []);
+
+  const deleteTimeEntry = useCallback((id: string) => {
+    setData(prev => ({ ...prev, timeEntries: prev.timeEntries.filter(t => t.id !== id) }));
+  }, []);
+
   return {
     data,
     addJob, updateJob, deleteJob,
     addExpense, updateExpense, deleteExpense,
     addIncome, updateIncome, deleteIncome,
     addEquipment, updateEquipment, deleteEquipment,
+    addTimeEntry, updateTimeEntry, deleteTimeEntry,
   };
 }

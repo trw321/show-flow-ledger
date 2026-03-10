@@ -9,6 +9,7 @@ const navItems = [
   { to: '/expenses', icon: Receipt, label: 'Expenses' },
   { to: '/income', icon: DollarSign, label: 'Income' },
   { to: '/equipment', icon: Speaker, label: 'Equipment' },
+  { to: '/time', icon: Clock, label: 'Time Tracking' },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
