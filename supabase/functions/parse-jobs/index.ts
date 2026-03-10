@@ -37,15 +37,24 @@ serve(async (req) => {
               content: `You are a job history parser for an AV technician's bookkeeping app. Parse pasted text (from websites, spreadsheets, emails, or notes) into structured job data. Today's date is ${today}.
 
 Extract as many jobs as you can find. For each job extract:
-- name: the job/show/event name
-- client: the production company or client name
-- venue: the venue/location
-- date: in YYYY-MM-DD format (use best guess from context)
-- status: one of "upcoming", "in-progress", "completed", "cancelled" (default "completed" for past dates)
-- hourlyRate: if mentioned, the hourly rate as a number
-- notes: any additional details
+- name: the job/show/event name (e.g. "PELOSI DINNER" or the show/event title)
+- client: the production company or client name (e.g. "METRO MEDIA PRODUCTIONS INC")
+- venue: the venue/location (e.g. "Marriott - 4th & Mission")
+- date: in YYYY-MM-DD format. For 2-digit years like "2/21/26", assume 2000s (2026). Use best guess from context.
+- status: one of "upcoming", "in-progress", "completed", "cancelled" (default "completed" for past dates, "upcoming" for future)
+- hourlyRate: if mentioned, the hourly rate as a number (e.g. $55.72 -> 55.72)
+- notes: any additional details like job number, room info, call times, special instructions, contact person, union/payroll info. Combine them into a readable note.
 
-Be flexible with formats — tables, lists, paragraphs, CSV-like data, etc. If you can't determine a field, use an empty string or omit it.`,
+Common AV industry formats include:
+- Job numbers (e.g. 2026-0496)
+- Call times (e.g. 08:00 AM - 05:00 PM)  
+- Setup descriptions (e.g. "SETUP: HANG, FOCUS CB")
+- Union/payroll references
+- Rate codes (e.g. "2023-2028 BASIC ENTERTAINMENT")
+- Contact names
+- Room/salon numbers
+
+Be flexible with formats — tables, lists, paragraphs, CSV-like data, concatenated text without clear delimiters, etc. If you can't determine a field, use an empty string or omit it.`,
             },
             { role: "user", content: text },
           ],
