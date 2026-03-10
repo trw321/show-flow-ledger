@@ -86,6 +86,10 @@ export default function TimesheetUpload() {
     });
   };
 
+  const updateEntry = (idx: number, field: keyof ParsedTimeEntry, value: string | number) => {
+    setEntries(prev => prev.map((e, i) => i === idx ? { ...e, [field]: value } : e));
+  };
+
   const addSelected = () => {
     let count = 0;
     entries.forEach((entry, i) => {
@@ -169,19 +173,33 @@ export default function TimesheetUpload() {
                     <th className="text-left px-3 py-2">Description</th>
                     <th className="text-right px-3 py-2">Hours</th>
                     <th className="text-right px-3 py-2">Rate</th>
+                    <th className="text-right px-3 py-2">MP</th>
                   </tr>
                 </thead>
                 <tbody>
                   {entries.map((entry, i) => (
-                    <tr key={i} onClick={() => toggleSelect(i)} className={`border-t border-border cursor-pointer transition-colors ${selected.has(i) ? 'bg-primary/5' : 'hover:bg-secondary/30'}`}>
-                      <td className="px-3 py-2 text-center">
+                    <tr key={i} className={`border-t border-border transition-colors ${selected.has(i) ? 'bg-primary/5' : 'hover:bg-secondary/30'}`}>
+                      <td className="px-3 py-2 text-center cursor-pointer" onClick={() => toggleSelect(i)}>
                         {selected.has(i) ? <Check size={14} className="text-primary" /> : <span className="w-3.5 h-3.5 rounded-sm border border-border inline-block" />}
                       </td>
-                      <td className="px-3 py-2 text-mono text-xs">{entry.date}</td>
-                      <td className="px-3 py-2 font-medium">{entry.client}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{entry.description}</td>
-                      <td className="px-3 py-2 text-right text-mono font-bold">{entry.hours}</td>
-                      <td className="px-3 py-2 text-right text-mono">{entry.rate ? `$${entry.rate}` : '—'}</td>
+                      <td className="px-3 py-2">
+                        <input type="date" value={entry.date} onChange={e => updateEntry(i, 'date', e.target.value)} className="bg-transparent border-b border-border/50 text-xs text-mono w-28 focus:outline-none focus:border-primary" />
+                      </td>
+                      <td className="px-3 py-2">
+                        <input value={entry.client} onChange={e => updateEntry(i, 'client', e.target.value)} className="bg-transparent border-b border-border/50 text-sm w-full focus:outline-none focus:border-primary" />
+                      </td>
+                      <td className="px-3 py-2">
+                        <input value={entry.description} onChange={e => updateEntry(i, 'description', e.target.value)} className="bg-transparent border-b border-border/50 text-sm text-muted-foreground w-full focus:outline-none focus:border-primary" />
+                      </td>
+                      <td className="px-3 py-2">
+                        <input type="number" step="0.25" min="0" value={entry.hours} onChange={e => updateEntry(i, 'hours', parseFloat(e.target.value) || 0)} className="bg-transparent border-b border-border/50 text-sm text-mono font-bold text-right w-16 focus:outline-none focus:border-primary" />
+                      </td>
+                      <td className="px-3 py-2">
+                        <input type="number" step="0.01" min="0" value={entry.rate || ''} onChange={e => updateEntry(i, 'rate', parseFloat(e.target.value) || 0)} placeholder="—" className="bg-transparent border-b border-border/50 text-sm text-mono text-right w-16 focus:outline-none focus:border-primary" />
+                      </td>
+                      <td className="px-3 py-2">
+                        <input type="number" min="0" value={entry.mealPenalties || 0} onChange={e => updateEntry(i, 'mealPenalties', parseInt(e.target.value) || 0)} className="bg-transparent border-b border-border/50 text-sm text-mono text-right w-10 focus:outline-none focus:border-primary" />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
