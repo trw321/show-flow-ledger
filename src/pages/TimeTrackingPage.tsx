@@ -62,6 +62,7 @@ function TimeEntryForm({ onSubmit, initial, onCancel, jobs }: {
       client: client.trim(),
       jobId: jobId || undefined,
       description: description.trim(),
+      mealPenalties: parseInt(mealPenalties) || 0,
       notes: notes.trim(),
       attachments,
     });
