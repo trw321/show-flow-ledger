@@ -25,6 +25,7 @@ function TimeEntryForm({ onSubmit, initial, onCancel, jobs }: {
   const [client, setClient] = useState(initial?.client ?? '');
   const [jobId, setJobId] = useState(initial?.jobId ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
+  const [mealPenalties, setMealPenalties] = useState(String(initial?.mealPenalties ?? '0'));
   const [notes, setNotes] = useState(initial?.notes ?? '');
   const [attachments, setAttachments] = useState<string[]>(initial?.attachments ?? []);
   const fileInputRef = useRef<HTMLInputElement>(null);
