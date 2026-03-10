@@ -118,40 +118,8 @@ serve(async (req) => {
             ],
           },
         ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "extract_expenses",
-              description: "Extract expense transactions from a bank statement or receipt",
-              parameters: {
-                type: "object",
-                properties: {
-                  transactions: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        description: { type: "string" },
-                        amount: { type: "number" },
-                        date: { type: "string", description: "YYYY-MM-DD format" },
-                        category: {
-                          type: "string",
-                          enum: ["Travel", "Gear Rental", "Consumables", "Fuel", "Meals", "Lodging", "Labor", "Insurance", "Software", "Other"],
-                        },
-                      },
-                      required: ["description", "amount", "date", "category"],
-                      additionalProperties: false,
-                    },
-                  },
-                },
-                required: ["transactions"],
-                additionalProperties: false,
-              },
-            },
-          },
-        ],
-        tool_choice: { type: "function", function: { name: "extract_expenses" } },
+        tools: [toolDef],
+        tool_choice: { type: "function", function: { name: toolName } },
       }),
     });
 
