@@ -8,8 +8,10 @@ export interface Job {
   date: string;
   status: 'upcoming' | 'in-progress' | 'completed' | 'cancelled';
   paySchedule?: 'weekly' | 'bi-weekly' | 'semi-monthly' | 'monthly' | 'per-project';
-  payPeriodStart?: string; // anchor date for pay period calculation
+  payPeriodStart?: string;
   hourlyRate?: number;
+  minimumHours?: number; // e.g. 5-hour minimum per call
+  has6th7thDayRule?: boolean; // 6th day = 1.5x, 7th day = 2x
   notes: string;
   createdAt: string;
 }
