@@ -82,6 +82,7 @@ export default function ExpensesPage() {
               <ExpenseForm jobs={jobs} onSubmit={(exp) => { addExpense(exp); setOpen(false); }} />
             </DialogContent>
           </Dialog>
+          </div>
         }
       />
 
