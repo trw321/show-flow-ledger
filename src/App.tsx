@@ -10,6 +10,7 @@ import JobsPage from "@/pages/JobsPage";
 import ExpensesPage from "@/pages/ExpensesPage";
 import IncomePage from "@/pages/IncomePage";
 import EquipmentPage from "@/pages/EquipmentPage";
+import TimeTrackingPage from "@/pages/TimeTrackingPage";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => (
               <Route path="/expenses" element={<ExpensesPage />} />
               <Route path="/income" element={<IncomePage />} />
               <Route path="/equipment" element={<EquipmentPage />} />
+              <Route path="/time" element={<TimeTrackingPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AppLayout>

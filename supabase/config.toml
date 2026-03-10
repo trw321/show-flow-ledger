@@ -2,3 +2,6 @@ project_id = "xuyugyyuuakcexfirqii"
 
 [functions.parse-statement]
 verify_jwt = false
+
+[functions.parse-time-entry]
+verify_jwt = false

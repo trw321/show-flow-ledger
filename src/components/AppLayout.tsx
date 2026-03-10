@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Briefcase, Receipt, DollarSign, Speaker, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Receipt, DollarSign, Speaker, Clock, Menu, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -9,6 +9,7 @@ const navItems = [
   { to: '/expenses', icon: Receipt, label: 'Expenses' },
   { to: '/income', icon: DollarSign, label: 'Income' },
   { to: '/equipment', icon: Speaker, label: 'Equipment' },
+  { to: '/time', icon: Clock, label: 'Time Tracking' },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
