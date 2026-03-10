@@ -336,7 +336,7 @@ export default function TimeTrackingPage() {
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditId(entry.id)}>
                           <Pencil size={14} />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteTimeEntry(entry.id)}>
+                        <Button variant="destructive" size="icon" className="h-7 w-7" onClick={() => { deleteTimeEntry(entry.id); toast.success('Entry deleted'); }}>
                           <Trash2 size={14} />
                         </Button>
                       </div>
