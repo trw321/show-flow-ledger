@@ -12,12 +12,19 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const { imageBase64, mimeType, type = "expense" } = await req.json();
+    const { imageBase64, mimeType, type = "expense", jobs } = await req.json();
     if (!imageBase64) throw new Error("No image provided");
 
     const isIncome = type === "income";
+    const isTimesheet = type === "timesheet";
 
-    const systemPrompt = isIncome
+    const jobsList = jobs?.length
+      ? `Available jobs to match against: ${jobs.map((j: { name: string; client: string }) => `"${j.name}" (client: ${j.client})`).join(", ")}`
+      : "";
+
+    const systemPrompt = isTimesheet
+      ? `You are a timesheet and work note parser for an AV technician. Analyze the uploaded image of handwritten notes, timesheets, call sheets, or schedules. Extract every work session/entry you can find. For each entry extract: date (YYYY-MM-DD), hours worked (as a number), client name, job/project name, description of work done, and hourly rate if visible (default 0). Interpret shorthand like "in 8a out 4p" as 8 hours. Calculate hours from clock-in/clock-out times when shown. ${jobsList} If you can't determine the date, use today's date ${new Date().toISOString().split("T")[0]}.`
+      : isIncome
       ? `You are a financial document parser specializing in bank statements and invoices. Extract all incoming payments/deposits/credits you can identify. For each transaction extract: client (who paid), description, amount (as a positive number), date (as YYYY-MM-DD), and invoiceNumber (if visible). If you can't determine the date, use today's date. Return ONLY valid JSON.`
       : `You are a financial document parser specializing in bank statements and receipts. Extract all transactions/line items you can identify. For each transaction extract: description, amount (as a number), date (as YYYY-MM-DD), and category. Categories should be one of: Travel, Gear Rental, Consumables, Fuel, Meals, Lodging, Labor, Insurance, Software, Other. If you can't determine the category, use "Other". If you can't determine the date, use today's date. Return ONLY valid JSON.`;
 
