@@ -209,7 +209,10 @@ serve(async (req) => {
     }
 
     const result = JSON.parse(toolCall.function.arguments);
-    return new Response(JSON.stringify({ transactions: result.transactions }), {
+    const responseBody = isTimesheet
+      ? { entries: result.entries }
+      : { transactions: result.transactions };
+    return new Response(JSON.stringify(responseBody), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
