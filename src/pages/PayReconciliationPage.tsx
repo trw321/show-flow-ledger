@@ -97,7 +97,10 @@ export default function PayReconciliationPage() {
         });
 
         const totalHours = periodEntries.reduce((s, t) => s + t.hours, 0);
-        const expectedPay = periodEntries.reduce((s, t) => s + (t.hours * (t.rate || job.hourlyRate || 0)), 0);
+
+        // Use the pay calculation engine with OT, minimums, 6th/7th day rules
+        const payResult = calculateExpectedPay(periodEntries, job, data.timeEntries);
+        const expectedPay = payResult.total;
         const actualPaid = periodIncome.reduce((s, i) => s + i.amount, 0);
 
         if (totalHours > 0 || actualPaid > 0) {
@@ -111,9 +114,7 @@ export default function PayReconciliationPage() {
             expectedPay,
             actualPaid,
             difference: actualPaid - expectedPay,
-            timeEntryDetails: periodEntries.map(t => ({
-              date: t.date, hours: t.hours, rate: t.rate, description: t.description,
-            })),
+            timeEntryDetails: payResult.details,
             incomeDetails: periodIncome.map(i => ({
               date: i.date, amount: i.amount, description: i.description, invoiceNumber: i.invoiceNumber,
             })),
