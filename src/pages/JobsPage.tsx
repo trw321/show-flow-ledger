@@ -22,12 +22,20 @@ function JobForm({ onSubmit, initial, onCancel }: {
   const [venue, setVenue] = useState(initial?.venue ?? '');
   const [date, setDate] = useState(initial?.date ?? new Date().toISOString().split('T')[0]);
   const [status, setStatus] = useState<Job['status']>(initial?.status ?? 'upcoming');
+  const [paySchedule, setPaySchedule] = useState<Job['paySchedule']>(initial?.paySchedule ?? undefined);
+  const [payPeriodStart, setPayPeriodStart] = useState(initial?.payPeriodStart ?? '');
+  const [hourlyRate, setHourlyRate] = useState(initial?.hourlyRate?.toString() ?? '');
   const [notes, setNotes] = useState(initial?.notes ?? '');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    onSubmit({ name: name.trim(), client: client.trim(), venue: venue.trim(), date, status, notes: notes.trim() });
+    onSubmit({
+      name: name.trim(), client: client.trim(), venue: venue.trim(), date, status, notes: notes.trim(),
+      paySchedule: paySchedule || undefined,
+      payPeriodStart: payPeriodStart || undefined,
+      hourlyRate: hourlyRate ? parseFloat(hourlyRate) : undefined,
+    });
   };
 
   return (
