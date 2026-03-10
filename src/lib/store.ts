@@ -7,6 +7,9 @@ export interface Job {
   venue: string;
   date: string;
   status: 'upcoming' | 'in-progress' | 'completed' | 'cancelled';
+  paySchedule?: 'weekly' | 'bi-weekly' | 'semi-monthly' | 'monthly' | 'per-project';
+  payPeriodStart?: string; // anchor date for pay period calculation
+  hourlyRate?: number;
   notes: string;
   createdAt: string;
 }
