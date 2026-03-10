@@ -28,11 +28,44 @@ serve(async (req) => {
       ? `You are a financial document parser specializing in bank statements and invoices. Extract all incoming payments/deposits/credits you can identify. For each transaction extract: client (who paid), description, amount (as a positive number), date (as YYYY-MM-DD), and invoiceNumber (if visible). If you can't determine the date, use today's date. Return ONLY valid JSON.`
       : `You are a financial document parser specializing in bank statements and receipts. Extract all transactions/line items you can identify. For each transaction extract: description, amount (as a number), date (as YYYY-MM-DD), and category. Categories should be one of: Travel, Gear Rental, Consumables, Fuel, Meals, Lodging, Labor, Insurance, Software, Other. If you can't determine the category, use "Other". If you can't determine the date, use today's date. Return ONLY valid JSON.`;
 
-    const userPrompt = isIncome
+    const userPrompt = isTimesheet
+      ? "Extract all work sessions/time entries from this handwritten note, timesheet, call sheet, or schedule image. Calculate hours from any clock-in/clock-out times. Return structured time entries."
+      : isIncome
       ? "Extract all income/payment/deposit transactions from this bank statement or invoice image. Return a JSON array of objects with fields: client, description, amount, date, invoiceNumber."
       : "Extract all expense transactions from this bank statement or receipt image. Return a JSON array of objects with fields: description, amount, date, category.";
 
-    const toolDef = isIncome
+    const toolDef = isTimesheet
+      ? {
+          type: "function" as const,
+          function: {
+            name: "extract_time_entries",
+            description: "Extract time/work entries from a timesheet, note, or schedule image",
+            parameters: {
+              type: "object",
+              properties: {
+                entries: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      date: { type: "string", description: "YYYY-MM-DD format" },
+                      hours: { type: "number", description: "Hours worked" },
+                      client: { type: "string", description: "Client or company name" },
+                      jobName: { type: "string", description: "Job or project name" },
+                      description: { type: "string", description: "Description of work done" },
+                      rate: { type: "number", description: "Hourly rate if visible, 0 otherwise" },
+                    },
+                    required: ["date", "hours", "client", "description"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+              required: ["entries"],
+              additionalProperties: false,
+            },
+          },
+        }
+      : isIncome
       ? {
           type: "function" as const,
           function: {
