@@ -262,10 +262,12 @@ export default function TimeTrackingPage() {
         title="Time Tracking"
         description="Log hours worked, link to jobs, and track earnings"
         action={
-          <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setVoicePrefill(undefined); }}>
-            <DialogTrigger asChild>
-              <Button size="sm"><Plus size={16} className="mr-1" /> New Entry</Button>
-            </DialogTrigger>
+          <div className="flex gap-2">
+            <TimesheetUpload />
+            <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setVoicePrefill(undefined); }}>
+              <DialogTrigger asChild>
+                <Button size="sm"><Plus size={16} className="mr-1" /> New Entry</Button>
+              </DialogTrigger>
             <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
               <DialogHeader><DialogTitle className="text-mono">New Time Entry</DialogTitle></DialogHeader>
               <VoiceInput onParsed={handleVoiceParsed} jobs={jobs} />
