@@ -86,6 +86,10 @@ export default function TimesheetUpload() {
     });
   };
 
+  const updateEntry = (idx: number, field: keyof ParsedTimeEntry, value: string | number) => {
+    setEntries(prev => prev.map((e, i) => i === idx ? { ...e, [field]: value } : e));
+  };
+
   const addSelected = () => {
     let count = 0;
     entries.forEach((entry, i) => {
