@@ -300,18 +300,17 @@ export default function TimeTrackingPage() {
       {data.timeEntries.length === 0 ? (
         <EmptyState icon={Clock} title="No time entries yet" description="Log your first hours worked to start tracking." />
       ) : (
-        <div className="rounded-lg border border-border overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="rounded-lg border border-border overflow-x-auto">
+          <table className="w-full text-sm min-w-[700px]">
             <thead>
               <tr className="bg-secondary/50 text-muted-foreground text-xs uppercase tracking-wider text-mono">
                 <th className="text-left px-4 py-3">Date</th>
                 <th className="text-left px-4 py-3">Description</th>
                 <th className="text-left px-4 py-3">Client</th>
-                <th className="text-left px-4 py-3">Job</th>
                 <th className="text-right px-4 py-3">Hours</th>
                 <th className="text-right px-4 py-3">Rate</th>
                 <th className="text-right px-4 py-3">Total</th>
-                <th className="px-4 py-3"></th>
+                <th className="px-4 py-3 text-right sticky right-0 bg-secondary/50">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -322,21 +321,21 @@ export default function TimeTrackingPage() {
                     <td className="px-4 py-3 text-mono text-xs">{format(new Date(entry.date), 'MMM d, yyyy')}</td>
                     <td className="px-4 py-3 font-medium">
                       {entry.description}
+                      {job && <span className="text-muted-foreground text-xs ml-1">({job.name})</span>}
                       {entry.attachments?.length > 0 && (
                         <Paperclip size={12} className="inline ml-1 text-muted-foreground" />
                       )}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{entry.client}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{job?.name ?? '—'}</td>
                     <td className="px-4 py-3 text-right text-mono">{entry.hours}</td>
                     <td className="px-4 py-3 text-right text-mono">${entry.rate}</td>
                     <td className="px-4 py-3 text-right text-mono font-bold text-success">${(entry.hours * entry.rate).toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right sticky right-0 bg-background">
                       <div className="flex gap-1 justify-end">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditId(entry.id)}>
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setEditId(entry.id)}>
                           <Pencil size={14} />
                         </Button>
-                        <Button variant="destructive" size="icon" className="h-7 w-7" onClick={() => { deleteTimeEntry(entry.id); toast.success('Entry deleted'); }}>
+                        <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => { deleteTimeEntry(entry.id); toast.success('Entry deleted'); }}>
                           <Trash2 size={14} />
                         </Button>
                       </div>
