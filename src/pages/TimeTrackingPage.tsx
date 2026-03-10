@@ -86,6 +86,7 @@ function TimeEntryForm({ onSubmit, initial, onCancel, jobs }: {
         </SelectContent>
       </Select>
       <Input placeholder="Description" value={description} onChange={e => setDescription(e.target.value)} />
+      <Input type="number" min="0" placeholder="Meal penalties (# of penalties)" value={mealPenalties} onChange={e => setMealPenalties(e.target.value)} />
       <Textarea placeholder="Notes" value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
       
       {/* Attachments */}

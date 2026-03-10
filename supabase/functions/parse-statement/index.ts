@@ -49,11 +49,12 @@ serve(async (req) => {
                     type: "object",
                     properties: {
                       date: { type: "string", description: "YYYY-MM-DD format" },
-                      hours: { type: "number", description: "Hours worked" },
+                      hours: { type: "number", description: "Hours worked (after subtracting walk-away breaks)" },
                       client: { type: "string", description: "Client or company name" },
                       jobName: { type: "string", description: "Job or project name" },
                       description: { type: "string", description: "Description of work done" },
                       rate: { type: "number", description: "Hourly rate if visible, 0 otherwise" },
+                      mealPenalties: { type: "number", description: "Number of meal penalties (MP), 0 if none" },
                     },
                     required: ["date", "hours", "client", "description"],
                     additionalProperties: false,
