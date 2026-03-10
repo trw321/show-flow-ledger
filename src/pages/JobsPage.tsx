@@ -103,15 +103,18 @@ export default function JobsPage() {
         title="Jobs"
         description="Track AV gigs, clients, and venues"
         action={
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm"><Plus size={16} className="mr-1" /> New Job</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle className="text-mono">New Job</DialogTitle></DialogHeader>
-              <JobForm onSubmit={(job) => { addJob(job); setOpen(false); }} />
-            </DialogContent>
-          </Dialog>
+          <div className="flex gap-2">
+            <JobPasteImport onImport={addJob} />
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm"><Plus size={16} className="mr-1" /> New Job</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle className="text-mono">New Job</DialogTitle></DialogHeader>
+                <JobForm onSubmit={(job) => { addJob(job); setOpen(false); }} />
+              </DialogContent>
+            </Dialog>
+          </div>
         }
       />
 
