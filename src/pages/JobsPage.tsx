@@ -73,6 +73,13 @@ function JobForm({ onSubmit, initial, onCancel }: {
         <Input type="date" placeholder="Pay period start" value={payPeriodStart} onChange={e => setPayPeriodStart(e.target.value)} />
         <Input type="number" step="0.01" placeholder="Hourly rate" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} />
       </div>
+      <div className="grid grid-cols-2 gap-4">
+        <Input type="number" step="0.5" min="0" placeholder="Minimum hours (e.g. 5)" value={minimumHours} onChange={e => setMinimumHours(e.target.value)} />
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <input type="checkbox" checked={has6th7thDayRule} onChange={e => setHas6th7thDayRule(e.target.checked)} className="rounded border-border" />
+          <span>6th/7th day rule (1.5× / 2×)</span>
+        </label>
+      </div>
       <Input placeholder="Notes" value={notes} onChange={e => setNotes(e.target.value)} />
       <div className="flex gap-2 justify-end">
         {onCancel && <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>}

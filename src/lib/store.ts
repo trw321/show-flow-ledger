@@ -60,8 +60,9 @@ export interface TimeEntry {
   hours: number;
   rate: number;
   date: string;
+  mealPenalties?: number; // number of meal penalties (each = 1hr straight rate)
   notes: string;
-  attachments: string[]; // base64 data URIs for note images
+  attachments: string[];
   createdAt: string;
 }
 
