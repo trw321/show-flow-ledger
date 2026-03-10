@@ -25,6 +25,8 @@ function JobForm({ onSubmit, initial, onCancel }: {
   const [paySchedule, setPaySchedule] = useState<Job['paySchedule']>(initial?.paySchedule ?? undefined);
   const [payPeriodStart, setPayPeriodStart] = useState(initial?.payPeriodStart ?? '');
   const [hourlyRate, setHourlyRate] = useState(initial?.hourlyRate?.toString() ?? '');
+  const [minimumHours, setMinimumHours] = useState(initial?.minimumHours?.toString() ?? '');
+  const [has6th7thDayRule, setHas6th7thDayRule] = useState(initial?.has6th7thDayRule ?? false);
   const [notes, setNotes] = useState(initial?.notes ?? '');
 
   const handleSubmit = (e: React.FormEvent) => {
