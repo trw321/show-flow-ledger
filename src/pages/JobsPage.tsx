@@ -37,6 +37,8 @@ function JobForm({ onSubmit, initial, onCancel }: {
       paySchedule: paySchedule || undefined,
       payPeriodStart: payPeriodStart || undefined,
       hourlyRate: hourlyRate ? parseFloat(hourlyRate) : undefined,
+      minimumHours: minimumHours ? parseFloat(minimumHours) : undefined,
+      has6th7thDayRule,
     });
   };
 
