@@ -98,6 +98,7 @@ export default function TimesheetUpload() {
           client: entry.client || matchedJob?.client || '',
           jobId: matchedJob?.id,
           description: entry.description,
+          mealPenalties: entry.mealPenalties || 0,
           notes: '',
           attachments: [],
         });
