@@ -278,6 +278,7 @@ export default function TimeTrackingPage() {
               />
             </DialogContent>
           </Dialog>
+          </div>
         }
       />
 
