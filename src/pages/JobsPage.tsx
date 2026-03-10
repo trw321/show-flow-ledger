@@ -54,6 +54,21 @@ function JobForm({ onSubmit, initial, onCancel }: {
           {statusOptions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
         </SelectContent>
       </Select>
+      <div className="grid grid-cols-3 gap-4">
+        <Select value={paySchedule || 'none'} onValueChange={(v) => setPaySchedule(v === 'none' ? undefined : v as Job['paySchedule'])}>
+          <SelectTrigger><SelectValue placeholder="Pay schedule" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">No schedule</SelectItem>
+            <SelectItem value="weekly">Weekly</SelectItem>
+            <SelectItem value="bi-weekly">Bi-weekly</SelectItem>
+            <SelectItem value="semi-monthly">Semi-monthly</SelectItem>
+            <SelectItem value="monthly">Monthly</SelectItem>
+            <SelectItem value="per-project">Per project</SelectItem>
+          </SelectContent>
+        </Select>
+        <Input type="date" placeholder="Pay period start" value={payPeriodStart} onChange={e => setPayPeriodStart(e.target.value)} />
+        <Input type="number" step="0.01" placeholder="Hourly rate" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} />
+      </div>
       <Input placeholder="Notes" value={notes} onChange={e => setNotes(e.target.value)} />
       <div className="flex gap-2 justify-end">
         {onCancel && <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>}
