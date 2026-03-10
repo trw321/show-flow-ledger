@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Briefcase, Plus, Trash2, Pencil } from 'lucide-react';
+import JobPasteImport from '@/components/JobPasteImport';
 import { format } from 'date-fns';
 import type { Job } from '@/lib/store';
 
@@ -102,15 +103,18 @@ export default function JobsPage() {
         title="Jobs"
         description="Track AV gigs, clients, and venues"
         action={
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm"><Plus size={16} className="mr-1" /> New Job</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle className="text-mono">New Job</DialogTitle></DialogHeader>
-              <JobForm onSubmit={(job) => { addJob(job); setOpen(false); }} />
-            </DialogContent>
-          </Dialog>
+          <div className="flex gap-2">
+            <JobPasteImport onImport={addJob} />
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm"><Plus size={16} className="mr-1" /> New Job</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle className="text-mono">New Job</DialogTitle></DialogHeader>
+                <JobForm onSubmit={(job) => { addJob(job); setOpen(false); }} />
+              </DialogContent>
+            </Dialog>
+          </div>
         }
       />
 
