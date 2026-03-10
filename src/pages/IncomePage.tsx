@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useData } from '@/lib/DataContext';
 import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
+import IncomeStatementUpload from '@/components/IncomeStatementUpload';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -80,6 +81,7 @@ export default function IncomePage() {
         action={
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild><Button size="sm"><Plus size={16} className="mr-1" /> New Income</Button></DialogTrigger>
+            <IncomeStatementUpload />
             <DialogContent>
               <DialogHeader><DialogTitle className="text-mono">New Income</DialogTitle></DialogHeader>
               <IncomeForm jobs={jobs} onSubmit={(inc) => { addIncome(inc); setOpen(false); }} />
