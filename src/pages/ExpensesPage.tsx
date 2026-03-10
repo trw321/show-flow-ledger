@@ -73,8 +73,10 @@ export default function ExpensesPage() {
         title="Expenses"
         description={`Total: $${total.toLocaleString()}`}
         action={
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild><Button size="sm"><Plus size={16} className="mr-1" /> New Expense</Button></DialogTrigger>
+          <div className="flex gap-2">
+            <StatementUpload />
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild><Button size="sm"><Plus size={16} className="mr-1" /> New Expense</Button></DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle className="text-mono">New Expense</DialogTitle></DialogHeader>
               <ExpenseForm jobs={jobs} onSubmit={(exp) => { addExpense(exp); setOpen(false); }} />
