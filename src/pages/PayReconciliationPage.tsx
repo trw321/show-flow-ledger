@@ -57,7 +57,7 @@ interface ReconciliationRow {
   expectedPay: number;
   actualPaid: number;
   difference: number;
-  timeEntryDetails: { date: string; hours: number; rate: number; description: string }[];
+  timeEntryDetails: { date: string; hours: number; pay: number; breakdown: string[] }[];
   incomeDetails: { date: string; amount: number; description: string; invoiceNumber?: string }[];
 }
 
