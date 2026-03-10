@@ -100,14 +100,14 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `You are a financial document parser specializing in bank statements and receipts. Extract all transactions/line items you can identify. For each transaction extract: description, amount (as a number), date (as YYYY-MM-DD), and category. Categories should be one of: Travel, Gear Rental, Consumables, Fuel, Meals, Lodging, Labor, Insurance, Software, Other. If you can't determine the category, use "Other". If you can't determine the date, use today's date. Return ONLY valid JSON.`,
+            content: systemPrompt,
           },
           {
             role: "user",
             content: [
               {
                 type: "text",
-                text: "Extract all expense transactions from this bank statement or receipt image. Return a JSON array of objects with fields: description, amount, date, category.",
+                text: userPrompt,
               },
               {
                 type: "image_url",
