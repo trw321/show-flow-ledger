@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Scale, ChevronDown, ChevronUp, AlertTriangle, CheckCircle } from 'lucide-react';
 import { format, addDays, addWeeks, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
+import { calculateExpectedPay } from '@/lib/payCalc';
 import type { Job } from '@/lib/store';
 
 function getPayPeriods(job: Job, rangeStart: Date, rangeEnd: Date) {
@@ -56,7 +57,7 @@ interface ReconciliationRow {
   expectedPay: number;
   actualPaid: number;
   difference: number;
-  timeEntryDetails: { date: string; hours: number; rate: number; description: string }[];
+  timeEntryDetails: { date: string; hours: number; pay: number; breakdown: string[] }[];
   incomeDetails: { date: string; amount: number; description: string; invoiceNumber?: string }[];
 }
 
@@ -96,7 +97,10 @@ export default function PayReconciliationPage() {
         });
 
         const totalHours = periodEntries.reduce((s, t) => s + t.hours, 0);
-        const expectedPay = periodEntries.reduce((s, t) => s + (t.hours * (t.rate || job.hourlyRate || 0)), 0);
+
+        // Use the pay calculation engine with OT, minimums, 6th/7th day rules
+        const payResult = calculateExpectedPay(periodEntries, job, data.timeEntries);
+        const expectedPay = payResult.total;
         const actualPaid = periodIncome.reduce((s, i) => s + i.amount, 0);
 
         if (totalHours > 0 || actualPaid > 0) {
@@ -110,9 +114,7 @@ export default function PayReconciliationPage() {
             expectedPay,
             actualPaid,
             difference: actualPaid - expectedPay,
-            timeEntryDetails: periodEntries.map(t => ({
-              date: t.date, hours: t.hours, rate: t.rate, description: t.description,
-            })),
+            timeEntryDetails: payResult.details,
             incomeDetails: periodIncome.map(i => ({
               date: i.date, amount: i.amount, description: i.description, invoiceNumber: i.invoiceNumber,
             })),
@@ -239,9 +241,18 @@ export default function PayReconciliationPage() {
                               ) : (
                                 <div className="space-y-1">
                                   {row.timeEntryDetails.map((t, j) => (
-                                    <div key={j} className="flex justify-between items-center rounded bg-background px-3 py-1.5 text-xs">
-                                      <span>{format(parseISO(t.date), 'MMM d')} — {t.description || 'No description'}</span>
-                                      <span className="text-mono font-medium">{t.hours}h × ${t.rate} = ${(t.hours * t.rate).toFixed(2)}</span>
+                                    <div key={j} className="rounded bg-background px-3 py-1.5 text-xs">
+                                      <div className="flex justify-between items-center">
+                                        <span>{format(parseISO(t.date), 'MMM d')} — {t.hours}h worked</span>
+                                        <span className="text-mono font-medium">${t.pay.toFixed(2)}</span>
+                                      </div>
+                                      {t.breakdown.length > 0 && (
+                                        <div className="mt-1 text-muted-foreground space-y-0.5 pl-2 border-l border-border">
+                                          {t.breakdown.map((line, k) => (
+                                            <p key={k}>{line}</p>
+                                          ))}
+                                        </div>
+                                      )}
                                     </div>
                                   ))}
                                 </div>

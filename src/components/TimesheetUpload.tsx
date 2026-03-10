@@ -12,6 +12,7 @@ interface ParsedTimeEntry {
   jobName?: string;
   description: string;
   rate?: number;
+  mealPenalties?: number;
 }
 
 export default function TimesheetUpload() {
@@ -97,6 +98,7 @@ export default function TimesheetUpload() {
           client: entry.client || matchedJob?.client || '',
           jobId: matchedJob?.id,
           description: entry.description,
+          mealPenalties: entry.mealPenalties || 0,
           notes: '',
           attachments: [],
         });

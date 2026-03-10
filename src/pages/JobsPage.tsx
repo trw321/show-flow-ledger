@@ -25,6 +25,8 @@ function JobForm({ onSubmit, initial, onCancel }: {
   const [paySchedule, setPaySchedule] = useState<Job['paySchedule']>(initial?.paySchedule ?? undefined);
   const [payPeriodStart, setPayPeriodStart] = useState(initial?.payPeriodStart ?? '');
   const [hourlyRate, setHourlyRate] = useState(initial?.hourlyRate?.toString() ?? '');
+  const [minimumHours, setMinimumHours] = useState(initial?.minimumHours?.toString() ?? '');
+  const [has6th7thDayRule, setHas6th7thDayRule] = useState(initial?.has6th7thDayRule ?? false);
   const [notes, setNotes] = useState(initial?.notes ?? '');
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -35,6 +37,8 @@ function JobForm({ onSubmit, initial, onCancel }: {
       paySchedule: paySchedule || undefined,
       payPeriodStart: payPeriodStart || undefined,
       hourlyRate: hourlyRate ? parseFloat(hourlyRate) : undefined,
+      minimumHours: minimumHours ? parseFloat(minimumHours) : undefined,
+      has6th7thDayRule,
     });
   };
 
@@ -68,6 +72,13 @@ function JobForm({ onSubmit, initial, onCancel }: {
         </Select>
         <Input type="date" placeholder="Pay period start" value={payPeriodStart} onChange={e => setPayPeriodStart(e.target.value)} />
         <Input type="number" step="0.01" placeholder="Hourly rate" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <Input type="number" step="0.5" min="0" placeholder="Minimum hours (e.g. 5)" value={minimumHours} onChange={e => setMinimumHours(e.target.value)} />
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <input type="checkbox" checked={has6th7thDayRule} onChange={e => setHas6th7thDayRule(e.target.checked)} className="rounded border-border" />
+          <span>6th/7th day rule (1.5× / 2×)</span>
+        </label>
       </div>
       <Input placeholder="Notes" value={notes} onChange={e => setNotes(e.target.value)} />
       <div className="flex gap-2 justify-end">

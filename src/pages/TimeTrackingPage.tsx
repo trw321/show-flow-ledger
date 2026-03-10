@@ -25,6 +25,7 @@ function TimeEntryForm({ onSubmit, initial, onCancel, jobs }: {
   const [client, setClient] = useState(initial?.client ?? '');
   const [jobId, setJobId] = useState(initial?.jobId ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
+  const [mealPenalties, setMealPenalties] = useState(String(initial?.mealPenalties ?? '0'));
   const [notes, setNotes] = useState(initial?.notes ?? '');
   const [attachments, setAttachments] = useState<string[]>(initial?.attachments ?? []);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -61,6 +62,7 @@ function TimeEntryForm({ onSubmit, initial, onCancel, jobs }: {
       client: client.trim(),
       jobId: jobId || undefined,
       description: description.trim(),
+      mealPenalties: parseInt(mealPenalties) || 0,
       notes: notes.trim(),
       attachments,
     });
@@ -84,6 +86,7 @@ function TimeEntryForm({ onSubmit, initial, onCancel, jobs }: {
         </SelectContent>
       </Select>
       <Input placeholder="Description" value={description} onChange={e => setDescription(e.target.value)} />
+      <Input type="number" min="0" placeholder="Meal penalties (# of penalties)" value={mealPenalties} onChange={e => setMealPenalties(e.target.value)} />
       <Textarea placeholder="Notes" value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
       
       {/* Attachments */}
