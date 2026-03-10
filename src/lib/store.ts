@@ -75,6 +75,7 @@ const defaultData: AppData = {
   expenses: [],
   income: [],
   equipment: [],
+  timeEntries: [],
 };
 
 function loadData(): AppData {
