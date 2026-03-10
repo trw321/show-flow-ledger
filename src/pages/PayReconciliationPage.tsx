@@ -241,9 +241,18 @@ export default function PayReconciliationPage() {
                               ) : (
                                 <div className="space-y-1">
                                   {row.timeEntryDetails.map((t, j) => (
-                                    <div key={j} className="flex justify-between items-center rounded bg-background px-3 py-1.5 text-xs">
-                                      <span>{format(parseISO(t.date), 'MMM d')} — {t.description || 'No description'}</span>
-                                      <span className="text-mono font-medium">{t.hours}h × ${t.rate} = ${(t.hours * t.rate).toFixed(2)}</span>
+                                    <div key={j} className="rounded bg-background px-3 py-1.5 text-xs">
+                                      <div className="flex justify-between items-center">
+                                        <span>{format(parseISO(t.date), 'MMM d')} — {t.hours}h worked</span>
+                                        <span className="text-mono font-medium">${t.pay.toFixed(2)}</span>
+                                      </div>
+                                      {t.breakdown.length > 0 && (
+                                        <div className="mt-1 text-muted-foreground space-y-0.5 pl-2 border-l border-border">
+                                          {t.breakdown.map((line, k) => (
+                                            <p key={k}>{line}</p>
+                                          ))}
+                                        </div>
+                                      )}
                                     </div>
                                   ))}
                                 </div>
