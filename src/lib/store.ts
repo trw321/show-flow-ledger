@@ -47,11 +47,25 @@ export interface Equipment {
   createdAt: string;
 }
 
+export interface TimeEntry {
+  id: string;
+  jobId?: string;
+  client: string;
+  description: string;
+  hours: number;
+  rate: number;
+  date: string;
+  notes: string;
+  attachments: string[]; // base64 data URIs for note images
+  createdAt: string;
+}
+
 export interface AppData {
   jobs: Job[];
   expenses: Expense[];
   income: Income[];
   equipment: Equipment[];
+  timeEntries: TimeEntry[];
 }
 
 const STORAGE_KEY = 'av-bookkeeper-data';
