@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Scale, ChevronDown, ChevronUp, AlertTriangle, CheckCircle } from 'lucide-react';
 import { format, addDays, addWeeks, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
+import { calculateExpectedPay } from '@/lib/payCalc';
 import type { Job } from '@/lib/store';
 
 function getPayPeriods(job: Job, rangeStart: Date, rangeEnd: Date) {
