@@ -2,16 +2,22 @@ import { useState, useEffect, useCallback } from 'react';
 
 export interface Job {
   id: string;
+  jobNumber?: string; // last 4 digits of dispatch number
   name: string;
-  client: string;
+  client: string; // production company or project name
   venue: string;
   date: string;
+  startTime?: string; // e.g. "08:00 AM"
+  endTime?: string; // e.g. "05:00 PM"
   status: 'upcoming' | 'in-progress' | 'completed' | 'cancelled';
   paySchedule?: 'weekly' | 'bi-weekly' | 'semi-monthly' | 'monthly' | 'per-project';
   payPeriodStart?: string;
+  payrollCompany?: string; // e.g. "UNION PAYROLL AGENCY INC"
   hourlyRate?: number;
-  minimumHours?: number; // e.g. 5-hour minimum per call
-  has6th7thDayRule?: boolean; // 6th day = 1.5x, 7th day = 2x
+  minimumHours?: number;
+  has6th7thDayRule?: boolean;
+  steward?: string; // contact/steward name
+  parkingCost?: number;
   notes: string;
   createdAt: string;
 }

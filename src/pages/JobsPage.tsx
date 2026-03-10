@@ -18,40 +18,57 @@ function JobForm({ onSubmit, initial, onCancel }: {
   initial?: Partial<Job>;
   onCancel?: () => void;
 }) {
+  const [jobNumber, setJobNumber] = useState(initial?.jobNumber ?? '');
   const [name, setName] = useState(initial?.name ?? '');
   const [client, setClient] = useState(initial?.client ?? '');
   const [venue, setVenue] = useState(initial?.venue ?? '');
   const [date, setDate] = useState(initial?.date ?? new Date().toISOString().split('T')[0]);
+  const [startTime, setStartTime] = useState(initial?.startTime ?? '');
+  const [endTime, setEndTime] = useState(initial?.endTime ?? '');
   const [status, setStatus] = useState<Job['status']>(initial?.status ?? 'upcoming');
   const [paySchedule, setPaySchedule] = useState<Job['paySchedule']>(initial?.paySchedule ?? undefined);
   const [payPeriodStart, setPayPeriodStart] = useState(initial?.payPeriodStart ?? '');
+  const [payrollCompany, setPayrollCompany] = useState(initial?.payrollCompany ?? '');
   const [hourlyRate, setHourlyRate] = useState(initial?.hourlyRate?.toString() ?? '');
   const [minimumHours, setMinimumHours] = useState(initial?.minimumHours?.toString() ?? '');
   const [has6th7thDayRule, setHas6th7thDayRule] = useState(initial?.has6th7thDayRule ?? false);
+  const [steward, setSteward] = useState(initial?.steward ?? '');
+  const [parkingCost, setParkingCost] = useState(initial?.parkingCost?.toString() ?? '');
   const [notes, setNotes] = useState(initial?.notes ?? '');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
     onSubmit({
+      jobNumber: jobNumber.trim() || undefined,
       name: name.trim(), client: client.trim(), venue: venue.trim(), date, status, notes: notes.trim(),
+      startTime: startTime.trim() || undefined,
+      endTime: endTime.trim() || undefined,
       paySchedule: paySchedule || undefined,
       payPeriodStart: payPeriodStart || undefined,
+      payrollCompany: payrollCompany.trim() || undefined,
       hourlyRate: hourlyRate ? parseFloat(hourlyRate) : undefined,
       minimumHours: minimumHours ? parseFloat(minimumHours) : undefined,
       has6th7thDayRule,
+      steward: steward.trim() || undefined,
+      parkingCost: parkingCost ? parseFloat(parkingCost) : undefined,
     });
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <Input placeholder="Job name*" value={name} onChange={e => setName(e.target.value)} required />
-        <Input placeholder="Client" value={client} onChange={e => setClient(e.target.value)} />
+      <div className="grid grid-cols-3 gap-4">
+        <Input placeholder="Job # (last 4)" value={jobNumber} onChange={e => setJobNumber(e.target.value)} />
+        <Input placeholder="Job name*" value={name} onChange={e => setName(e.target.value)} required className="col-span-2" />
       </div>
       <div className="grid grid-cols-2 gap-4">
+        <Input placeholder="Client / Production Co." value={client} onChange={e => setClient(e.target.value)} />
         <Input placeholder="Venue" value={venue} onChange={e => setVenue(e.target.value)} />
+      </div>
+      <div className="grid grid-cols-3 gap-4">
         <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
+        <Input placeholder="Start time (e.g. 08:00 AM)" value={startTime} onChange={e => setStartTime(e.target.value)} />
+        <Input placeholder="End time (e.g. 05:00 PM)" value={endTime} onChange={e => setEndTime(e.target.value)} />
       </div>
       <Select value={status} onValueChange={(v) => setStatus(v as Job['status'])}>
         <SelectTrigger><SelectValue /></SelectTrigger>
@@ -59,6 +76,11 @@ function JobForm({ onSubmit, initial, onCancel }: {
           {statusOptions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
         </SelectContent>
       </Select>
+      <div className="grid grid-cols-3 gap-4">
+        <Input placeholder="Payroll company" value={payrollCompany} onChange={e => setPayrollCompany(e.target.value)} />
+        <Input type="number" step="0.01" placeholder="Hourly rate" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} />
+        <Input placeholder="Steward / Contact" value={steward} onChange={e => setSteward(e.target.value)} />
+      </div>
       <div className="grid grid-cols-3 gap-4">
         <Select value={paySchedule || 'none'} onValueChange={(v) => setPaySchedule(v === 'none' ? undefined : v as Job['paySchedule'])}>
           <SelectTrigger><SelectValue placeholder="Pay schedule" /></SelectTrigger>
@@ -72,7 +94,7 @@ function JobForm({ onSubmit, initial, onCancel }: {
           </SelectContent>
         </Select>
         <Input type="date" placeholder="Pay period start" value={payPeriodStart} onChange={e => setPayPeriodStart(e.target.value)} />
-        <Input type="number" step="0.01" placeholder="Hourly rate" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} />
+        <Input type="number" step="0.01" placeholder="Parking cost" value={parkingCost} onChange={e => setParkingCost(e.target.value)} />
       </div>
       <div className="grid grid-cols-2 gap-4">
         <Input type="number" step="0.5" min="0" placeholder="Minimum hours (e.g. 5)" value={minimumHours} onChange={e => setMinimumHours(e.target.value)} />
@@ -121,25 +143,35 @@ export default function JobsPage() {
       {data.jobs.length === 0 ? (
         <EmptyState icon={Briefcase} title="No jobs yet" description="Add your first AV job to start tracking." />
       ) : (
-        <div className="rounded-lg border border-border overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="rounded-lg border border-border overflow-x-auto">
+          <table className="w-full text-sm min-w-[800px]">
             <thead>
               <tr className="bg-secondary/50 text-muted-foreground text-xs uppercase tracking-wider text-mono">
-                <th className="text-left px-4 py-3">Job</th>
+                <th className="text-left px-4 py-3">Job #</th>
+                <th className="text-left px-4 py-3">Event</th>
                 <th className="text-left px-4 py-3">Client</th>
                 <th className="text-left px-4 py-3">Venue</th>
                 <th className="text-left px-4 py-3">Date</th>
+                <th className="text-left px-4 py-3">Time</th>
+                <th className="text-left px-4 py-3">Rate</th>
+                <th className="text-left px-4 py-3">Steward</th>
                 <th className="text-left px-4 py-3">Status</th>
-                <th className="px-4 py-3"></th>
+                <th className="px-4 py-3 sticky right-0 bg-secondary/50"></th>
               </tr>
             </thead>
             <tbody>
               {data.jobs.map(job => (
                 <tr key={job.id} className="border-t border-border hover:bg-secondary/30 transition-colors">
+                  <td className="px-4 py-3 text-mono text-xs text-muted-foreground">{job.jobNumber || '—'}</td>
                   <td className="px-4 py-3 font-medium">{job.name}</td>
                   <td className="px-4 py-3 text-muted-foreground">{job.client}</td>
                   <td className="px-4 py-3 text-muted-foreground">{job.venue}</td>
                   <td className="px-4 py-3 text-mono text-xs">{format(new Date(job.date), 'MMM d, yyyy')}</td>
+                  <td className="px-4 py-3 text-mono text-xs text-muted-foreground">
+                    {job.startTime ? `${job.startTime}${job.endTime ? ` – ${job.endTime}` : ''}` : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-mono text-xs">{job.hourlyRate ? `$${job.hourlyRate.toFixed(2)}` : '—'}</td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs">{job.steward || '—'}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-block rounded px-2 py-0.5 text-xs text-mono font-medium ${
                       job.status === 'completed' ? 'bg-success/20 text-success' :
@@ -150,7 +182,7 @@ export default function JobsPage() {
                       {job.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 text-right sticky right-0 bg-background">
                     <div className="flex gap-1 justify-end">
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditId(job.id)}>
                         <Pencil size={14} />
