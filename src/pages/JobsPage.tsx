@@ -127,6 +127,7 @@ export default function JobsPage() {
         description="Track AV gigs, clients, and venues"
         action={
           <div className="flex gap-2">
+            <JobPhotoImport onImport={addJob} />
             <JobPasteImport onImport={addJob} />
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>

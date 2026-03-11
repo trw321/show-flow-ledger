@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/jobs', icon: Briefcase, label: 'Jobs' },
+  { to: '/calendar', icon: CalendarDays, label: 'Calendar' },
   { to: '/expenses', icon: Receipt, label: 'Expenses' },
   { to: '/income', icon: DollarSign, label: 'Income' },
   { to: '/reconciliation', icon: Scale, label: 'Reconciliation' },
