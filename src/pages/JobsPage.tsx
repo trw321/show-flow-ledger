@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Briefcase, Plus, Trash2, Pencil } from 'lucide-react';
 import JobPasteImport from '@/components/JobPasteImport';
+import JobPhotoImport from '@/components/JobPhotoImport';
 import { format } from 'date-fns';
 import type { Job } from '@/lib/store';
 
@@ -126,6 +127,7 @@ export default function JobsPage() {
         description="Track AV gigs, clients, and venues"
         action={
           <div className="flex gap-2">
+            <JobPhotoImport onImport={addJob} />
             <JobPasteImport onImport={addJob} />
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>

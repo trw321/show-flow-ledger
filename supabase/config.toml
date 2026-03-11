@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.parse-time-entry]
 verify_jwt = false
+
+[functions.parse-job-image]
+verify_jwt = false

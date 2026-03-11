@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Briefcase, Receipt, DollarSign, Speaker, Clock, Scale, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Receipt, DollarSign, Speaker, Clock, Scale, CalendarDays, Menu, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/jobs', icon: Briefcase, label: 'Jobs' },
+  { to: '/calendar', icon: CalendarDays, label: 'Calendar' },
   { to: '/expenses', icon: Receipt, label: 'Expenses' },
   { to: '/income', icon: DollarSign, label: 'Income' },
   { to: '/reconciliation', icon: Scale, label: 'Reconciliation' },

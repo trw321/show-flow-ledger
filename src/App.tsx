@@ -12,6 +12,7 @@ import IncomePage from "@/pages/IncomePage";
 import EquipmentPage from "@/pages/EquipmentPage";
 import TimeTrackingPage from "@/pages/TimeTrackingPage";
 import PayReconciliationPage from "@/pages/PayReconciliationPage";
+import CalendarPage from "@/pages/CalendarPage";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -27,6 +28,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/jobs" element={<JobsPage />} />
+              <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/expenses" element={<ExpensesPage />} />
               <Route path="/income" element={<IncomePage />} />
               <Route path="/equipment" element={<EquipmentPage />} />
