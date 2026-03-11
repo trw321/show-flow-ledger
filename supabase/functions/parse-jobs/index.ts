@@ -57,6 +57,7 @@ Common AV industry text formats:
 - Concatenated text without clear delimiters
 - Rate codes like "2023-2028 BASIC ENTERTAINMENT"
 - Setup descriptions like "SETUP: HANG, FOCUS CB FOR OUTT ELEC X"
+- "SAME DAY CB" or "same day callback" means a callback for more work — it may be on the same day or a different date. Treat it as a separate job entry with its own date/time. If it references the same job number, keep the same job number but create a separate entry.
 
 Be flexible — data may be from tables, lists, emails, or messy concatenated text.`,
             },
