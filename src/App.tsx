@@ -10,7 +10,6 @@ import JobsPage from "@/pages/JobsPage";
 import ExpensesPage from "@/pages/ExpensesPage";
 import IncomePage from "@/pages/IncomePage";
 import EquipmentPage from "@/pages/EquipmentPage";
-import TimeTrackingPage from "@/pages/TimeTrackingPage";
 import PayReconciliationPage from "@/pages/PayReconciliationPage";
 import CalendarPage from "@/pages/CalendarPage";
 import NotFound from "./pages/NotFound.tsx";
@@ -33,7 +32,6 @@ const App = () => (
               <Route path="/income" element={<IncomePage />} />
               <Route path="/equipment" element={<EquipmentPage />} />
               <Route path="/reconciliation" element={<PayReconciliationPage />} />
-              <Route path="/time" element={<TimeTrackingPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AppLayout>

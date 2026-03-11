@@ -16,7 +16,7 @@ interface ParsedTimeEntry {
 }
 
 export default function TimesheetUpload() {
-  const { data, addTimeEntry } = useData();
+  const { data, addJob } = useData();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [entries, setEntries] = useState<ParsedTimeEntry[]>([]);
@@ -94,22 +94,21 @@ export default function TimesheetUpload() {
     let count = 0;
     entries.forEach((entry, i) => {
       if (selected.has(i)) {
-        const matchedJob = jobs.find(j => j.name.toLowerCase() === entry.jobName?.toLowerCase());
-        addTimeEntry({
-          hours: entry.hours,
-          rate: entry.rate || 0,
+        addJob({
+          name: entry.description || entry.jobName || 'Timesheet Entry',
+          client: entry.client || '',
+          venue: '',
           date: entry.date,
-          client: entry.client || matchedJob?.client || '',
-          jobId: matchedJob?.id,
-          description: entry.description,
+          status: 'completed',
+          hourlyRate: entry.rate || 0,
+          hoursWorked: entry.hours,
           mealPenalties: entry.mealPenalties || 0,
           notes: '',
-          attachments: [],
         });
         count++;
       }
     });
-    toast.success(`Added ${count} time entry(ies)`);
+    toast.success(`Added ${count} job(s) from timesheet`);
     setOpen(false);
     setEntries([]);
     setSelected(new Set());
@@ -207,7 +206,7 @@ export default function TimesheetUpload() {
             </div>
             <div className="flex gap-2 justify-end">
               <Button variant="ghost" onClick={() => { setEntries([]); setPreview(null); }}><X size={14} className="mr-1" /> Cancel</Button>
-              <Button onClick={addSelected} disabled={selected.size === 0}>Add {selected.size} entry(ies)</Button>
+              <Button onClick={addSelected} disabled={selected.size === 0}>Add {selected.size} job(s)</Button>
             </div>
           </div>
         )}

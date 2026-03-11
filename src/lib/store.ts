@@ -2,22 +2,25 @@ import { useState, useEffect, useCallback } from 'react';
 
 export interface Job {
   id: string;
-  jobNumber?: string; // last 4 digits of dispatch number
+  jobNumber?: string;
   name: string;
-  client: string; // production company or project name
+  client: string;
   venue: string;
   date: string;
-  startTime?: string; // e.g. "08:00 AM"
-  endTime?: string; // e.g. "05:00 PM"
+  startTime?: string;
+  endTime?: string;
   status: 'upcoming' | 'in-progress' | 'completed' | 'cancelled';
   paySchedule?: 'weekly' | 'bi-weekly' | 'semi-monthly' | 'monthly' | 'per-project';
   payPeriodStart?: string;
-  payrollCompany?: string; // e.g. "UNION PAYROLL AGENCY INC"
+  payrollCompany?: string;
   hourlyRate?: number;
   minimumHours?: number;
   has6th7thDayRule?: boolean;
-  steward?: string; // contact/steward name
+  steward?: string;
   parkingCost?: number;
+  hoursWorked?: number;
+  mealPenalties?: number;
+  attachments?: string[];
   notes: string;
   createdAt: string;
 }
@@ -58,26 +61,11 @@ export interface Equipment {
   createdAt: string;
 }
 
-export interface TimeEntry {
-  id: string;
-  jobId?: string;
-  client: string;
-  description: string;
-  hours: number;
-  rate: number;
-  date: string;
-  mealPenalties?: number; // number of meal penalties (each = 1hr straight rate)
-  notes: string;
-  attachments: string[];
-  createdAt: string;
-}
-
 export interface AppData {
   jobs: Job[];
   expenses: Expense[];
   income: Income[];
   equipment: Equipment[];
-  timeEntries: TimeEntry[];
 }
 
 const STORAGE_KEY = 'av-bookkeeper-data';
@@ -87,13 +75,37 @@ const defaultData: AppData = {
   expenses: [],
   income: [],
   equipment: [],
-  timeEntries: [],
 };
 
 function loadData(): AppData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? { ...defaultData, ...JSON.parse(raw) } : defaultData;
+    if (!raw) return defaultData;
+    const parsed = JSON.parse(raw);
+    // Migrate: convert old timeEntries into jobs if they exist
+    if (parsed.timeEntries?.length) {
+      const migratedJobs: Job[] = parsed.timeEntries.map((t: any) => ({
+        id: t.id,
+        jobNumber: undefined,
+        name: t.description || 'Time Entry',
+        client: t.client || '',
+        venue: '',
+        date: t.date,
+        startTime: undefined,
+        endTime: undefined,
+        status: 'completed' as const,
+        hourlyRate: t.rate || 0,
+        hoursWorked: t.hours || 0,
+        mealPenalties: t.mealPenalties || 0,
+        attachments: t.attachments || [],
+        notes: t.notes || '',
+        createdAt: t.createdAt,
+      }));
+      const existingJobs = parsed.jobs || [];
+      parsed.jobs = [...existingJobs, ...migratedJobs];
+      delete parsed.timeEntries;
+    }
+    return { ...defaultData, ...parsed };
   } catch {
     return defaultData;
   }
@@ -182,30 +194,11 @@ export function useAppData() {
     setData(prev => ({ ...prev, equipment: prev.equipment.filter(e => e.id !== id) }));
   }, []);
 
-  const addTimeEntry = useCallback((entry: Omit<TimeEntry, 'id' | 'createdAt'>) => {
-    setData(prev => ({
-      ...prev,
-      timeEntries: [...prev.timeEntries, { ...entry, id: crypto.randomUUID(), createdAt: new Date().toISOString() }],
-    }));
-  }, []);
-
-  const updateTimeEntry = useCallback((id: string, updates: Partial<TimeEntry>) => {
-    setData(prev => ({
-      ...prev,
-      timeEntries: prev.timeEntries.map(t => t.id === id ? { ...t, ...updates } : t),
-    }));
-  }, []);
-
-  const deleteTimeEntry = useCallback((id: string) => {
-    setData(prev => ({ ...prev, timeEntries: prev.timeEntries.filter(t => t.id !== id) }));
-  }, []);
-
   return {
     data,
     addJob, updateJob, deleteJob,
     addExpense, updateExpense, deleteExpense,
     addIncome, updateIncome, deleteIncome,
     addEquipment, updateEquipment, deleteEquipment,
-    addTimeEntry, updateTimeEntry, deleteTimeEntry,
   };
 }

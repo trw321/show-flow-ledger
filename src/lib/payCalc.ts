@@ -1,4 +1,4 @@
-import type { Job, TimeEntry } from './store';
+import type { Job } from './store';
 import { parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 
 /**
@@ -12,7 +12,7 @@ export function calculateDayPay(
   rate: number,
   minimumHours: number = 0,
   mealPenalties: number = 0,
-  dayMultiplier: number = 1 // 1 = normal, 1.5 = 6th day, 2 = 7th day
+  dayMultiplier: number = 1
 ): { billableHours: number; totalPay: number; breakdown: string[] } {
   const billableHours = Math.max(actualHours, minimumHours);
   const effectiveRate = rate * dayMultiplier;
@@ -42,7 +42,7 @@ export function calculateDayPay(
   }
 
   if (mealPenalties > 0) {
-    const mpPay = mealPenalties * rate; // meal penalty at base straight rate (not multiplied)
+    const mpPay = mealPenalties * rate;
     pay += mpPay;
     breakdown.push(`${mealPenalties} meal penalty × $${rate.toFixed(2)} = $${mpPay.toFixed(2)}`);
   }
@@ -60,30 +60,26 @@ export function calculateDayPay(
 
 /**
  * Determine the day multiplier for 6th/7th consecutive day rules.
- * Looks at all time entries for the same job/client in the surrounding period.
+ * Looks at all jobs for the same client in the surrounding period.
  */
 export function getDayMultiplier(
   entryDate: string,
-  jobId: string | undefined,
   client: string,
-  allEntries: TimeEntry[],
+  allJobs: Job[],
   has6th7thDayRule: boolean
 ): number {
   if (!has6th7thDayRule) return 1;
 
   const targetDate = startOfDay(parseISO(entryDate));
 
-  // Find all entries for same job/client
-  const relevantEntries = allEntries.filter(
-    e => (e.jobId && e.jobId === jobId) || e.client === client
+  const relevantJobs = allJobs.filter(
+    j => j.client === client && (j.hoursWorked ?? 0) > 0
   );
 
-  // Get unique work dates sorted
-  const workDates = [...new Set(relevantEntries.map(e => e.date))]
+  const workDates = [...new Set(relevantJobs.map(j => j.date))]
     .map(d => startOfDay(parseISO(d)))
     .sort((a, b) => a.getTime() - b.getTime());
 
-  // Find the consecutive streak ending on or including targetDate
   let consecutiveDays = 1;
   const targetIdx = workDates.findIndex(d => d.getTime() === targetDate.getTime());
   if (targetIdx < 0) return 1;
@@ -103,30 +99,32 @@ export function getDayMultiplier(
 }
 
 /**
- * Calculate expected pay for a set of time entries for a given job.
+ * Calculate expected pay for a set of jobs (with hours worked).
  */
 export function calculateExpectedPay(
-  entries: TimeEntry[],
-  job: Job,
-  allEntries: TimeEntry[]
+  jobs: Job[],
+  referenceJob: Job,
+  allJobs: Job[]
 ): { total: number; details: { date: string; hours: number; pay: number; breakdown: string[] }[] } {
-  const rate = entries[0]?.rate || job.hourlyRate || 0;
   const details: { date: string; hours: number; pay: number; breakdown: string[] }[] = [];
   let total = 0;
 
-  // Group entries by date
+  // Group by date
   const byDate = new Map<string, { hours: number; mealPenalties: number; rate: number }>();
-  for (const entry of entries) {
-    const existing = byDate.get(entry.date) || { hours: 0, mealPenalties: 0, rate: entry.rate || rate };
-    existing.hours += entry.hours;
-    existing.mealPenalties += entry.mealPenalties || 0;
-    existing.rate = entry.rate || rate;
-    byDate.set(entry.date, existing);
+  for (const job of jobs) {
+    const hours = job.hoursWorked ?? 0;
+    if (hours <= 0) continue;
+    const rate = job.hourlyRate || referenceJob.hourlyRate || 0;
+    const existing = byDate.get(job.date) || { hours: 0, mealPenalties: 0, rate };
+    existing.hours += hours;
+    existing.mealPenalties += job.mealPenalties || 0;
+    existing.rate = rate;
+    byDate.set(job.date, existing);
   }
 
-  for (const [date, { hours, mealPenalties, rate: entryRate }] of byDate.entries()) {
-    const dayMultiplier = getDayMultiplier(date, job.id, job.client, allEntries, job.has6th7thDayRule || false);
-    const result = calculateDayPay(hours, entryRate, job.minimumHours || 0, mealPenalties, dayMultiplier);
+  for (const [date, { hours, mealPenalties, rate }] of byDate.entries()) {
+    const dayMultiplier = getDayMultiplier(date, referenceJob.client, allJobs, referenceJob.has6th7thDayRule || false);
+    const result = calculateDayPay(hours, rate, referenceJob.minimumHours || 0, mealPenalties, dayMultiplier);
     total += result.totalPay;
     details.push({ date, hours, pay: result.totalPay, breakdown: result.breakdown });
   }
