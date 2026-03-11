@@ -64,7 +64,7 @@ const container = {
 
 const item = {
   hidden: { opacity: 0, y: 20, scale: 0.95 },
-  show: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', damping: 20 } },
+  show: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring' as const, damping: 20 } },
 };
 
 export default function DiscoverPage() {

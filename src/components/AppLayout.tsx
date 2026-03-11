@@ -9,6 +9,7 @@ const navItems = [
   { to: '/calendar', icon: CalendarDays, label: 'Calendar' },
   { to: '/expenses', icon: Receipt, label: 'Expenses' },
   { to: '/income', icon: DollarSign, label: 'Income' },
+  { to: '/discover', icon: Sparkles, label: 'Discover' },
   { to: '/reconciliation', icon: Scale, label: 'Reconciliation' },
   { to: '/equipment', icon: Speaker, label: 'Equipment' },
 ];
