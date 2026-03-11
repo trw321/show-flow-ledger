@@ -51,6 +51,10 @@ Extract these fields for each job found in the image:
 - status: "upcoming" for future dates, "completed" for past dates
 - notes: any remaining info
 
+Industry terminology:
+- "SAME DAY CB" or "same day callback" means a callback for more work — it may be on the same day or a different date. Treat it as a separate job entry with its own date/time.
+- If a callback references the same job number, keep the same job number but create a separate entry.
+
 Be flexible — the image may be a screenshot of a dispatch email, a schedule, a table, or a photo of a printed document.`,
             },
             {
