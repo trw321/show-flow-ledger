@@ -12,6 +12,7 @@ import IncomePage from "@/pages/IncomePage";
 import EquipmentPage from "@/pages/EquipmentPage";
 import PayReconciliationPage from "@/pages/PayReconciliationPage";
 import CalendarPage from "@/pages/CalendarPage";
+import DiscoverPage from "@/pages/DiscoverPage";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
