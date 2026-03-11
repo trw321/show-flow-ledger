@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Scale, ChevronDown, ChevronUp, AlertTriangle, CheckCircle } from 'lucide-react';
-import { format, addDays, addWeeks, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
+import { format, addDays, endOfMonth, isWithinInterval, parseISO, startOfMonth } from 'date-fns';
 import { calculateExpectedPay } from '@/lib/payCalc';
 import type { Job } from '@/lib/store';
 
@@ -19,7 +19,6 @@ function getPayPeriods(job: Job, rangeStart: Date, rangeEnd: Date) {
   const periods: { start: Date; end: Date; label: string }[] = [];
 
   let periodStart = new Date(anchor);
-  // Rewind to before rangeStart
   while (periodStart > rangeStart) {
     if (job.paySchedule === 'weekly') periodStart = addDays(periodStart, -7);
     else if (job.paySchedule === 'bi-weekly') periodStart = addDays(periodStart, -14);
@@ -64,51 +63,59 @@ interface ReconciliationRow {
 export default function PayReconciliationPage() {
   const { data } = useData();
 
-  const [startDate, setStartDate] = useState(() => {
-    const d = startOfMonth(new Date());
-    return format(d, 'yyyy-MM-dd');
-  });
+  const [startDate, setStartDate] = useState(() => format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(() => format(endOfMonth(new Date()), 'yyyy-MM-dd'));
-  const [filterJobId, setFilterJobId] = useState<string>('all');
+  const [filterJobClient, setFilterJobClient] = useState<string>('all');
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+
+  // Get unique clients from jobs for filtering
+  const uniqueClients = useMemo(() => {
+    const clients = new Set(data.jobs.map(j => j.client).filter(Boolean));
+    return Array.from(clients).sort();
+  }, [data.jobs]);
 
   const reconciliation = useMemo<ReconciliationRow[]>(() => {
     const rangeStart = parseISO(startDate);
     const rangeEnd = parseISO(endDate);
     const rows: ReconciliationRow[] = [];
 
-    const jobsToCheck = filterJobId === 'all' ? data.jobs : data.jobs.filter(j => j.id === filterJobId);
+    // Group jobs by client+payrollCompany as "productions"
+    const productions = new Map<string, Job[]>();
+    for (const job of data.jobs) {
+      if (filterJobClient !== 'all' && job.client !== filterJobClient) continue;
+      const key = `${job.client}||${job.payrollCompany || ''}`;
+      if (!productions.has(key)) productions.set(key, []);
+      productions.get(key)!.push(job);
+    }
 
-    for (const job of jobsToCheck) {
-      const periods = getPayPeriods(job, rangeStart, rangeEnd);
+    for (const [, prodJobs] of productions) {
+      const referenceJob = prodJobs[0];
+      const periods = getPayPeriods(referenceJob, rangeStart, rangeEnd);
 
       for (const period of periods) {
-        const periodEntries = data.timeEntries.filter(t => {
-          if (t.jobId !== job.id && t.client !== job.client) return false;
-          const d = parseISO(t.date);
-          return isWithinInterval(d, { start: period.start, end: period.end });
+        const periodJobs = prodJobs.filter(j => {
+          const d = parseISO(j.date);
+          return isWithinInterval(d, { start: period.start, end: period.end }) && (j.hoursWorked ?? 0) > 0;
         });
 
         const periodIncome = data.income.filter(i => {
           if (i.status !== 'paid') return false;
-          if (i.jobId !== job.id && i.client !== job.client) return false;
+          if (i.client !== referenceJob.client) return false;
           const d = parseISO(i.date);
           return isWithinInterval(d, { start: period.start, end: period.end });
         });
 
-        const totalHours = periodEntries.reduce((s, t) => s + t.hours, 0);
-
-        // Use the pay calculation engine with OT, minimums, 6th/7th day rules
-        const payResult = calculateExpectedPay(periodEntries, job, data.timeEntries);
+        const totalHours = periodJobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
+        const payResult = calculateExpectedPay(periodJobs, referenceJob, data.jobs);
         const expectedPay = payResult.total;
         const actualPaid = periodIncome.reduce((s, i) => s + i.amount, 0);
 
         if (totalHours > 0 || actualPaid > 0) {
           rows.push({
-            jobId: job.id,
-            jobName: job.name,
-            client: job.client,
-            paySchedule: job.paySchedule || 'none',
+            jobId: referenceJob.id,
+            jobName: referenceJob.name,
+            client: referenceJob.client,
+            paySchedule: referenceJob.paySchedule || 'none',
             periodLabel: period.label,
             totalHours,
             expectedPay,
@@ -124,7 +131,7 @@ export default function PayReconciliationPage() {
     }
 
     return rows;
-  }, [data, startDate, endDate, filterJobId]);
+  }, [data, startDate, endDate, filterJobClient]);
 
   const totalExpected = reconciliation.reduce((s, r) => s + r.expectedPay, 0);
   const totalActual = reconciliation.reduce((s, r) => s + r.actualPaid, 0);
@@ -134,7 +141,6 @@ export default function PayReconciliationPage() {
     <>
       <PageHeader title="Pay Reconciliation" description="Cross-check hours worked vs income received" />
 
-      {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-6 items-end">
         <div>
           <label className="text-xs text-muted-foreground text-mono uppercase mb-1 block">From</label>
@@ -145,18 +151,17 @@ export default function PayReconciliationPage() {
           <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-40" />
         </div>
         <div>
-          <label className="text-xs text-muted-foreground text-mono uppercase mb-1 block">Production</label>
-          <Select value={filterJobId} onValueChange={setFilterJobId}>
+          <label className="text-xs text-muted-foreground text-mono uppercase mb-1 block">Client</label>
+          <Select value={filterJobClient} onValueChange={setFilterJobClient}>
             <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All productions</SelectItem>
-              {data.jobs.map(j => <SelectItem key={j.id} value={j.id}>{j.name}</SelectItem>)}
+              <SelectItem value="all">All clients</SelectItem>
+              {uniqueClients.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
       </div>
 
-      {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="rounded-lg border border-border bg-card p-4">
           <p className="text-xs text-muted-foreground text-mono uppercase">Expected (Hours × Rate)</p>
@@ -174,15 +179,14 @@ export default function PayReconciliationPage() {
         </div>
       </div>
 
-      {/* Reconciliation table */}
       {reconciliation.length === 0 ? (
-        <EmptyState icon={Scale} title="No data to reconcile" description="Add time entries and mark income as paid to see cross-checks here." />
+        <EmptyState icon={Scale} title="No data to reconcile" description="Add jobs with hours worked and mark income as paid to see cross-checks." />
       ) : (
         <div className="rounded-lg border border-border overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-secondary/50 text-muted-foreground text-xs uppercase tracking-wider text-mono">
-                <th className="text-left px-4 py-3">Production</th>
+                <th className="text-left px-4 py-3">Client</th>
                 <th className="text-left px-4 py-3">Pay Period</th>
                 <th className="text-left px-4 py-3">Schedule</th>
                 <th className="text-right px-4 py-3">Hours</th>
@@ -193,8 +197,8 @@ export default function PayReconciliationPage() {
               </tr>
             </thead>
             <tbody>
-              {reconciliation.map((row, i) => {
-                const key = `${row.jobId}-${row.periodLabel}`;
+              {reconciliation.map((row) => {
+                const key = `${row.client}-${row.periodLabel}`;
                 const isExpanded = expandedRow === key;
                 const isMatch = Math.abs(row.difference) < 0.01;
                 const isOver = row.difference > 0;
@@ -207,8 +211,7 @@ export default function PayReconciliationPage() {
                       onClick={() => setExpandedRow(isExpanded ? null : key)}
                     >
                       <td className="px-4 py-3">
-                        <p className="font-medium">{row.jobName}</p>
-                        <p className="text-xs text-muted-foreground">{row.client}</p>
+                        <p className="font-medium">{row.client}</p>
                       </td>
                       <td className="px-4 py-3 text-mono text-xs">{row.periodLabel}</td>
                       <td className="px-4 py-3">
@@ -233,11 +236,10 @@ export default function PayReconciliationPage() {
                       <tr key={`${key}-detail`} className="border-t border-border bg-muted/30">
                         <td colSpan={8} className="px-6 py-4">
                           <div className="grid lg:grid-cols-2 gap-6">
-                            {/* Time entries */}
                             <div>
-                              <h4 className="text-xs text-mono uppercase text-muted-foreground mb-2 font-semibold">Time Entries</h4>
+                              <h4 className="text-xs text-mono uppercase text-muted-foreground mb-2 font-semibold">Jobs / Hours</h4>
                               {row.timeEntryDetails.length === 0 ? (
-                                <p className="text-xs text-muted-foreground">No time entries</p>
+                                <p className="text-xs text-muted-foreground">No hours logged</p>
                               ) : (
                                 <div className="space-y-1">
                                   {row.timeEntryDetails.map((t, j) => (
@@ -248,9 +250,7 @@ export default function PayReconciliationPage() {
                                       </div>
                                       {t.breakdown.length > 0 && (
                                         <div className="mt-1 text-muted-foreground space-y-0.5 pl-2 border-l border-border">
-                                          {t.breakdown.map((line, k) => (
-                                            <p key={k}>{line}</p>
-                                          ))}
+                                          {t.breakdown.map((line, k) => <p key={k}>{line}</p>)}
                                         </div>
                                       )}
                                     </div>
@@ -258,7 +258,6 @@ export default function PayReconciliationPage() {
                                 </div>
                               )}
                             </div>
-                            {/* Income entries */}
                             <div>
                               <h4 className="text-xs text-mono uppercase text-muted-foreground mb-2 font-semibold">Payments Received</h4>
                               {row.incomeDetails.length === 0 ? (
