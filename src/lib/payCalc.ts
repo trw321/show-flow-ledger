@@ -12,11 +12,22 @@ export function calculateDayPay(
   rate: number,
   minimumHours: number = 0,
   mealPenalties: number = 0,
-  dayMultiplier: number = 1
+  dayMultiplier: number = 1,
+  mealType?: 'YWA' | 'NWA'
 ): { billableHours: number; totalPay: number; breakdown: string[] } {
-  const billableHours = Math.max(actualHours, minimumHours);
+  // YWA = 1hr walk-away off the clock (deduct from hours)
+  // NWA = 30min meal on the clock (no deduction)
+  const mealDeduction = mealType === 'YWA' ? 1 : 0;
+  const adjustedHours = Math.max(0, actualHours - mealDeduction);
+  const billableHours = Math.max(adjustedHours, minimumHours);
   const effectiveRate = rate * dayMultiplier;
   const breakdown: string[] = [];
+
+  if (mealType === 'YWA') {
+    breakdown.push(`YWA: ${actualHours}h − 1h walk-away = ${adjustedHours}h`);
+  } else if (mealType === 'NWA') {
+    breakdown.push(`NWA: 30min meal on clock (no deduction)`);
+  }
 
   let pay = 0;
 
