@@ -40,6 +40,7 @@ function JobForm({ onSubmit, initial, onCancel }: {
   const [parkingCost, setParkingCost] = useState(initial?.parkingCost?.toString() ?? '');
   const [hoursWorked, setHoursWorked] = useState(initial?.hoursWorked?.toString() ?? '');
   const [mealPenalties, setMealPenalties] = useState(initial?.mealPenalties?.toString() ?? '0');
+  const [mealType, setMealType] = useState<Job['mealType']>(initial?.mealType ?? undefined);
   const [notes, setNotes] = useState(initial?.notes ?? '');
   const [attachments, setAttachments] = useState<string[]>(initial?.attachments ?? []);
   const fileInputRef = useRef<HTMLInputElement>(null);
