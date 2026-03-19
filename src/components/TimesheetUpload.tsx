@@ -16,7 +16,7 @@ interface ParsedTimeEntry {
 }
 
 export default function TimesheetUpload() {
-  const { data, addJob } = useData();
+  const { data, addJob, updateJob } = useData();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [entries, setEntries] = useState<ParsedTimeEntry[]>([]);
@@ -90,10 +90,53 @@ export default function TimesheetUpload() {
     setEntries(prev => prev.map((e, i) => i === idx ? { ...e, [field]: value } : e));
   };
 
+  const findMatchingJob = (entry: ParsedTimeEntry) => {
+    const candidates = data.jobs.filter(j => j.date === entry.date);
+    if (candidates.length === 0) return null;
+
+    // Try matching by client + name/description
+    for (const job of candidates) {
+      const clientMatch = entry.client && job.client &&
+        job.client.toLowerCase().includes(entry.client.toLowerCase());
+      const nameMatch = entry.jobName && job.name &&
+        job.name.toLowerCase().includes(entry.jobName.toLowerCase());
+      const descMatch = entry.description && job.name &&
+        job.name.toLowerCase().includes(entry.description.toLowerCase());
+
+      if (clientMatch || nameMatch || descMatch) {
+        // Check if this job already has hours — if so, it might be a split shift
+        // Only merge if the existing job has NO hours yet
+        if (!job.hoursWorked || job.hoursWorked === 0) {
+          return job;
+        }
+      }
+    }
+
+    // Fallback: if there's exactly one job on that date with no hours, match it
+    const noHoursJobs = candidates.filter(j => !j.hoursWorked || j.hoursWorked === 0);
+    if (noHoursJobs.length === 1) return noHoursJobs[0];
+
+    return null;
+  };
+
   const addSelected = () => {
-    let count = 0;
+    let merged = 0;
+    let created = 0;
     entries.forEach((entry, i) => {
-      if (selected.has(i)) {
+      if (!selected.has(i)) return;
+
+      const match = findMatchingJob(entry);
+      if (match) {
+        // Merge hours into existing job
+        updateJob(match.id, {
+          hoursWorked: entry.hours,
+          mealPenalties: entry.mealPenalties || 0,
+          status: 'completed',
+          ...(entry.rate && !match.hourlyRate ? { hourlyRate: entry.rate } : {}),
+        });
+        merged++;
+      } else {
+        // Create new entry (split shift or no match)
         addJob({
           name: entry.description || entry.jobName || 'Timesheet Entry',
           client: entry.client || '',
@@ -105,10 +148,14 @@ export default function TimesheetUpload() {
           mealPenalties: entry.mealPenalties || 0,
           notes: '',
         });
-        count++;
+        created++;
       }
     });
-    toast.success(`Added ${count} job(s) from timesheet`);
+
+    const parts = [];
+    if (merged > 0) parts.push(`${merged} merged`);
+    if (created > 0) parts.push(`${created} new`);
+    toast.success(`Hours added: ${parts.join(', ')}`);
     setOpen(false);
     setEntries([]);
     setSelected(new Set());
