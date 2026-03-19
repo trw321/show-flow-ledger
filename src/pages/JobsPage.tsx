@@ -7,7 +7,6 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Briefcase, Plus, Trash2, Pencil, Mic, MicOff, Loader2, Paperclip, X, ChevronDown, ChevronRight } from 'lucide-react';
 import JobPasteImport from '@/components/JobPasteImport';
 import JobPhotoImport from '@/components/JobPhotoImport';
@@ -166,7 +165,8 @@ function JobForm({ onSubmit, initial, onCancel }: {
                   <X size={10} />
                 </button>
               </div>
-            ))}
+            ))
+            }
           </div>
         )}
       </div>
@@ -291,7 +291,7 @@ export default function JobsPage() {
     });
   };
 
-  // Group jobs by name+client, sorted by most recent date
+  // Group jobs by name+client, sorted most recent first
   const groupedJobs = useMemo(() => {
     const groups = new Map<string, { name: string; client: string; jobs: Job[] }>();
     const sorted = [...data.jobs].sort((a, b) => b.date.localeCompare(a.date) || (b.startTime ?? '').localeCompare(a.startTime ?? ''));
@@ -302,9 +302,12 @@ export default function JobsPage() {
       }
       groups.get(key)!.jobs.push(job);
     }
-    // Sort groups by most recent job date
     return [...groups.entries()].sort((a, b) => b[1].jobs[0].date.localeCompare(a[1].jobs[0].date));
   }, [data.jobs]);
+
+  return (
+    <>
+      <PageHeader
         title="Jobs"
         description="Track gigs, hours worked, and earnings"
         action={
@@ -344,66 +347,80 @@ export default function JobsPage() {
       {data.jobs.length === 0 ? (
         <EmptyState icon={Briefcase} title="No jobs yet" description="Add your first AV job to start tracking." />
       ) : (
-        <div className="rounded-lg border border-border overflow-x-auto">
-          <table className="w-full text-sm min-w-[900px]">
-            <thead>
-              <tr className="bg-secondary/50 text-muted-foreground text-xs uppercase tracking-wider text-mono">
-                <th className="text-left px-4 py-3">Job #</th>
-                <th className="text-left px-4 py-3">Event</th>
-                <th className="text-left px-4 py-3">Client</th>
-                <th className="text-left px-4 py-3">Date</th>
-                <th className="text-left px-4 py-3">Time</th>
-                <th className="text-right px-4 py-3">Hours</th>
-                <th className="text-right px-4 py-3">Rate</th>
-                <th className="text-right px-4 py-3">Earned</th>
-                <th className="text-left px-4 py-3">Status</th>
-                <th className="px-4 py-3 sticky right-0 bg-secondary/50"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...data.jobs].sort((a, b) => b.date.localeCompare(a.date) || (b.startTime ?? '').localeCompare(a.startTime ?? '')).map(job => {
-                const hours = job.hoursWorked ?? 0;
-                const earned = hours * (job.hourlyRate ?? 0);
-                return (
-                  <tr key={job.id} className="border-t border-border hover:bg-secondary/30 transition-colors">
-                    <td className="px-4 py-3 text-mono text-xs text-muted-foreground">{job.jobNumber || '—'}</td>
-                    <td className="px-4 py-3 font-medium">
-                      {job.name}
-                      {(job.attachments?.length ?? 0) > 0 && <Paperclip size={12} className="inline ml-1 text-muted-foreground" />}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">{job.client}</td>
-                    <td className="px-4 py-3 text-mono text-xs">{format(new Date(job.date), 'MMM d, yyyy')}</td>
-                    <td className="px-4 py-3 text-mono text-xs text-muted-foreground">
-                      {job.startTime ? `${job.startTime}${job.endTime ? ` – ${job.endTime}` : ''}` : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right text-mono">{hours > 0 ? hours : '—'}</td>
-                    <td className="px-4 py-3 text-right text-mono">{job.hourlyRate ? `$${job.hourlyRate.toFixed(2)}` : '—'}</td>
-                    <td className="px-4 py-3 text-right text-mono font-bold text-success">{earned > 0 ? `$${earned.toLocaleString()}` : '—'}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-block rounded px-2 py-0.5 text-xs text-mono font-medium ${
-                        job.status === 'completed' ? 'bg-success/20 text-success' :
-                        job.status === 'in-progress' ? 'bg-primary/20 text-primary' :
-                        job.status === 'cancelled' ? 'bg-destructive/20 text-destructive' :
-                        'bg-accent/20 text-accent'
-                      }`}>
-                        {job.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right sticky right-0 bg-background">
-                      <div className="flex gap-1 justify-end">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditId(job.id)}>
-                          <Pencil size={14} />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => { deleteJob(job.id); toast.success('Job deleted'); }}>
-                          <Trash2 size={14} />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="space-y-2">
+          {groupedJobs.map(([key, group]) => {
+            const isOpen = expandedGroups.has(key);
+            const totalGroupHours = group.jobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
+            const totalGroupEarned = group.jobs.reduce((s, j) => s + (j.hoursWorked ?? 0) * (j.hourlyRate ?? 0), 0);
+            const latestDate = group.jobs[0].date;
+            const shiftCount = group.jobs.length;
+
+            return (
+              <div key={key} className="rounded-lg border border-border overflow-hidden">
+                {/* Group header */}
+                <button
+                  onClick={() => toggleGroup(key)}
+                  className="w-full flex items-center gap-3 px-4 py-3 bg-secondary/30 hover:bg-secondary/50 transition-colors text-left"
+                >
+                  {isOpen
+                    ? <ChevronDown size={16} className="text-muted-foreground shrink-0" />
+                    : <ChevronRight size={16} className="text-muted-foreground shrink-0" />
+                  }
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm truncate">{group.name}</span>
+                      <span className="text-xs text-muted-foreground">• {group.client}</span>
+                    </div>
+                    <div className="flex gap-3 text-xs text-muted-foreground text-mono mt-0.5">
+                      <span>{shiftCount} shift{shiftCount !== 1 ? 's' : ''}</span>
+                      <span>Latest: {format(new Date(latestDate), 'MMM d')}</span>
+                      {totalGroupHours > 0 && <span>{totalGroupHours.toFixed(1)}h</span>}
+                      {totalGroupEarned > 0 && <span className="text-success font-semibold">${totalGroupEarned.toLocaleString()}</span>}
+                    </div>
+                  </div>
+                </button>
+
+                {/* Expanded shift rows */}
+                {isOpen && (
+                  <div className="divide-y divide-border">
+                    {group.jobs.map(job => {
+                      const hours = job.hoursWorked ?? 0;
+                      const earned = hours * (job.hourlyRate ?? 0);
+                      return (
+                        <div key={job.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-secondary/20 transition-colors text-sm">
+                          <div className="w-16 text-mono text-xs text-muted-foreground">{job.jobNumber || '—'}</div>
+                          <div className="w-24 text-mono text-xs">{format(new Date(job.date), 'MMM d, yyyy')}</div>
+                          <div className="w-28 text-mono text-xs text-muted-foreground">
+                            {job.startTime ? `${job.startTime}${job.endTime ? ` – ${job.endTime}` : ''}` : '—'}
+                          </div>
+                          <div className="flex-1 min-w-0 truncate text-muted-foreground text-xs">{job.venue || '—'}</div>
+                          <div className="w-14 text-right text-mono text-xs">{hours > 0 ? `${hours}h` : '—'}</div>
+                          <div className="w-16 text-right text-mono text-xs">{job.hourlyRate ? `$${job.hourlyRate.toFixed(2)}` : '—'}</div>
+                          <div className="w-16 text-right text-mono text-xs font-bold text-success">{earned > 0 ? `$${earned.toLocaleString()}` : '—'}</div>
+                          <span className={cn("inline-block rounded px-2 py-0.5 text-[10px] text-mono font-medium shrink-0",
+                            job.status === 'completed' ? 'bg-success/20 text-success' :
+                              job.status === 'in-progress' ? 'bg-primary/20 text-primary' :
+                                job.status === 'cancelled' ? 'bg-destructive/20 text-destructive' :
+                                  'bg-accent/20 text-accent'
+                          )}>
+                            {job.status}
+                          </span>
+                          <div className="flex gap-1 shrink-0">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); setEditId(job.id); }}>
+                              <Pencil size={14} />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={(e) => { e.stopPropagation(); deleteJob(job.id); toast.success('Job deleted'); }}>
+                              <Trash2 size={14} />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
