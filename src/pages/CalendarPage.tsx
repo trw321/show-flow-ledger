@@ -32,6 +32,23 @@ export default function CalendarPage() {
     return map;
   }, [data.jobs]);
 
+  const payByDate = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const [date, jobs] of Object.entries(jobsByDate)) {
+      let dayPay = 0;
+      for (const job of jobs) {
+        const hours = job.hoursWorked ?? 0;
+        if (hours <= 0) continue;
+        const rate = job.hourlyRate || 0;
+        const multiplier = getDayMultiplier(date, job.client, data.jobs, job.has6th7thDayRule || false);
+        const result = calculateDayPay(hours, rate, job.minimumHours || 0, job.mealPenalties || 0, multiplier);
+        dayPay += result.totalPay;
+      }
+      if (dayPay > 0) map[date] = dayPay;
+    }
+    return map;
+  }, [jobsByDate, data.jobs]);
+
   const navigate = (dir: 1 | -1) => {
     setCurrentDate(prev =>
       view === 'month'
