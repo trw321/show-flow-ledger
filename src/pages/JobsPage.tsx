@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import { useData } from '@/lib/DataContext';
 import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
@@ -7,13 +7,15 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Briefcase, Plus, Trash2, Pencil, Mic, MicOff, Loader2, Paperclip, X } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Briefcase, Plus, Trash2, Pencil, Mic, MicOff, Loader2, Paperclip, X, ChevronDown, ChevronRight } from 'lucide-react';
 import JobPasteImport from '@/components/JobPasteImport';
 import JobPhotoImport from '@/components/JobPhotoImport';
 import TimesheetUpload from '@/components/TimesheetUpload';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import type { Job } from '@/lib/store';
+import { cn } from '@/lib/utils';
 
 const statusOptions = ['upcoming', 'in-progress', 'completed', 'cancelled'] as const;
 
