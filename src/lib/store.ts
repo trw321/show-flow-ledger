@@ -117,13 +117,18 @@ function loadData(): AppData {
           const ex = deduped[i];
           if (ex.date !== job.date) continue;
 
+          // Split shift detection: if both have start times and they differ, keep separate
+          if (job.startTime && ex.startTime && job.startTime !== ex.startTime) continue;
+
+          // If both have hours logged, they're likely separate shifts — keep both
+          if ((job.hoursWorked ?? 0) > 0 && (ex.hoursWorked ?? 0) > 0) continue;
+
           // Match by jobNumber if both have one
           if (job.jobNumber && ex.jobNumber && job.jobNumber === ex.jobNumber) return i;
 
           // Match by normalized name + client
           const nameMatch = normalize(job.name) === normalize(ex.name);
           const clientMatch = normalize(job.client) === normalize(ex.client);
-          // Match if name matches, or client matches and names are similar
           if (nameMatch && clientMatch) return i;
           if (clientMatch && (normalize(job.name).includes(normalize(ex.name)) || normalize(ex.name).includes(normalize(job.name)))) return i;
         }
