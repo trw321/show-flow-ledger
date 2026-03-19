@@ -144,6 +144,12 @@ export default function CalendarPage() {
                 {view === 'month' && dayJobs.length > 3 && (
                   <div className="text-[10px] text-muted-foreground text-mono pl-1">+{dayJobs.length - 3} more</div>
                 )}
+                {payByDate[dateKey] && (
+                  <div className="flex items-center gap-0.5 mt-1 text-[10px] text-mono font-semibold text-success">
+                    <DollarSign size={10} />
+                    {payByDate[dateKey].toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  </div>
+                )}
               </div>
             </div>
           );
