@@ -106,62 +106,6 @@ function loadData(): AppData {
       parsed.jobs = [...existingJobs, ...migratedJobs];
       delete parsed.timeEntries;
     }
-    // Deduplicate jobs: merge entries with same date + (name OR jobNumber) + client
-    if (parsed.jobs?.length) {
-      const deduped: Job[] = [];
-
-      const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '').trim();
-
-      const findMatch = (job: Job): number => {
-        for (let i = 0; i < deduped.length; i++) {
-          const ex = deduped[i];
-          if (ex.date !== job.date) continue;
-
-          // Split shift detection: if both have start times and they differ, keep separate
-          if (job.startTime && ex.startTime && job.startTime !== ex.startTime) continue;
-
-          // If both have hours logged, they're likely separate shifts — keep both
-          if ((job.hoursWorked ?? 0) > 0 && (ex.hoursWorked ?? 0) > 0) continue;
-
-          // Match by jobNumber if both have one
-          if (job.jobNumber && ex.jobNumber && job.jobNumber === ex.jobNumber) return i;
-
-          // Match by normalized name + client
-          const nameMatch = normalize(job.name) === normalize(ex.name);
-          const clientMatch = normalize(job.client) === normalize(ex.client);
-          if (nameMatch && clientMatch) return i;
-          if (clientMatch && (normalize(job.name).includes(normalize(ex.name)) || normalize(ex.name).includes(normalize(job.name)))) return i;
-        }
-        return -1;
-      };
-
-      for (const job of parsed.jobs as Job[]) {
-        const idx = findMatch(job);
-        if (idx >= 0) {
-          const existing = deduped[idx];
-          deduped[idx] = {
-            ...existing,
-            hoursWorked: job.hoursWorked || existing.hoursWorked,
-            hourlyRate: job.hourlyRate || existing.hourlyRate,
-            mealPenalties: job.mealPenalties || existing.mealPenalties,
-            mealType: job.mealType || existing.mealType,
-            venue: job.venue || existing.venue,
-            startTime: job.startTime || existing.startTime,
-            endTime: job.endTime || existing.endTime,
-            status: job.hoursWorked ? 'completed' : existing.status,
-            notes: [existing.notes, job.notes].filter(n => n?.trim()).join('\n'),
-            payrollCompany: job.payrollCompany || existing.payrollCompany,
-            steward: job.steward || existing.steward,
-            parkingCost: job.parkingCost || existing.parkingCost,
-            jobNumber: job.jobNumber || existing.jobNumber,
-            name: existing.name.length >= job.name.length ? existing.name : job.name,
-          };
-        } else {
-          deduped.push(job);
-        }
-      }
-      parsed.jobs = deduped;
-    }
     return { ...defaultData, ...parsed };
   } catch {
     return defaultData;
