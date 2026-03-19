@@ -2,11 +2,13 @@ import { useState, useMemo } from 'react';
 import { useData } from '@/lib/DataContext';
 import PageHeader from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, DollarSign } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ChevronLeft, ChevronRight, DollarSign, X } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, addWeeks, subWeeks, isSameMonth, isSameDay } from 'date-fns';
 import type { Job } from '@/lib/store';
 import { calculateDayPay, getDayMultiplier } from '@/lib/payCalc';
 import { cn } from '@/lib/utils';
+import { useNavigate } from 'react-router-dom';
 
 type ViewMode = 'month' | 'week';
 
@@ -19,8 +21,10 @@ const statusColors: Record<Job['status'], string> = {
 
 export default function CalendarPage() {
   const { data } = useData();
+  const navigate = useNavigate();
   const [view, setView] = useState<ViewMode>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const jobsByDate = useMemo(() => {
     const map: Record<string, Job[]> = {};
@@ -49,7 +53,7 @@ export default function CalendarPage() {
     return map;
   }, [jobsByDate, data.jobs]);
 
-  const navigate = (dir: 1 | -1) => {
+  const navMonth = (dir: 1 | -1) => {
     setCurrentDate(prev =>
       view === 'month'
         ? dir === 1 ? addMonths(prev, 1) : subMonths(prev, 1)
@@ -73,6 +77,7 @@ export default function CalendarPage() {
 
   const days = view === 'month' ? monthDays : weekDays;
   const today = new Date();
+  const selectedJobs = selectedDate ? (jobsByDate[selectedDate] || []) : [];
 
   return (
     <>
@@ -80,11 +85,11 @@ export default function CalendarPage() {
 
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ChevronLeft size={18} /></Button>
+          <Button variant="ghost" size="icon" onClick={() => navMonth(-1)}><ChevronLeft size={18} /></Button>
           <h2 className="text-mono text-lg font-semibold min-w-[200px] text-center">
             {view === 'month' ? format(currentDate, 'MMMM yyyy') : `Week of ${format(startOfWeek(currentDate), 'MMM d, yyyy')}`}
           </h2>
-          <Button variant="ghost" size="icon" onClick={() => navigate(1)}><ChevronRight size={18} /></Button>
+          <Button variant="ghost" size="icon" onClick={() => navMonth(1)}><ChevronRight size={18} /></Button>
           <Button variant="outline" size="sm" onClick={() => setCurrentDate(new Date())}>Today</Button>
         </div>
         <div className="flex rounded-md border border-border overflow-hidden">
@@ -113,15 +118,18 @@ export default function CalendarPage() {
           const dayJobs = jobsByDate[dateKey] || [];
           const isToday = isSameDay(day, today);
           const isCurrentMonth = isSameMonth(day, currentDate);
+          const hasJobs = dayJobs.length > 0;
 
           return (
             <div
               key={i}
+              onClick={() => hasJobs && setSelectedDate(dateKey)}
               className={cn(
                 "border-r border-b border-border p-1.5 transition-colors",
                 view === 'month' ? 'min-h-[100px]' : 'min-h-[400px]',
                 !isCurrentMonth && view === 'month' && 'opacity-40',
-                isToday && 'bg-primary/5'
+                isToday && 'bg-primary/5',
+                hasJobs && 'cursor-pointer hover:bg-secondary/40'
               )}
             >
               <div className={cn(
@@ -155,6 +163,56 @@ export default function CalendarPage() {
           );
         })}
       </div>
+
+      {/* Day detail dialog */}
+      <Dialog open={!!selectedDate} onOpenChange={(o) => !o && setSelectedDate(null)}>
+        <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-mono">
+              {selectedDate && format(new Date(selectedDate + 'T12:00:00'), 'EEEE, MMMM d, yyyy')}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {selectedJobs.map(job => {
+              const hours = job.hoursWorked ?? 0;
+              const earned = hours * (job.hourlyRate ?? 0);
+              return (
+                <div
+                  key={job.id}
+                  onClick={() => { setSelectedDate(null); navigate('/jobs'); }}
+                  className={cn(
+                    "rounded-lg border p-3 space-y-1.5 cursor-pointer hover:bg-secondary/30 transition-colors",
+                    statusColors[job.status]
+                  )}
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-medium text-sm">{job.name}</p>
+                      <p className="text-xs opacity-70">{job.client}</p>
+                    </div>
+                    <span className="text-[10px] text-mono uppercase font-medium opacity-70">{job.status}</span>
+                  </div>
+                  {job.venue && <p className="text-xs opacity-60">{job.venue}</p>}
+                  <div className="flex gap-4 text-xs text-mono">
+                    {job.startTime && (
+                      <span>{job.startTime}{job.endTime ? ` – ${job.endTime}` : ''}</span>
+                    )}
+                    {hours > 0 && <span>{hours}h</span>}
+                    {earned > 0 && <span className="font-semibold">${earned.toLocaleString()}</span>}
+                    {job.mealType && <span className="opacity-70">{job.mealType}</span>}
+                  </div>
+                </div>
+              );
+            })}
+            {payByDate[selectedDate!] && (
+              <div className="flex items-center justify-between pt-2 border-t border-border text-sm text-mono">
+                <span className="text-muted-foreground">Estimated pay</span>
+                <span className="font-bold text-success">${payByDate[selectedDate!].toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
