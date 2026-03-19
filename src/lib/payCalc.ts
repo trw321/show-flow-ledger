@@ -121,15 +121,16 @@ export function calculateExpectedPay(
   let total = 0;
 
   // Group by date
-  const byDate = new Map<string, { hours: number; mealPenalties: number; rate: number }>();
+  const byDate = new Map<string, { hours: number; mealPenalties: number; rate: number; mealType?: 'YWA' | 'NWA' }>();
   for (const job of jobs) {
     const hours = job.hoursWorked ?? 0;
     if (hours <= 0) continue;
     const rate = job.hourlyRate || referenceJob.hourlyRate || 0;
-    const existing = byDate.get(job.date) || { hours: 0, mealPenalties: 0, rate };
+    const existing = byDate.get(job.date) || { hours: 0, mealPenalties: 0, rate, mealType: job.mealType };
     existing.hours += hours;
     existing.mealPenalties += job.mealPenalties || 0;
     existing.rate = rate;
+    if (job.mealType) existing.mealType = job.mealType;
     byDate.set(job.date, existing);
   }
 
