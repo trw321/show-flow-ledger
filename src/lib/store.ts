@@ -139,8 +139,6 @@ export function useAppData() {
       if (isDuplicateJob(job, prev.jobs)) return prev;
 
       return {
-
-      return {
         ...prev,
         jobs: [...prev.jobs, { ...job, id: crypto.randomUUID(), createdAt: new Date().toISOString() }],
       };
