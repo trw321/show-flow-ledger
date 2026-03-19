@@ -2,9 +2,10 @@ import { useState, useMemo } from 'react';
 import { useData } from '@/lib/DataContext';
 import PageHeader from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, addWeeks, subWeeks, isSameMonth, isSameDay, parseISO } from 'date-fns';
+import { ChevronLeft, ChevronRight, DollarSign } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, addWeeks, subWeeks, isSameMonth, isSameDay } from 'date-fns';
 import type { Job } from '@/lib/store';
+import { calculateDayPay, getDayMultiplier } from '@/lib/payCalc';
 import { cn } from '@/lib/utils';
 
 type ViewMode = 'month' | 'week';
