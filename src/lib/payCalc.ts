@@ -134,9 +134,9 @@ export function calculateExpectedPay(
     byDate.set(job.date, existing);
   }
 
-  for (const [date, { hours, mealPenalties, rate }] of byDate.entries()) {
+  for (const [date, { hours, mealPenalties, rate, mealType }] of byDate.entries()) {
     const dayMultiplier = getDayMultiplier(date, referenceJob.client, allJobs, referenceJob.has6th7thDayRule || false);
-    const result = calculateDayPay(hours, rate, referenceJob.minimumHours || 0, mealPenalties, dayMultiplier);
+    const result = calculateDayPay(hours, rate, referenceJob.minimumHours || 0, mealPenalties, dayMultiplier, mealType);
     total += result.totalPay;
     details.push({ date, hours, pay: result.totalPay, breakdown: result.breakdown });
   }
