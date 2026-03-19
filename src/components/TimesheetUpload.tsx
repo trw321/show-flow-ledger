@@ -16,7 +16,7 @@ interface ParsedTimeEntry {
 }
 
 export default function TimesheetUpload() {
-  const { data, addJob } = useData();
+  const { data, addJob, updateJob } = useData();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [entries, setEntries] = useState<ParsedTimeEntry[]>([]);
