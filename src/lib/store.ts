@@ -136,10 +136,9 @@ export function useAppData() {
 
   const addJob = useCallback((job: Omit<Job, 'id' | 'createdAt'>) => {
     setData(prev => {
-      const nextKey = getJobDedupKey(job);
-      const exists = prev.jobs.some(existing => getJobDedupKey(existing) === nextKey);
+      if (isDuplicateJob(job, prev.jobs)) return prev;
 
-      if (exists) return prev;
+      return {
 
       return {
         ...prev,
