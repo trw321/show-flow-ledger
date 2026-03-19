@@ -339,7 +339,7 @@ export default function JobsPage() {
               </tr>
             </thead>
             <tbody>
-              {data.jobs.map(job => {
+              {[...data.jobs].sort((a, b) => b.date.localeCompare(a.date) || (b.startTime ?? '').localeCompare(a.startTime ?? '')).map(job => {
                 const hours = job.hoursWorked ?? 0;
                 const earned = hours * (job.hourlyRate ?? 0);
                 return (
