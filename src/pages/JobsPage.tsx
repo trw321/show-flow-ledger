@@ -270,6 +270,7 @@ export default function JobsPage() {
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [voicePrefill, setVoicePrefill] = useState<Partial<Job> | undefined>();
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const editingJob = editId ? data.jobs.find(j => j.id === editId) : undefined;
   const jobs = data.jobs.map(j => ({ name: j.name, client: j.client }));
