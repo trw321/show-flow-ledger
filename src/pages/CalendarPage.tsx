@@ -41,7 +41,7 @@ export default function CalendarPage() {
         if (hours <= 0) continue;
         const rate = job.hourlyRate || 0;
         const multiplier = getDayMultiplier(date, job.client, data.jobs, job.has6th7thDayRule || false);
-        const result = calculateDayPay(hours, rate, job.minimumHours || 0, job.mealPenalties || 0, multiplier);
+        const result = calculateDayPay(hours, rate, job.minimumHours || 0, job.mealPenalties || 0, multiplier, job.mealType);
         dayPay += result.totalPay;
       }
       if (dayPay > 0) map[date] = dayPay;
