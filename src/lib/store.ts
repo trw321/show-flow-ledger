@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getJobDedupKey } from './jobDedup';
+import { isDuplicateJob } from './jobDedup';
 
 export interface Job {
   id: string;
@@ -136,10 +136,7 @@ export function useAppData() {
 
   const addJob = useCallback((job: Omit<Job, 'id' | 'createdAt'>) => {
     setData(prev => {
-      const nextKey = getJobDedupKey(job);
-      const exists = prev.jobs.some(existing => getJobDedupKey(existing) === nextKey);
-
-      if (exists) return prev;
+      if (isDuplicateJob(job, prev.jobs)) return prev;
 
       return {
         ...prev,
