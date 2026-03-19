@@ -106,6 +106,16 @@ function loadData(): AppData {
       parsed.jobs = [...existingJobs, ...migratedJobs];
       delete parsed.timeEntries;
     }
+    // Auto-mark past jobs as completed if still 'upcoming' or 'in-progress'
+    const today = new Date().toISOString().split('T')[0];
+    if (parsed.jobs?.length) {
+      parsed.jobs = (parsed.jobs as Job[]).map(job => {
+        if (job.date < today && (job.status === 'upcoming' || job.status === 'in-progress')) {
+          return { ...job, status: 'completed' as const };
+        }
+        return job;
+      });
+    }
     return { ...defaultData, ...parsed };
   } catch {
     return defaultData;
