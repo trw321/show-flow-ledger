@@ -77,6 +77,7 @@ function JobForm({ onSubmit, initial, onCancel }: {
       parkingCost: parkingCost ? parseFloat(parkingCost) : undefined,
       hoursWorked: hoursWorked ? parseFloat(hoursWorked) : undefined,
       mealPenalties: mealPenalties ? parseInt(mealPenalties) : 0,
+      mealType: mealType || undefined,
       attachments,
     });
   };
