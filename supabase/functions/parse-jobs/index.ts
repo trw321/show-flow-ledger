@@ -36,9 +36,11 @@ serve(async (req) => {
               role: "system",
               content: `You are a job history parser for an AV technician's bookkeeping app. Parse pasted text into structured job data. Today's date is ${today}.
 
+CRITICAL DATE RULE: Extract the EXACT date from the source text for each job. Dates may appear in many formats (e.g. "2/2/26", "Feb 2", "02/02/2026", next to venue/job names, in headers, on separate lines). NEVER default to today's date. If a date appears anywhere near a job entry, that IS the job's date. For 2-digit years like "2/2/26", assume 2000s (= 2026-02-02).
+
 Extract these fields for each job:
 - jobNumber: the last 4 digits only of the job/dispatch number (e.g. "2026-0496" → "0496")
-- date: in YYYY-MM-DD format. For 2-digit years like "2/21/26", assume 2000s (2026-02-21).
+- date: in YYYY-MM-DD format. MUST come from the text, not assumed.
 - startTime: call/start time (e.g. "08:00 AM")
 - endTime: wrap/end time if present (e.g. "05:00 PM")
 - client: production company or project name (e.g. "METRO MEDIA PRODUCTIONS INC")
