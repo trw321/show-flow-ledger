@@ -1,10 +1,12 @@
 import { useState, useRef } from 'react';
+import { useData } from '@/lib/DataContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Camera, Loader2, Check, ImagePlus } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Job } from '@/lib/store';
+import { getJobDedupKey } from '@/lib/jobDedup';
 
 interface ParsedJob {
   jobNumber?: string;
@@ -23,6 +25,7 @@ interface ParsedJob {
 }
 
 export default function JobPhotoImport({ onImport }: { onImport: (job: Omit<Job, 'id' | 'createdAt'>) => void }) {
+  const { data: appData } = useData();
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [imageData, setImageData] = useState<{ base64: string; mimeType: string } | null>(null);
@@ -95,15 +98,46 @@ export default function JobPhotoImport({ onImport }: { onImport: (job: Omit<Job,
   const handleImport = () => {
     const toImport = entries.filter((_, i) => selected.has(i));
     if (toImport.length === 0) { toast.error('Select at least one job'); return; }
+
+    const existingKeys = new Set(appData.jobs.map(job => getJobDedupKey(job)));
+    let imported = 0;
+    let skipped = 0;
+
     toImport.forEach(j => {
-      onImport({
-        jobNumber: j.jobNumber, name: j.name, client: j.client, venue: j.venue,
-        date: j.date, startTime: j.startTime, endTime: j.endTime, status: j.status,
-        payrollCompany: j.payrollCompany, hourlyRate: j.hourlyRate, steward: j.steward,
-        parkingCost: j.parkingCost, notes: j.notes || '', has6th7thDayRule: false,
-      });
+      const draft = {
+        jobNumber: j.jobNumber,
+        name: j.name,
+        client: j.client,
+        venue: j.venue,
+        date: j.date,
+        startTime: j.startTime,
+        endTime: j.endTime,
+        status: j.status,
+        payrollCompany: j.payrollCompany,
+        hourlyRate: j.hourlyRate,
+        steward: j.steward,
+        parkingCost: j.parkingCost,
+        notes: j.notes || '',
+        has6th7thDayRule: false,
+      };
+      const key = getJobDedupKey(draft);
+
+      if (existingKeys.has(key)) {
+        skipped++;
+        return;
+      }
+
+      existingKeys.add(key);
+      onImport(draft);
+      imported++;
     });
-    toast.success(`Imported ${toImport.length} job(s)`);
+
+    if (imported === 0) {
+      toast.error('All selected jobs were already imported');
+      return;
+    }
+
+    toast.success(`Imported ${imported} job(s)${skipped ? ` • skipped ${skipped} duplicate(s)` : ''}`);
     handleClose(false);
   };
 

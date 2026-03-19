@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { getJobDedupKey } from './jobDedup';
 
 export interface Job {
   id: string;
@@ -134,10 +135,17 @@ export function useAppData() {
   }, [data]);
 
   const addJob = useCallback((job: Omit<Job, 'id' | 'createdAt'>) => {
-    setData(prev => ({
-      ...prev,
-      jobs: [...prev.jobs, { ...job, id: crypto.randomUUID(), createdAt: new Date().toISOString() }],
-    }));
+    setData(prev => {
+      const nextKey = getJobDedupKey(job);
+      const exists = prev.jobs.some(existing => getJobDedupKey(existing) === nextKey);
+
+      if (exists) return prev;
+
+      return {
+        ...prev,
+        jobs: [...prev.jobs, { ...job, id: crypto.randomUUID(), createdAt: new Date().toISOString() }],
+      };
+    });
   }, []);
 
   const updateJob = useCallback((id: string, updates: Partial<Job>) => {

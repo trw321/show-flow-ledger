@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Upload, Loader2, Check, X, FileImage } from 'lucide-react';
 import { toast } from 'sonner';
+import { getJobDedupKey } from '@/lib/jobDedup';
 
 interface ParsedTimeEntry {
   date: string;
@@ -122,6 +123,9 @@ export default function TimesheetUpload() {
   const addSelected = () => {
     let merged = 0;
     let created = 0;
+    let skipped = 0;
+    const existingKeys = new Set(data.jobs.map(job => getJobDedupKey(job)));
+
     entries.forEach((entry, i) => {
       if (!selected.has(i)) return;
 
@@ -136,18 +140,26 @@ export default function TimesheetUpload() {
         });
         merged++;
       } else {
-        // Create new entry (split shift or no match)
-        addJob({
+        const draft = {
           name: entry.description || entry.jobName || 'Timesheet Entry',
           client: entry.client || '',
           venue: '',
           date: entry.date,
-          status: 'completed',
+          status: 'completed' as const,
           hourlyRate: entry.rate || 0,
           hoursWorked: entry.hours,
           mealPenalties: entry.mealPenalties || 0,
           notes: '',
-        });
+        };
+        const key = getJobDedupKey(draft);
+
+        if (existingKeys.has(key)) {
+          skipped++;
+          return;
+        }
+
+        existingKeys.add(key);
+        addJob(draft);
         created++;
       }
     });
@@ -155,6 +167,7 @@ export default function TimesheetUpload() {
     const parts = [];
     if (merged > 0) parts.push(`${merged} merged`);
     if (created > 0) parts.push(`${created} new`);
+    if (skipped > 0) parts.push(`${skipped} duplicate skipped`);
     toast.success(`Hours added: ${parts.join(', ')}`);
     setOpen(false);
     setEntries([]);
