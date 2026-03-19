@@ -20,6 +20,7 @@ export interface Job {
   parkingCost?: number;
   hoursWorked?: number;
   mealPenalties?: number;
+  mealType?: 'YWA' | 'NWA';
   attachments?: string[];
   notes: string;
   createdAt: string;
