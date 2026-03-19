@@ -12,11 +12,22 @@ export function calculateDayPay(
   rate: number,
   minimumHours: number = 0,
   mealPenalties: number = 0,
-  dayMultiplier: number = 1
+  dayMultiplier: number = 1,
+  mealType?: 'YWA' | 'NWA'
 ): { billableHours: number; totalPay: number; breakdown: string[] } {
-  const billableHours = Math.max(actualHours, minimumHours);
+  // YWA = 1hr walk-away off the clock (deduct from hours)
+  // NWA = 30min meal on the clock (no deduction)
+  const mealDeduction = mealType === 'YWA' ? 1 : 0;
+  const adjustedHours = Math.max(0, actualHours - mealDeduction);
+  const billableHours = Math.max(adjustedHours, minimumHours);
   const effectiveRate = rate * dayMultiplier;
   const breakdown: string[] = [];
+
+  if (mealType === 'YWA') {
+    breakdown.push(`YWA: ${actualHours}h − 1h walk-away = ${adjustedHours}h`);
+  } else if (mealType === 'NWA') {
+    breakdown.push(`NWA: 30min meal on clock (no deduction)`);
+  }
 
   let pay = 0;
 
@@ -110,21 +121,22 @@ export function calculateExpectedPay(
   let total = 0;
 
   // Group by date
-  const byDate = new Map<string, { hours: number; mealPenalties: number; rate: number }>();
+  const byDate = new Map<string, { hours: number; mealPenalties: number; rate: number; mealType?: 'YWA' | 'NWA' }>();
   for (const job of jobs) {
     const hours = job.hoursWorked ?? 0;
     if (hours <= 0) continue;
     const rate = job.hourlyRate || referenceJob.hourlyRate || 0;
-    const existing = byDate.get(job.date) || { hours: 0, mealPenalties: 0, rate };
+    const existing = byDate.get(job.date) || { hours: 0, mealPenalties: 0, rate, mealType: job.mealType };
     existing.hours += hours;
     existing.mealPenalties += job.mealPenalties || 0;
     existing.rate = rate;
+    if (job.mealType) existing.mealType = job.mealType;
     byDate.set(job.date, existing);
   }
 
-  for (const [date, { hours, mealPenalties, rate }] of byDate.entries()) {
+  for (const [date, { hours, mealPenalties, rate, mealType }] of byDate.entries()) {
     const dayMultiplier = getDayMultiplier(date, referenceJob.client, allJobs, referenceJob.has6th7thDayRule || false);
-    const result = calculateDayPay(hours, rate, referenceJob.minimumHours || 0, mealPenalties, dayMultiplier);
+    const result = calculateDayPay(hours, rate, referenceJob.minimumHours || 0, mealPenalties, dayMultiplier, mealType);
     total += result.totalPay;
     details.push({ date, hours, pay: result.totalPay, breakdown: result.breakdown });
   }

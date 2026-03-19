@@ -40,6 +40,7 @@ function JobForm({ onSubmit, initial, onCancel }: {
   const [parkingCost, setParkingCost] = useState(initial?.parkingCost?.toString() ?? '');
   const [hoursWorked, setHoursWorked] = useState(initial?.hoursWorked?.toString() ?? '');
   const [mealPenalties, setMealPenalties] = useState(initial?.mealPenalties?.toString() ?? '0');
+  const [mealType, setMealType] = useState<Job['mealType']>(initial?.mealType ?? undefined);
   const [notes, setNotes] = useState(initial?.notes ?? '');
   const [attachments, setAttachments] = useState<string[]>(initial?.attachments ?? []);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -76,6 +77,7 @@ function JobForm({ onSubmit, initial, onCancel }: {
       parkingCost: parkingCost ? parseFloat(parkingCost) : undefined,
       hoursWorked: hoursWorked ? parseFloat(hoursWorked) : undefined,
       mealPenalties: mealPenalties ? parseInt(mealPenalties) : 0,
+      mealType: mealType || undefined,
       attachments,
     });
   };
@@ -95,10 +97,18 @@ function JobForm({ onSubmit, initial, onCancel }: {
         <Input placeholder="Start time (e.g. 08:00 AM)" value={startTime} onChange={e => setStartTime(e.target.value)} />
         <Input placeholder="End time (e.g. 05:00 PM)" value={endTime} onChange={e => setEndTime(e.target.value)} />
       </div>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <Input type="number" step="0.25" min="0" placeholder="Hours worked" value={hoursWorked} onChange={e => setHoursWorked(e.target.value)} />
         <Input type="number" step="0.01" min="0" placeholder="Hourly rate ($)" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} />
         <Input type="number" min="0" placeholder="Meal penalties" value={mealPenalties} onChange={e => setMealPenalties(e.target.value)} />
+        <Select value={mealType || 'none'} onValueChange={(v) => setMealType(v === 'none' ? undefined : v as Job['mealType'])}>
+          <SelectTrigger><SelectValue placeholder="Meal type" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">No meal break</SelectItem>
+            <SelectItem value="YWA">YWA — 1hr off clock</SelectItem>
+            <SelectItem value="NWA">NWA — 30min on clock</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
       <Select value={status} onValueChange={(v) => setStatus(v as Job['status'])}>
         <SelectTrigger><SelectValue /></SelectTrigger>
