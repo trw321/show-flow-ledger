@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getJobDedupKey } from './jobDedup';
+import { isDuplicateJob } from './jobDedup';
 
 export interface Job {
   id: string;
