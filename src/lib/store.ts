@@ -106,6 +106,39 @@ function loadData(): AppData {
       parsed.jobs = [...existingJobs, ...migratedJobs];
       delete parsed.timeEntries;
     }
+    // Deduplicate jobs: merge entries with same date + name + client
+    if (parsed.jobs?.length) {
+      const seen = new Map<string, number>();
+      const deduped: Job[] = [];
+      for (const job of parsed.jobs as Job[]) {
+        const key = `${job.date}|${job.name.toLowerCase().trim()}|${job.client.toLowerCase().trim()}`;
+        const existingIdx = seen.get(key);
+        if (existingIdx !== undefined) {
+          // Merge: keep the entry with more data, layer hours/fields on top
+          const existing = deduped[existingIdx];
+          deduped[existingIdx] = {
+            ...existing,
+            hoursWorked: job.hoursWorked || existing.hoursWorked,
+            hourlyRate: job.hourlyRate || existing.hourlyRate,
+            mealPenalties: job.mealPenalties || existing.mealPenalties,
+            mealType: job.mealType || existing.mealType,
+            venue: job.venue || existing.venue,
+            startTime: job.startTime || existing.startTime,
+            endTime: job.endTime || existing.endTime,
+            status: job.hoursWorked ? 'completed' : existing.status,
+            notes: [existing.notes, job.notes].filter(Boolean).join('\n'),
+            payrollCompany: job.payrollCompany || existing.payrollCompany,
+            steward: job.steward || existing.steward,
+            parkingCost: job.parkingCost || existing.parkingCost,
+            jobNumber: job.jobNumber || existing.jobNumber,
+          };
+        } else {
+          seen.set(key, deduped.length);
+          deduped.push(job);
+        }
+      }
+      parsed.jobs = deduped;
+    }
     return { ...defaultData, ...parsed };
   } catch {
     return defaultData;
