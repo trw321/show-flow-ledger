@@ -106,17 +106,35 @@ function loadData(): AppData {
       parsed.jobs = [...existingJobs, ...migratedJobs];
       delete parsed.timeEntries;
     }
-    // Deduplicate jobs: merge entries with same date + name + client
+    // Deduplicate jobs: merge entries with same date + (name OR jobNumber) + client
     if (parsed.jobs?.length) {
-      const seen = new Map<string, number>();
       const deduped: Job[] = [];
+
+      const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+
+      const findMatch = (job: Job): number => {
+        for (let i = 0; i < deduped.length; i++) {
+          const ex = deduped[i];
+          if (ex.date !== job.date) continue;
+
+          // Match by jobNumber if both have one
+          if (job.jobNumber && ex.jobNumber && job.jobNumber === ex.jobNumber) return i;
+
+          // Match by normalized name + client
+          const nameMatch = normalize(job.name) === normalize(ex.name);
+          const clientMatch = normalize(job.client) === normalize(ex.client);
+          // Match if name matches, or client matches and names are similar
+          if (nameMatch && clientMatch) return i;
+          if (clientMatch && (normalize(job.name).includes(normalize(ex.name)) || normalize(ex.name).includes(normalize(job.name)))) return i;
+        }
+        return -1;
+      };
+
       for (const job of parsed.jobs as Job[]) {
-        const key = `${job.date}|${job.name.toLowerCase().trim()}|${job.client.toLowerCase().trim()}`;
-        const existingIdx = seen.get(key);
-        if (existingIdx !== undefined) {
-          // Merge: keep the entry with more data, layer hours/fields on top
-          const existing = deduped[existingIdx];
-          deduped[existingIdx] = {
+        const idx = findMatch(job);
+        if (idx >= 0) {
+          const existing = deduped[idx];
+          deduped[idx] = {
             ...existing,
             hoursWorked: job.hoursWorked || existing.hoursWorked,
             hourlyRate: job.hourlyRate || existing.hourlyRate,
@@ -126,14 +144,14 @@ function loadData(): AppData {
             startTime: job.startTime || existing.startTime,
             endTime: job.endTime || existing.endTime,
             status: job.hoursWorked ? 'completed' : existing.status,
-            notes: [existing.notes, job.notes].filter(Boolean).join('\n'),
+            notes: [existing.notes, job.notes].filter(n => n?.trim()).join('\n'),
             payrollCompany: job.payrollCompany || existing.payrollCompany,
             steward: job.steward || existing.steward,
             parkingCost: job.parkingCost || existing.parkingCost,
             jobNumber: job.jobNumber || existing.jobNumber,
+            name: existing.name.length >= job.name.length ? existing.name : job.name,
           };
         } else {
-          seen.set(key, deduped.length);
           deduped.push(job);
         }
       }
