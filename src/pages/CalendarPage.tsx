@@ -2,9 +2,10 @@ import { useState, useMemo } from 'react';
 import { useData } from '@/lib/DataContext';
 import PageHeader from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, addWeeks, subWeeks, isSameMonth, isSameDay, parseISO } from 'date-fns';
+import { ChevronLeft, ChevronRight, DollarSign } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, addWeeks, subWeeks, isSameMonth, isSameDay } from 'date-fns';
 import type { Job } from '@/lib/store';
+import { calculateDayPay, getDayMultiplier } from '@/lib/payCalc';
 import { cn } from '@/lib/utils';
 
 type ViewMode = 'month' | 'week';
@@ -30,6 +31,23 @@ export default function CalendarPage() {
     });
     return map;
   }, [data.jobs]);
+
+  const payByDate = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const [date, jobs] of Object.entries(jobsByDate)) {
+      let dayPay = 0;
+      for (const job of jobs) {
+        const hours = job.hoursWorked ?? 0;
+        if (hours <= 0) continue;
+        const rate = job.hourlyRate || 0;
+        const multiplier = getDayMultiplier(date, job.client, data.jobs, job.has6th7thDayRule || false);
+        const result = calculateDayPay(hours, rate, job.minimumHours || 0, job.mealPenalties || 0, multiplier);
+        dayPay += result.totalPay;
+      }
+      if (dayPay > 0) map[date] = dayPay;
+    }
+    return map;
+  }, [jobsByDate, data.jobs]);
 
   const navigate = (dir: 1 | -1) => {
     setCurrentDate(prev =>
@@ -125,6 +143,12 @@ export default function CalendarPage() {
                 ))}
                 {view === 'month' && dayJobs.length > 3 && (
                   <div className="text-[10px] text-muted-foreground text-mono pl-1">+{dayJobs.length - 3} more</div>
+                )}
+                {payByDate[dateKey] && (
+                  <div className="flex items-center gap-0.5 mt-1 text-[10px] text-mono font-semibold text-success">
+                    <DollarSign size={10} />
+                    {payByDate[dateKey].toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  </div>
                 )}
               </div>
             </div>
