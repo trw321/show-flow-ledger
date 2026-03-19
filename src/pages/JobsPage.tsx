@@ -283,9 +283,28 @@ export default function JobsPage() {
     setOpen(true);
   };
 
-  return (
-    <>
-      <PageHeader
+  const toggleGroup = (key: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+
+  // Group jobs by name+client, sorted by most recent date
+  const groupedJobs = useMemo(() => {
+    const groups = new Map<string, { name: string; client: string; jobs: Job[] }>();
+    const sorted = [...data.jobs].sort((a, b) => b.date.localeCompare(a.date) || (b.startTime ?? '').localeCompare(a.startTime ?? ''));
+    for (const job of sorted) {
+      const key = `${job.name.toLowerCase().trim()}|${job.client.toLowerCase().trim()}`;
+      if (!groups.has(key)) {
+        groups.set(key, { name: job.name, client: job.client, jobs: [] });
+      }
+      groups.get(key)!.jobs.push(job);
+    }
+    // Sort groups by most recent job date
+    return [...groups.entries()].sort((a, b) => b[1].jobs[0].date.localeCompare(a[1].jobs[0].date));
+  }, [data.jobs]);
         title="Jobs"
         description="Track gigs, hours worked, and earnings"
         action={
