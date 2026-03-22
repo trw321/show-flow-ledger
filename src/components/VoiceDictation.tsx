@@ -87,10 +87,11 @@ export default function VoiceDictation({ onParsed, jobs }: VoiceDictationProps) 
         date: e.date || new Date().toISOString().split('T')[0],
         startTime: e.startTime || '',
         endTime: e.endTime || '',
-        hourlyRate: e.rate?.toString() || '',
-        hoursWorked: e.hours?.toString() || '',
         status: 'completed',
         notes: e.description || '',
+        mealType: e.mealType || '',
+        mealPenalties: e.mealPenalties?.toString() || '0',
+        contractNotes: e.contractNotes || '',
       });
       setHasParsed(true);
       toast.success('Got it! Review the details below');
