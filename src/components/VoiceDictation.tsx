@@ -207,12 +207,22 @@ export default function VoiceDictation({ onParsed, jobs }: VoiceDictationProps) 
                     : 'bg-card border-border text-muted-foreground hover:border-primary/40'
                 }`}
               >
-                {opt === '' ? 'No lunch' : opt === 'YWA' ? 'Walk Away' : 'Non Walk Away'}
+                {opt === '' ? 'No lunch' : opt === 'YWA' ? '1hr Walk Away' : '30min On Clock'}
               </button>
             ))}
           </div>
           <p className="text-sm leading-loose text-foreground/80">
-            <MadLibField value={fields.mealPenalties} onChange={v => set('mealPenalties', v)} placeholder="0" width="w-10" />
+            <input
+              type="number"
+              min="0"
+              max="9"
+              value={fields.mealPenalties}
+              onChange={e => set('mealPenalties', e.target.value.replace(/^0+/, '') || '0')}
+              onFocus={e => { if (e.target.value === '0') set('mealPenalties', ''); }}
+              onBlur={e => { if (!e.target.value) set('mealPenalties', '0'); }}
+              className="w-10 inline-block border-b-2 border-primary/40 bg-transparent text-foreground font-medium 
+                text-center px-1 py-0.5 focus:outline-none focus:border-primary transition-colors text-sm"
+            />
             {' '}meal {parseInt(fields.mealPenalties || '0') === 1 ? 'penalty' : 'penalties'}
             <span className="text-xs text-muted-foreground ml-1">(1hr straight time each)</span>
           </p>
