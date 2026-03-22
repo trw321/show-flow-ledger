@@ -39,16 +39,18 @@ serve(async (req) => {
               role: "system",
               content: `You are a time entry parser for an AV technician's bookkeeping app. Parse spoken or typed input into structured job data. Today's date is ${today}. ${jobsList}
 
-Extract all available details from the user's spoken input:
+Extract these details from the user's spoken input:
 - Job/gig name and client/production company
 - Venue/location
 - Date (interpret relative dates like "yesterday", "last friday" relative to today)
 - Start time and end time (in 12-hour format like "07:00 AM")
-- Hours worked (calculate from start/end if given, or use explicit mention)
-- Hourly rate (default $0 if not mentioned)
+- Meal type: "YWA" if they mention walk-away lunch (1hr off clock), "NWA" if non-walk-away (30min on clock), empty if not mentioned
+- Meal penalties: number of meal penalties (each = 1hr straight time), 0 if not mentioned
+- Contract notes: any special terms, rate details, minimums, or other contract info mentioned
 - Job number (if mentioned)
 - Any notes or description
 
+Do NOT extract hourly rate or hours worked — those are tracked elsewhere.
 Match to available jobs if the description seems to reference one. Be generous with interpretation — the user is speaking naturally on a phone.`,
             },
             { role: "user", content: text },
