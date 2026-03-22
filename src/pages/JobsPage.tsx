@@ -58,17 +58,17 @@ export default function JobsPage() {
     <>
       <PageHeader
         title="Jobs"
-        description="Track gigs, hours worked, and earnings"
+        description="Track gigs, hours, and earnings"
         action={
-          <div className="flex gap-2 flex-wrap">
+          <>
             <TimesheetUpload />
             <JobPhotoImport onImport={addJob} />
             <JobPasteImport onImport={addJob} />
             <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setVoicePrefill(undefined); }}>
               <DialogTrigger asChild>
-                <Button size="sm"><Plus size={16} className="mr-1" /> New Job</Button>
+                <Button size="sm"><Plus size={16} className="mr-1" /> New</Button>
               </DialogTrigger>
-              <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+              <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto mx-2">
                 <DialogHeader><DialogTitle className="text-mono">New Job</DialogTitle></DialogHeader>
                 <JobForm
                   initial={voicePrefill}
@@ -76,24 +76,24 @@ export default function JobsPage() {
                 />
               </DialogContent>
             </Dialog>
-          </div>
+          </>
         }
       />
 
-      {/* Voice Dictation - prominent on page */}
-      <div className="mb-6 rounded-lg border border-border bg-secondary/20 p-4">
+      {/* Voice Dictation */}
+      <div className="mb-4 rounded-lg border border-border bg-secondary/20 p-3">
         <VoiceDictation onParsed={handleVoiceParsed} jobs={jobsList} />
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <div className="rounded-lg border border-border bg-secondary/20 p-4">
-          <p className="text-xs text-muted-foreground text-mono uppercase">Total Hours</p>
-          <p className="text-2xl font-bold text-mono mt-1">{totalHours.toFixed(1)}</p>
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="rounded-lg border border-border bg-secondary/20 p-3">
+          <p className="text-[10px] text-muted-foreground text-mono uppercase">Total Hours</p>
+          <p className="text-xl font-bold text-mono mt-0.5">{totalHours.toFixed(1)}</p>
         </div>
-        <div className="rounded-lg border border-border bg-secondary/20 p-4">
-          <p className="text-xs text-muted-foreground text-mono uppercase">Total Earnings</p>
-          <p className="text-2xl font-bold text-mono text-success mt-1">${totalEarnings.toLocaleString()}</p>
+        <div className="rounded-lg border border-border bg-secondary/20 p-3">
+          <p className="text-[10px] text-muted-foreground text-mono uppercase">Total Earnings</p>
+          <p className="text-xl font-bold text-mono text-success mt-0.5">${totalEarnings.toLocaleString()}</p>
         </div>
       </div>
 
@@ -110,59 +110,78 @@ export default function JobsPage() {
 
             return (
               <div key={key} className="rounded-lg border border-border overflow-hidden">
+                {/* Group header */}
                 <button
                   onClick={() => toggleGroup(key)}
-                  className="w-full flex items-center gap-3 px-4 py-3 bg-secondary/30 hover:bg-secondary/50 transition-colors text-left"
+                  className="w-full flex items-center gap-2 px-3 py-2.5 bg-secondary/30 hover:bg-secondary/50 transition-colors text-left"
                 >
                   {isOpen
-                    ? <ChevronDown size={16} className="text-muted-foreground shrink-0" />
-                    : <ChevronRight size={16} className="text-muted-foreground shrink-0" />
+                    ? <ChevronDown size={14} className="text-muted-foreground shrink-0" />
+                    : <ChevronRight size={14} className="text-muted-foreground shrink-0" />
                   }
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-medium text-sm truncate">{group.name}</span>
-                      <span className="text-xs text-muted-foreground">• {group.client}</span>
+                      {group.client && <span className="text-xs text-muted-foreground truncate">• {group.client}</span>}
                     </div>
-                    <div className="flex gap-3 text-xs text-muted-foreground text-mono mt-0.5">
+                    <div className="flex gap-2 text-[11px] text-muted-foreground text-mono mt-0.5">
                       <span>{shiftCount} shift{shiftCount !== 1 ? 's' : ''}</span>
-                      <span>Latest: {format(new Date(latestDate), 'MMM d')}</span>
+                      <span>{format(new Date(latestDate), 'MMM d')}</span>
                       {totalGroupHours > 0 && <span>{totalGroupHours.toFixed(1)}h</span>}
                       {totalGroupEarned > 0 && <span className="text-success font-semibold">${totalGroupEarned.toLocaleString()}</span>}
                     </div>
                   </div>
                 </button>
 
+                {/* Expanded: mobile card layout */}
                 {isOpen && (
                   <div className="divide-y divide-border">
                     {group.jobs.map(job => {
                       const hours = job.hoursWorked ?? 0;
                       const earned = hours * (job.hourlyRate ?? 0);
                       return (
-                        <div key={job.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-secondary/20 transition-colors text-sm">
-                          <div className="w-16 text-mono text-xs text-muted-foreground">{job.jobNumber || '—'}</div>
-                          <div className="w-24 text-mono text-xs">{format(new Date(job.date), 'MMM d, yyyy')}</div>
-                          <div className="w-28 text-mono text-xs text-muted-foreground">
-                            {job.startTime ? `${job.startTime}${job.endTime ? ` – ${job.endTime}` : ''}` : '—'}
-                          </div>
-                          <div className="flex-1 min-w-0 truncate text-muted-foreground text-xs">{job.venue || '—'}</div>
-                          <div className="w-14 text-right text-mono text-xs">{hours > 0 ? `${hours}h` : '—'}</div>
-                          <div className="w-16 text-right text-mono text-xs">{job.hourlyRate ? `$${job.hourlyRate.toFixed(2)}` : '—'}</div>
-                          <div className="w-16 text-right text-mono text-xs font-bold text-success">{earned > 0 ? `$${earned.toLocaleString()}` : '—'}</div>
-                          <span className={cn("inline-block rounded px-2 py-0.5 text-[10px] text-mono font-medium shrink-0",
-                            job.status === 'completed' ? 'bg-success/20 text-success' :
-                              job.status === 'in-progress' ? 'bg-primary/20 text-primary' :
-                                job.status === 'cancelled' ? 'bg-destructive/20 text-destructive' :
-                                  'bg-accent/20 text-accent'
-                          )}>
-                            {job.status}
-                          </span>
-                          <div className="flex gap-1 shrink-0">
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); setEditId(job.id); }}>
-                              <Pencil size={14} />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={(e) => { e.stopPropagation(); deleteJob(job.id); toast.success('Job deleted'); }}>
-                              <Trash2 size={14} />
-                            </Button>
+                        <div key={job.id} className="px-3 py-2.5 hover:bg-secondary/20 transition-colors">
+                          {/* Mobile: stacked card layout */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0 space-y-0.5">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-xs text-mono font-medium">
+                                  {format(new Date(job.date), 'MMM d, yyyy')}
+                                </span>
+                                {job.jobNumber && (
+                                  <span className="text-[10px] text-muted-foreground text-mono">#{job.jobNumber}</span>
+                                )}
+                                <span className={cn("inline-block rounded px-1.5 py-0.5 text-[10px] text-mono font-medium",
+                                  job.status === 'completed' ? 'bg-success/20 text-success' :
+                                    job.status === 'in-progress' ? 'bg-primary/20 text-primary' :
+                                      job.status === 'cancelled' ? 'bg-destructive/20 text-destructive' :
+                                        'bg-accent/20 text-accent'
+                                )}>
+                                  {job.status}
+                                </span>
+                              </div>
+                              {job.venue && (
+                                <p className="text-xs text-muted-foreground truncate">{job.venue}</p>
+                              )}
+                              <div className="flex items-center gap-3 text-xs text-mono">
+                                {job.startTime && (
+                                  <span className="text-muted-foreground">
+                                    {job.startTime}{job.endTime ? ` – ${job.endTime}` : ''}
+                                  </span>
+                                )}
+                                {hours > 0 && <span>{hours}h</span>}
+                                {job.hourlyRate ? <span>${job.hourlyRate}/hr</span> : null}
+                                {earned > 0 && <span className="font-bold text-success">${earned.toLocaleString()}</span>}
+                              </div>
+                            </div>
+                            <div className="flex gap-0.5 shrink-0">
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditId(job.id)}>
+                                <Pencil size={14} />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => { deleteJob(job.id); toast.success('Deleted'); }}>
+                                <Trash2 size={14} />
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       );
@@ -176,7 +195,7 @@ export default function JobsPage() {
       )}
 
       <Dialog open={!!editId} onOpenChange={(o) => !o && setEditId(null)}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto mx-2">
           <DialogHeader><DialogTitle className="text-mono">Edit Job</DialogTitle></DialogHeader>
           {editingJob && (
             <JobForm
