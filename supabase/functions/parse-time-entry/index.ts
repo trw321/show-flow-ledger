@@ -37,11 +37,19 @@ serve(async (req) => {
           messages: [
             {
               role: "system",
-              content: `You are a time entry parser for an AV technician's bookkeeping app. Parse spoken or typed input into structured time entry data. Today's date is ${today}. ${jobsList}
+              content: `You are a time entry parser for an AV technician's bookkeeping app. Parse spoken or typed input into structured job data. Today's date is ${today}. ${jobsList}
 
-Extract: hours worked, hourly rate (default $0 if not mentioned), date (default today), client name, job name (match to available jobs if possible), and description/notes.
+Extract all available details from the user's spoken input:
+- Job/gig name and client/production company
+- Venue/location
+- Date (interpret relative dates like "yesterday", "last friday" relative to today)
+- Start time and end time (in 12-hour format like "07:00 AM")
+- Hours worked (calculate from start/end if given, or use explicit mention)
+- Hourly rate (default $0 if not mentioned)
+- Job number (if mentioned)
+- Any notes or description
 
-Interpret relative dates like "yesterday", "last friday", etc. relative to today.`,
+Match to available jobs if the description seems to reference one. Be generous with interpretation — the user is speaking naturally on a phone.`,
             },
             { role: "user", content: text },
           ],
@@ -50,39 +58,61 @@ Interpret relative dates like "yesterday", "last friday", etc. relative to today
               type: "function",
               function: {
                 name: "create_time_entry",
-                description: "Create a parsed time entry from the user's input",
+                description: "Create a parsed job entry from the user's spoken input",
                 parameters: {
                   type: "object",
                   properties: {
-                    hours: { type: "number", description: "Hours worked" },
-                    rate: {
-                      type: "number",
-                      description: "Hourly rate in dollars, 0 if not mentioned",
+                    jobName: {
+                      type: "string",
+                      description: "Job or gig name, matched from available jobs if possible",
+                    },
+                    client: {
+                      type: "string",
+                      description: "Client or production company name, empty string if not mentioned",
+                    },
+                    venue: {
+                      type: "string",
+                      description: "Venue or location, empty string if not mentioned",
                     },
                     date: {
                       type: "string",
                       description: "Date in YYYY-MM-DD format",
                     },
-                    client: {
+                    startTime: {
                       type: "string",
-                      description: "Client name, empty string if not mentioned",
+                      description: "Start time in HH:MM AM/PM format (e.g. '07:00 AM'), empty string if not mentioned",
                     },
-                    jobName: {
+                    endTime: {
                       type: "string",
-                      description:
-                        "Job name matched from available jobs, or empty string",
+                      description: "End time in HH:MM AM/PM format (e.g. '05:00 PM'), empty string if not mentioned",
+                    },
+                    hours: {
+                      type: "number",
+                      description: "Hours worked (calculate from start/end times if both given, otherwise use explicit mention, 0 if unknown)",
+                    },
+                    rate: {
+                      type: "number",
+                      description: "Hourly rate in dollars, 0 if not mentioned",
+                    },
+                    jobNumber: {
+                      type: "string",
+                      description: "Job number if mentioned, empty string otherwise",
                     },
                     description: {
                       type: "string",
-                      description: "Description of work done",
+                      description: "Any additional notes or description of work done",
                     },
                   },
                   required: [
+                    "jobName",
+                    "client",
+                    "venue",
+                    "date",
+                    "startTime",
+                    "endTime",
                     "hours",
                     "rate",
-                    "date",
-                    "client",
-                    "jobName",
+                    "jobNumber",
                     "description",
                   ],
                   additionalProperties: false,
