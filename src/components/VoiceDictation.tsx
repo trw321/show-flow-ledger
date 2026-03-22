@@ -112,10 +112,10 @@ export default function VoiceDictation({ onParsed, jobs }: VoiceDictationProps) 
       date: fields.date,
       startTime: fields.startTime.trim() || undefined,
       endTime: fields.endTime.trim() || undefined,
-      hourlyRate: fields.hourlyRate ? parseFloat(fields.hourlyRate) : undefined,
-      hoursWorked: fields.hoursWorked ? parseFloat(fields.hoursWorked) : undefined,
       status: fields.status,
       notes: fields.notes.trim(),
+      mealType: fields.mealType === 'YWA' || fields.mealType === 'NWA' ? fields.mealType : undefined,
+      mealPenalties: fields.mealPenalties ? parseInt(fields.mealPenalties) : 0,
     });
     setFields(blankJob);
     setHasParsed(false);
