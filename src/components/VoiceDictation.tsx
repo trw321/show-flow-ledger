@@ -17,10 +17,11 @@ const blankJob = {
   date: new Date().toISOString().split('T')[0],
   startTime: '',
   endTime: '',
-  hourlyRate: '',
-  hoursWorked: '',
   status: 'completed' as const,
   notes: '',
+  mealType: '' as '' | 'YWA' | 'NWA',
+  mealPenalties: '0',
+  contractNotes: '',
 };
 
 export default function VoiceDictation({ onParsed, jobs }: VoiceDictationProps) {
