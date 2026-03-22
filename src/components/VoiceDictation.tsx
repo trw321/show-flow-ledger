@@ -196,18 +196,18 @@ export default function VoiceDictation({ onParsed, jobs }: VoiceDictationProps) 
         <div className="pt-1 space-y-2">
           <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Lunch & Penalties</p>
           <div className="flex gap-2">
-            {(['', 'YWA', 'NWA'] as const).map(opt => (
+            {(['YWA', 'NWA'] as const).map(opt => (
               <button
-                key={opt || 'none'}
+                key={opt}
                 type="button"
-                onClick={() => set('mealType', opt)}
+                onClick={() => set('mealType', fields.mealType === opt ? '' : opt)}
                 className={`flex-1 text-xs py-2 px-2 rounded-xl border transition-colors ${
                   fields.mealType === opt
                     ? 'bg-primary text-primary-foreground border-primary'
                     : 'bg-card border-border text-muted-foreground hover:border-primary/40'
                 }`}
               >
-                {opt === '' ? 'No lunch' : opt === 'YWA' ? '1hr Walk Away' : '30min On Clock'}
+                {opt === 'YWA' ? '1hr Walk Away' : '30min On Clock'}
               </button>
             ))}
           </div>
