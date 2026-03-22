@@ -127,6 +127,11 @@ function saveData(data: AppData) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
+export function clearAllData() {
+  localStorage.removeItem(STORAGE_KEY);
+  window.location.reload();
+}
+
 export function useAppData() {
   const [data, setData] = useState<AppData>(loadData);
 
