@@ -39,16 +39,18 @@ serve(async (req) => {
               role: "system",
               content: `You are a time entry parser for an AV technician's bookkeeping app. Parse spoken or typed input into structured job data. Today's date is ${today}. ${jobsList}
 
-Extract all available details from the user's spoken input:
+Extract these details from the user's spoken input:
 - Job/gig name and client/production company
 - Venue/location
 - Date (interpret relative dates like "yesterday", "last friday" relative to today)
 - Start time and end time (in 12-hour format like "07:00 AM")
-- Hours worked (calculate from start/end if given, or use explicit mention)
-- Hourly rate (default $0 if not mentioned)
+- Meal type: "YWA" if they mention walk-away lunch (1hr off clock), "NWA" if non-walk-away (30min on clock), empty if not mentioned
+- Meal penalties: number of meal penalties (each = 1hr straight time), 0 if not mentioned
+- Contract notes: any special terms, rate details, minimums, or other contract info mentioned
 - Job number (if mentioned)
 - Any notes or description
 
+Do NOT extract hourly rate or hours worked — those are tracked elsewhere.
 Match to available jobs if the description seems to reference one. Be generous with interpretation — the user is speaking naturally on a phone.`,
             },
             { role: "user", content: text },
@@ -80,19 +82,23 @@ Match to available jobs if the description seems to reference one. Be generous w
                     },
                     startTime: {
                       type: "string",
-                      description: "Start time in HH:MM AM/PM format (e.g. '07:00 AM'), empty string if not mentioned",
+                      description: "Start time in HH:MM AM/PM format, empty string if not mentioned",
                     },
                     endTime: {
                       type: "string",
-                      description: "End time in HH:MM AM/PM format (e.g. '05:00 PM'), empty string if not mentioned",
+                      description: "End time in HH:MM AM/PM format, empty string if not mentioned",
                     },
-                    hours: {
-                      type: "number",
-                      description: "Hours worked (calculate from start/end times if both given, otherwise use explicit mention, 0 if unknown)",
+                    mealType: {
+                      type: "string",
+                      description: "Meal type: 'YWA' for walk-away, 'NWA' for non-walk-away, empty string if not mentioned",
                     },
-                    rate: {
+                    mealPenalties: {
                       type: "number",
-                      description: "Hourly rate in dollars, 0 if not mentioned",
+                      description: "Number of meal penalties, 0 if not mentioned",
+                    },
+                    contractNotes: {
+                      type: "string",
+                      description: "Any contract terms, rate details, minimums, or special conditions mentioned",
                     },
                     jobNumber: {
                       type: "string",
@@ -110,8 +116,9 @@ Match to available jobs if the description seems to reference one. Be generous w
                     "date",
                     "startTime",
                     "endTime",
-                    "hours",
-                    "rate",
+                    "mealType",
+                    "mealPenalties",
+                    "contractNotes",
                     "jobNumber",
                     "description",
                   ],
