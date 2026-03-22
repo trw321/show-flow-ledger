@@ -192,15 +192,43 @@ export default function VoiceDictation({ onParsed, jobs }: VoiceDictationProps) 
           <MadLibField value={fields.endTime} onChange={v => set('endTime', v)} placeholder="end" width="w-20" />
         </p>
 
-        <p className="text-sm leading-loose text-foreground/80">
-          at{' '}
-          <span className="inline-flex items-center">
-            $<MadLibField value={fields.hourlyRate} onChange={v => set('hourlyRate', v)} placeholder="rate" width="w-14" />
-          </span>
-          {' '}/hr for{' '}
-          <MadLibField value={fields.hoursWorked} onChange={v => set('hoursWorked', v)} placeholder="hrs" width="w-12" />
-          {' '}hours
-        </p>
+        {/* Meal section */}
+        <div className="pt-1 space-y-2">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Lunch & Penalties</p>
+          <div className="flex gap-2">
+            {(['', 'YWA', 'NWA'] as const).map(opt => (
+              <button
+                key={opt || 'none'}
+                type="button"
+                onClick={() => set('mealType', opt)}
+                className={`flex-1 text-xs py-2 px-2 rounded-xl border transition-colors ${
+                  fields.mealType === opt
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-card border-border text-muted-foreground hover:border-primary/40'
+                }`}
+              >
+                {opt === '' ? 'No lunch' : opt === 'YWA' ? 'Walk Away' : 'Non Walk Away'}
+              </button>
+            ))}
+          </div>
+          <p className="text-sm leading-loose text-foreground/80">
+            <MadLibField value={fields.mealPenalties} onChange={v => set('mealPenalties', v)} placeholder="0" width="w-10" />
+            {' '}meal {parseInt(fields.mealPenalties || '0') === 1 ? 'penalty' : 'penalties'}
+            <span className="text-xs text-muted-foreground ml-1">(1hr straight time each)</span>
+          </p>
+        </div>
+
+        {/* Contract notes */}
+        <div className="pt-1">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-1">Contract Notes</p>
+          <textarea
+            value={fields.contractNotes}
+            onChange={e => set('contractNotes', e.target.value)}
+            placeholder="Rate details, minimums, special terms…"
+            rows={2}
+            className="w-full rounded-xl border border-border bg-transparent text-sm px-3 py-2 placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary transition-colors resize-none"
+          />
+        </div>
 
         <div className="pt-2">
           <Button onClick={handleSubmit} size="sm" className="w-full rounded-xl">
