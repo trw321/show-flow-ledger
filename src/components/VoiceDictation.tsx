@@ -207,7 +207,7 @@ export default function VoiceDictation({ onParsed, jobs }: VoiceDictationProps) 
                     : 'bg-card border-border text-muted-foreground hover:border-primary/40'
                 }`}
               >
-                {opt === '' ? 'No lunch' : opt === 'YWA' ? 'Walk Away' : 'Non Walk Away'}
+                {opt === '' ? 'No lunch' : opt === 'YWA' ? '1hr Walk Away' : '30min On Clock'}
               </button>
             ))}
           </div>
