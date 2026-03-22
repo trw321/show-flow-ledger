@@ -82,19 +82,23 @@ Match to available jobs if the description seems to reference one. Be generous w
                     },
                     startTime: {
                       type: "string",
-                      description: "Start time in HH:MM AM/PM format (e.g. '07:00 AM'), empty string if not mentioned",
+                      description: "Start time in HH:MM AM/PM format, empty string if not mentioned",
                     },
                     endTime: {
                       type: "string",
-                      description: "End time in HH:MM AM/PM format (e.g. '05:00 PM'), empty string if not mentioned",
+                      description: "End time in HH:MM AM/PM format, empty string if not mentioned",
                     },
-                    hours: {
-                      type: "number",
-                      description: "Hours worked (calculate from start/end times if both given, otherwise use explicit mention, 0 if unknown)",
+                    mealType: {
+                      type: "string",
+                      description: "Meal type: 'YWA' for walk-away, 'NWA' for non-walk-away, empty string if not mentioned",
                     },
-                    rate: {
+                    mealPenalties: {
                       type: "number",
-                      description: "Hourly rate in dollars, 0 if not mentioned",
+                      description: "Number of meal penalties, 0 if not mentioned",
+                    },
+                    contractNotes: {
+                      type: "string",
+                      description: "Any contract terms, rate details, minimums, or special conditions mentioned",
                     },
                     jobNumber: {
                       type: "string",
