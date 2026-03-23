@@ -128,7 +128,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <StatCard label="Net Profit" value={`$${netProfit.toLocaleString()}`} icon={DollarSign} variant={netProfit >= 0 ? 'success' : 'destructive'} />
         <StatCard label="Job Earnings" value={`$${totalEarnings.toLocaleString()}`} icon={DollarSign} variant="success" />
-        <StatCard label="Pending" value={`$${pendingIncome.toLocaleString()}`} icon={AlertCircle} variant="accent" />
+        <StatCard label="Pending" value={`$${pendingIncome.toLocaleString()}`} icon={AlertCircle} variant="warning" />
         <StatCard label="Overdue" value={`$${overdueIncome.toLocaleString()}`} icon={AlertCircle} variant="destructive" />
       </div>
 

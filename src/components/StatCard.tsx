@@ -5,7 +5,7 @@ interface StatCardProps {
   label: string;
   value: string | number;
   icon: LucideIcon;
-  variant?: 'default' | 'primary' | 'accent' | 'success' | 'destructive';
+  variant?: 'default' | 'primary' | 'accent' | 'success' | 'destructive' | 'info' | 'warning';
   subtitle?: string;
 }
 
