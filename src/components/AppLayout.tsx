@@ -129,7 +129,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </SheetTrigger>
             <SheetContent side="right" className="w-64 bg-sidebar p-0 flex flex-col">
               <div className="px-4 py-4 border-b border-border">
-                <span className="text-sm font-bold text-mono tracking-wider text-primary">AV LEDGER</span>
+                <span className="text-sm font-bold text-mono tracking-widest funky-gradient-text">AV LEDGER</span>
               </div>
               <SidebarContent onNavigate={() => setMobileOpen(false)} />
             </SheetContent>
