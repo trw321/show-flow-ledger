@@ -45,7 +45,7 @@ export default function MilestoneOverlay({ weeklyHours, weeklyEarnings }: Milest
         icon: Trophy,
         title: '40 Hours Hit! 🎉',
         subtitle: "Full week crushed. You've earned your rest!",
-        gradient: 'from-amber-400 via-orange-400 to-pink-500',
+        gradient: 'from-yellow-400 via-lime-400 to-primary',
       });
     }
 
