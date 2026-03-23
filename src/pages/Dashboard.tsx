@@ -144,7 +144,72 @@ export default function Dashboard() {
         <StatCard label="Overdue" value={`$${overdueIncome.toLocaleString()}`} icon={AlertCircle} variant="destructive" />
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-4">
+      {/* Tax Breakdown Pie Chart */}
+      <div className="rounded-2xl border border-border bg-card p-4 mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-[10px] font-semibold text-mono text-muted-foreground uppercase tracking-[0.2em]">Tax Breakdown</h2>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-muted-foreground">Tax Rate</span>
+            <select
+              value={taxRate}
+              onChange={e => setTaxRate(Number(e.target.value))}
+              className="text-xs bg-secondary border border-border rounded-md px-2 py-1 text-foreground"
+            >
+              {[15, 20, 25, 30, 35, 40].map(r => (
+                <option key={r} value={r}>{r}%</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {totalIncome === 0 && totalExpenses === 0 ? (
+          <p className="text-xs text-muted-foreground py-8 text-center">Add income & expenses to see your tax breakdown</p>
+        ) : (
+          <div className="flex items-center gap-4">
+            <div className="w-40 h-40 shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={35}
+                    outerRadius={65}
+                    paddingAngle={3}
+                    dataKey="value"
+                    strokeWidth={0}
+                  >
+                    {pieData.map((entry, i) => (
+                      <Cell key={i} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value: number) => `$${value.toLocaleString()}`}
+                    contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="space-y-2 flex-1 min-w-0">
+              {pieData.map(d => (
+                <div key={d.name} className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                  <span className="text-xs text-muted-foreground flex-1">{d.name}</span>
+                  <span className="text-xs font-bold text-mono">${d.value.toLocaleString()}</span>
+                </div>
+              ))}
+              <div className="border-t border-border pt-1.5 mt-1.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 shrink-0" />
+                  <span className="text-xs text-muted-foreground flex-1">Total Income</span>
+                  <span className="text-xs font-bold text-mono">${totalIncome.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
         <div className="rounded-2xl border border-border bg-card p-4">
           <h2 className="text-[10px] font-semibold text-mono mb-3 text-muted-foreground uppercase tracking-[0.2em]">Recent Jobs</h2>
           {recentJobs.length === 0 ? (
