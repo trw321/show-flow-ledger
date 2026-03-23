@@ -6,7 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { DataProvider } from "@/lib/DataContext";
 import AppLayout from "@/components/AppLayout";
 import Dashboard from "@/pages/Dashboard";
-import JobsPage from "@/pages/JobsPage";
+
 import ExpensesPage from "@/pages/ExpensesPage";
 import IncomePage from "@/pages/IncomePage";
 import EquipmentPage from "@/pages/EquipmentPage";
@@ -28,7 +28,7 @@ const App = () => (
           <AppLayout>
             <Routes>
               <Route path="/" element={<Dashboard />} />
-              <Route path="/jobs" element={<JobsPage />} />
+              
               <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/log" element={<JobLogPage />} />
               <Route path="/expenses" element={<ExpensesPage />} />
