@@ -13,9 +13,12 @@ interface ParsedIncome {
   invoiceNumber?: string;
 }
 
-export default function IncomeStatementUpload() {
+export default function IncomeStatementUpload({ externalOpen, onExternalOpenChange }: { externalOpen?: boolean; onExternalOpenChange?: (open: boolean) => void } = {}) {
   const { addIncome } = useData();
-  const [open, setOpen] = useState(false);
+  const isControlled = externalOpen !== undefined;
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = isControlled ? externalOpen : internalOpen;
+  const setOpen = (v: boolean) => { if (isControlled) onExternalOpenChange?.(v); else setInternalOpen(v); };
   const [loading, setLoading] = useState(false);
   const [transactions, setTransactions] = useState<ParsedIncome[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());

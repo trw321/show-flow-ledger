@@ -69,6 +69,7 @@ export default function IncomePage() {
   const { data, addIncome, updateIncome, deleteIncome } = useData();
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [statementOpen, setStatementOpen] = useState(false);
   const editingInc = editId ? data.income.find(i => i.id === editId) : undefined;
   const jobs = data.jobs.map(j => ({ id: j.id, name: j.name }));
   const total = data.income.reduce((s, i) => s + i.amount, 0);
@@ -93,7 +94,10 @@ export default function IncomePage() {
       />
 
       {data.income.length === 0 ? (
-        <EmptyState icon={DollarSign} title="No income recorded" description="Track payments and invoices for your AV work." />
+        <>
+          <EmptyState icon={DollarSign} title="No income recorded" description="Tap to upload a statement or invoice photo" onUploadPhoto={() => setStatementOpen(true)} />
+          <IncomeStatementUpload externalOpen={statementOpen} onExternalOpenChange={setStatementOpen} />
+        </>
       ) : (
         <div className="rounded-lg border border-border overflow-hidden">
           <table className="w-full text-sm">

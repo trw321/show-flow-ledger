@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 export default function JobsPage() {
   const { data, addJob, updateJob, deleteJob } = useData();
   const [editId, setEditId] = useState<string | null>(null);
+  const [photoOpen, setPhotoOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const editingJob = editId ? data.jobs.find(j => j.id === editId) : undefined;
@@ -55,7 +56,7 @@ export default function JobsPage() {
 
       {/* Secondary import methods */}
       <div className="flex gap-2 mb-4">
-        <JobPhotoImport onImport={addJob} />
+        <JobPhotoImport onImport={addJob} externalOpen={photoOpen} onExternalOpenChange={setPhotoOpen} />
         <JobPasteImport onImport={addJob} />
       </div>
 
@@ -73,7 +74,7 @@ export default function JobsPage() {
 
       {/* Job list */}
       {data.jobs.length === 0 ? (
-        <EmptyState icon={Briefcase} title="No jobs yet" description="Speak, snap, or paste to add your first gig." />
+        <EmptyState icon={Briefcase} title="No jobs yet" description="Tap to snap a photo of your schedule" onUploadPhoto={() => setPhotoOpen(true)} />
       ) : (
         <div className="space-y-2">
           {groupedJobs.map(([key, group]) => {
