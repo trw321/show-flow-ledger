@@ -3,7 +3,7 @@ import { useData } from '@/lib/DataContext';
 import PageHeader from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ChevronLeft, ChevronRight, DollarSign } from 'lucide-react';
+import { ChevronLeft, ChevronRight, DollarSign, Star } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay } from 'date-fns';
 import type { Job } from '@/lib/store';
 import { calculateDayPay, getDayMultiplier } from '@/lib/payCalc';
@@ -119,12 +119,18 @@ export default function CalendarPage() {
                 hasJobs && 'cursor-pointer active:bg-secondary/60'
               )}
             >
-              <span className={cn(
-                "text-[11px] text-mono leading-none w-6 h-6 flex items-center justify-center rounded-full",
-                isToday ? 'bg-primary text-primary-foreground font-bold' : 'text-foreground'
-              )}>
-                {format(day, 'd')}
-              </span>
+              {isToday ? (
+                <span className="relative w-6 h-6 flex items-center justify-center">
+                  <Star size={24} className="absolute text-primary fill-primary" />
+                  <span className="relative text-[11px] text-mono leading-none text-primary-foreground font-bold">
+                    {format(day, 'd')}
+                  </span>
+                </span>
+              ) : (
+                <span className="text-[11px] text-mono leading-none w-6 h-6 flex items-center justify-center text-foreground">
+                  {format(day, 'd')}
+                </span>
+              )}
 
               {/* Venue + dots */}
               {dayJobs.length > 0 && (
