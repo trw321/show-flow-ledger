@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useData } from '@/lib/DataContext';
 import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
-import StatementUpload from '@/components/StatementUpload';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -72,7 +72,7 @@ export default function ExpensesPage() {
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
-  const [statementOpen, setStatementOpen] = useState(false);
+  
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [openCategories, setOpenCategories] = useState<Set<string>>(new Set());
@@ -163,10 +163,7 @@ export default function ExpensesPage() {
       </div>
 
       {data.expenses.length === 0 ? (
-        <>
-          <EmptyState icon={Receipt} title="No expenses yet" description="Tap to upload a receipt or statement photo" onUploadPhoto={() => setStatementOpen(true)} />
-          <StatementUpload externalOpen={statementOpen} onExternalOpenChange={setStatementOpen} />
-        </>
+        <EmptyState icon={Receipt} title="No expenses yet" description="Add your first expense with the + button above" />
       ) : grouped.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">No expenses match this filter.</p>
       ) : (
