@@ -186,7 +186,7 @@ export default function TimesheetUpload() {
       </DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-mono">Scan Notes / Timesheet</DialogTitle>
+          <DialogTitle className="text-mono">Load Notes / Timesheet</DialogTitle>
         </DialogHeader>
 
         {!loading && entries.length === 0 && (

@@ -123,7 +123,7 @@ export default function StatementUpload() {
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setTransactions([]); setPreview(null); } }}>
       <DialogTrigger asChild>
         <Button size="sm" variant="outline" className="gap-1.5">
-          <Upload size={16} /> Scan Statement
+          <Upload size={16} /> Load Statement
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
