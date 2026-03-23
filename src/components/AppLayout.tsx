@@ -120,7 +120,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Mobile top bar + sheet nav */}
       <div className="flex flex-col flex-1 min-w-0">
         <header className="md:hidden flex items-center justify-between border-b border-border bg-sidebar px-4 py-3">
-          <span className="text-sm font-bold text-mono tracking-wider text-primary">AV LEDGER</span>
+          <span className="text-sm font-bold text-mono tracking-widest funky-gradient-text">AV LEDGER</span>
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
               <button className="text-muted-foreground hover:text-foreground transition-colors p-1">
