@@ -15,6 +15,8 @@ const variantStyles = {
   accent: 'border-accent/30 glow-accent',
   success: 'border-success/30 glow-success',
   destructive: 'border-destructive/30',
+  info: 'border-info/30 shadow-[0_0_20px_-5px_hsl(210_100%_55%/0.3)]',
+  warning: 'border-warning/30 shadow-[0_0_20px_-5px_hsl(50_100%_55%/0.3)]',
 };
 
 const iconVariants = {
@@ -23,6 +25,8 @@ const iconVariants = {
   accent: 'text-accent',
   success: 'text-success',
   destructive: 'text-destructive',
+  info: 'text-info',
+  warning: 'text-warning',
 };
 
 export default function StatCard({ label, value, icon: Icon, variant = 'default', subtitle }: StatCardProps) {
