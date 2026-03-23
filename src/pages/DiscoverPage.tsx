@@ -29,7 +29,7 @@ interface Suggestion {
 }
 
 const SUGGESTION_POOL: Omit<Suggestion, 'id'>[] = [
-  { name: 'Late Night Ramen', category: 'food', vibe: '🍜 Cozy', icon: Utensils, time: 'Open til 2am', description: 'Nothing beats a warm bowl after a long shift. Broth heals everything.', tags: ['Late Night', 'Comfort Food'], color: 'from-orange-500/20 to-red-500/20' },
+  { name: 'Late Night Ramen', category: 'food', vibe: '🍜 Cozy', icon: Utensils, time: 'Open til 2am', description: 'Nothing beats a warm bowl after a long shift. Broth heals everything.', tags: ['Late Night', 'Comfort Food'], color: 'from-blue-500/20 to-purple-500/20' },
   { name: 'Craft Cocktail Spot', category: 'food', vibe: '🍸 Chill', icon: Beer, time: 'Happy Hour til 9pm', description: 'Unwind with creative cocktails in a dimly lit, no-rush atmosphere.', tags: ['Drinks', 'Vibes'], color: 'from-violet-500/20 to-purple-500/20' },
   { name: 'Rooftop Pizza', category: 'food', vibe: '🍕 Views', icon: Pizza, time: 'Open til midnight', description: 'Wood-fired pizza with city skyline views. Bring someone special.', tags: ['Date Night', 'Scenic'], color: 'from-amber-500/20 to-orange-500/20' },
   { name: 'Coffee & Vinyl Shop', category: 'casual', vibe: '☕ Mellow', icon: Coffee, time: 'Open til 10pm', description: 'Sip a pour-over while flipping through records. Peak decompression.', tags: ['Chill', 'Music'], color: 'from-amber-600/20 to-yellow-500/20' },
