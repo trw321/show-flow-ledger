@@ -52,7 +52,7 @@ export default function JobLogPage() {
         <JobPhotoImport onImport={(job) => {
           addJob({ ...job, status: 'upcoming', hoursWorked: 0 });
           toast.success('Job loaded to calendar');
-        }} />
+        }} externalOpen={photoOpen} onExternalOpenChange={setPhotoOpen} />
       </div>
 
       {/* Today / Needs Logging */}
