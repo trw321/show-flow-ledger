@@ -181,12 +181,12 @@ export default function TimesheetUpload() {
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setEntries([]); setPreview(null); } }}>
       <DialogTrigger asChild>
         <Button size="sm" variant="outline" className="gap-1.5">
-          <Upload size={16} /> Scan Timesheet
+          <Upload size={16} /> Load Timesheet
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-mono">Scan Notes / Timesheet</DialogTitle>
+          <DialogTitle className="text-mono">Load Notes / Timesheet</DialogTitle>
         </DialogHeader>
 
         {!loading && entries.length === 0 && (
