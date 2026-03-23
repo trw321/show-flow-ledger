@@ -24,13 +24,13 @@
     --muted: 0 0% 12%;
     --muted-foreground: 0 0% 45%;
 
-    --accent: 24 100% 55%;
-    --accent-foreground: 0 0% 5%;
+    --accent: 265 90% 60%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 72% 55%;
     --destructive-foreground: 0 0% 98%;
 
-    --success: 145 65% 42%;
+    --success: 80 85% 55%;
     --success-foreground: 0 0% 5%;
 
     --border: 0 0% 16%;
