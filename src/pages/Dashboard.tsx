@@ -56,13 +56,13 @@ export default function Dashboard() {
           <motion.div
             className="absolute inset-0"
             style={{
-              background: 'radial-gradient(circle at 20% 50%, hsl(328 100% 54% / 0.4), transparent 50%), radial-gradient(circle at 80% 50%, hsl(265 90% 60% / 0.4), transparent 50%)',
+              background: 'radial-gradient(circle at 20% 50%, hsl(210 100% 55% / 0.4), transparent 50%), radial-gradient(circle at 80% 50%, hsl(265 90% 60% / 0.4), transparent 50%), radial-gradient(circle at 50% 80%, hsl(50 100% 55% / 0.3), transparent 40%)',
             }}
             animate={{
               background: [
-                'radial-gradient(circle at 20% 50%, hsl(328 100% 54% / 0.4), transparent 50%), radial-gradient(circle at 80% 50%, hsl(265 90% 60% / 0.4), transparent 50%)',
-                'radial-gradient(circle at 50% 20%, hsl(328 100% 54% / 0.4), transparent 50%), radial-gradient(circle at 50% 80%, hsl(265 90% 60% / 0.4), transparent 50%)',
-                'radial-gradient(circle at 80% 50%, hsl(328 100% 54% / 0.4), transparent 50%), radial-gradient(circle at 20% 50%, hsl(265 90% 60% / 0.4), transparent 50%)',
+                'radial-gradient(circle at 20% 50%, hsl(210 100% 55% / 0.4), transparent 50%), radial-gradient(circle at 80% 50%, hsl(265 90% 60% / 0.4), transparent 50%), radial-gradient(circle at 50% 80%, hsl(50 100% 55% / 0.3), transparent 40%)',
+                'radial-gradient(circle at 50% 20%, hsl(210 100% 55% / 0.4), transparent 50%), radial-gradient(circle at 50% 80%, hsl(265 90% 60% / 0.4), transparent 50%), radial-gradient(circle at 80% 50%, hsl(50 100% 55% / 0.3), transparent 40%)',
+                'radial-gradient(circle at 80% 50%, hsl(210 100% 55% / 0.4), transparent 50%), radial-gradient(circle at 20% 50%, hsl(265 90% 60% / 0.4), transparent 50%), radial-gradient(circle at 50% 20%, hsl(50 100% 55% / 0.3), transparent 40%)',
               ],
             }}
             transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
@@ -119,16 +119,16 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        <StatCard label="Active Jobs" value={activeJobs} icon={Briefcase} variant="primary" />
+        <StatCard label="Active Jobs" value={activeJobs} icon={Briefcase} variant="info" />
         <StatCard label="Hours Logged" value={totalHours.toFixed(1)} icon={Clock} variant="accent" />
         <StatCard label="Total Income" value={`$${totalIncome.toLocaleString()}`} icon={TrendingUp} variant="success" />
-        <StatCard label="Total Expenses" value={`$${totalExpenses.toLocaleString()}`} icon={TrendingDown} variant="destructive" />
+        <StatCard label="Total Expenses" value={`$${totalExpenses.toLocaleString()}`} icon={TrendingDown} variant="warning" />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <StatCard label="Net Profit" value={`$${netProfit.toLocaleString()}`} icon={DollarSign} variant={netProfit >= 0 ? 'success' : 'destructive'} />
         <StatCard label="Job Earnings" value={`$${totalEarnings.toLocaleString()}`} icon={DollarSign} variant="success" />
-        <StatCard label="Pending" value={`$${pendingIncome.toLocaleString()}`} icon={AlertCircle} variant="accent" />
+        <StatCard label="Pending" value={`$${pendingIncome.toLocaleString()}`} icon={AlertCircle} variant="warning" />
         <StatCard label="Overdue" value={`$${overdueIncome.toLocaleString()}`} icon={AlertCircle} variant="destructive" />
       </div>
 
