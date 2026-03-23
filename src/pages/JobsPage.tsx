@@ -74,7 +74,7 @@ export default function JobsPage() {
 
       {/* Job list */}
       {data.jobs.length === 0 ? (
-        <EmptyState icon={Briefcase} title="No jobs yet" description="Speak, snap, or paste to add your first gig." />
+        <EmptyState icon={Briefcase} title="No jobs yet" description="Tap to snap a photo of your schedule" onUploadPhoto={() => setPhotoOpen(true)} />
       ) : (
         <div className="space-y-2">
           {groupedJobs.map(([key, group]) => {
