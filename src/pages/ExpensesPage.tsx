@@ -72,6 +72,7 @@ export default function ExpensesPage() {
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
+  const [statementOpen, setStatementOpen] = useState(false);
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [openCategories, setOpenCategories] = useState<Set<string>>(new Set(categories));
