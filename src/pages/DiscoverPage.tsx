@@ -151,7 +151,7 @@ export default function DiscoverPage() {
           />
           {weeklyStats.hours >= 40 && (
             <motion.div
-              className="absolute inset-0 bg-gradient-to-r from-primary/20 via-accent/30 to-success/20"
+              className="absolute inset-0 bg-gradient-to-r from-info/20 via-accent/30 to-success/20"
               animate={{ opacity: [0.3, 0.7, 0.3] }}
               transition={{ duration: 2, repeat: Infinity }}
             />
