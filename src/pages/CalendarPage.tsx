@@ -162,7 +162,7 @@ export default function CalendarPage() {
               return (
                 <div
                   key={job.id}
-                  onClick={() => { setSelectedDate(null); navigate('/jobs'); }}
+                  onClick={() => { setSelectedDate(null); navigate('/log'); }}
                   className={cn(
                     "rounded-xl border p-3 space-y-1 cursor-pointer hover:bg-secondary/30 transition-colors",
                     statusColors[job.status]
