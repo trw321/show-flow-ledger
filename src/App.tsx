@@ -25,22 +25,24 @@ const App = () => (
       <Toaster />
       <Sonner />
       <DataProvider>
-        <BrowserRouter>
-          <AppLayout>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              
-              <Route path="/calendar" element={<CalendarPage />} />
-              <Route path="/log" element={<JobLogPage />} />
-              <Route path="/expenses" element={<ExpensesPage />} />
-              <Route path="/income" element={<IncomePage />} />
-              <Route path="/equipment" element={<EquipmentPage />} />
-              <Route path="/reconciliation" element={<PayReconciliationPage />} />
-              <Route path="/discover" element={<DiscoverPage />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </AppLayout>
-        </BrowserRouter>
+        <PartyModeProvider>
+          <BrowserRouter>
+            <AppLayout>
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                
+                <Route path="/calendar" element={<CalendarPage />} />
+                <Route path="/log" element={<JobLogPage />} />
+                <Route path="/expenses" element={<ExpensesPage />} />
+                <Route path="/income" element={<IncomePage />} />
+                <Route path="/equipment" element={<EquipmentPage />} />
+                <Route path="/reconciliation" element={<PayReconciliationPage />} />
+                <Route path="/discover" element={<DiscoverPage />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </AppLayout>
+          </BrowserRouter>
+        </PartyModeProvider>
       </DataProvider>
     </TooltipProvider>
   </QueryClientProvider>
