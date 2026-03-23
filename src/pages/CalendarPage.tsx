@@ -119,12 +119,18 @@ export default function CalendarPage() {
                 hasJobs && 'cursor-pointer active:bg-secondary/60'
               )}
             >
-              <span className={cn(
-                "text-[11px] text-mono leading-none w-6 h-6 flex items-center justify-center rounded-full",
-                isToday ? 'bg-primary text-primary-foreground font-bold' : 'text-foreground'
-              )}>
-                {format(day, 'd')}
-              </span>
+              {isToday ? (
+                <span className="relative w-6 h-6 flex items-center justify-center">
+                  <Star size={24} className="absolute text-primary fill-primary" />
+                  <span className="relative text-[11px] text-mono leading-none text-primary-foreground font-bold">
+                    {format(day, 'd')}
+                  </span>
+                </span>
+              ) : (
+                <span className="text-[11px] text-mono leading-none w-6 h-6 flex items-center justify-center text-foreground">
+                  {format(day, 'd')}
+                </span>
+              )}
 
               {/* Venue + dots */}
               {dayJobs.length > 0 && (
