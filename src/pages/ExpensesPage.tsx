@@ -163,10 +163,7 @@ export default function ExpensesPage() {
       </div>
 
       {data.expenses.length === 0 ? (
-        <>
-          <EmptyState icon={Receipt} title="No expenses yet" description="Tap to upload a receipt or statement photo" onUploadPhoto={() => setStatementOpen(true)} />
-          <StatementUpload externalOpen={statementOpen} onExternalOpenChange={setStatementOpen} />
-        </>
+        <EmptyState icon={Receipt} title="No expenses yet" description="Add your first expense with the + button above" />
       ) : grouped.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">No expenses match this filter.</p>
       ) : (
