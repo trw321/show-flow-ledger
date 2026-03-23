@@ -33,6 +33,12 @@
     --success: 80 85% 55%;
     --success-foreground: 0 0% 5%;
 
+    --info: 210 100% 55%;
+    --info-foreground: 0 0% 100%;
+
+    --warning: 50 100% 55%;
+    --warning-foreground: 0 0% 5%;
+
     --border: 0 0% 16%;
     --input: 0 0% 16%;
     --ring: 328 100% 54%;
