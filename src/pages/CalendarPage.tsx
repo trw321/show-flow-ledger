@@ -3,7 +3,7 @@ import { useData } from '@/lib/DataContext';
 import PageHeader from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ChevronLeft, ChevronRight, DollarSign } from 'lucide-react';
+import { ChevronLeft, ChevronRight, DollarSign, Star } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay } from 'date-fns';
 import type { Job } from '@/lib/store';
 import { calculateDayPay, getDayMultiplier } from '@/lib/payCalc';
