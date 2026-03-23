@@ -125,7 +125,6 @@ export default function JobLogPage() {
       {data.jobs.length === 0 && (
         <EmptyState icon={ClipboardCheck} title="No jobs loaded" description="Tap to upload a job schedule screenshot" onUploadPhoto={() => setPhotoOpen(true)} />
       )}
-      <JobPhotoImport onImport={addJob} externalOpen={photoOpen} onExternalOpenChange={setPhotoOpen} />
 
       {/* Log hours dialog */}
       <Dialog open={!!logId} onOpenChange={o => !o && setLogId(null)}>
