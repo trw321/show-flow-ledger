@@ -36,6 +36,7 @@ function FloatingOrb({ className, delay = 0 }: { className?: string; delay?: num
 
 export default function Dashboard() {
   const { data } = useData();
+  const [taxRate, setTaxRate] = useState(25);
 
   const totalExpenses = data.expenses.reduce((s, e) => s + e.amount, 0);
   const totalIncome = data.income.reduce((s, i) => s + i.amount, 0);
@@ -45,6 +46,15 @@ export default function Dashboard() {
   const totalHours = data.jobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
   const totalEarnings = data.jobs.reduce((s, j) => s + (j.hoursWorked ?? 0) * (j.hourlyRate ?? 0), 0);
   const netProfit = totalIncome - totalExpenses;
+
+  const estimatedTax = Math.max(0, netProfit * (taxRate / 100));
+  const afterTax = netProfit - estimatedTax;
+
+  const pieData = [
+    { name: 'Take Home', value: Math.max(0, afterTax), color: 'hsl(142, 76%, 46%)' },
+    { name: 'Estimated Tax', value: estimatedTax, color: 'hsl(50, 100%, 55%)' },
+    { name: 'Expenses', value: totalExpenses, color: 'hsl(0, 84%, 60%)' },
+  ].filter(d => d.value > 0);
 
   const recentJobs = [...data.jobs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
   const recentExpenses = [...data.expenses].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
