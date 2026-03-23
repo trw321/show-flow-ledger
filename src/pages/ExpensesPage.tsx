@@ -75,7 +75,7 @@ export default function ExpensesPage() {
   const [statementOpen, setStatementOpen] = useState(false);
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
-  const [openCategories, setOpenCategories] = useState<Set<string>>(new Set(categories));
+  const [openCategories, setOpenCategories] = useState<Set<string>>(new Set());
 
   const editingExp = editId ? data.expenses.find(e => e.id === editId) : undefined;
   const jobs = data.jobs.map(j => ({ id: j.id, name: j.name }));
