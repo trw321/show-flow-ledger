@@ -24,9 +24,12 @@ interface ParsedJob {
   notes?: string;
 }
 
-export default function JobPhotoImport({ onImport }: { onImport: (job: Omit<Job, 'id' | 'createdAt'>) => void }) {
+export default function JobPhotoImport({ onImport, externalOpen, onExternalOpenChange }: { onImport: (job: Omit<Job, 'id' | 'createdAt'>) => void; externalOpen?: boolean; onExternalOpenChange?: (open: boolean) => void }) {
   const { data: appData } = useData();
-  const [open, setOpen] = useState(false);
+  const isControlled = externalOpen !== undefined;
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = isControlled ? externalOpen : internalOpen;
+  const setOpen = (v: boolean) => { if (isControlled) onExternalOpenChange?.(v); else setInternalOpen(v); };
   const [preview, setPreview] = useState<string | null>(null);
   const [imageData, setImageData] = useState<{ base64: string; mimeType: string } | null>(null);
   const [entries, setEntries] = useState<ParsedJob[]>([]);
