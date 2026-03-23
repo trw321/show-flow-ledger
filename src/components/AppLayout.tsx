@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Briefcase, Receipt, DollarSign, Speaker, Scale, CalendarDays, Sparkles, Menu, X, Trash2, ClipboardCheck, PartyPopper } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Receipt, DollarSign, Speaker, Scale, CalendarDays, Sparkles, Menu, X, Trash2, ClipboardCheck, PartyPopper, PieChart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { clearAllData } from '@/lib/store';
 import { usePartyMode } from '@/lib/PartyModeContext';
@@ -23,6 +23,7 @@ const navItems = [
   { to: '/calendar', icon: CalendarDays, label: 'Calendar' },
   { to: '/log', icon: ClipboardCheck, label: 'Job Log' },
   { to: '/expenses', icon: Receipt, label: 'Expenses' },
+  { to: '/taxes', icon: PieChart, label: 'Taxes' },
   { to: '/income', icon: DollarSign, label: 'Income' },
   { to: '/discover', icon: Sparkles, label: 'Discover' },
   { to: '/reconciliation', icon: Scale, label: 'Reconciliation' },
