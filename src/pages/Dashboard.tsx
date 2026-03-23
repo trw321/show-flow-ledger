@@ -210,6 +210,7 @@ export default function Dashboard() {
         )}
       </div>
 
+      <div className="grid lg:grid-cols-2 gap-4">
         <div className="rounded-2xl border border-border bg-card p-4">
           <h2 className="text-[10px] font-semibold text-mono mb-3 text-muted-foreground uppercase tracking-[0.2em]">Recent Jobs</h2>
           {recentJobs.length === 0 ? (
