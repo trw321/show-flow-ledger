@@ -12,11 +12,11 @@ import { Receipt, Plus, Trash2, Pencil, ChevronRight, Filter } from 'lucide-reac
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isWithinInterval } from 'date-fns';
 import type { Expense } from '@/lib/store';
 
-const categories = ['Travel', 'Gear Rental', 'Consumables', 'Fuel', 'Meals', 'Lodging', 'Labor', 'Insurance', 'Software', 'Other'];
+const categories = ['Travel', 'Gear Rental', 'Consumables', 'Fuel', 'Meals', 'Lodging', 'Labor', 'Insurance', 'Software', 'Tools', 'Rent', 'Other'];
 
 const categoryEmojis: Record<string, string> = {
-  Travel: '✈️', 'Gear Rental': '🎛️', Consumables: '🔌', Fuel: '⛽', Meals: '🍔',
-  Lodging: '🏨', Labor: '👷', Insurance: '🛡️', Software: '💻', Other: '📦',
+  Travel: '✈️', 'Gear Rental': '🎛️', Consumables: '🛒', Fuel: '⛽', Meals: '🍔',
+  Lodging: '🏨', Labor: '👷', Insurance: '🛡️', Software: '💻', Tools: '🔧', Rent: '🏠', Other: '📦',
 };
 
 type DateFilter = 'all' | 'this-week' | 'this-month' | 'custom';
