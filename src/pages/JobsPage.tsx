@@ -56,7 +56,7 @@ export default function JobsPage() {
 
       {/* Secondary import methods */}
       <div className="flex gap-2 mb-4">
-        <JobPhotoImport onImport={addJob} />
+        <JobPhotoImport onImport={addJob} externalOpen={photoOpen} onExternalOpenChange={setPhotoOpen} />
         <JobPasteImport onImport={addJob} />
       </div>
 
