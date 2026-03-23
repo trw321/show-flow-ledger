@@ -119,10 +119,10 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        <StatCard label="Active Jobs" value={activeJobs} icon={Briefcase} variant="primary" />
+        <StatCard label="Active Jobs" value={activeJobs} icon={Briefcase} variant="info" />
         <StatCard label="Hours Logged" value={totalHours.toFixed(1)} icon={Clock} variant="accent" />
         <StatCard label="Total Income" value={`$${totalIncome.toLocaleString()}`} icon={TrendingUp} variant="success" />
-        <StatCard label="Total Expenses" value={`$${totalExpenses.toLocaleString()}`} icon={TrendingDown} variant="destructive" />
+        <StatCard label="Total Expenses" value={`$${totalExpenses.toLocaleString()}`} icon={TrendingDown} variant="warning" />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
