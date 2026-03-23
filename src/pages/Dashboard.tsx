@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { useData } from '@/lib/DataContext';
 import StatCard from '@/components/StatCard';
 import PageHeader from '@/components/PageHeader';
 import { Briefcase, Receipt, DollarSign, TrendingUp, TrendingDown, AlertCircle, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 function Starburst({ className, delay = 0 }: { className?: string; delay?: number }) {
   return (
