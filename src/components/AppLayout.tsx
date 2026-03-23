@@ -105,11 +105,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         )}
       >
         <div className="flex items-center gap-2 border-b border-border px-4 py-4">
-          <button onClick={() => setCollapsed(!collapsed)} className="text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => setCollapsed(!collapsed)} className="text-muted-foreground hover:text-primary transition-colors">
             {collapsed ? <Menu size={20} /> : <X size={20} />}
           </button>
           {!collapsed && (
-            <span className="text-sm font-bold text-mono tracking-wider text-primary">
+            <span className="text-sm font-bold text-mono tracking-widest funky-gradient-text">
               AV LEDGER
             </span>
           )}
@@ -120,7 +120,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Mobile top bar + sheet nav */}
       <div className="flex flex-col flex-1 min-w-0">
         <header className="md:hidden flex items-center justify-between border-b border-border bg-sidebar px-4 py-3">
-          <span className="text-sm font-bold text-mono tracking-wider text-primary">AV LEDGER</span>
+          <span className="text-sm font-bold text-mono tracking-widest funky-gradient-text">AV LEDGER</span>
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
               <button className="text-muted-foreground hover:text-foreground transition-colors p-1">
@@ -129,7 +129,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </SheetTrigger>
             <SheetContent side="right" className="w-64 bg-sidebar p-0 flex flex-col">
               <div className="px-4 py-4 border-b border-border">
-                <span className="text-sm font-bold text-mono tracking-wider text-primary">AV LEDGER</span>
+                <span className="text-sm font-bold text-mono tracking-widest funky-gradient-text">AV LEDGER</span>
               </div>
               <SidebarContent onNavigate={() => setMobileOpen(false)} />
             </SheetContent>
@@ -144,7 +144,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </main>
 
         {/* Mobile bottom tab bar */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-sidebar border-t border-border flex justify-around py-2 px-1 z-50">
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-sidebar/95 backdrop-blur-lg border-t border-border flex justify-around py-2 px-1 z-50">
           {tabItems.map(({ to, icon: Icon, label }) => {
             const active = location.pathname === to || (to !== '/' && location.pathname.startsWith(to));
             return (
@@ -152,11 +152,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 key={to}
                 to={to}
                 className={cn(
-                  "flex flex-col items-center gap-0.5 px-3 py-1 rounded-md text-[10px] transition-colors",
-                  active ? "text-primary" : "text-muted-foreground"
+                  "flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl text-[10px] font-medium tracking-wider uppercase transition-all",
+                  active ? "text-primary scale-110" : "text-muted-foreground"
                 )}
               >
-                <Icon size={20} />
+                <div className={cn(
+                  "p-1.5 rounded-xl transition-colors",
+                  active && "bg-primary/15"
+                )}>
+                  <Icon size={20} />
+                </div>
                 <span>{label}</span>
               </Link>
             );

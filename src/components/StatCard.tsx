@@ -27,10 +27,15 @@ const iconVariants = {
 
 export default function StatCard({ label, value, icon: Icon, variant = 'default', subtitle }: StatCardProps) {
   return (
-    <div className={cn("rounded-lg border bg-card p-4 transition-all hover:bg-secondary/50", variantStyles[variant])}>
+    <div className={cn(
+      "rounded-2xl border bg-card p-4 transition-all hover:scale-[1.02] hover:bg-secondary/50",
+      variantStyles[variant]
+    )}>
       <div className="flex items-center justify-between">
-        <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
-        <Icon size={16} className={iconVariants[variant]} />
+        <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium">{label}</p>
+        <div className={cn("w-8 h-8 rounded-full flex items-center justify-center bg-secondary", iconVariants[variant])}>
+          <Icon size={14} />
+        </div>
       </div>
       <p className="mt-2 text-2xl font-bold text-mono text-foreground">{value}</p>
       {subtitle && <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>}

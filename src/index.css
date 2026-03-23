@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,50 +6,50 @@
 
 @layer base {
   :root {
-    --background: 220 20% 7%;
-    --foreground: 210 20% 90%;
+    --background: 0 0% 5%;
+    --foreground: 0 0% 95%;
 
-    --card: 220 18% 10%;
-    --card-foreground: 210 20% 90%;
+    --card: 0 0% 8%;
+    --card-foreground: 0 0% 95%;
 
-    --popover: 220 18% 12%;
-    --popover-foreground: 210 20% 90%;
+    --popover: 0 0% 10%;
+    --popover-foreground: 0 0% 95%;
 
-    --primary: 205 100% 55%;
-    --primary-foreground: 220 20% 7%;
+    --primary: 328 100% 54%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 15% 16%;
-    --secondary-foreground: 210 20% 85%;
+    --secondary: 0 0% 14%;
+    --secondary-foreground: 0 0% 85%;
 
-    --muted: 220 15% 14%;
-    --muted-foreground: 215 15% 50%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 45%;
 
-    --accent: 38 95% 55%;
-    --accent-foreground: 220 20% 7%;
+    --accent: 24 100% 55%;
+    --accent-foreground: 0 0% 5%;
 
     --destructive: 0 72% 55%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 0 0% 98%;
 
     --success: 145 65% 42%;
-    --success-foreground: 220 20% 7%;
+    --success-foreground: 0 0% 5%;
 
-    --border: 220 15% 18%;
-    --input: 220 15% 18%;
-    --ring: 205 100% 55%;
+    --border: 0 0% 16%;
+    --input: 0 0% 16%;
+    --ring: 328 100% 54%;
 
-    --radius: 0.75rem;
+    --radius: 1rem;
 
-    --sidebar-background: 220 20% 5%;
-    --sidebar-foreground: 210 15% 70%;
-    --sidebar-primary: 205 100% 55%;
-    --sidebar-primary-foreground: 220 20% 7%;
-    --sidebar-accent: 220 15% 12%;
-    --sidebar-accent-foreground: 210 20% 90%;
-    --sidebar-border: 220 15% 14%;
-    --sidebar-ring: 205 100% 55%;
+    --sidebar-background: 0 0% 3%;
+    --sidebar-foreground: 0 0% 55%;
+    --sidebar-primary: 328 100% 54%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 10%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 0 0% 12%;
+    --sidebar-ring: 328 100% 54%;
 
-    --font-display: 'JetBrains Mono', monospace;
-    --font-body: 'Inter', sans-serif;
+    --font-display: 'Space Mono', monospace;
+    --font-body: 'Space Grotesk', sans-serif;
   }
 }
 
@@ -66,39 +66,54 @@
 
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
   }
 
   /* Custom scrollbar */
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 4px;
+    height: 4px;
   }
   ::-webkit-scrollbar-track {
     background: hsl(var(--background));
   }
   ::-webkit-scrollbar-thumb {
-    background: hsl(var(--border));
-    border-radius: 3px;
+    background: hsl(var(--primary) / 0.4);
+    border-radius: 2px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--muted-foreground));
+    background: hsl(var(--primary));
   }
 }
 
 @layer utilities {
   .glow-primary {
-    box-shadow: 0 0 20px -5px hsl(var(--primary) / 0.3);
+    box-shadow: 0 0 30px -5px hsl(var(--primary) / 0.4), inset 0 1px 0 hsl(var(--primary) / 0.1);
   }
   .glow-accent {
-    box-shadow: 0 0 20px -5px hsl(var(--accent) / 0.3);
+    box-shadow: 0 0 30px -5px hsl(var(--accent) / 0.4), inset 0 1px 0 hsl(var(--accent) / 0.1);
   }
   .glow-success {
     box-shadow: 0 0 20px -5px hsl(var(--success) / 0.3);
   }
   .border-glow {
-    border-color: hsl(var(--primary) / 0.3);
+    border-color: hsl(var(--primary) / 0.4);
   }
   .text-mono {
     font-family: var(--font-display);
+    letter-spacing: 0.05em;
+  }
+  .funky-gradient {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
+  }
+  .funky-gradient-text {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .starburst {
+    clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
   }
 }

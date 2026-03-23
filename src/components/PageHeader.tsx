@@ -9,8 +9,11 @@ export default function PageHeader({ title, description, action }: PageHeaderPro
     <div className="mb-4 md:mb-6 space-y-3">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <h1 className="text-xl md:text-2xl font-bold tracking-tight text-mono">{title}</h1>
-          {description && <p className="mt-0.5 text-xs md:text-sm text-muted-foreground">{description}</p>}
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full funky-gradient animate-pulse-glow" />
+            <h1 className="text-xl md:text-2xl font-bold tracking-widest text-mono uppercase">{title}</h1>
+          </div>
+          {description && <p className="mt-0.5 text-xs md:text-sm text-muted-foreground ml-5">{description}</p>}
         </div>
       </div>
       {action && <div className="flex flex-wrap gap-2">{action}</div>}
