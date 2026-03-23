@@ -128,7 +128,6 @@ export default function ExpensesPage() {
         description={`Total: $${total.toLocaleString()}`}
         action={
           <div className="flex gap-2">
-            <StatementUpload />
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild><Button size="sm"><Plus size={16} className="mr-1" /> New</Button></DialogTrigger>
               <DialogContent>
