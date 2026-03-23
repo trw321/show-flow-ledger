@@ -105,11 +105,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         )}
       >
         <div className="flex items-center gap-2 border-b border-border px-4 py-4">
-          <button onClick={() => setCollapsed(!collapsed)} className="text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => setCollapsed(!collapsed)} className="text-muted-foreground hover:text-primary transition-colors">
             {collapsed ? <Menu size={20} /> : <X size={20} />}
           </button>
           {!collapsed && (
-            <span className="text-sm font-bold text-mono tracking-wider text-primary">
+            <span className="text-sm font-bold text-mono tracking-widest funky-gradient-text">
               AV LEDGER
             </span>
           )}
