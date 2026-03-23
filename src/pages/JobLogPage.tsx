@@ -130,7 +130,7 @@ export default function JobLogPage() {
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto mx-2 rounded-2xl">
           <DialogHeader><DialogTitle className="text-mono">Log Hours</DialogTitle></DialogHeader>
           {loggingJob && (
-            <JobForm
+            <LogHoursForm
               initial={loggingJob}
               onSubmit={updates => {
                 updateJob(logId!, { ...updates, status: 'completed' });
