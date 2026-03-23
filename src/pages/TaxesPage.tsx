@@ -76,7 +76,7 @@ export default function TaxesPage() {
 
   return (
     <>
-      <PageHeader title="Taxes" subtitle="Your estimated tax breakdown as a real pie 🥧" />
+      <PageHeader title="Taxes" description="Your estimated tax breakdown as a real pie 🥧" />
 
       {/* Tax rate selector */}
       <div className="rounded-2xl border border-border bg-card p-4 mb-6">
