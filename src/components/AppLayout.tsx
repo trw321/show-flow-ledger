@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Briefcase, Receipt, DollarSign, Speaker, Scale, CalendarDays, Sparkles, Menu, X, Trash2, ClipboardCheck } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Receipt, DollarSign, Speaker, Scale, CalendarDays, Sparkles, Menu, X, Trash2, ClipboardCheck, PartyPopper } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { clearAllData } from '@/lib/store';
+import { usePartyMode } from '@/lib/PartyModeContext';
+import FloatingEmojis from '@/components/FloatingEmojis';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,7 +39,7 @@ const tabItems = [
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
-
+  const { partyMode, togglePartyMode } = usePartyMode();
   return (
     <>
       <nav className="flex-1 py-4 space-y-1 px-2">
@@ -84,6 +86,16 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        <button
+          onClick={togglePartyMode}
+          className={cn(
+            "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors w-full",
+            partyMode ? "text-primary hover:bg-primary/10" : "text-muted-foreground hover:bg-secondary"
+          )}
+        >
+          <PartyPopper size={18} />
+          <span>{partyMode ? 'Vibes ON' : 'Vibes OFF'}</span>
+        </button>
         <p className="text-xs text-muted-foreground text-mono px-3">LOCAL MODE</p>
       </div>
     </>
@@ -94,9 +106,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { partyMode } = usePartyMode();
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      {partyMode && <FloatingEmojis />}
       {/* Desktop sidebar — hidden on mobile */}
       <aside
         className={cn(
