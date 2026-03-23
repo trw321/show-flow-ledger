@@ -12,6 +12,7 @@ import IncomePage from "@/pages/IncomePage";
 import EquipmentPage from "@/pages/EquipmentPage";
 import PayReconciliationPage from "@/pages/PayReconciliationPage";
 import CalendarPage from "@/pages/CalendarPage";
+import JobLogPage from "@/pages/JobLogPage";
 import DiscoverPage from "@/pages/DiscoverPage";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -29,6 +30,7 @@ const App = () => (
               <Route path="/" element={<Dashboard />} />
               <Route path="/jobs" element={<JobsPage />} />
               <Route path="/calendar" element={<CalendarPage />} />
+              <Route path="/log" element={<JobLogPage />} />
               <Route path="/expenses" element={<ExpensesPage />} />
               <Route path="/income" element={<IncomePage />} />
               <Route path="/equipment" element={<EquipmentPage />} />
