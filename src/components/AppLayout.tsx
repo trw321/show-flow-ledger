@@ -144,7 +144,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </main>
 
         {/* Mobile bottom tab bar */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-sidebar border-t border-border flex justify-around py-2 px-1 z-50">
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-sidebar/95 backdrop-blur-lg border-t border-border flex justify-around py-2 px-1 z-50">
           {tabItems.map(({ to, icon: Icon, label }) => {
             const active = location.pathname === to || (to !== '/' && location.pathname.startsWith(to));
             return (
@@ -152,11 +152,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 key={to}
                 to={to}
                 className={cn(
-                  "flex flex-col items-center gap-0.5 px-3 py-1 rounded-md text-[10px] transition-colors",
-                  active ? "text-primary" : "text-muted-foreground"
+                  "flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl text-[10px] font-medium tracking-wider uppercase transition-all",
+                  active ? "text-primary scale-110" : "text-muted-foreground"
                 )}
               >
-                <Icon size={20} />
+                <div className={cn(
+                  "p-1.5 rounded-xl transition-colors",
+                  active && "bg-primary/15"
+                )}>
+                  <Icon size={20} />
+                </div>
                 <span>{label}</span>
               </Link>
             );
