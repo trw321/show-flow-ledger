@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ClipboardCheck, Camera, Clock, ChevronRight } from 'lucide-react';
 import JobPhotoImport from '@/components/JobPhotoImport';
-import JobForm from '@/components/JobForm';
+import LogHoursForm from '@/components/LogHoursForm';
 import { format, isToday, isPast, isFuture } from 'date-fns';
 import { toast } from 'sonner';
 import type { Job } from '@/lib/store';
