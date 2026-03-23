@@ -144,7 +144,7 @@ export default function DiscoverPage() {
         </div>
         <div className="relative h-3 rounded-full bg-secondary overflow-hidden">
           <motion.div
-            className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-primary via-accent to-success"
+            className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-info via-accent to-success"
             initial={{ width: 0 }}
             animate={{ width: `${Math.min((weeklyStats.hours / 40) * 100, 100)}%` }}
             transition={{ duration: 1, ease: 'easeOut' }}
