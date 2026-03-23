@@ -39,7 +39,7 @@ const tabItems = [
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
-
+  const { partyMode, togglePartyMode } = usePartyMode();
   return (
     <>
       <nav className="flex-1 py-4 space-y-1 px-2">
