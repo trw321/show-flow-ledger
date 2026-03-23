@@ -71,7 +71,7 @@ export default function LogHoursForm({ initial, onSubmit, onCancel }: {
         <label className="text-xs text-muted-foreground text-mono uppercase tracking-wider mb-1.5 block">Times</label>
         <div className="grid grid-cols-2 gap-2">
           <Input placeholder="Start (7:00 AM)" value={startTime} onChange={e => setStartTime(e.target.value)} className="text-sm rounded-xl" />
-          <Input placeholder="End (5:30 PM)" value={endTime} onChange={e => setEndTime(e.target.value)} className="text-sm rounded-xl" />
+          <Input autoFocus placeholder="End (5:30 PM)" value={endTime} onChange={e => setEndTime(e.target.value)} className="text-sm rounded-xl" />
         </div>
         {hours > 0 && (
           <p className="text-xs text-mono text-muted-foreground mt-1.5">
