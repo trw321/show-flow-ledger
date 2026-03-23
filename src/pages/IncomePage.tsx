@@ -79,14 +79,16 @@ export default function IncomePage() {
         title="Income"
         description={`Total: $${total.toLocaleString()}`}
         action={
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild><Button size="sm"><Plus size={16} className="mr-1" /> New Income</Button></DialogTrigger>
+          <div className="flex gap-2">
             <IncomeStatementUpload />
-            <DialogContent>
-              <DialogHeader><DialogTitle className="text-mono">New Income</DialogTitle></DialogHeader>
-              <IncomeForm jobs={jobs} onSubmit={(inc) => { addIncome(inc); setOpen(false); }} />
-            </DialogContent>
-          </Dialog>
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild><Button size="sm"><Plus size={16} className="mr-1" /> New Income</Button></DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle className="text-mono">New Income</DialogTitle></DialogHeader>
+                <IncomeForm jobs={jobs} onSubmit={(inc) => { addIncome(inc); setOpen(false); }} />
+              </DialogContent>
+            </Dialog>
+          </div>
         }
       />
 
