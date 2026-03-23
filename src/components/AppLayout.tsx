@@ -106,9 +106,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { partyMode } = usePartyMode();
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      {partyMode && <FloatingEmojis />}
       {/* Desktop sidebar — hidden on mobile */}
       <aside
         className={cn(
