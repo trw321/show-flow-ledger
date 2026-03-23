@@ -30,7 +30,7 @@ const navItems = [
 // Bottom tab bar items (most used on mobile)
 const tabItems = [
   { to: '/', icon: LayoutDashboard, label: 'Home' },
-  { to: '/jobs', icon: Briefcase, label: 'Jobs' },
+  { to: '/log', icon: ClipboardCheck, label: 'Job Log' },
   { to: '/expenses', icon: Receipt, label: 'Expenses' },
   { to: '/income', icon: DollarSign, label: 'Income' },
 ];
