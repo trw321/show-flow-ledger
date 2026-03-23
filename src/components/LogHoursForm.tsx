@@ -14,7 +14,7 @@ export default function LogHoursForm({ initial, onSubmit, onCancel }: {
   const [endTime, setEndTime] = useState(initial?.endTime ?? '');
   const [mealType, setMealType] = useState<Job['mealType']>(initial?.mealType ?? undefined);
   const [mealPenalties, setMealPenalties] = useState(initial?.mealPenalties?.toString() ?? '0');
-  const [notes, setNotes] = useState(initial?.notes ?? '');
+  const [notes, setNotes] = useState('');
 
   // Calculate hours from start/end
   const calcHours = (): number => {
