@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 export default function JobsPage() {
   const { data, addJob, updateJob, deleteJob } = useData();
   const [editId, setEditId] = useState<string | null>(null);
+  const [photoOpen, setPhotoOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const editingJob = editId ? data.jobs.find(j => j.id === editId) : undefined;
