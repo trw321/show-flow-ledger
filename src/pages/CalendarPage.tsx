@@ -126,7 +126,12 @@ export default function CalendarPage() {
                 {format(day, 'd')}
               </span>
 
-              {/* Dots row */}
+              {/* Venue + dots */}
+              {dayJobs.length > 0 && (
+                <span className="text-[7px] text-muted-foreground leading-tight text-center truncate max-w-[3rem] mt-0.5">
+                  {dayJobs[0].venue || dayJobs[0].client}
+                </span>
+              )}
               <div className="flex gap-0.5 mt-0.5 h-2 items-center">
                 {dayJobs.slice(0, 3).map((job, j) => (
                   <span key={j} className={cn("w-1.5 h-1.5 rounded-full", statusDot[job.status])} />
@@ -162,7 +167,7 @@ export default function CalendarPage() {
               return (
                 <div
                   key={job.id}
-                  onClick={() => { setSelectedDate(null); navigate('/jobs'); }}
+                  onClick={() => { setSelectedDate(null); navigate('/log'); }}
                   className={cn(
                     "rounded-xl border p-3 space-y-1 cursor-pointer hover:bg-secondary/30 transition-colors",
                     statusColors[job.status]
