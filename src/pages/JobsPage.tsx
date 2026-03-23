@@ -54,10 +54,6 @@ export default function JobsPage() {
         <VoiceDictation onParsed={addJob} jobs={jobsList} />
       </div>
 
-      {/* Secondary import methods */}
-      <div className="flex gap-2 mb-4">
-        <JobPasteImport onImport={addJob} />
-      </div>
 
       {/* Summary */}
       <div className="grid grid-cols-2 gap-3 mb-4">
