@@ -23,6 +23,7 @@ const navItems = [
   { to: '/calendar', icon: CalendarDays, label: 'Calendar' },
   { to: '/log', icon: ClipboardCheck, label: 'Job Log' },
   { to: '/expenses', icon: Receipt, label: 'Expenses' },
+  { to: '/taxes', icon: PieChart, label: 'Taxes' },
   { to: '/income', icon: DollarSign, label: 'Income' },
   { to: '/discover', icon: Sparkles, label: 'Discover' },
   { to: '/reconciliation', icon: Scale, label: 'Reconciliation' },
