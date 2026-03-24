@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useData } from '@/lib/DataContext';
 import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
-import IncomeStatementUpload from '@/components/IncomeStatementUpload';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -69,7 +69,7 @@ export default function IncomePage() {
   const { data, addIncome, updateIncome, deleteIncome } = useData();
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [statementOpen, setStatementOpen] = useState(false);
+  
   const editingInc = editId ? data.income.find(i => i.id === editId) : undefined;
   const jobs = data.jobs.map(j => ({ id: j.id, name: j.name }));
   const total = data.income.reduce((s, i) => s + i.amount, 0);
@@ -81,7 +81,6 @@ export default function IncomePage() {
         description={`Total: $${total.toLocaleString()}`}
         action={
           <div className="flex gap-2">
-            <IncomeStatementUpload />
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild><Button size="sm"><Plus size={16} className="mr-1" /> New Income</Button></DialogTrigger>
               <DialogContent>
@@ -95,8 +94,7 @@ export default function IncomePage() {
 
       {data.income.length === 0 ? (
         <>
-          <EmptyState icon={DollarSign} title="No income recorded" description="Tap to upload a statement or invoice photo" onUploadPhoto={() => setStatementOpen(true)} />
-          <IncomeStatementUpload externalOpen={statementOpen} onExternalOpenChange={setStatementOpen} />
+          <EmptyState icon={DollarSign} title="No income recorded" description="Add your first income with the + button above" />
         </>
       ) : (
         <div className="rounded-lg border border-border overflow-hidden">
