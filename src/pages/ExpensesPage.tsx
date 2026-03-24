@@ -163,7 +163,7 @@ export default function ExpensesPage() {
       </div>
 
       {data.expenses.length === 0 ? (
-        <EmptyState icon={Receipt} title="No expenses yet" description="Add your first expense with the + button above" />
+        <EmptyState icon={Receipt} title="No expenses yet" description="Tap to upload a receipt photo or use the + button above" onUploadPhoto={(file) => { toast.info('Photo received! Add expense details manually for now.'); }} />
       ) : grouped.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">No expenses match this filter.</p>
       ) : (
