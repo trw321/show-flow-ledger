@@ -69,7 +69,7 @@ export default function IncomePage() {
   const { data, addIncome, updateIncome, deleteIncome } = useData();
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [statementOpen, setStatementOpen] = useState(false);
+  
   const editingInc = editId ? data.income.find(i => i.id === editId) : undefined;
   const jobs = data.jobs.map(j => ({ id: j.id, name: j.name }));
   const total = data.income.reduce((s, i) => s + i.amount, 0);
