@@ -94,8 +94,7 @@ export default function IncomePage() {
 
       {data.income.length === 0 ? (
         <>
-          <EmptyState icon={DollarSign} title="No income recorded" description="Tap to upload a statement or invoice photo" onUploadPhoto={() => setStatementOpen(true)} />
-          <IncomeStatementUpload externalOpen={statementOpen} onExternalOpenChange={setStatementOpen} />
+          <EmptyState icon={DollarSign} title="No income recorded" description="Add your first income with the + button above" />
         </>
       ) : (
         <div className="rounded-lg border border-border overflow-hidden">
