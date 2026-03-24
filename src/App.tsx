@@ -27,33 +27,36 @@ const App = () => {
   const handleComplete = useCallback(() => setLoading(false), []);
 
   return (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <DataProvider>
-        <PartyModeProvider>
-          <BrowserRouter>
-            <AppLayout>
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                
-                <Route path="/calendar" element={<CalendarPage />} />
-                <Route path="/log" element={<JobLogPage />} />
-                <Route path="/expenses" element={<ExpensesPage />} />
-                <Route path="/income" element={<IncomePage />} />
-                <Route path="/equipment" element={<EquipmentPage />} />
-                <Route path="/reconciliation" element={<PayReconciliationPage />} />
-                <Route path="/taxes" element={<TaxesPage />} />
-                <Route path="/discover" element={<DiscoverPage />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </AppLayout>
-          </BrowserRouter>
-        </PartyModeProvider>
-      </DataProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+    <>
+      {loading && <LoadingScreen onComplete={handleComplete} />}
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <DataProvider>
+            <PartyModeProvider>
+              <BrowserRouter>
+                <AppLayout>
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/calendar" element={<CalendarPage />} />
+                    <Route path="/log" element={<JobLogPage />} />
+                    <Route path="/expenses" element={<ExpensesPage />} />
+                    <Route path="/income" element={<IncomePage />} />
+                    <Route path="/equipment" element={<EquipmentPage />} />
+                    <Route path="/reconciliation" element={<PayReconciliationPage />} />
+                    <Route path="/taxes" element={<TaxesPage />} />
+                    <Route path="/discover" element={<DiscoverPage />} />
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </AppLayout>
+              </BrowserRouter>
+            </PartyModeProvider>
+          </DataProvider>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </>
+  );
+};
 
 export default App;
