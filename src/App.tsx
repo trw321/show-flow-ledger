@@ -1,3 +1,4 @@
+import { useState, useCallback } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -7,6 +8,7 @@ import { DataProvider } from "@/lib/DataContext";
 import { PartyModeProvider } from "@/lib/PartyModeContext";
 import AppLayout from "@/components/AppLayout";
 import Dashboard from "@/pages/Dashboard";
+import LoadingScreen from "@/components/LoadingScreen";
 
 import ExpensesPage from "@/pages/ExpensesPage";
 import IncomePage from "@/pages/IncomePage";
@@ -20,7 +22,11 @@ import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
 
-const App = () => (
+const App = () => {
+  const [loading, setLoading] = useState(true);
+  const handleComplete = useCallback(() => setLoading(false), []);
+
+  return (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
