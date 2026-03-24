@@ -81,7 +81,6 @@ export default function IncomePage() {
         description={`Total: $${total.toLocaleString()}`}
         action={
           <div className="flex gap-2">
-            <IncomeStatementUpload />
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild><Button size="sm"><Plus size={16} className="mr-1" /> New Income</Button></DialogTrigger>
               <DialogContent>
