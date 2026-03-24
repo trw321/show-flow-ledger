@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useData } from '@/lib/DataContext';
 import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
@@ -93,9 +94,7 @@ export default function IncomePage() {
       />
 
       {data.income.length === 0 ? (
-        <>
-          <EmptyState icon={DollarSign} title="No income recorded" description="Add your first income with the + button above" />
-        </>
+        <EmptyState icon={DollarSign} title="No income recorded" description="Tap to upload an invoice photo or use the + button above" onUploadPhoto={(file) => { toast.info('Photo received! Add income details manually for now.'); }} />
       ) : (
         <div className="rounded-lg border border-border overflow-hidden">
           <table className="w-full text-sm">
