@@ -1,3 +1,4 @@
+import { useState, useCallback } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -7,6 +8,7 @@ import { DataProvider } from "@/lib/DataContext";
 import { PartyModeProvider } from "@/lib/PartyModeContext";
 import AppLayout from "@/components/AppLayout";
 import Dashboard from "@/pages/Dashboard";
+import LoadingScreen from "@/components/LoadingScreen";
 
 import ExpensesPage from "@/pages/ExpensesPage";
 import IncomePage from "@/pages/IncomePage";
@@ -20,34 +22,41 @@ import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <DataProvider>
-        <PartyModeProvider>
-          <BrowserRouter>
-            <AppLayout>
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                
-                <Route path="/calendar" element={<CalendarPage />} />
-                <Route path="/log" element={<JobLogPage />} />
-                <Route path="/expenses" element={<ExpensesPage />} />
-                <Route path="/income" element={<IncomePage />} />
-                <Route path="/equipment" element={<EquipmentPage />} />
-                <Route path="/reconciliation" element={<PayReconciliationPage />} />
-                <Route path="/taxes" element={<TaxesPage />} />
-                <Route path="/discover" element={<DiscoverPage />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </AppLayout>
-          </BrowserRouter>
-        </PartyModeProvider>
-      </DataProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  const [loading, setLoading] = useState(true);
+  const handleComplete = useCallback(() => setLoading(false), []);
+
+  return (
+    <>
+      {loading && <LoadingScreen onComplete={handleComplete} />}
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <DataProvider>
+            <PartyModeProvider>
+              <BrowserRouter>
+                <AppLayout>
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/calendar" element={<CalendarPage />} />
+                    <Route path="/log" element={<JobLogPage />} />
+                    <Route path="/expenses" element={<ExpensesPage />} />
+                    <Route path="/income" element={<IncomePage />} />
+                    <Route path="/equipment" element={<EquipmentPage />} />
+                    <Route path="/reconciliation" element={<PayReconciliationPage />} />
+                    <Route path="/taxes" element={<TaxesPage />} />
+                    <Route path="/discover" element={<DiscoverPage />} />
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </AppLayout>
+              </BrowserRouter>
+            </PartyModeProvider>
+          </DataProvider>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </>
+  );
+};
 
 export default App;
