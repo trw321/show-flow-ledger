@@ -26,14 +26,14 @@ export default function LoadingScreen({ onComplete }: { onComplete: () => void }
     if (p < 55) return `hsl(30, ${90 - (p - 35) * 1.5}%, ${38 + p * 0.4}%)`;
     if (p < 75) return `hsl(45, ${60 - (p - 55) * 2}%, ${58 + p * 0.3}%)`;
     if (p < 90) return `hsl(${45 + (p - 75) * 14}, ${30 + (p - 75) * 3}%, ${75 + (p - 75) * 0.5}%)`;
-    return `hsl(${210 + (p - 90) * 2}, ${60 + (p - 90) * 2}%, ${70 + (p - 90) * 1.5}%)`;
+    return `hsl(${200 + (p - 90) * 1}, ${60 + (p - 90) * 3}%, ${75 - (p - 90) * 1.5}%)`;
   };
 
   const getFilamentColor = (p: number) => {
     if (p < 20) return `hsl(0, 100%, ${15 + p * 1.5}%)`;
     if (p < 50) return `hsl(${(p - 20) * 1.2}, 100%, ${45 + p * 0.4}%)`;
     if (p < 80) return `hsl(40, ${100 - (p - 50) * 1.5}%, ${65 + (p - 50) * 0.5}%)`;
-    return `hsl(${200 + (p - 80) * 3}, ${70 + (p - 80) * 2}%, ${80 + (p - 80) * 1}%)`;
+    return `hsl(${200 + (p - 80) * 0.5}, ${70 + (p - 80) * 1.5}%, ${75 - (p - 80) * 0.5}%)`;
   };
 
   const color = getColor(progress);
