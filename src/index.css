@@ -15,7 +15,7 @@
     --popover: 0 0% 10%;
     --popover-foreground: 0 0% 95%;
 
-    --primary: 332 88% 52%;
+    --primary: 252 78% 60%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 0 0% 14%;
@@ -24,7 +24,7 @@
     --muted: 0 0% 12%;
     --muted-foreground: 0 0% 45%;
 
-    --accent: 265 90% 60%;
+    --accent: 188 80% 50%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 72% 55%;
@@ -41,18 +41,18 @@
 
     --border: 0 0% 16%;
     --input: 0 0% 16%;
-    --ring: 332 88% 52%;
+    --ring: 252 78% 60%;
 
     --radius: 1rem;
 
     --sidebar-background: 0 0% 3%;
     --sidebar-foreground: 0 0% 55%;
-    --sidebar-primary: 332 88% 52%;
+    --sidebar-primary: 252 78% 60%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 0 0% 10%;
     --sidebar-accent-foreground: 0 0% 95%;
     --sidebar-border: 0 0% 12%;
-    --sidebar-ring: 332 88% 52%;
+    --sidebar-ring: 252 78% 60%;
 
     --font-display: 'Space Mono', monospace;
     --font-body: 'Space Grotesk', sans-serif;
@@ -95,10 +95,10 @@
 
 @layer utilities {
   .glow-primary {
-    box-shadow: 0 0 30px -5px hsl(var(--primary) / 0.4), inset 0 1px 0 hsl(var(--primary) / 0.1);
+    box-shadow: 0 0 30px -5px hsl(var(--primary) / 0.5), inset 0 1px 0 hsl(var(--primary) / 0.15);
   }
   .glow-accent {
-    box-shadow: 0 0 30px -5px hsl(var(--accent) / 0.4), inset 0 1px 0 hsl(var(--accent) / 0.1);
+    box-shadow: 0 0 30px -5px hsl(var(--accent) / 0.5), inset 0 1px 0 hsl(var(--accent) / 0.15);
   }
   .glow-success {
     box-shadow: 0 0 20px -5px hsl(var(--success) / 0.3);
@@ -111,10 +111,10 @@
     letter-spacing: 0.05em;
   }
   .funky-gradient {
-    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--success)), hsl(var(--info)));
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--info)), hsl(var(--accent)));
   }
   .funky-gradient-text {
-    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--success)), hsl(var(--info)));
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--info)), hsl(var(--accent)));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
