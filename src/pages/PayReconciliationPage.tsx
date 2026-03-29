@@ -101,8 +101,8 @@ export default function PayReconciliationPage() {
           return isWithinInterval(d, { start: period.start, end: period.end }) && (j.hoursWorked ?? 0) > 0;
         });
 
-        // Include payments up to 35 days after period end to account for payroll lag
-        const paymentWindow = addDays(period.end, 35);
+        // Include payments up to 90 days after period end (some productions pay 1–2 months late)
+        const paymentWindow = addDays(period.end, 90);
         const periodIncome = data.income.filter(i => {
           if (i.status !== 'paid') return false;
           if (i.client !== referenceJob.client) return false;

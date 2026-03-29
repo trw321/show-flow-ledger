@@ -65,8 +65,9 @@ function scoreMatch(deposit: ParsedDeposit, row: ReconciliationRowInfo): MatchRe
   const periodEnd = parseISO(row.periodEnd);
   const daysAfter = differenceInDays(depDate, periodEnd);
   if (daysAfter >= 0 && daysAfter <= 7)  { score += 20; reasons.push('Paid within 1 week of period end'); }
-  else if (daysAfter >= 0 && daysAfter <= 21) { score += 12; reasons.push('Paid within 3 weeks of period end'); }
-  else if (daysAfter >= 0 && daysAfter <= 42) { score += 5;  reasons.push('Paid within 6 weeks of period end'); }
+  else if (daysAfter >= 0 && daysAfter <= 21) { score += 14; reasons.push('Paid within 3 weeks of period end'); }
+  else if (daysAfter >= 0 && daysAfter <= 42) { score += 8;  reasons.push('Paid within 6 weeks of period end'); }
+  else if (daysAfter >= 0 && daysAfter <= 90) { score += 5;  reasons.push('Paid within 3 months of period end'); }
   else if (daysAfter < 0 && daysAfter >= -7) { score += 5;  reasons.push('Paid slightly before period end'); }
 
   const confidence: 'high' | 'medium' | 'low' =

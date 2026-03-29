@@ -17,6 +17,7 @@ export interface Job {
   hourlyRate?: number;
   minimumHours?: number;
   has6th7thDayRule?: boolean;
+  hasVacationPay?: boolean;
   steward?: string;
   parkingCost?: number;
   hoursWorked?: number;

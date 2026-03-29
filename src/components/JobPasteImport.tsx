@@ -98,6 +98,7 @@ export default function JobPasteImport({ onImport }: { onImport: (job: Omit<Job,
         parkingCost: j.parkingCost,
         notes: j.notes || '',
         has6th7thDayRule: false,
+        hasVacationPay: false,
       };
       const key = getJobDedupKey(draft);
 
