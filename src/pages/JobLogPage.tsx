@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ClipboardCheck, Camera, Clock, ChevronRight } from 'lucide-react';
 import JobPhotoImport from '@/components/JobPhotoImport';
+import JobPasteImport from '@/components/JobPasteImport';
 import LogHoursForm from '@/components/LogHoursForm';
 import { format, isToday, isPast, isFuture } from 'date-fns';
 import { toast } from 'sonner';
@@ -47,12 +48,16 @@ export default function JobLogPage() {
     <>
       <PageHeader title="Job Log" description="Pre-load jobs, then log hours on the day" />
 
-      {/* Load upcoming jobs via screenshot */}
-      <div className="mb-4">
+      {/* Load upcoming jobs — photo or paste */}
+      <div className="flex gap-2 mb-4">
         <JobPhotoImport onImport={(job) => {
           addJob({ ...job, status: 'upcoming', hoursWorked: 0 });
           toast.success('Job loaded to calendar');
         }} externalOpen={photoOpen} onExternalOpenChange={setPhotoOpen} />
+        <JobPasteImport onImport={(job) => {
+          addJob({ ...job, status: 'upcoming', hoursWorked: 0 });
+          toast.success('Job loaded to calendar');
+        }} />
       </div>
 
       {/* Today / Needs Logging */}
