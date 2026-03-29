@@ -5,7 +5,7 @@ import PageHeader from '@/components/PageHeader';
 import { Briefcase, Receipt, DollarSign, TrendingUp, TrendingDown, AlertCircle, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Sector } from 'recharts';
 
 function Starburst({ className, delay = 0 }: { className?: string; delay?: number }) {
   return (
@@ -34,6 +34,27 @@ function FloatingOrb({ className, delay = 0 }: { className?: string; delay?: num
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function GlitterActiveShape(props: any) {
+  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
+  return (
+    <g style={{ filter: `drop-shadow(0 0 12px ${fill}) drop-shadow(0 0 4px #fff4)` }}>
+      {/* soft outer pulse ring */}
+      <Sector cx={cx} cy={cy} innerRadius={outerRadius + 3} outerRadius={outerRadius + 10}
+        startAngle={startAngle} endAngle={endAngle} fill={fill} opacity={0.25} />
+      {/* main segment, popped out */}
+      <Sector cx={cx} cy={cy} innerRadius={innerRadius - 2} outerRadius={outerRadius + 5}
+        startAngle={startAngle} endAngle={endAngle} fill={fill} />
+      {/* glitter shimmer — bright half-lens highlight */}
+      <Sector cx={cx} cy={cy}
+        innerRadius={innerRadius - 2}
+        outerRadius={innerRadius + (outerRadius - innerRadius) * 0.52}
+        startAngle={startAngle} endAngle={endAngle}
+        fill="rgba(255,255,255,0.22)" />
+    </g>
+  );
+}
+
 export default function Dashboard() {
   const { data } = useData();
   const [taxRate, setTaxRate] = useState(25);
@@ -51,9 +72,9 @@ export default function Dashboard() {
   const afterTax = netProfit - estimatedTax;
 
   const pieData = [
-    { name: 'Take Home', value: Math.max(0, afterTax), color: 'hsl(142, 76%, 46%)' },
+    { name: 'Take Home', value: Math.max(0, afterTax), color: 'hsl(76, 92%, 48%)' },
     { name: 'Estimated Tax', value: estimatedTax, color: 'hsl(50, 100%, 55%)' },
-    { name: 'Expenses', value: totalExpenses, color: 'hsl(0, 84%, 60%)' },
+    { name: 'Expenses', value: totalExpenses, color: 'hsl(0, 72%, 55%)' },
   ].filter(d => d.value > 0);
 
   const recentJobs = [...data.jobs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
@@ -178,14 +199,31 @@ export default function Dashboard() {
                     paddingAngle={3}
                     dataKey="value"
                     strokeWidth={0}
+                    activeShape={GlitterActiveShape}
                   >
                     {pieData.map((entry, i) => (
-                      <Cell key={i} fill={entry.color} />
+                      <Cell
+                        key={i}
+                        fill={entry.color}
+                        stroke="rgba(255,255,255,0.15)"
+                        strokeWidth={1.5}
+                      />
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value: number) => `$${value.toLocaleString()}`}
-                    contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
+                    formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name]}
+                    contentStyle={{
+                      background: '#ffffff',
+                      border: 'none',
+                      borderRadius: '12px',
+                      fontSize: '12px',
+                      fontFamily: 'Space Mono, monospace',
+                      boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                      padding: '10px 14px',
+                      color: '#111111',
+                    }}
+                    labelStyle={{ color: '#111111', fontWeight: 700, marginBottom: 2 }}
+                    itemStyle={{ color: '#333333' }}
                   />
                 </PieChart>
               </ResponsiveContainer>
