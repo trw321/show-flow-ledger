@@ -199,7 +199,7 @@ export default function TimesheetUpload() {
             <FileImage size={32} className="text-muted-foreground mb-3" />
             <p className="text-sm text-muted-foreground">Drop a photo of your notes, timesheet, or call sheet</p>
             <p className="text-xs text-muted-foreground mt-1">JPG, PNG, WEBP • Max 10MB</p>
-            <input id="timesheet-upload-input" type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+            <input id="timesheet-upload-input" type="file" accept="image/*" className="hidden" onClick={e => e.stopPropagation()} onChange={e => { const f = e.target.files?.[0]; if (f) { handleFile(f); e.currentTarget.value = ''; } }} />
           </div>
         )}
 

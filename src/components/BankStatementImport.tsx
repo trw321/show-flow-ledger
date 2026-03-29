@@ -305,7 +305,8 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
             type="file"
             accept="image/*"
             className="hidden"
-            onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
+            onClick={e => e.stopPropagation()}
+            onChange={e => { const f = e.target.files?.[0]; if (f) { handleFile(f); e.currentTarget.value = ''; } }}
           />
         </div>
       )}

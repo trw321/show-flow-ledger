@@ -181,7 +181,8 @@ export default function JobPhotoImport({ onImport, externalOpen, onExternalOpenC
                 type="file"
                 accept="image/*"
                 className="hidden"
-                onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+                onClick={e => e.stopPropagation()}
+                onChange={e => { const f = e.target.files?.[0]; if (f) { handleFile(f); e.target.value = ''; } }}
               />
               {preview ? (
                 <img src={preview} alt="Preview" className="max-h-64 mx-auto rounded-md" />

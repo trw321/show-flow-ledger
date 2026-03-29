@@ -235,13 +235,13 @@ export default function PayReconciliationPage() {
       {reconciliation.length === 0 ? (
         <EmptyState icon={Scale} title="No data to reconcile" description="Add jobs with hours worked and mark income as paid to see cross-checks." />
       ) : (
-        <div className="rounded-lg border border-border overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="rounded-lg border border-border overflow-x-auto">
+          <table className="w-full text-sm min-w-[680px]">
             <thead>
               <tr className="bg-secondary/50 text-muted-foreground text-xs uppercase tracking-wider text-mono">
-                <th className="text-left px-4 py-3">Client</th>
-                <th className="text-left px-4 py-3">Pay Period</th>
-                <th className="text-left px-4 py-3">Schedule</th>
+                <th className="text-left px-4 py-3.5">Client</th>
+                <th className="text-left px-4 py-3.5">Pay Period</th>
+                <th className="text-left px-4 py-3.5">Schedule</th>
                 <th className="text-right px-4 py-3">Hours</th>
                 <th className="text-right px-4 py-3">Expected</th>
                 <th className="text-right px-4 py-3">Paid</th>
@@ -272,8 +272,8 @@ export default function PayReconciliationPage() {
                           {row.paySchedule}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right text-mono">{row.totalHours.toFixed(1)}</td>
-                      <td className="px-4 py-3 text-right text-mono">${row.expectedPay.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td className="px-4 py-3.5 text-right text-mono">{row.totalHours.toFixed(1)}</td>
+                      <td className="px-4 py-3.5 text-right text-mono">${row.expectedPay.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                       <td className="px-4 py-3 text-right text-mono text-success">${row.actualPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                       <td className="px-4 py-3 text-right">
                         <span className={`inline-flex items-center gap-1 text-mono text-xs font-bold ${isMatch ? 'text-success' : isOver ? 'text-primary' : 'text-destructive'}`}>

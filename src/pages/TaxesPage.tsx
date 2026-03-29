@@ -97,6 +97,57 @@ function calcSETax(netProfit: number): {
   return { seTax, seDeduction, ssTax, medicareTax, additionalMedicare };
 }
 
+// ── Bracket colors (low → high rate maps green → teal → blue → purple → red)
+const BRACKET_COLORS = [
+  'hsl(76,  92%, 48%)',   // 10% — lime/success
+  'hsl(157, 70%, 45%)',   // 12% — teal-green
+  'hsl(188, 80%, 50%)',   // 22% — teal/accent
+  'hsl(210,100%, 55%)',   // 24% — blue/info
+  'hsl(252, 78%, 60%)',   // 32% — purple/primary
+  'hsl(280, 70%, 55%)',   // 35% — violet
+  'hsl(0,   72%, 55%)',   // 37% — red/destructive
+];
+
+function BracketBar({ taxableIncome, status }: { taxableIncome: number; status: FilingStatus }) {
+  if (taxableIncome <= 0) return null;
+  const brackets = BRACKETS[status];
+  let remaining = taxableIncome;
+  const segments = brackets.map((b, i) => {
+    const prev = i === 0 ? 0 : brackets[i - 1].limit;
+    const slotWidth = b.limit === Infinity ? remaining : b.limit - prev;
+    const filled = Math.min(remaining, slotWidth);
+    remaining -= filled;
+    return { rate: b.rate, slotWidth, filled };
+  }).filter(s => s.filled > 0);
+
+  return (
+    <div className="mt-4 space-y-2 pt-3 border-t border-border">
+      <p className="text-[10px] text-mono text-muted-foreground uppercase tracking-wider mb-2">Federal Tax Brackets</p>
+      {segments.map((seg, i) => (
+        <div key={i} className="flex items-center gap-2.5">
+          <span className="text-[10px] text-mono font-bold w-7 shrink-0 text-right" style={{ color: BRACKET_COLORS[i] }}>
+            {(seg.rate * 100).toFixed(0)}%
+          </span>
+          <div className="flex-1 h-2.5 rounded-full bg-secondary/50 overflow-hidden">
+            <div
+              className="h-full rounded-full"
+              style={{
+                width: `${Math.min(100, (seg.filled / seg.slotWidth) * 100)}%`,
+                background: BRACKET_COLORS[i],
+                boxShadow: `0 0 8px ${BRACKET_COLORS[i]}90`,
+              }}
+            />
+          </div>
+          <span className="text-[10px] text-mono text-muted-foreground w-20 text-right shrink-0">
+            ${seg.filled.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            <span className="opacity-60"> @ {(seg.rate * 100).toFixed(0)}%</span>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Pie geometry helpers ──────────────────────────────────────────────────
 
 function pieClipPath(startDeg: number, endDeg: number, gap = 2): string {
@@ -312,21 +363,23 @@ export default function TaxesPage() {
               <Divider />
               <Row label="Federal Taxable Income" value={calc.taxableIncome} bold />
 
+              <BracketBar taxableIncome={calc.taxableIncome} status={filingStatus} />
+
               <div className="h-2" />
 
-              <Row label="Federal Income Tax" value={-calc.federalTax} color="text-destructive" />
+              <Row label="Federal Income Tax" value={-calc.federalTax} color="text-primary" />
               {isSelfEmployed && (
                 <>
-                  <Row label={`  Social Security (12.4% on ≤$${SS_WAGE_BASE.toLocaleString()})`} value={-calc.ssTax} color="text-destructive" small />
-                  <Row label="  Medicare (2.9%)" value={-calc.medicareTax} color="text-destructive" small />
+                  <Row label={`  Social Security (12.4% on ≤$${SS_WAGE_BASE.toLocaleString()})`} value={-calc.ssTax} color="text-accent" small />
+                  <Row label="  Medicare (2.9%)" value={-calc.medicareTax} color="text-accent" small />
                   {calc.additionalMedicare > 0 && (
-                    <Row label="  Additional Medicare (0.9%)" value={-calc.additionalMedicare} color="text-destructive" small />
+                    <Row label="  Additional Medicare (0.9%)" value={-calc.additionalMedicare} color="text-accent" small />
                   )}
-                  <Row label="Self-Employment Tax Total" value={-calc.seTax} color="text-destructive" />
+                  <Row label="Self-Employment Tax Total" value={-calc.seTax} color="text-primary" />
                 </>
               )}
               {stateRate > 0 && (
-                <Row label={`State Income Tax (${stateRate}%)`} value={-calc.stateTax} color="text-destructive" />
+                <Row label={`State Income Tax (${stateRate}%)`} value={-calc.stateTax} color="text-info" />
               )}
 
               <Divider />

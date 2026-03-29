@@ -25,9 +25,9 @@ const navItems = [
   { to: '/expenses', icon: Receipt, label: 'Expenses' },
   { to: '/taxes', icon: PieChart, label: 'Taxes' },
   { to: '/income', icon: DollarSign, label: 'Income' },
-  { to: '/discover', icon: Sparkles, label: 'Discover' },
   { to: '/reconciliation', icon: Scale, label: 'Reconciliation' },
   { to: '/equipment', icon: Speaker, label: 'Equipment' },
+  { to: '/discover', icon: Sparkles, label: 'Discover' },
 ];
 
 // Bottom tab bar items (most used on mobile)
