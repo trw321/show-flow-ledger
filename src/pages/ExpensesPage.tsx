@@ -13,12 +13,33 @@ import { Receipt, Plus, Trash2, Pencil, ChevronRight, Filter } from 'lucide-reac
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isWithinInterval } from 'date-fns';
 import type { Expense } from '@/lib/store';
 
-const categories = ['Travel', 'Gear Rental', 'Consumables', 'Fuel', 'Meals', 'Lodging', 'Labor', 'Insurance', 'Software', 'Tools', 'Rent', 'Other'];
+const categories = [
+  'Travel', 'Gear Rental', 'Consumables', 'Fuel', 'Meals', 'Lodging',
+  'Labor', 'Insurance', 'Software', 'Tools', 'Entertainment', 'Medical',
+  'Rent', 'IATSE Union Dues', 'Other',
+];
 
 const categoryEmojis: Record<string, string> = {
   Travel: '✈️', 'Gear Rental': '🎛️', Consumables: '🛒', Fuel: '⛽', Meals: '🍔',
-  Lodging: '🏨', Labor: '👷', Insurance: '🛡️', Software: '💻', Tools: '🔧', Rent: '🏠', Other: '📦',
+  Lodging: '🏨', Labor: '👷', Insurance: '🛡️', Software: '💻', Tools: '🔧',
+  Entertainment: '🪩', Medical: '🩺', Rent: '🏢', Other: '📦',
 };
+
+function IATSEIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 22 22" className="inline-block shrink-0">
+      <circle cx="11" cy="11" r="9.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <circle cx="11" cy="11" r="7.5" fill="none" stroke="currentColor" strokeWidth="0.6" opacity="0.5" />
+      <text x="11" y="13.8" textAnchor="middle" fontSize="7.5" fontWeight="700" fill="currentColor"
+        fontFamily="Space Mono, monospace" letterSpacing="0.5">IA</text>
+    </svg>
+  );
+}
+
+function CategoryIcon({ cat }: { cat: string }) {
+  if (cat === 'IATSE Union Dues') return <IATSEIcon />;
+  return <span className="text-lg leading-none">{categoryEmojis[cat] || '📦'}</span>;
+}
 
 type DateFilter = 'all' | 'this-week' | 'this-month' | 'custom';
 
@@ -175,7 +196,7 @@ export default function ExpensesPage() {
               <Collapsible key={cat} open={openCategories.has(cat)} onOpenChange={() => toggleCategory(cat)}>
                 <CollapsibleTrigger className="flex items-center w-full gap-3 px-4 py-3 rounded-lg bg-secondary/50 hover:bg-secondary/80 transition-colors group">
                   <ChevronRight size={16} className={`text-muted-foreground transition-transform duration-200 ${openCategories.has(cat) ? 'rotate-90' : ''}`} />
-                  <span className="text-lg">{categoryEmojis[cat] || '📦'}</span>
+                  <CategoryIcon cat={cat} />
                   <span className="font-semibold text-sm flex-1 text-left">{cat}</span>
                   <span className="text-xs text-muted-foreground">{exps.length} item{exps.length !== 1 ? 's' : ''}</span>
                   <span className="text-sm font-bold text-destructive text-mono">-${catTotal.toLocaleString()}</span>

@@ -26,7 +26,7 @@ serve(async (req) => {
       ? `You are a timesheet and work note parser for an AV technician. Analyze the uploaded image of handwritten notes, timesheets, call sheets, or schedules. Extract every work session/entry you can find. For each entry extract: date (YYYY-MM-DD), hours worked (as a number), client name, job/project name, description of work done, hourly rate if visible (default 0), and mealPenalties (number of meal penalties, default 0). IMPORTANT RULES: 1) A one-hour "walk away" (meal break, lunch break) is OFF THE CLOCK — subtract it from total hours. 2) A "meal penalty" or "MP" noted means the crew was not broken for a meal on time — count each as a meal penalty (each = 1 hour at straight rate, added to pay). If you see "MP" or "meal penalty" on the timesheet, set mealPenalties accordingly. ${jobsList} If you can't determine the date, use today's date ${new Date().toISOString().split("T")[0]}.`
       : isIncome
       ? `You are a financial document parser specializing in bank statements and invoices. Extract all incoming payments/deposits/credits you can identify. For each transaction extract: client (who paid), description, amount (as a positive number), date (as YYYY-MM-DD), and invoiceNumber (if visible). If you can't determine the date, use today's date. Return ONLY valid JSON.`
-      : `You are a financial document parser specializing in bank statements and receipts. Extract all transactions/line items you can identify. For each transaction extract: description, amount (as a number), date (as YYYY-MM-DD), and category. Categories should be one of: Travel, Gear Rental, Consumables, Fuel, Meals, Lodging, Labor, Insurance, Software, Other. If you can't determine the category, use "Other". If you can't determine the date, use today's date. Return ONLY valid JSON.`;
+      : `You are a financial document parser specializing in bank statements and receipts. Extract all transactions/line items you can identify. For each transaction extract: description, amount (as a number), date (as YYYY-MM-DD), and category. Categories should be one of: Travel, Gear Rental, Consumables, Fuel, Meals, Lodging, Labor, Insurance, Software, Tools, Entertainment, Medical, Rent, IATSE Union Dues, Other. If you can't determine the category, use "Other". If you can't determine the date, use today's date. Return ONLY valid JSON.`;
 
     const userPrompt = isTimesheet
       ? "Extract all work sessions/time entries from this handwritten note, timesheet, call sheet, or schedule image. Calculate hours from any clock-in/clock-out times. Return structured time entries."
@@ -114,7 +114,7 @@ serve(async (req) => {
                       date: { type: "string", description: "YYYY-MM-DD format" },
                       category: {
                         type: "string",
-                        enum: ["Travel", "Gear Rental", "Consumables", "Fuel", "Meals", "Lodging", "Labor", "Insurance", "Software", "Other"],
+                        enum: ["Travel", "Gear Rental", "Consumables", "Fuel", "Meals", "Lodging", "Labor", "Insurance", "Software", "Tools", "Entertainment", "Medical", "Rent", "IATSE Union Dues", "Other"],
                       },
                     },
                     required: ["description", "amount", "date", "category"],
