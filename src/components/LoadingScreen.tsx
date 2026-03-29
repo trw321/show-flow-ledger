@@ -19,21 +19,17 @@ export default function LoadingScreen({ onComplete }: { onComplete: () => void }
     return () => clearInterval(interval);
   }, [onComplete]);
 
-  // LED color: dim red → orange → warm white → cool white → blue finish
+  // LED color: dim red → orange → blue (no white)
   const getColor = (p: number) => {
-    if (p < 15) return `hsl(0, 85%, ${8 + p * 0.8}%)`;
-    if (p < 35) return `hsl(${(p - 15) * 1.5}, 90%, ${20 + p * 0.5}%)`;
-    if (p < 55) return `hsl(30, ${90 - (p - 35) * 1.5}%, ${38 + p * 0.4}%)`;
-    if (p < 75) return `hsl(45, ${60 - (p - 55) * 2}%, ${58 + p * 0.3}%)`;
-    if (p < 90) return `hsl(${45 + (p - 75) * 14}, ${30 + (p - 75) * 3}%, ${75 + (p - 75) * 0.5}%)`;
-    return `hsl(${200 + (p - 90) * 1}, ${60 + (p - 90) * 3}%, ${75 - (p - 90) * 1.5}%)`;
+    if (p < 30) return `hsl(0, 85%, ${8 + p * 0.8}%)`;
+    if (p < 65) return `hsl(${(p - 30) * 0.86}, 95%, ${32 + (p - 30) * 0.86}%)`;
+    return `hsl(${30 + (p - 65) * 5.14}, ${95 - (p - 65) * 0.14}%, ${62 + (p - 65) * 0.09}%)`;
   };
 
   const getFilamentColor = (p: number) => {
     if (p < 20) return `hsl(0, 100%, ${15 + p * 1.5}%)`;
-    if (p < 50) return `hsl(${(p - 20) * 1.2}, 100%, ${45 + p * 0.4}%)`;
-    if (p < 80) return `hsl(40, ${100 - (p - 50) * 1.5}%, ${65 + (p - 50) * 0.5}%)`;
-    return `hsl(${200 + (p - 80) * 0.5}, ${70 + (p - 80) * 1.5}%, ${75 - (p - 80) * 0.5}%)`;
+    if (p < 60) return `hsl(${(p - 20) * 0.75}, 100%, ${45 + (p - 20) * 0.5}%)`;
+    return `hsl(${30 + (p - 60) * 4.5}, ${100 - (p - 60) * 0.75}%, ${65 + (p - 60) * 0.1}%)`;
   };
 
   const color = getColor(progress);
