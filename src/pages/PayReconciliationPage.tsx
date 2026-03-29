@@ -2,13 +2,15 @@ import { useState, useMemo } from 'react';
 import { useData } from '@/lib/DataContext';
 import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
+import BankStatementImport, { type ReconciliationRowInfo } from '@/components/BankStatementImport';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Scale, ChevronDown, ChevronUp, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Scale, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, Upload } from 'lucide-react';
 import { format, addDays, endOfMonth, isWithinInterval, parseISO, startOfMonth } from 'date-fns';
 import { calculateExpectedPay } from '@/lib/payCalc';
-import type { Job } from '@/lib/store';
+import type { Job, Income } from '@/lib/store';
 
 function getPayPeriods(job: Job, rangeStart: Date, rangeEnd: Date) {
   if (!job.paySchedule || job.paySchedule === 'per-project') {
@@ -52,6 +54,8 @@ interface ReconciliationRow {
   client: string;
   paySchedule: string;
   periodLabel: string;
+  periodStart: string;
+  periodEnd: string;
   totalHours: number;
   expectedPay: number;
   actualPaid: number;
@@ -61,14 +65,14 @@ interface ReconciliationRow {
 }
 
 export default function PayReconciliationPage() {
-  const { data } = useData();
+  const { data, addIncome } = useData();
 
   const [startDate, setStartDate] = useState(() => format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(() => format(endOfMonth(new Date()), 'yyyy-MM-dd'));
   const [filterJobClient, setFilterJobClient] = useState<string>('all');
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [showImport, setShowImport] = useState(false);
 
-  // Get unique clients from jobs for filtering
   const uniqueClients = useMemo(() => {
     const clients = new Set(data.jobs.map(j => j.client).filter(Boolean));
     return Array.from(clients).sort();
@@ -79,7 +83,6 @@ export default function PayReconciliationPage() {
     const rangeEnd = parseISO(endDate);
     const rows: ReconciliationRow[] = [];
 
-    // Group jobs by client+payrollCompany as "productions"
     const productions = new Map<string, Job[]>();
     for (const job of data.jobs) {
       if (filterJobClient !== 'all' && job.client !== filterJobClient) continue;
@@ -98,11 +101,13 @@ export default function PayReconciliationPage() {
           return isWithinInterval(d, { start: period.start, end: period.end }) && (j.hoursWorked ?? 0) > 0;
         });
 
+        // Include payments up to 35 days after period end to account for payroll lag
+        const paymentWindow = addDays(period.end, 35);
         const periodIncome = data.income.filter(i => {
           if (i.status !== 'paid') return false;
           if (i.client !== referenceJob.client) return false;
           const d = parseISO(i.date);
-          return isWithinInterval(d, { start: period.start, end: period.end });
+          return d >= period.start && d <= paymentWindow;
         });
 
         const totalHours = periodJobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
@@ -117,6 +122,8 @@ export default function PayReconciliationPage() {
             client: referenceJob.client,
             paySchedule: referenceJob.paySchedule || 'none',
             periodLabel: period.label,
+            periodStart: format(period.start, 'yyyy-MM-dd'),
+            periodEnd: format(period.end, 'yyyy-MM-dd'),
             totalHours,
             expectedPay,
             actualPaid,
@@ -137,30 +144,76 @@ export default function PayReconciliationPage() {
   const totalActual = reconciliation.reduce((s, r) => s + r.actualPaid, 0);
   const totalDiff = totalActual - totalExpected;
 
+  // Build rows info for BankStatementImport
+  const importRows: ReconciliationRowInfo[] = useMemo(() =>
+    reconciliation.map(r => ({
+      key: `${r.client}-${r.periodLabel}`,
+      jobId: r.jobId,
+      client: r.client,
+      periodLabel: r.periodLabel,
+      periodEnd: r.periodEnd,
+      expectedPay: r.expectedPay,
+    })),
+    [reconciliation]
+  );
+
+  const handleImportConfirm = (income: Omit<Income, 'id' | 'createdAt'>) => {
+    addIncome(income);
+  };
+
   return (
     <>
       <PageHeader title="Pay Reconciliation" description="Cross-check hours worked vs income received" />
 
-      <div className="flex flex-wrap gap-3 mb-6 items-end">
-        <div>
-          <label className="text-xs text-muted-foreground text-mono uppercase mb-1 block">From</label>
-          <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-40" />
+      <div className="flex flex-wrap gap-3 mb-6 items-end justify-between">
+        <div className="flex flex-wrap gap-3 items-end">
+          <div>
+            <label className="text-xs text-muted-foreground text-mono uppercase mb-1 block">From</label>
+            <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-40" />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground text-mono uppercase mb-1 block">To</label>
+            <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-40" />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground text-mono uppercase mb-1 block">Client</label>
+            <Select value={filterJobClient} onValueChange={setFilterJobClient}>
+              <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All clients</SelectItem>
+                {uniqueClients.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        <div>
-          <label className="text-xs text-muted-foreground text-mono uppercase mb-1 block">To</label>
-          <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-40" />
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground text-mono uppercase mb-1 block">Client</label>
-          <Select value={filterJobClient} onValueChange={setFilterJobClient}>
-            <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All clients</SelectItem>
-              {uniqueClients.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
+
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5"
+          onClick={() => setShowImport(true)}
+        >
+          <Upload size={15} /> Import Bank Statement
+        </Button>
       </div>
+
+      {/* Bank statement import dialog */}
+      <Dialog open={showImport} onOpenChange={setShowImport}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-mono">Import Bank Statement</DialogTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Upload a screenshot of your bank statement. AI will extract deposits
+              and suggest which pay period each one belongs to.
+            </p>
+          </DialogHeader>
+          <BankStatementImport
+            rows={importRows}
+            onConfirm={handleImportConfirm}
+            onClose={() => setShowImport(false)}
+          />
+        </DialogContent>
+      </Dialog>
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="rounded-lg border border-border bg-card p-4">
@@ -261,7 +314,15 @@ export default function PayReconciliationPage() {
                             <div>
                               <h4 className="text-xs text-mono uppercase text-muted-foreground mb-2 font-semibold">Payments Received</h4>
                               {row.incomeDetails.length === 0 ? (
-                                <p className="text-xs text-muted-foreground">No payments recorded</p>
+                                <div className="space-y-1">
+                                  <p className="text-xs text-muted-foreground">No payments recorded</p>
+                                  <button
+                                    onClick={e => { e.stopPropagation(); setShowImport(true); }}
+                                    className="text-xs text-primary hover:underline"
+                                  >
+                                    + Import from bank statement
+                                  </button>
+                                </div>
                               ) : (
                                 <div className="space-y-1">
                                   {row.incomeDetails.map((inc, j) => (
