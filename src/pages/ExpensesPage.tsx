@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
-import { toast } from 'sonner';
 import { useData } from '@/lib/DataContext';
 import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
+import ExpenseReceiptUpload from '@/components/ExpenseReceiptUpload';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -93,6 +93,7 @@ export default function ExpensesPage() {
   const { data, addExpense, updateExpense, deleteExpense } = useData();
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   
   const [customFrom, setCustomFrom] = useState('');
@@ -150,6 +151,7 @@ export default function ExpensesPage() {
         description={`Total: $${total.toLocaleString()}`}
         action={
           <div className="flex gap-2">
+            <ExpenseReceiptUpload externalOpen={uploadOpen} onExternalOpenChange={setUploadOpen} />
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild><Button size="sm"><Plus size={16} className="mr-1" /> New</Button></DialogTrigger>
               <DialogContent>
@@ -185,7 +187,7 @@ export default function ExpensesPage() {
       </div>
 
       {data.expenses.length === 0 ? (
-        <EmptyState icon={Receipt} title="No expenses yet" description="Tap to upload a receipt photo or use the + button above" onUploadPhoto={(file) => { toast.info('Photo received! Add expense details manually for now.'); }} />
+        <EmptyState icon={Receipt} title="No expenses yet" description="Tap to upload a receipt photo or use the + button above" onUploadPhoto={() => setUploadOpen(true)} />
       ) : grouped.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">No expenses match this filter.</p>
       ) : (

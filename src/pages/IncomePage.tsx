@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { toast } from 'sonner';
 import { useData } from '@/lib/DataContext';
 import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
@@ -11,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { DollarSign, Plus, Trash2, Pencil } from 'lucide-react';
 import { format } from 'date-fns';
 import type { Income } from '@/lib/store';
+import IncomeStatementUpload from '@/components/IncomeStatementUpload';
 
 const statusOptions = ['pending', 'paid', 'overdue'] as const;
 
@@ -70,6 +70,7 @@ export default function IncomePage() {
   const { data, addIncome, updateIncome, deleteIncome } = useData();
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
   
   const editingInc = editId ? data.income.find(i => i.id === editId) : undefined;
   const jobs = data.jobs.map(j => ({ id: j.id, name: j.name }));
@@ -82,6 +83,7 @@ export default function IncomePage() {
         description={`Total: $${total.toLocaleString()}`}
         action={
           <div className="flex gap-2">
+            <IncomeStatementUpload externalOpen={uploadOpen} onExternalOpenChange={setUploadOpen} />
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild><Button size="sm"><Plus size={16} className="mr-1" /> New Income</Button></DialogTrigger>
               <DialogContent>
@@ -94,7 +96,7 @@ export default function IncomePage() {
       />
 
       {data.income.length === 0 ? (
-        <EmptyState icon={DollarSign} title="No income recorded" description="Tap to upload an invoice photo or use the + button above" onUploadPhoto={(file) => { toast.info('Photo received! Add income details manually for now.'); }} />
+        <EmptyState icon={DollarSign} title="No income recorded" description="Tap to upload an invoice photo or use the + button above" onUploadPhoto={() => setUploadOpen(true)} />
       ) : (
         <div className="rounded-lg border border-border overflow-hidden">
           <table className="w-full text-sm">
