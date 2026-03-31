@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Briefcase, Receipt, DollarSign, Speaker, Scale, CalendarDays, Sparkles, Menu, X, Trash2, ClipboardCheck, PartyPopper, PieChart } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Receipt, DollarSign, Speaker, Scale, CalendarDays, Sparkles, Menu, X, Trash2, ClipboardCheck, PartyPopper, PieChart, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { clearAllData } from '@/lib/store';
 import { usePartyMode } from '@/lib/PartyModeContext';
+import { useAuth } from '@/lib/AuthContext';
 import FloatingEmojis from '@/components/FloatingEmojis';
 import {
   AlertDialog,
@@ -41,6 +42,7 @@ const tabItems = [
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const { partyMode, togglePartyMode } = usePartyMode();
+  const { user, signOut } = useAuth();
   return (
     <>
       <nav className="flex-1 py-4 space-y-1 px-2">
@@ -97,7 +99,14 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           <PartyPopper size={18} />
           <span>{partyMode ? 'Vibes ON' : 'Vibes OFF'}</span>
         </button>
-        <p className="text-xs text-muted-foreground text-mono px-3">LOCAL MODE</p>
+        <button
+          onClick={signOut}
+          className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-secondary transition-colors w-full"
+        >
+          <LogOut size={18} />
+          <span>Sign Out</span>
+        </button>
+        {user && <p className="text-[10px] text-muted-foreground text-mono px-3 truncate">{user.email}</p>}
       </div>
     </>
   );

@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { isDuplicateJob } from './jobDedup';
+
+// ── Interfaces (unchanged) ──────────────────────────────────────────────────
 
 export interface Job {
   id: string;
@@ -71,156 +74,487 @@ export interface AppData {
   equipment: Equipment[];
 }
 
-const STORAGE_KEY = 'av-bookkeeper-data';
+// ── Snake ↔ Camel mappers ───────────────────────────────────────────────────
 
-const defaultData: AppData = {
-  jobs: [],
-  expenses: [],
-  income: [],
-  equipment: [],
-};
+// DB row → App object
+function jobFromRow(r: Record<string, unknown>): Job {
+  return {
+    id: r.id as string,
+    jobNumber: r.job_number as string | undefined,
+    name: r.name as string,
+    client: r.client as string,
+    venue: r.venue as string,
+    date: r.date as string,
+    startTime: r.start_time as string | undefined,
+    endTime: r.end_time as string | undefined,
+    status: r.status as Job['status'],
+    paySchedule: r.pay_schedule as Job['paySchedule'],
+    payPeriodStart: r.pay_period_start as string | undefined,
+    payrollCompany: r.payroll_company as string | undefined,
+    hourlyRate: r.hourly_rate as number | undefined,
+    minimumHours: r.minimum_hours as number | undefined,
+    has6th7thDayRule: r.has_6th_7th_day_rule as boolean | undefined,
+    hasVacationPay: r.has_vacation_pay as boolean | undefined,
+    steward: r.steward as string | undefined,
+    parkingCost: r.parking_cost as number | undefined,
+    hoursWorked: r.hours_worked as number | undefined,
+    mealPenalties: r.meal_penalties as number | undefined,
+    mealType: r.meal_type as Job['mealType'],
+    attachments: r.attachments as string[] | undefined,
+    notes: r.notes as string,
+    createdAt: r.created_at as string,
+  };
+}
 
-function loadData(): AppData {
+// App object → DB row (for insert/update)
+function jobToRow(j: Partial<Job> & { userId?: string }) {
+  const row: Record<string, unknown> = {};
+  if (j.userId !== undefined) row.user_id = j.userId;
+  if (j.jobNumber !== undefined) row.job_number = j.jobNumber;
+  if (j.name !== undefined) row.name = j.name;
+  if (j.client !== undefined) row.client = j.client;
+  if (j.venue !== undefined) row.venue = j.venue;
+  if (j.date !== undefined) row.date = j.date;
+  if (j.startTime !== undefined) row.start_time = j.startTime;
+  if (j.endTime !== undefined) row.end_time = j.endTime;
+  if (j.status !== undefined) row.status = j.status;
+  if (j.paySchedule !== undefined) row.pay_schedule = j.paySchedule;
+  if (j.payPeriodStart !== undefined) row.pay_period_start = j.payPeriodStart;
+  if (j.payrollCompany !== undefined) row.payroll_company = j.payrollCompany;
+  if (j.hourlyRate !== undefined) row.hourly_rate = j.hourlyRate;
+  if (j.minimumHours !== undefined) row.minimum_hours = j.minimumHours;
+  if (j.has6th7thDayRule !== undefined) row.has_6th_7th_day_rule = j.has6th7thDayRule;
+  if (j.hasVacationPay !== undefined) row.has_vacation_pay = j.hasVacationPay;
+  if (j.steward !== undefined) row.steward = j.steward;
+  if (j.parkingCost !== undefined) row.parking_cost = j.parkingCost;
+  if (j.hoursWorked !== undefined) row.hours_worked = j.hoursWorked;
+  if (j.mealPenalties !== undefined) row.meal_penalties = j.mealPenalties;
+  if (j.mealType !== undefined) row.meal_type = j.mealType;
+  if (j.attachments !== undefined) row.attachments = j.attachments;
+  if (j.notes !== undefined) row.notes = j.notes;
+  return row;
+}
+
+function expenseFromRow(r: Record<string, unknown>): Expense {
+  return {
+    id: r.id as string,
+    jobId: r.job_id as string | undefined,
+    category: r.category as string,
+    description: r.description as string,
+    amount: Number(r.amount),
+    date: r.date as string,
+    receipt: r.receipt as string | undefined,
+    createdAt: r.created_at as string,
+  };
+}
+
+function expenseToRow(e: Partial<Expense> & { userId?: string }) {
+  const row: Record<string, unknown> = {};
+  if (e.userId !== undefined) row.user_id = e.userId;
+  if (e.jobId !== undefined) row.job_id = e.jobId;
+  if (e.category !== undefined) row.category = e.category;
+  if (e.description !== undefined) row.description = e.description;
+  if (e.amount !== undefined) row.amount = e.amount;
+  if (e.date !== undefined) row.date = e.date;
+  if (e.receipt !== undefined) row.receipt = e.receipt;
+  return row;
+}
+
+function incomeFromRow(r: Record<string, unknown>): Income {
+  return {
+    id: r.id as string,
+    jobId: r.job_id as string | undefined,
+    client: r.client as string,
+    description: r.description as string,
+    amount: Number(r.amount),
+    date: r.date as string,
+    status: r.status as Income['status'],
+    invoiceNumber: r.invoice_number as string | undefined,
+    createdAt: r.created_at as string,
+  };
+}
+
+function incomeToRow(i: Partial<Income> & { userId?: string }) {
+  const row: Record<string, unknown> = {};
+  if (i.userId !== undefined) row.user_id = i.userId;
+  if (i.jobId !== undefined) row.job_id = i.jobId;
+  if (i.client !== undefined) row.client = i.client;
+  if (i.description !== undefined) row.description = i.description;
+  if (i.amount !== undefined) row.amount = i.amount;
+  if (i.date !== undefined) row.date = i.date;
+  if (i.status !== undefined) row.status = i.status;
+  if (i.invoiceNumber !== undefined) row.invoice_number = i.invoiceNumber;
+  return row;
+}
+
+function equipmentFromRow(r: Record<string, unknown>): Equipment {
+  return {
+    id: r.id as string,
+    name: r.name as string,
+    category: r.category as string,
+    serialNumber: r.serial_number as string | undefined,
+    purchaseDate: r.purchase_date as string | undefined,
+    value: r.value as number | undefined,
+    status: r.status as Equipment['status'],
+    assignedJobId: r.assigned_job_id as string | undefined,
+    notes: r.notes as string,
+    createdAt: r.created_at as string,
+  };
+}
+
+function equipmentToRow(e: Partial<Equipment> & { userId?: string }) {
+  const row: Record<string, unknown> = {};
+  if (e.userId !== undefined) row.user_id = e.userId;
+  if (e.name !== undefined) row.name = e.name;
+  if (e.category !== undefined) row.category = e.category;
+  if (e.serialNumber !== undefined) row.serial_number = e.serialNumber;
+  if (e.purchaseDate !== undefined) row.purchase_date = e.purchaseDate;
+  if (e.value !== undefined) row.value = e.value;
+  if (e.status !== undefined) row.status = e.status;
+  if (e.assignedJobId !== undefined) row.assigned_job_id = e.assignedJobId;
+  if (e.notes !== undefined) row.notes = e.notes;
+  return row;
+}
+
+// ── Local cache (offline fallback) ──────────────────────────────────────────
+
+const CACHE_KEY = 'av-bookkeeper-data';
+
+const defaultData: AppData = { jobs: [], expenses: [], income: [], equipment: [] };
+
+function loadCache(): AppData {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return defaultData;
-    const parsed = JSON.parse(raw);
-    // Migrate: convert old timeEntries into jobs if they exist
-    if (parsed.timeEntries?.length) {
-      const migratedJobs: Job[] = parsed.timeEntries.map((t: any) => ({
-        id: t.id,
-        jobNumber: undefined,
-        name: t.description || 'Time Entry',
-        client: t.client || '',
-        venue: '',
-        date: t.date,
-        startTime: undefined,
-        endTime: undefined,
-        status: 'completed' as const,
-        hourlyRate: t.rate || 0,
-        hoursWorked: t.hours || 0,
-        mealPenalties: t.mealPenalties || 0,
-        attachments: t.attachments || [],
-        notes: t.notes || '',
-        createdAt: t.createdAt,
-      }));
-      const existingJobs = parsed.jobs || [];
-      parsed.jobs = [...existingJobs, ...migratedJobs];
-      delete parsed.timeEntries;
-    }
-    // Auto-mark past jobs as completed if still 'upcoming' or 'in-progress'
-    const today = new Date().toISOString().split('T')[0];
-    if (parsed.jobs?.length) {
-      parsed.jobs = (parsed.jobs as Job[]).map(job => {
-        if (job.date < today && (job.status === 'upcoming' || job.status === 'in-progress')) {
-          return { ...job, status: 'completed' as const };
-        }
-        return job;
-      });
-    }
-    return { ...defaultData, ...parsed };
+    return { ...defaultData, ...JSON.parse(raw) };
   } catch {
     return defaultData;
   }
 }
 
-function saveData(data: AppData) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+function saveCache(data: AppData) {
+  localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+}
+
+// ── Legacy localStorage data (pre-Supabase) for migration ────────────────
+
+export function hasLegacyData(): boolean {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return false;
+    const d = JSON.parse(raw);
+    return (d.jobs?.length > 0 || d.expenses?.length > 0 || d.income?.length > 0 || d.equipment?.length > 0);
+  } catch {
+    return false;
+  }
+}
+
+export function getLegacyData(): AppData {
+  return loadCache();
+}
+
+export function clearLegacyData() {
+  localStorage.removeItem(CACHE_KEY);
 }
 
 export function clearAllData() {
-  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(CACHE_KEY);
   window.location.reload();
 }
 
-export function useAppData() {
-  const [data, setData] = useState<AppData>(loadData);
+// ── Main hook ───────────────────────────────────────────────────────────────
 
+export function useAppData(userId: string | null) {
+  const [data, setData] = useState<AppData>(loadCache);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch all data from Supabase on mount / user change
   useEffect(() => {
-    saveData(data);
-  }, [data]);
+    if (!userId) { setLoading(false); return; }
 
-  const addJob = useCallback((job: Omit<Job, 'id' | 'createdAt'>) => {
+    let cancelled = false;
+
+    async function fetchAll() {
+      setLoading(true);
+      const [jobsRes, expRes, incRes, eqRes] = await Promise.all([
+        supabase.from('jobs').select('*').order('date', { ascending: false }),
+        supabase.from('expenses').select('*').order('date', { ascending: false }),
+        supabase.from('income').select('*').order('date', { ascending: false }),
+        supabase.from('equipment').select('*').order('created_at', { ascending: false }),
+      ]);
+
+      if (cancelled) return;
+
+      const newData: AppData = {
+        jobs: (jobsRes.data || []).map(r => jobFromRow(r as Record<string, unknown>)),
+        expenses: (expRes.data || []).map(r => expenseFromRow(r as Record<string, unknown>)),
+        income: (incRes.data || []).map(r => incomeFromRow(r as Record<string, unknown>)),
+        equipment: (eqRes.data || []).map(r => equipmentFromRow(r as Record<string, unknown>)),
+      };
+
+      setData(newData);
+      saveCache(newData);
+      setLoading(false);
+    }
+
+    fetchAll();
+    return () => { cancelled = true; };
+  }, [userId]);
+
+  // ── Jobs ──────────────────────────────────────────────────────────────────
+
+  const addJob = useCallback(async (job: Omit<Job, 'id' | 'createdAt'>) => {
+    if (!userId) return;
+
+    // Optimistic: check dedup locally
     setData(prev => {
       if (isDuplicateJob(job, prev.jobs)) return prev;
-
-      return {
-        ...prev,
-        jobs: [...prev.jobs, { ...job, id: crypto.randomUUID(), createdAt: new Date().toISOString() }],
-      };
+      return prev; // actual insert below
     });
+
+    // Check dedup against current state
+    const current = loadCache();
+    if (isDuplicateJob(job, current.jobs)) return;
+
+    const { data: rows, error } = await supabase
+      .from('jobs')
+      .insert(jobToRow({ ...job, userId }))
+      .select();
+
+    if (error) { console.error('addJob:', error); return; }
+    if (!rows?.length) return;
+
+    const newJob = jobFromRow(rows[0] as Record<string, unknown>);
+    setData(prev => {
+      const updated = { ...prev, jobs: [...prev.jobs, newJob] };
+      saveCache(updated);
+      return updated;
+    });
+  }, [userId]);
+
+  const updateJob = useCallback(async (id: string, updates: Partial<Job>) => {
+    // Optimistic update
+    setData(prev => {
+      const updated = { ...prev, jobs: prev.jobs.map(j => j.id === id ? { ...j, ...updates } : j) };
+      saveCache(updated);
+      return updated;
+    });
+
+    const { error } = await supabase
+      .from('jobs')
+      .update(jobToRow(updates))
+      .eq('id', id);
+
+    if (error) console.error('updateJob:', error);
   }, []);
 
-  const updateJob = useCallback((id: string, updates: Partial<Job>) => {
-    setData(prev => ({
-      ...prev,
-      jobs: prev.jobs.map(j => j.id === id ? { ...j, ...updates } : j),
-    }));
+  const deleteJob = useCallback(async (id: string) => {
+    setData(prev => {
+      const updated = { ...prev, jobs: prev.jobs.filter(j => j.id !== id) };
+      saveCache(updated);
+      return updated;
+    });
+
+    const { error } = await supabase.from('jobs').delete().eq('id', id);
+    if (error) console.error('deleteJob:', error);
   }, []);
 
-  const deleteJob = useCallback((id: string) => {
-    setData(prev => ({ ...prev, jobs: prev.jobs.filter(j => j.id !== id) }));
+  // ── Expenses ──────────────────────────────────────────────────────────────
+
+  const addExpense = useCallback(async (expense: Omit<Expense, 'id' | 'createdAt'>) => {
+    if (!userId) return;
+
+    const { data: rows, error } = await supabase
+      .from('expenses')
+      .insert(expenseToRow({ ...expense, userId }))
+      .select();
+
+    if (error) { console.error('addExpense:', error); return; }
+    if (!rows?.length) return;
+
+    const newExp = expenseFromRow(rows[0] as Record<string, unknown>);
+    setData(prev => {
+      const updated = { ...prev, expenses: [...prev.expenses, newExp] };
+      saveCache(updated);
+      return updated;
+    });
+  }, [userId]);
+
+  const updateExpense = useCallback(async (id: string, updates: Partial<Expense>) => {
+    setData(prev => {
+      const updated = { ...prev, expenses: prev.expenses.map(e => e.id === id ? { ...e, ...updates } : e) };
+      saveCache(updated);
+      return updated;
+    });
+
+    const { error } = await supabase.from('expenses').update(expenseToRow(updates)).eq('id', id);
+    if (error) console.error('updateExpense:', error);
   }, []);
 
-  const addExpense = useCallback((expense: Omit<Expense, 'id' | 'createdAt'>) => {
-    setData(prev => ({
-      ...prev,
-      expenses: [...prev.expenses, { ...expense, id: crypto.randomUUID(), createdAt: new Date().toISOString() }],
-    }));
+  const deleteExpense = useCallback(async (id: string) => {
+    setData(prev => {
+      const updated = { ...prev, expenses: prev.expenses.filter(e => e.id !== id) };
+      saveCache(updated);
+      return updated;
+    });
+
+    const { error } = await supabase.from('expenses').delete().eq('id', id);
+    if (error) console.error('deleteExpense:', error);
   }, []);
 
-  const updateExpense = useCallback((id: string, updates: Partial<Expense>) => {
-    setData(prev => ({
-      ...prev,
-      expenses: prev.expenses.map(e => e.id === id ? { ...e, ...updates } : e),
-    }));
+  // ── Income ────────────────────────────────────────────────────────────────
+
+  const addIncome = useCallback(async (income: Omit<Income, 'id' | 'createdAt'>) => {
+    if (!userId) return;
+
+    const { data: rows, error } = await supabase
+      .from('income')
+      .insert(incomeToRow({ ...income, userId }))
+      .select();
+
+    if (error) { console.error('addIncome:', error); return; }
+    if (!rows?.length) return;
+
+    const newInc = incomeFromRow(rows[0] as Record<string, unknown>);
+    setData(prev => {
+      const updated = { ...prev, income: [...prev.income, newInc] };
+      saveCache(updated);
+      return updated;
+    });
+  }, [userId]);
+
+  const updateIncome = useCallback(async (id: string, updates: Partial<Income>) => {
+    setData(prev => {
+      const updated = { ...prev, income: prev.income.map(i => i.id === id ? { ...i, ...updates } : i) };
+      saveCache(updated);
+      return updated;
+    });
+
+    const { error } = await supabase.from('income').update(incomeToRow(updates)).eq('id', id);
+    if (error) console.error('updateIncome:', error);
   }, []);
 
-  const deleteExpense = useCallback((id: string) => {
-    setData(prev => ({ ...prev, expenses: prev.expenses.filter(e => e.id !== id) }));
+  const deleteIncome = useCallback(async (id: string) => {
+    setData(prev => {
+      const updated = { ...prev, income: prev.income.filter(i => i.id !== id) };
+      saveCache(updated);
+      return updated;
+    });
+
+    const { error } = await supabase.from('income').delete().eq('id', id);
+    if (error) console.error('deleteIncome:', error);
   }, []);
 
-  const addIncome = useCallback((income: Omit<Income, 'id' | 'createdAt'>) => {
-    setData(prev => ({
-      ...prev,
-      income: [...prev.income, { ...income, id: crypto.randomUUID(), createdAt: new Date().toISOString() }],
-    }));
+  // ── Equipment ─────────────────────────────────────────────────────────────
+
+  const addEquipment = useCallback(async (equip: Omit<Equipment, 'id' | 'createdAt'>) => {
+    if (!userId) return;
+
+    const { data: rows, error } = await supabase
+      .from('equipment')
+      .insert(equipmentToRow({ ...equip, userId }))
+      .select();
+
+    if (error) { console.error('addEquipment:', error); return; }
+    if (!rows?.length) return;
+
+    const newEq = equipmentFromRow(rows[0] as Record<string, unknown>);
+    setData(prev => {
+      const updated = { ...prev, equipment: [...prev.equipment, newEq] };
+      saveCache(updated);
+      return updated;
+    });
+  }, [userId]);
+
+  const updateEquipment = useCallback(async (id: string, updates: Partial<Equipment>) => {
+    setData(prev => {
+      const updated = { ...prev, equipment: prev.equipment.map(e => e.id === id ? { ...e, ...updates } : e) };
+      saveCache(updated);
+      return updated;
+    });
+
+    const { error } = await supabase.from('equipment').update(equipmentToRow(updates)).eq('id', id);
+    if (error) console.error('updateEquipment:', error);
   }, []);
 
-  const updateIncome = useCallback((id: string, updates: Partial<Income>) => {
-    setData(prev => ({
-      ...prev,
-      income: prev.income.map(i => i.id === id ? { ...i, ...updates } : i),
-    }));
+  const deleteEquipment = useCallback(async (id: string) => {
+    setData(prev => {
+      const updated = { ...prev, equipment: prev.equipment.filter(e => e.id !== id) };
+      saveCache(updated);
+      return updated;
+    });
+
+    const { error } = await supabase.from('equipment').delete().eq('id', id);
+    if (error) console.error('deleteEquipment:', error);
   }, []);
 
-  const deleteIncome = useCallback((id: string) => {
-    setData(prev => ({ ...prev, income: prev.income.filter(i => i.id !== id) }));
-  }, []);
+  // ── Migrate local data to Supabase ────────────────────────────────────────
 
-  const addEquipment = useCallback((equip: Omit<Equipment, 'id' | 'createdAt'>) => {
-    setData(prev => ({
-      ...prev,
-      equipment: [...prev.equipment, { ...equip, id: crypto.randomUUID(), createdAt: new Date().toISOString() }],
-    }));
-  }, []);
+  const migrateLocalData = useCallback(async (localData: AppData) => {
+    if (!userId) return 0;
+    let count = 0;
 
-  const updateEquipment = useCallback((id: string, updates: Partial<Equipment>) => {
-    setData(prev => ({
-      ...prev,
-      equipment: prev.equipment.map(e => e.id === id ? { ...e, ...updates } : e),
-    }));
-  }, []);
+    // Insert jobs (map old IDs to new ones for FK references)
+    const idMap = new Map<string, string>();
+    for (const job of localData.jobs) {
+      const { data: rows } = await supabase
+        .from('jobs')
+        .insert(jobToRow({ ...job, userId }))
+        .select('id');
+      if (rows?.[0]) {
+        idMap.set(job.id, rows[0].id as string);
+        count++;
+      }
+    }
 
-  const deleteEquipment = useCallback((id: string) => {
-    setData(prev => ({ ...prev, equipment: prev.equipment.filter(e => e.id !== id) }));
-  }, []);
+    // Insert expenses
+    for (const exp of localData.expenses) {
+      const mapped = { ...exp, userId, jobId: exp.jobId ? idMap.get(exp.jobId) : undefined };
+      await supabase.from('expenses').insert(expenseToRow(mapped));
+      count++;
+    }
+
+    // Insert income
+    for (const inc of localData.income) {
+      const mapped = { ...inc, userId, jobId: inc.jobId ? idMap.get(inc.jobId) : undefined };
+      await supabase.from('income').insert(incomeToRow(mapped));
+      count++;
+    }
+
+    // Insert equipment
+    for (const eq of localData.equipment) {
+      const mapped = { ...eq, userId, assignedJobId: eq.assignedJobId ? idMap.get(eq.assignedJobId) : undefined };
+      await supabase.from('equipment').insert(equipmentToRow(mapped));
+      count++;
+    }
+
+    // Refresh data from Supabase
+    const [jobsRes, expRes, incRes, eqRes] = await Promise.all([
+      supabase.from('jobs').select('*').order('date', { ascending: false }),
+      supabase.from('expenses').select('*').order('date', { ascending: false }),
+      supabase.from('income').select('*').order('date', { ascending: false }),
+      supabase.from('equipment').select('*').order('created_at', { ascending: false }),
+    ]);
+
+    const refreshed: AppData = {
+      jobs: (jobsRes.data || []).map(r => jobFromRow(r as Record<string, unknown>)),
+      expenses: (expRes.data || []).map(r => expenseFromRow(r as Record<string, unknown>)),
+      income: (incRes.data || []).map(r => incomeFromRow(r as Record<string, unknown>)),
+      equipment: (eqRes.data || []).map(r => equipmentFromRow(r as Record<string, unknown>)),
+    };
+
+    setData(refreshed);
+    saveCache(refreshed);
+    return count;
+  }, [userId]);
 
   return {
     data,
+    loading,
     addJob, updateJob, deleteJob,
     addExpense, updateExpense, deleteExpense,
     addIncome, updateIncome, deleteIncome,
     addEquipment, updateEquipment, deleteEquipment,
+    migrateLocalData,
   };
 }

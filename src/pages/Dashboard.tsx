@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { useData } from '@/lib/DataContext';
 import StatCard from '@/components/StatCard';
 import PageHeader from '@/components/PageHeader';
-import { Briefcase, Receipt, DollarSign, TrendingUp, TrendingDown, AlertCircle, Clock, Download } from 'lucide-react';
+import { Briefcase, Receipt, DollarSign, TrendingUp, TrendingDown, AlertCircle, Clock, Download, Upload, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Sector } from 'recharts';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
+import { hasLegacyData, getLegacyData, clearLegacyData } from '@/lib/store';
+import { toast } from 'sonner';
 
 function Starburst({ className, delay = 0 }: { className?: string; delay?: number }) {
   return (
@@ -57,8 +59,10 @@ function GlitterActiveShape(props: any) {
 }
 
 export default function Dashboard() {
-  const { data } = useData();
+  const { data, migrateLocalData } = useData();
   const [taxRate, setTaxRate] = useState(25);
+  const [showMigrate, setShowMigrate] = useState(hasLegacyData);
+  const [migrating, setMigrating] = useState(false);
 
   const totalExpenses = data.expenses.reduce((s, e) => s + e.amount, 0);
   const totalIncome = data.income.reduce((s, i) => s + i.amount, 0);
@@ -81,8 +85,44 @@ export default function Dashboard() {
   const recentJobs = [...data.jobs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
   const recentExpenses = [...data.expenses].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
 
+  const handleMigrate = async () => {
+    setMigrating(true);
+    try {
+      const legacy = getLegacyData();
+      const count = await migrateLocalData(legacy);
+      clearLegacyData();
+      setShowMigrate(false);
+      toast.success(`Migrated ${count} records to your account`);
+    } catch (err) {
+      console.error(err);
+      toast.error('Migration failed — your local data is still safe');
+    } finally {
+      setMigrating(false);
+    }
+  };
+
   return (
     <>
+      {/* Migration banner */}
+      {showMigrate && (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 mb-4 flex items-center gap-3 flex-wrap">
+          <Upload size={18} className="text-primary shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium">Local data found</p>
+            <p className="text-xs text-muted-foreground">Import your existing jobs, expenses, and income into your account.</p>
+          </div>
+          <button
+            onClick={handleMigrate}
+            disabled={migrating}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
+          >
+            {migrating ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+            {migrating ? 'Migrating...' : 'Import Data'}
+          </button>
+          <button onClick={() => setShowMigrate(false)} className="text-xs text-muted-foreground hover:text-foreground">Dismiss</button>
+        </div>
+      )}
+
       {/* Hero area with funky animated background */}
       <div className="relative overflow-hidden rounded-2xl border border-border mb-6 p-5 bg-card">
         {/* Animated gradient background */}
