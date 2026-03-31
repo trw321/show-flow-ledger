@@ -2,15 +2,20 @@ import { useState, useCallback } from 'react';
 import { useData } from '@/lib/DataContext';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Upload, Loader2, Check, X, FileImage } from 'lucide-react';
+import { Upload, Loader2, Check, X, FileImage, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { getJobDedupKey } from '@/lib/jobDedup';
+import type { Job } from '@/lib/store';
 
 interface ParsedTimeEntry {
   date: string;
   hours: number;
+  startTime?: string;
+  endTime?: string;
   client: string;
   jobName?: string;
+  venue?: string;
+  steward?: string;
   description: string;
   rate?: number;
   mealPenalties?: number;
@@ -91,33 +96,64 @@ export default function TimesheetUpload() {
     setEntries(prev => prev.map((e, i) => i === idx ? { ...e, [field]: value } : e));
   };
 
-  const findMatchingJob = (entry: ParsedTimeEntry) => {
+  const scoreMatch = (job: Job, entry: ParsedTimeEntry): number => {
+    // Date must match — it's the primary key
+    if (job.date !== entry.date) return -1;
+
+    let score = 50; // base for same-date match
+
+    // Steward match (strong signal — same person at same event)
+    if (entry.steward && job.steward) {
+      const a = entry.steward.toLowerCase();
+      const b = job.steward.toLowerCase();
+      if (b.includes(a) || a.includes(b)) score += 30;
+    }
+
+    // Venue match
+    if (entry.venue && job.venue) {
+      const a = entry.venue.toLowerCase();
+      const b = job.venue.toLowerCase();
+      if (b.includes(a) || a.includes(b)) score += 20;
+    }
+
+    // Client match
+    if (entry.client && job.client) {
+      const a = entry.client.toLowerCase();
+      const b = job.client.toLowerCase();
+      if (b.includes(a) || a.includes(b)) score += 15;
+    }
+
+    // Job name / description match
+    if (entry.jobName && job.name) {
+      const a = entry.jobName.toLowerCase();
+      const b = job.name.toLowerCase();
+      if (b.includes(a) || a.includes(b)) score += 10;
+    } else if (entry.description && job.name) {
+      const a = entry.description.toLowerCase();
+      const b = job.name.toLowerCase();
+      if (b.includes(a) || a.includes(b)) score += 8;
+    }
+
+    // Penalty if job already has hours logged
+    if (job.hoursWorked && job.hoursWorked > 0) score -= 40;
+
+    return score;
+  };
+
+  const findMatchingJob = (entry: ParsedTimeEntry): Job | null => {
     const candidates = data.jobs.filter(j => j.date === entry.date);
     if (candidates.length === 0) return null;
 
-    // Try matching by client + name/description
-    for (const job of candidates) {
-      const clientMatch = entry.client && job.client &&
-        job.client.toLowerCase().includes(entry.client.toLowerCase());
-      const nameMatch = entry.jobName && job.name &&
-        job.name.toLowerCase().includes(entry.jobName.toLowerCase());
-      const descMatch = entry.description && job.name &&
-        job.name.toLowerCase().includes(entry.description.toLowerCase());
+    let best: Job | null = null;
+    let bestScore = -1;
 
-      if (clientMatch || nameMatch || descMatch) {
-        // Check if this job already has hours — if so, it might be a split shift
-        // Only merge if the existing job has NO hours yet
-        if (!job.hoursWorked || job.hoursWorked === 0) {
-          return job;
-        }
-      }
+    for (const job of candidates) {
+      const s = scoreMatch(job, entry);
+      if (s > bestScore) { bestScore = s; best = job; }
     }
 
-    // Fallback: if there's exactly one job on that date with no hours, match it
-    const noHoursJobs = candidates.filter(j => !j.hoursWorked || j.hoursWorked === 0);
-    if (noHoursJobs.length === 1) return noHoursJobs[0];
-
-    return null;
+    // Require at least base score (50) — a pure date match is enough
+    return bestScore >= 50 ? best : null;
   };
 
   const addSelected = () => {
@@ -131,12 +167,16 @@ export default function TimesheetUpload() {
 
       const match = findMatchingJob(entry);
       if (match) {
-        // Merge hours into existing job
+        // Merge hours + time details into existing job
         updateJob(match.id, {
           hoursWorked: entry.hours,
           mealPenalties: entry.mealPenalties || 0,
           status: 'completed',
           ...(entry.rate && !match.hourlyRate ? { hourlyRate: entry.rate } : {}),
+          ...(entry.startTime ? { startTime: entry.startTime } : {}),
+          ...(entry.endTime ? { endTime: entry.endTime } : {}),
+          ...(entry.steward && !match.steward ? { steward: entry.steward } : {}),
+          ...(entry.venue && !match.venue ? { venue: entry.venue } : {}),
         });
         merged++;
       } else {
@@ -233,6 +273,7 @@ export default function TimesheetUpload() {
                     <th className="text-right px-3 py-2">Hours</th>
                     <th className="text-right px-3 py-2">Rate</th>
                     <th className="text-right px-3 py-2">MP</th>
+                    <th className="text-left px-3 py-2">Match</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -258,6 +299,14 @@ export default function TimesheetUpload() {
                       </td>
                       <td className="px-3 py-2">
                         <input type="number" min="0" value={entry.mealPenalties || 0} onChange={e => updateEntry(i, 'mealPenalties', parseInt(e.target.value) || 0)} className="bg-transparent border-b border-border/50 text-sm text-mono text-right w-10 focus:outline-none focus:border-primary" />
+                      </td>
+                      <td className="px-3 py-2 min-w-[120px]">
+                        {(() => {
+                          const match = findMatchingJob(entry);
+                          return match
+                            ? <span className="flex items-center gap-1 text-xs text-primary font-medium"><ArrowRight size={12} />{match.name}</span>
+                            : <span className="text-xs text-muted-foreground">New entry</span>;
+                        })()}
                       </td>
                     </tr>
                   ))}
