@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { useData } from '@/lib/DataContext';
 import StatCard from '@/components/StatCard';
 import PageHeader from '@/components/PageHeader';
-import { Briefcase, Receipt, DollarSign, TrendingUp, TrendingDown, AlertCircle, Clock } from 'lucide-react';
+import { Briefcase, Receipt, DollarSign, TrendingUp, TrendingDown, AlertCircle, Clock, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Sector } from 'recharts';
+import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 
 function Starburst({ className, delay = 0 }: { className?: string; delay?: number }) {
   return (
@@ -163,6 +164,17 @@ export default function Dashboard() {
         <StatCard label="Job Earnings" value={`$${totalEarnings.toLocaleString()}`} icon={DollarSign} variant="success" />
         <StatCard label="Pending" value={`$${pendingIncome.toLocaleString()}`} icon={AlertCircle} variant="warning" />
         <StatCard label="Overdue" value={`$${overdueIncome.toLocaleString()}`} icon={AlertCircle} variant="destructive" />
+      </div>
+
+      {/* Weekly Export */}
+      <div className="flex justify-end mb-4">
+        <button
+          onClick={() => exportWeeklyToExcel(data.jobs, data.expenses, data.income)}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 border border-primary/30 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors"
+        >
+          <Download size={14} />
+          Export Weekly Breakdown
+        </button>
       </div>
 
       {/* Tax Breakdown Pie Chart */}
