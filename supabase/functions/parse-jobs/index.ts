@@ -36,10 +36,12 @@ serve(async (req) => {
               role: "system",
               content: `You are a job history parser for an AV technician's bookkeeping app. Parse pasted text into structured job data. Today's date is ${today}.
 
-CRITICAL DATE RULE: Extract the EXACT date from the source text for each job. Dates may appear in many formats (e.g. "2/2/26", "Feb 2", "02/02/2026", next to venue/job names, in headers, on separate lines). NEVER default to today's date. If a date appears anywhere near a job entry, that IS the job's date. For 2-digit years like "2/2/26", assume 2000s (= 2026-02-02).
+CRITICAL JOB NUMBER FORMAT: Job entries begin with a job number in YYYY-NNNN format (e.g. "2026-0959" — year 2026, job 0959). The date for that job comes immediately after the job number. Always store the FULL job number (e.g. "2026-0959"), never strip it to just the last digits.
+
+CRITICAL DATE RULE: Extract the EXACT date from the source text for each job. The date appears right after the YYYY-NNNN job number. Dates may also appear in many formats (e.g. "2/2/26", "Feb 2", "02/02/2026"). NEVER default to today's date. For 2-digit years like "2/2/26", assume 2000s (= 2026-02-02).
 
 Extract these fields for each job:
-- jobNumber: the last 4 digits only of the job/dispatch number (e.g. "2026-0496" → "0496")
+- jobNumber: the FULL job/dispatch number in YYYY-NNNN format (e.g. "2026-0496"). Never truncate it.
 - date: in YYYY-MM-DD format. MUST come from the text, not assumed.
 - startTime: call/start time (e.g. "08:00 AM")
 - endTime: wrap/end time if present (e.g. "05:00 PM")
@@ -79,7 +81,7 @@ Be flexible — data may be from tables, lists, emails, or messy concatenated te
                       items: {
                         type: "object",
                         properties: {
-                          jobNumber: { type: "string", description: "Last 4 digits of job/dispatch number" },
+                          jobNumber: { type: "string", description: "Full job/dispatch number in YYYY-NNNN format (e.g. 2026-0496)" },
                           date: { type: "string", description: "Date in YYYY-MM-DD format" },
                           startTime: { type: "string", description: "Start/call time e.g. 08:00 AM" },
                           endTime: { type: "string", description: "End/wrap time e.g. 05:00 PM" },

@@ -37,7 +37,7 @@ serve(async (req) => {
               content: `You are a job history parser for an AV technician's bookkeeping app. Parse the image into structured job data. Today's date is ${today}.
 
 Extract these fields for each job found in the image:
-- jobNumber: the last 4 digits only of the job/dispatch number (e.g. "2026-0496" → "0496")
+- jobNumber: the FULL job/dispatch number in YYYY-NNNN format (e.g. "2026-0496"). Never truncate it.
 - date: in YYYY-MM-DD format. For 2-digit years like "2/21/26", assume 2000s (2026-02-21).
 - startTime: call/start time (e.g. "08:00 AM")
 - endTime: wrap/end time if present (e.g. "05:00 PM")
@@ -86,7 +86,7 @@ Be flexible — the image may be a screenshot of a dispatch email, a schedule, a
                       items: {
                         type: "object",
                         properties: {
-                          jobNumber: { type: "string", description: "Last 4 digits of job/dispatch number" },
+                          jobNumber: { type: "string", description: "Full job/dispatch number in YYYY-NNNN format (e.g. 2026-0496)" },
                           date: { type: "string", description: "Date in YYYY-MM-DD format" },
                           startTime: { type: "string", description: "Start/call time" },
                           endTime: { type: "string", description: "End/wrap time" },
