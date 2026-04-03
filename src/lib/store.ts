@@ -303,26 +303,25 @@ export function useAppData(userId: string | null) {
 
   // ── Jobs ──────────────────────────────────────────────────────────────────
 
-  const addJob = useCallback(async (job: Omit<Job, 'id' | 'createdAt'>) => {
-    if (!userId) return;
+  const addJob = useCallback(async (job: Omit<Job, 'id' | 'createdAt'>): Promise<Job | null> => {
+    if (!userId) { console.error('addJob: no userId'); return null; }
 
-    // Optimistic: check dedup locally
-    setData(prev => {
-      if (isDuplicateJob(job, prev.jobs)) return prev;
-      return prev; // actual insert below
+    // Check dedup against current React state
+    const isDup = await new Promise<boolean>(resolve => {
+      setData(prev => { resolve(isDuplicateJob(job, prev.jobs)); return prev; });
     });
-
-    // Check dedup against current state
-    const current = loadCache();
-    if (isDuplicateJob(job, current.jobs)) return;
+    if (isDup) return null;
 
     const { data: rows, error } = await supabase
       .from('jobs')
       .insert(jobToRow({ ...job, userId }))
       .select();
 
-    if (error) { console.error('addJob:', error); return; }
-    if (!rows?.length) return;
+    if (error) {
+      console.error('addJob error:', error);
+      throw new Error(error.message);
+    }
+    if (!rows?.length) return null;
 
     const newJob = jobFromRow(rows[0] as Record<string, unknown>);
     setData(prev => {
@@ -330,6 +329,7 @@ export function useAppData(userId: string | null) {
       saveCache(updated);
       return updated;
     });
+    return newJob;
   }, [userId]);
 
   const updateJob = useCallback(async (id: string, updates: Partial<Job>) => {
