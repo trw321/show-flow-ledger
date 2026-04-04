@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useData } from '@/lib/DataContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -48,6 +48,18 @@ export default function JobPhotoImport({
   const [step, setStep] = useState<'upload' | 'review' | 'done'>('upload');
   const [importedCount, setImportedCount] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Prevent browser from navigating to dropped files anywhere on the page
+  useEffect(() => {
+    if (!open) return;
+    const prevent = (e: DragEvent) => { e.preventDefault(); e.stopPropagation(); };
+    document.addEventListener('dragover', prevent);
+    document.addEventListener('drop', prevent);
+    return () => {
+      document.removeEventListener('dragover', prevent);
+      document.removeEventListener('drop', prevent);
+    };
+  }, [open]);
 
   const parseImage = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/')) { toast.error('Please upload an image file'); return; }
@@ -191,21 +203,20 @@ export default function JobPhotoImport({
 
         {/* ── Upload / Parsing ── */}
         {step === 'upload' && (
-          <div
+          <label
             onDrop={handleDrop}
             onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
             onDragLeave={() => setIsDragOver(false)}
-            onClick={() => !isParsing && fileRef.current?.click()}
-            className={`relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-10 text-center transition-all cursor-pointer min-h-[220px]
-              ${isDragOver ? 'border-primary bg-primary/10 scale-[1.01]' : 'border-border hover:border-primary/50 hover:bg-secondary/30'}
-              ${isParsing ? 'cursor-wait' : ''}`}
+            className={`relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-10 text-center transition-all min-h-[220px]
+              ${isParsing ? 'cursor-wait pointer-events-none' : 'cursor-pointer'}
+              ${isDragOver ? 'border-primary bg-primary/10 scale-[1.01]' : 'border-border hover:border-primary/50 hover:bg-secondary/30'}`}
           >
             <input
               ref={fileRef}
               type="file"
               accept="image/*"
               className="hidden"
-              onClick={e => e.stopPropagation()}
+              disabled={isParsing}
               onChange={e => { const f = e.target.files?.[0]; if (f) { parseImage(f); e.currentTarget.value = ''; } }}
             />
 
@@ -226,7 +237,7 @@ export default function JobPhotoImport({
                 <p className="text-xs text-primary mt-3 font-medium">AI will extract jobs automatically</p>
               </>
             )}
-          </div>
+          </label>
         )}
 
         {/* ── Review ── */}
