@@ -142,35 +142,43 @@ export default function JobPhotoImport({
     let imported = 0;
     let skipped = 0;
 
-    for (const j of toImport) {
-      const draft = {
-        jobNumber: j.jobNumber,
-        name: j.name,
-        client: j.client,
-        venue: j.venue,
-        date: j.date,
-        startTime: j.startTime,
-        endTime: j.endTime,
-        status: j.status,
-        payrollCompany: j.payrollCompany,
-        hourlyRate: j.hourlyRate,
-        steward: j.steward,
-        parkingCost: j.parkingCost,
-        notes: j.notes || '',
-        has6th7thDayRule: false,
-        hasVacationPay: false,
-      };
-      const key = getJobDedupKey(draft);
-      if (existingKeys.has(key)) { skipped++; continue; }
-      existingKeys.add(key);
-      await onImport(draft);
-      imported++;
+    try {
+      for (const j of toImport) {
+        const draft = {
+          jobNumber: j.jobNumber,
+          name: j.name,
+          client: j.client,
+          venue: j.venue,
+          date: j.date,
+          startTime: j.startTime,
+          endTime: j.endTime,
+          status: j.status,
+          payrollCompany: j.payrollCompany,
+          hourlyRate: j.hourlyRate,
+          steward: j.steward,
+          parkingCost: j.parkingCost,
+          notes: j.notes || '',
+          has6th7thDayRule: false,
+          hasVacationPay: false,
+        };
+        const key = getJobDedupKey(draft);
+        if (existingKeys.has(key)) { skipped++; continue; }
+        existingKeys.add(key);
+        try {
+          await onImport(draft);
+          imported++;
+        } catch (err) {
+          console.error('Failed to save job:', j.name, err);
+          toast.error(`Failed to save "${j.name}": ${err instanceof Error ? err.message : 'Unknown error'}`);
+          skipped++;
+        }
+      }
+    } finally {
+      setIsImporting(false);
     }
 
-    setIsImporting(false);
-
     if (imported === 0) {
-      toast.error('All selected jobs already exist');
+      toast.error('All selected jobs already exist or could not be saved');
       return;
     }
 

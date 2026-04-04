@@ -54,6 +54,21 @@ export default function JobsPage() {
         <VoiceDictation onParsed={addJob} jobs={jobsList} />
       </div>
 
+      {/* Photo / paste import */}
+      <div className="flex gap-2 mb-4">
+        <JobPhotoImport onImport={async (job) => {
+          await addJob(job);
+        }} externalOpen={photoOpen} onExternalOpenChange={setPhotoOpen} />
+        <JobPasteImport onImport={async (job) => {
+          try {
+            const result = await addJob(job);
+            if (result) toast.success('Job added');
+            else toast.error('Job already exists');
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : 'Failed to save job');
+          }
+        }} />
+      </div>
 
       {/* Summary */}
       <div className="grid grid-cols-2 gap-3 mb-4">
@@ -69,7 +84,7 @@ export default function JobsPage() {
 
       {/* Job list */}
       {data.jobs.length === 0 ? (
-        <EmptyState icon={Briefcase} title="No jobs yet" description="Tap to snap a photo of your schedule" onUploadPhoto={() => setPhotoOpen(true)} />
+        <EmptyState icon={Briefcase} title="No jobs yet" description="Use Photo Import above to scan a dispatch email or schedule" />
       ) : (
         <div className="space-y-2">
           {groupedJobs.map(([key, group]) => {

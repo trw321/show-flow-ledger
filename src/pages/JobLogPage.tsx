@@ -51,8 +51,7 @@ export default function JobLogPage() {
       {/* Load upcoming jobs — photo or paste */}
       <div className="flex gap-2 mb-4">
         <JobPhotoImport onImport={async (job) => {
-          const result = await addJob({ ...job, status: 'upcoming', hoursWorked: 0 });
-          if (!result) throw new Error('Job already exists or could not be saved');
+          await addJob({ ...job, status: 'upcoming', hoursWorked: 0 });
         }} externalOpen={photoOpen} onExternalOpenChange={setPhotoOpen} />
         <JobPasteImport onImport={async (job) => {
           try {
