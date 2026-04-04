@@ -51,13 +51,8 @@ export default function JobLogPage() {
       {/* Load upcoming jobs — photo or paste */}
       <div className="flex gap-2 mb-4">
         <JobPhotoImport onImport={async (job) => {
-          try {
-            const result = await addJob({ ...job, status: 'upcoming', hoursWorked: 0 });
-            if (result) toast.success('Job loaded to calendar');
-            else toast.error('Job already exists or could not be saved');
-          } catch (e) {
-            toast.error(e instanceof Error ? e.message : 'Failed to save job');
-          }
+          const result = await addJob({ ...job, status: 'upcoming', hoursWorked: 0 });
+          if (!result) throw new Error('Job already exists or could not be saved');
         }} externalOpen={photoOpen} onExternalOpenChange={setPhotoOpen} />
         <JobPasteImport onImport={async (job) => {
           try {
