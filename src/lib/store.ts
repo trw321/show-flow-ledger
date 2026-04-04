@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { isDuplicateJob } from './jobDedup';
 
@@ -267,6 +267,10 @@ export function clearAllData() {
 export function useAppData(userId: string | null) {
   const [data, setData] = useState<AppData>(loadCache);
   const [loading, setLoading] = useState(true);
+  const dataRef = useRef(data);
+
+  // Keep ref in sync with state so callbacks always see latest data
+  useEffect(() => { dataRef.current = data; }, [data]);
 
   // Fetch all data from Supabase on mount / user change
   useEffect(() => {
@@ -306,11 +310,8 @@ export function useAppData(userId: string | null) {
   const addJob = useCallback(async (job: Omit<Job, 'id' | 'createdAt'>): Promise<Job | null> => {
     if (!userId) { console.error('addJob: no userId'); return null; }
 
-    // Check dedup against current React state
-    const isDup = await new Promise<boolean>(resolve => {
-      setData(prev => { resolve(isDuplicateJob(job, prev.jobs)); return prev; });
-    });
-    if (isDup) return null;
+    // Check dedup against current data via ref (never stale, never hangs)
+    if (isDuplicateJob(job, dataRef.current.jobs)) return null;
 
     const { data: rows, error } = await supabase
       .from('jobs')
