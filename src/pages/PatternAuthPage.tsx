@@ -149,7 +149,7 @@ export default function PatternAuthPage() {
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6 overflow-y-auto">
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
@@ -169,7 +169,7 @@ export default function PatternAuthPage() {
               <p className="text-sm text-muted-foreground">
                 Hey {setup?.username} — draw your pattern
               </p>
-              <PatternLock onComplete={handleUnlock} disabled={loading} error={patternError} />
+              <PatternLock onComplete={handleUnlock} disabled={loading} error={patternError} size={220} />
               {loading && <Loader2 size={20} className="animate-spin text-primary" />}
               {error && <p className="text-xs text-destructive text-center">{error}</p>}
               <button onClick={() => setScreen('recovery')} className="text-xs text-muted-foreground hover:text-primary underline underline-offset-2">
@@ -206,7 +206,7 @@ export default function PatternAuthPage() {
           {screen === 'setup-draw' && (
             <motion.div key="setup-draw" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-4 w-full">
               <p className="text-sm text-muted-foreground text-center">Draw your pattern<br /><span className="text-xs">(connect at least 4 dots)</span></p>
-              <PatternLock onComplete={handleFirstPattern} />
+              <PatternLock onComplete={handleFirstPattern} size={220} />
               <button onClick={() => { setFirstPattern([]); setScreen('setup-draw'); }} className="text-xs text-muted-foreground hover:text-primary underline underline-offset-2">
                 Whoops — start over
               </button>
@@ -217,7 +217,7 @@ export default function PatternAuthPage() {
           {screen === 'setup-confirm' && (
             <motion.div key="setup-confirm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-4 w-full">
               <p className="text-sm text-muted-foreground text-center">Draw it again to confirm</p>
-              <PatternLock onComplete={handleConfirmPattern} disabled={loading} error={patternError} />
+              <PatternLock onComplete={handleConfirmPattern} disabled={loading} error={patternError} size={220} />
               {loading && <Loader2 size={20} className="animate-spin text-primary" />}
               {error && <p className="text-xs text-destructive text-center">{error}</p>}
               <button onClick={() => { setFirstPattern([]); setPatternError(false); setError(''); setScreen('setup-draw'); }} className="text-xs text-muted-foreground hover:text-primary underline underline-offset-2">
