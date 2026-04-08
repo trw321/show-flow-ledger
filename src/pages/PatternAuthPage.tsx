@@ -30,6 +30,7 @@ export default function PatternAuthPage() {
   const [screen, setScreen] = useState<Screen>(isReturning ? 'unlock' : 'setup-name');
   const [username, setUsername] = useState('');
   const [firstPattern, setFirstPattern] = useState<number[]>([]);
+  const [confirmedPattern, setConfirmedPattern] = useState<number[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [patternError, setPatternError] = useState(false);
@@ -109,6 +110,7 @@ export default function PatternAuthPage() {
     // Save setup locally
     savePatternSetup({ username, email, recoveryPhrase: phrase });
     setRecoveryPhrase(phrase);
+    setConfirmedPattern(pattern);
     setLoading(false);
     setScreen('setup-phrase');
   };
@@ -232,7 +234,7 @@ export default function PatternAuthPage() {
               </div>
 
               <p className="text-xs text-muted-foreground text-center">This phrase is shown once. You can find it in Settings later.</p>
-              <Button onClick={() => signIn(usernameToEmail(username), patternToPassword(firstPattern))} className="w-full">
+              <Button onClick={() => signIn(usernameToEmail(username), patternToPassword(confirmedPattern))} className="w-full">
                 I saved it — let me in
               </Button>
             </motion.div>
