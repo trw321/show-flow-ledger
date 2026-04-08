@@ -10,7 +10,7 @@ import { PartyModeProvider } from "@/lib/PartyModeContext";
 import AppLayout from "@/components/AppLayout";
 import Dashboard from "@/pages/Dashboard";
 import LoadingScreen from "@/components/LoadingScreen";
-import AuthPage from "@/pages/AuthPage";
+import PatternAuthPage from "@/pages/PatternAuthPage";
 
 import ExpensesPage from "@/pages/ExpensesPage";
 import IncomePage from "@/pages/IncomePage";
@@ -30,7 +30,7 @@ function AuthenticatedApp() {
   const handleComplete = useCallback(() => setSplashDone(true), []);
 
   if (authLoading) return null; // waiting for session check
-  if (!user) return <AuthPage />;
+  if (!user) return <PatternAuthPage />;
 
   return (
     <>
