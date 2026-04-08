@@ -4,7 +4,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider, useAuth } from "@/lib/AuthContext";
+import { AuthProvider } from "@/lib/AuthContext";
 import { DataProvider } from "@/lib/DataContext";
 import { PartyModeProvider } from "@/lib/PartyModeContext";
 import AppLayout from "@/components/AppLayout";
@@ -25,12 +25,11 @@ import NotFound from "./pages/NotFound.tsx";
 const queryClient = new QueryClient();
 
 function AuthenticatedApp() {
-  const { user, loading: authLoading } = useAuth();
+  const [unlocked, setUnlocked] = useState(false);
   const [splashDone, setSplashDone] = useState(false);
   const handleComplete = useCallback(() => setSplashDone(true), []);
 
-  if (authLoading) return null; // waiting for session check
-  if (!user) return <PatternAuthPage />;
+  if (!unlocked) return <PatternAuthPage onUnlocked={() => setUnlocked(true)} />;
 
   return (
     <>
