@@ -107,7 +107,8 @@ function jobFromRow(r: Record<string, unknown>): Job {
 }
 
 // App object → DB row (for insert/update)
-function jobToRow(j: Partial<Job> & { userId?: string }) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function jobToRow(j: Partial<Job> & { userId?: string }): any {
   const row: Record<string, unknown> = {};
   if (j.userId !== undefined) row.user_id = j.userId;
   if (j.jobNumber !== undefined) row.job_number = j.jobNumber;
