@@ -92,7 +92,9 @@ export default function PatternAuthPage() {
     const recoveryPassword = recoveryPhraseToPassword(phrase);
 
     // Try sign up with pattern password
+    console.log('Signing up:', email, 'password length:', password.length);
     const signUpResult = await signUp(email, password);
+    console.log('SignUp result:', signUpResult);
     if (signUpResult.error && !signUpResult.error.includes('already registered')) {
       setError(signUpResult.error);
       setLoading(false);
@@ -100,11 +102,12 @@ export default function PatternAuthPage() {
     }
 
     // Sign in (whether new signup or already registered)
+    console.log('Signing in:', email, 'password length:', password.length);
     const signInResult = await signIn(email, password);
+    console.log('SignIn result:', signInResult);
     if (signInResult.error) {
-      setError('This name is taken or pattern mismatch — try a different name');
+      setError(`Sign in failed: ${signInResult.error}`);
       setLoading(false);
-      setScreen('setup-name');
       return;
     }
 
