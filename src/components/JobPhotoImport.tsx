@@ -202,7 +202,11 @@ export default function JobPhotoImport({
     }
 
     if (imported === 0) {
-      toast.error('All selected jobs already exist or could not be saved');
+      toast('Already got that one!', {
+        description: 'This job is already in your log.',
+        duration: 2500,
+      });
+      handleClose(false);
       return;
     }
 
@@ -236,9 +240,23 @@ export default function JobPhotoImport({
         onChange={handleFileChange}
       />
 
-      <Button type="button" size="sm" variant="outline" onClick={openFilePicker}>
-        <Camera size={16} className="mr-1" /> Photo Import
-      </Button>
+      <div
+        onClick={openFilePicker}
+        onDrop={handleDrop}
+        onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
+        onDragLeave={() => setIsDragOver(false)}
+        className={`w-full flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-8 cursor-pointer transition-all
+          ${isDragOver ? 'border-primary bg-primary/10 scale-[1.01]' : 'border-border hover:border-primary/50 hover:bg-secondary/30'}`}
+      >
+        <div className={`rounded-full p-4 transition-colors ${isDragOver ? 'bg-primary/20' : 'bg-secondary'}`}>
+          <Camera size={32} className={isDragOver ? 'text-primary' : 'text-muted-foreground'} />
+        </div>
+        <div className="text-center">
+          <p className="font-semibold text-sm">{isDragOver ? 'Drop to scan' : 'Import Jobs from Photo'}</p>
+          <p className="text-xs text-muted-foreground mt-1">Tap or drag a dispatch email, call sheet, or schedule screenshot</p>
+          <p className="text-xs text-primary font-medium mt-2">AI extracts all jobs automatically</p>
+        </div>
+      </div>
 
       <Dialog open={open} onOpenChange={handleClose}>
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
