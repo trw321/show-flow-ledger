@@ -13,6 +13,7 @@ interface Dot {
 
 interface Props {
   onComplete: (pattern: number[]) => void;
+  onStart?: () => void;
   size?: number;
   disabled?: boolean;
   error?: boolean;
@@ -48,7 +49,7 @@ function getHitDot(dots: Dot[], x: number, y: number): Dot | null {
   return null;
 }
 
-export default function PatternLock({ onComplete, size = 280, disabled = false, error = false }: Props) {
+export default function PatternLock({ onComplete, onStart, size = 280, disabled = false, error = false }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [pattern, setPattern] = useState<number[]>([]);
   const [drawing, setDrawing] = useState(false);
@@ -155,6 +156,7 @@ export default function PatternLock({ onComplete, size = 280, disabled = false, 
       setPattern([hit.index]);
       setDrawing(true);
       setMousePos(pos);
+      onStart?.();
     }
   };
 

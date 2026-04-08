@@ -31,6 +31,7 @@ export default function PatternAuthPage() {
   const [username, setUsername] = useState('');
   const [firstPattern, setFirstPattern] = useState<number[]>([]);
   const [confirmedPattern, setConfirmedPattern] = useState<number[]>([]);
+  const [hasStartedPattern, setHasStartedPattern] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [patternError, setPatternError] = useState(false);
@@ -64,6 +65,7 @@ export default function PatternAuthPage() {
   // ── Setup: step 2 — draw pattern ────────────────────────────────────────
   const handleFirstPattern = (pattern: number[]) => {
     setFirstPattern(pattern);
+    setHasStartedPattern(false);
     setScreen('setup-confirm');
   };
 
@@ -97,32 +99,22 @@ export default function PatternAuthPage() {
       return;
     }
 
-    // If already registered with this name, sign in instead
-    if (signUpResult.error?.includes('already registered')) {
-      const signInResult = await signIn(email, password);
-      if (signInResult.error) {
-        setError('This name is taken — try a different one');
-        setLoading(false);
-        setScreen('setup-name');
-        return;
-      }
-      savePatternSetup({ username, email, recoveryPhrase: phrase });
-      setRecoveryPhrase(phrase);
-      setConfirmedPattern(pattern);
+    // Sign in (whether new signup or already registered)
+    const signInResult = await signIn(email, password);
+    if (signInResult.error) {
+      setError('This name is taken or pattern mismatch — try a different name');
       setLoading(false);
-      setScreen('setup-phrase');
+      setScreen('setup-name');
       return;
     }
 
     // Also sign up a recovery account using the recovery phrase as password
-    // We use a slightly different email for the recovery account
-    const recoveryEmail = `recovery-${usernameToEmail(username)}`;
+    const recoveryEmail = `recovery-${email}`;
     await signUp(recoveryEmail, recoveryPassword);
 
     // Save setup locally
     savePatternSetup({ username, email, recoveryPhrase: phrase });
     setRecoveryPhrase(phrase);
-    setConfirmedPattern(pattern);
     setLoading(false);
     setScreen('setup-phrase');
   };
@@ -206,10 +198,12 @@ export default function PatternAuthPage() {
           {screen === 'setup-draw' && (
             <motion.div key="setup-draw" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-4 w-full">
               <p className="text-sm text-muted-foreground text-center">Draw your pattern<br /><span className="text-xs">(connect at least 4 dots)</span></p>
-              <PatternLock onComplete={handleFirstPattern} size={220} />
-              <button onClick={() => { setFirstPattern([]); setScreen('setup-draw'); }} className="text-xs text-muted-foreground hover:text-primary underline underline-offset-2">
-                Whoops — start over
-              </button>
+              <PatternLock onComplete={handleFirstPattern} size={220} onStart={() => setHasStartedPattern(true)} />
+              {hasStartedPattern && (
+                <button onClick={() => { setFirstPattern([]); setHasStartedPattern(false); setScreen('setup-draw'); }} className="text-xs text-muted-foreground hover:text-primary underline underline-offset-2">
+                  Whoops — start over
+                </button>
+              )}
             </motion.div>
           )}
 
@@ -252,7 +246,7 @@ export default function PatternAuthPage() {
               </div>
 
               <p className="text-xs text-muted-foreground text-center">This phrase is shown once. You can find it in Settings later.</p>
-              <Button onClick={() => signIn(usernameToEmail(username), patternToPassword(confirmedPattern))} className="w-full">
+              <Button onClick={() => setScreen('unlock')} className="w-full">
                 I saved it — let me in
               </Button>
             </motion.div>
