@@ -149,7 +149,8 @@ function expenseFromRow(r: Record<string, unknown>): Expense {
   };
 }
 
-function expenseToRow(e: Partial<Expense> & { userId?: string }) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function expenseToRow(e: Partial<Expense> & { userId?: string }): any {
   const row: Record<string, unknown> = {};
   if (e.userId !== undefined) row.user_id = e.userId;
   if (e.jobId !== undefined) row.job_id = e.jobId;
@@ -175,7 +176,8 @@ function incomeFromRow(r: Record<string, unknown>): Income {
   };
 }
 
-function incomeToRow(i: Partial<Income> & { userId?: string }) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function incomeToRow(i: Partial<Income> & { userId?: string }): any {
   const row: Record<string, unknown> = {};
   if (i.userId !== undefined) row.user_id = i.userId;
   if (i.jobId !== undefined) row.job_id = i.jobId;
@@ -203,7 +205,8 @@ function equipmentFromRow(r: Record<string, unknown>): Equipment {
   };
 }
 
-function equipmentToRow(e: Partial<Equipment> & { userId?: string }) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function equipmentToRow(e: Partial<Equipment> & { userId?: string }): any {
   const row: Record<string, unknown> = {};
   if (e.userId !== undefined) row.user_id = e.userId;
   if (e.name !== undefined) row.name = e.name;
