@@ -87,8 +87,9 @@ export default function PatternAuthPage() {
     const email = usernameToEmail(username);
     const password = patternToPassword(pattern);
     const phrase = generateRecoveryPhrase();
+    const recoveryPassword = recoveryPhraseToPassword(phrase);
 
-    // Try sign up
+    // Try sign up with pattern password
     const signUpResult = await signUp(email, password);
     if (signUpResult.error && !signUpResult.error.includes('already registered')) {
       setError(signUpResult.error);
@@ -96,7 +97,7 @@ export default function PatternAuthPage() {
       return;
     }
 
-    // If already registered, just sign in
+    // If already registered with this name, sign in instead
     if (signUpResult.error?.includes('already registered')) {
       const signInResult = await signIn(email, password);
       if (signInResult.error) {
@@ -105,7 +106,18 @@ export default function PatternAuthPage() {
         setScreen('setup-name');
         return;
       }
+      savePatternSetup({ username, email, recoveryPhrase: phrase });
+      setRecoveryPhrase(phrase);
+      setConfirmedPattern(pattern);
+      setLoading(false);
+      setScreen('setup-phrase');
+      return;
     }
+
+    // Also sign up a recovery account using the recovery phrase as password
+    // We use a slightly different email for the recovery account
+    const recoveryEmail = `recovery-${usernameToEmail(username)}`;
+    await signUp(recoveryEmail, recoveryPassword);
 
     // Save setup locally
     savePatternSetup({ username, email, recoveryPhrase: phrase });
@@ -120,9 +132,9 @@ export default function PatternAuthPage() {
     if (!setup) return;
     setLoading(true);
     setError('');
-    const password = recoveryPhraseToPassword(recoveryInput);
-    // Recovery phrase was used as an alternate password during setup
-    const result = await signIn(setup.email, password);
+    const password = recoveryPhraseToPassword(recoveryInput.trim());
+    const recoveryEmail = `recovery-${setup.email}`;
+    const result = await signIn(recoveryEmail, password);
     if (result.error) {
       setError('Recovery phrase not recognized');
     }
