@@ -207,6 +207,9 @@ export default function PatternAuthPage() {
             <motion.div key="setup-draw" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-4 w-full">
               <p className="text-sm text-muted-foreground text-center">Draw your pattern<br /><span className="text-xs">(connect at least 4 dots)</span></p>
               <PatternLock onComplete={handleFirstPattern} />
+              <button onClick={() => { setFirstPattern([]); setScreen('setup-draw'); }} className="text-xs text-muted-foreground hover:text-primary underline underline-offset-2">
+                Whoops — start over
+              </button>
             </motion.div>
           )}
 
@@ -217,6 +220,9 @@ export default function PatternAuthPage() {
               <PatternLock onComplete={handleConfirmPattern} disabled={loading} error={patternError} />
               {loading && <Loader2 size={20} className="animate-spin text-primary" />}
               {error && <p className="text-xs text-destructive text-center">{error}</p>}
+              <button onClick={() => { setFirstPattern([]); setPatternError(false); setError(''); setScreen('setup-draw'); }} className="text-xs text-muted-foreground hover:text-primary underline underline-offset-2">
+                Whoops — redo my pattern
+              </button>
             </motion.div>
           )}
 
