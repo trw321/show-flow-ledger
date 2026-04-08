@@ -14,7 +14,207 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      equipment: {
+        Row: {
+          assigned_job_id: string | null
+          category: string
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          purchase_date: string | null
+          serial_number: string | null
+          status: string
+          user_id: string
+          value: number | null
+        }
+        Insert: {
+          assigned_job_id?: string | null
+          category: string
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          purchase_date?: string | null
+          serial_number?: string | null
+          status?: string
+          user_id: string
+          value?: number | null
+        }
+        Update: {
+          assigned_job_id?: string | null
+          category?: string
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          purchase_date?: string | null
+          serial_number?: string | null
+          status?: string
+          user_id?: string
+          value?: number | null
+        }
+        Relationships: []
+      }
+      expenses: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string
+          date: string
+          description: string | null
+          id: string
+          job_id: string | null
+          receipt: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          category: string
+          created_at?: string
+          date: string
+          description?: string | null
+          id?: string
+          job_id?: string | null
+          receipt?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string
+          date?: string
+          description?: string | null
+          id?: string
+          job_id?: string | null
+          receipt?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      income: {
+        Row: {
+          amount: number
+          client: string
+          created_at: string
+          date: string
+          description: string | null
+          id: string
+          invoice_number: string | null
+          job_id: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          client: string
+          created_at?: string
+          date: string
+          description?: string | null
+          id?: string
+          invoice_number?: string | null
+          job_id?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          client?: string
+          created_at?: string
+          date?: string
+          description?: string | null
+          id?: string
+          invoice_number?: string | null
+          job_id?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      jobs: {
+        Row: {
+          attachments: string[] | null
+          client: string
+          created_at: string
+          date: string
+          end_time: string | null
+          has_6th_7th_day_rule: boolean | null
+          has_vacation_pay: boolean | null
+          hourly_rate: number | null
+          hours_worked: number | null
+          id: string
+          job_number: string | null
+          meal_penalties: number | null
+          meal_type: string | null
+          minimum_hours: number | null
+          name: string
+          notes: string | null
+          parking_cost: number | null
+          pay_period_start: string | null
+          pay_schedule: string | null
+          payroll_company: string | null
+          start_time: string | null
+          status: string
+          steward: string | null
+          user_id: string
+          venue: string
+        }
+        Insert: {
+          attachments?: string[] | null
+          client: string
+          created_at?: string
+          date: string
+          end_time?: string | null
+          has_6th_7th_day_rule?: boolean | null
+          has_vacation_pay?: boolean | null
+          hourly_rate?: number | null
+          hours_worked?: number | null
+          id?: string
+          job_number?: string | null
+          meal_penalties?: number | null
+          meal_type?: string | null
+          minimum_hours?: number | null
+          name: string
+          notes?: string | null
+          parking_cost?: number | null
+          pay_period_start?: string | null
+          pay_schedule?: string | null
+          payroll_company?: string | null
+          start_time?: string | null
+          status?: string
+          steward?: string | null
+          user_id: string
+          venue: string
+        }
+        Update: {
+          attachments?: string[] | null
+          client?: string
+          created_at?: string
+          date?: string
+          end_time?: string | null
+          has_6th_7th_day_rule?: boolean | null
+          has_vacation_pay?: boolean | null
+          hourly_rate?: number | null
+          hours_worked?: number | null
+          id?: string
+          job_number?: string | null
+          meal_penalties?: number | null
+          meal_type?: string | null
+          minimum_hours?: number | null
+          name?: string
+          notes?: string | null
+          parking_cost?: number | null
+          pay_period_start?: string | null
+          pay_schedule?: string | null
+          payroll_company?: string | null
+          start_time?: string | null
+          status?: string
+          steward?: string | null
+          user_id?: string
+          venue?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
