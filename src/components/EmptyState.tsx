@@ -6,19 +6,26 @@ interface EmptyStateProps {
   title: string;
   description: string;
   action?: React.ReactNode;
-  onUploadPhoto?: (file: File) => void;
+  onUploadPhoto?: (() => void) | ((file: File) => void);
 }
 
 export default function EmptyState({ icon: Icon, title, description, action, onUploadPhoto }: EmptyStateProps) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleClick = () => {
-    if (onUploadPhoto && fileRef.current) fileRef.current.click();
+    if (onUploadPhoto) {
+      // If the callback accepts no args (just opens a dialog), call it directly
+      if (onUploadPhoto.length === 0) {
+        (onUploadPhoto as () => void)();
+      } else if (fileRef.current) {
+        fileRef.current.click();
+      }
+    }
   };
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && onUploadPhoto) onUploadPhoto(file);
+    if (file && onUploadPhoto && onUploadPhoto.length > 0) (onUploadPhoto as (f: File) => void)(file);
     if (fileRef.current) fileRef.current.value = '';
   };
 
@@ -27,7 +34,7 @@ export default function EmptyState({ icon: Icon, title, description, action, onU
       onClick={handleClick}
       className={`flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card/50 py-16 px-6 text-center transition-colors ${onUploadPhoto ? 'cursor-pointer hover:border-primary hover:bg-primary/5' : ''}`}
     >
-      {onUploadPhoto && (
+      {onUploadPhoto && onUploadPhoto.length > 0 && (
         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
       )}
       <div className="rounded-full bg-secondary p-4 mb-4">
