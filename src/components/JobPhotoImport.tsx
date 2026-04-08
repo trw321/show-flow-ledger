@@ -61,6 +61,15 @@ export default function JobPhotoImport({
     };
   }, [open]);
 
+  // Auto-open file picker when dialog is opened externally (e.g. from EmptyState)
+  useEffect(() => {
+    if (open && isControlled && step === 'upload' && !isParsing && fileRef.current) {
+      // Small delay to let the dialog render first
+      const t = setTimeout(() => fileRef.current?.click(), 150);
+      return () => clearTimeout(t);
+    }
+  }, [open, isControlled, step, isParsing]);
+
   const parseImage = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/')) { toast.error('Please upload an image file'); return; }
     if (file.size > 10 * 1024 * 1024) { toast.error('Image must be under 10MB'); return; }
