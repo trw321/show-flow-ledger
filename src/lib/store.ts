@@ -329,6 +329,9 @@ export function useAppData(userId: string | null) {
     if (!rows?.length) return null;
 
     const newJob = jobFromRow(rows[0] as Record<string, unknown>);
+    // Update ref immediately so back-to-back addJob calls see the new job
+    // before React has a chance to re-render and run the useEffect sync
+    dataRef.current = { ...dataRef.current, jobs: [...dataRef.current.jobs, newJob] };
     setData(prev => {
       const updated = { ...prev, jobs: [...prev.jobs, newJob] };
       saveCache(updated);
