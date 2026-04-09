@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Scale, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, Upload } from 'lucide-react';
-import { format, addDays, endOfMonth, isWithinInterval, parseISO, startOfMonth } from 'date-fns';
+import { format, addDays, endOfMonth, isWithinInterval, parseISO, startOfMonth, differenceInDays } from 'date-fns';
 import { calculateExpectedPay } from '@/lib/payCalc';
 import type { Job, Income } from '@/lib/store';
 
@@ -48,10 +48,37 @@ function getPayPeriods(job: Job, rangeStart: Date, rangeEnd: Date) {
   return periods;
 }
 
+type LagStatus = 'early' | 'on-time' | 'late' | 'unusual';
+
+function getLagStatus(lagDays: number, paySchedule: string): LagStatus {
+  if (lagDays < 0) return 'early';
+  // Expected window per schedule type
+  const maxNormal = paySchedule === 'weekly' ? 10
+    : paySchedule === 'bi-weekly' ? 18
+    : paySchedule === 'semi-monthly' ? 18
+    : paySchedule === 'monthly' ? 35
+    : 30; // per-project / unknown
+  if (lagDays <= maxNormal) return 'on-time';
+  if (lagDays <= maxNormal * 2) return 'late';
+  return 'unusual';
+}
+
+// Case-insensitive name matching: exact, one contains the other (min 3 chars)
+function namesMatch(a?: string, b?: string): boolean {
+  if (!a || !b) return false;
+  const na = a.toLowerCase().trim();
+  const nb = b.toLowerCase().trim();
+  if (na === nb) return true;
+  if (na.length >= 3 && nb.includes(na)) return true;
+  if (nb.length >= 3 && na.includes(nb)) return true;
+  return false;
+}
+
 interface ReconciliationRow {
   jobId: string;
   jobName: string;
   client: string;
+  payrollCompany?: string;
   paySchedule: string;
   periodLabel: string;
   periodStart: string;
@@ -61,7 +88,15 @@ interface ReconciliationRow {
   actualPaid: number;
   difference: number;
   timeEntryDetails: { date: string; hours: number; pay: number; breakdown: string[] }[];
-  incomeDetails: { date: string; amount: number; description: string; invoiceNumber?: string }[];
+  incomeDetails: {
+    date: string;
+    amount: number;
+    description: string;
+    invoiceNumber?: string;
+    payorName: string;
+    lagDays: number;
+    lagStatus: LagStatus;
+  }[];
 }
 
 export default function PayReconciliationPage() {
@@ -101,13 +136,15 @@ export default function PayReconciliationPage() {
           return isWithinInterval(d, { start: period.start, end: period.end }) && (j.hoursWorked ?? 0) > 0;
         });
 
-        // Include payments up to 90 days after period end (some productions pay 1–2 months late)
+        // Include payments up to 90 days after period end
         const paymentWindow = addDays(period.end, 90);
         const periodIncome = data.income.filter(i => {
           if (i.status !== 'paid') return false;
-          if (i.client !== referenceJob.client) return false;
           const d = parseISO(i.date);
-          return d >= period.start && d <= paymentWindow;
+          if (d < period.start || d > paymentWindow) return false;
+          // Match by production client OR payroll company — they are often different entities
+          return namesMatch(i.client, referenceJob.client) ||
+                 namesMatch(i.client, referenceJob.payrollCompany);
         });
 
         const totalHours = periodJobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
@@ -129,9 +166,19 @@ export default function PayReconciliationPage() {
             actualPaid,
             difference: actualPaid - expectedPay,
             timeEntryDetails: payResult.details,
-            incomeDetails: periodIncome.map(i => ({
-              date: i.date, amount: i.amount, description: i.description, invoiceNumber: i.invoiceNumber,
-            })),
+            payrollCompany: referenceJob.payrollCompany,
+            incomeDetails: periodIncome.map(i => {
+              const lagDays = differenceInDays(parseISO(i.date), period.end);
+              return {
+                date: i.date,
+                amount: i.amount,
+                description: i.description,
+                invoiceNumber: i.invoiceNumber,
+                payorName: i.client,
+                lagDays,
+                lagStatus: getLagStatus(lagDays, referenceJob.paySchedule || ''),
+              };
+            }),
           });
         }
       }
@@ -265,6 +312,9 @@ export default function PayReconciliationPage() {
                     >
                       <td className="px-4 py-3">
                         <p className="font-medium">{row.client}</p>
+                        {row.payrollCompany && (
+                          <p className="text-[10px] text-muted-foreground text-mono mt-0.5">via {row.payrollCompany}</p>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-mono text-xs">{row.periodLabel}</td>
                       <td className="px-4 py-3">
@@ -325,12 +375,35 @@ export default function PayReconciliationPage() {
                                 </div>
                               ) : (
                                 <div className="space-y-1">
-                                  {row.incomeDetails.map((inc, j) => (
-                                    <div key={j} className="flex justify-between items-center rounded bg-background px-3 py-1.5 text-xs">
-                                      <span>{format(parseISO(inc.date), 'MMM d')} — {inc.description || 'Payment'} {inc.invoiceNumber && `(#${inc.invoiceNumber})`}</span>
-                                      <span className="text-mono font-medium text-success">+${inc.amount.toFixed(2)}</span>
-                                    </div>
-                                  ))}
+                                  {row.incomeDetails.map((inc, j) => {
+                                    const lagLabel = inc.lagStatus === 'early' ? 'early'
+                                      : inc.lagStatus === 'on-time' ? `${inc.lagDays}d after`
+                                      : inc.lagStatus === 'late' ? `${inc.lagDays}d — late`
+                                      : `${inc.lagDays}d — unusual`;
+                                    const lagColor = inc.lagStatus === 'on-time' || inc.lagStatus === 'early'
+                                      ? 'text-success' : inc.lagStatus === 'late' ? 'text-accent' : 'text-destructive';
+                                    const payorDiffers = !namesMatch(inc.payorName, row.client);
+                                    return (
+                                      <div key={j} className="rounded bg-background px-3 py-1.5 text-xs space-y-0.5">
+                                        <div className="flex justify-between items-center gap-2">
+                                          <div className="min-w-0">
+                                            <span>{format(parseISO(inc.date), 'MMM d')}</span>
+                                            {inc.description && <span className="text-muted-foreground"> — {inc.description}</span>}
+                                            {inc.invoiceNumber && <span className="text-muted-foreground"> (#{inc.invoiceNumber})</span>}
+                                          </div>
+                                          <span className="text-mono font-medium text-success shrink-0">+${inc.amount.toFixed(2)}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          {payorDiffers && (
+                                            <span className="text-[10px] text-mono text-accent bg-accent/10 px-1.5 py-0.5 rounded">
+                                              paid by {inc.payorName}
+                                            </span>
+                                          )}
+                                          <span className={`text-[10px] text-mono ${lagColor}`}>{lagLabel}</span>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>

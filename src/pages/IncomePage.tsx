@@ -70,8 +70,7 @@ export default function IncomePage() {
   const { data, addIncome, updateIncome, deleteIncome } = useData();
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [uploadOpen, setUploadOpen] = useState(false);
-  
+
   const editingInc = editId ? data.income.find(i => i.id === editId) : undefined;
   const jobs = data.jobs.map(j => ({ id: j.id, name: j.name }));
   const total = data.income.reduce((s, i) => s + i.amount, 0);
@@ -83,7 +82,7 @@ export default function IncomePage() {
         description={`Total: $${total.toLocaleString()}`}
         action={
           <div className="flex gap-2">
-            <IncomeStatementUpload externalOpen={uploadOpen} onExternalOpenChange={setUploadOpen} />
+            <IncomeStatementUpload />
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild><Button size="sm"><Plus size={16} className="mr-1" /> New Income</Button></DialogTrigger>
               <DialogContent>
@@ -96,7 +95,7 @@ export default function IncomePage() {
       />
 
       {data.income.length === 0 ? (
-        <EmptyState icon={DollarSign} title="No income recorded" description="Tap to upload an invoice photo or use the + button above" onUploadPhoto={() => setUploadOpen(true)} />
+        <EmptyState icon={DollarSign} title="No income recorded" description="Use Load Statement above to scan an invoice or bank statement" />
       ) : (
         <div className="rounded-lg border border-border overflow-hidden">
           <table className="w-full text-sm">
