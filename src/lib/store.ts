@@ -261,13 +261,15 @@ export function clearLegacyData() {
   localStorage.removeItem(CACHE_KEY);
 }
 
-export async function clearAllData(userId?: string | null) {
-  if (userId) {
+export async function clearAllData() {
+  const { data: { session } } = await supabase.auth.getSession();
+  const uid = session?.user?.id;
+  if (uid) {
     await Promise.all([
-      supabase.from('jobs').delete().eq('user_id', userId),
-      supabase.from('expenses').delete().eq('user_id', userId),
-      supabase.from('income').delete().eq('user_id', userId),
-      supabase.from('equipment').delete().eq('user_id', userId),
+      supabase.from('jobs').delete().eq('user_id', uid),
+      supabase.from('expenses').delete().eq('user_id', uid),
+      supabase.from('income').delete().eq('user_id', uid),
+      supabase.from('equipment').delete().eq('user_id', uid),
     ]);
   }
   localStorage.removeItem(CACHE_KEY);

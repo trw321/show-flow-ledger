@@ -107,28 +107,28 @@ export default function CalendarPage() {
     <>
       {/* Compact header */}
       <div className="flex items-center justify-between mb-3">
-        <button
-          onClick={() => setCurrentDate(prev => subMonths(prev, 1))}
-          className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-secondary transition-colors"
-        >
-          <ChevronLeft size={14} className="text-muted-foreground" />
-        </button>
-        <div className="flex items-center gap-2.5">
-          <h1 className="text-mono text-sm font-bold tracking-widest">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setCurrentDate(prev => subMonths(prev, 1))}
+            className="w-7 h-7 flex items-center justify-center rounded hover:bg-secondary transition-colors"
+          >
+            <ChevronLeft size={13} className="text-muted-foreground" />
+          </button>
+          <h1 className="text-mono text-sm font-bold tracking-widest px-1">
             {format(currentDate, 'MMM yyyy').toUpperCase()}
           </h1>
           <button
-            onClick={() => setCurrentDate(new Date())}
-            className="text-[9px] text-mono text-primary border border-primary/40 px-2 py-0.5 rounded-full hover:bg-primary/10 transition-colors"
+            onClick={() => setCurrentDate(prev => addMonths(prev, 1))}
+            className="w-7 h-7 flex items-center justify-center rounded hover:bg-secondary transition-colors"
           >
-            TODAY
+            <ChevronRight size={13} className="text-muted-foreground" />
           </button>
         </div>
         <button
-          onClick={() => setCurrentDate(prev => addMonths(prev, 1))}
-          className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-secondary transition-colors"
+          onClick={() => setCurrentDate(new Date())}
+          className="text-[9px] text-mono text-muted-foreground/40 hover:text-primary transition-colors tracking-widest uppercase"
         >
-          <ChevronRight size={14} className="text-muted-foreground" />
+          Today
         </button>
       </div>
 
@@ -136,7 +136,7 @@ export default function CalendarPage() {
       <div className="rounded-xl border border-border overflow-hidden">
 
         {/* Day headers */}
-        <div className="grid grid-cols-[repeat(7,1fr)_2.5rem] border-b border-border bg-secondary/40">
+        <div className="grid grid-cols-[repeat(7,1fr)_2.5rem] border-b border-border/40">
           {['SUN','MON','TUE','WED','THU','FRI','SAT'].map((d, i) => (
             <div key={i} className={cn(
               "py-1.5 text-center text-[8px] text-mono font-bold tracking-widest",
@@ -171,9 +171,8 @@ export default function CalendarPage() {
                     "relative flex flex-col items-center py-2 gap-0.5",
                     "border-r border-border/30 last-of-type:border-r-0",
                     !inMonth && 'opacity-15',
-                    isWeekend && inMonth && 'bg-secondary/20',
-                    isToday && 'bg-primary/10',
-                    hasJobs && 'cursor-pointer hover:bg-secondary/50 transition-colors'
+                    isToday && 'bg-primary/8',
+                    hasJobs && 'cursor-pointer hover:bg-white/5 transition-colors'
                   )}
                 >
                   {/* Date number */}
@@ -216,7 +215,7 @@ export default function CalendarPage() {
             })}
 
             {/* Week total column */}
-            <div className="flex flex-col items-center justify-center py-2 bg-secondary/30 border-l border-border/30">
+            <div className="flex flex-col items-center justify-center py-2 border-l border-border/20">
               {weekStats[wi].pay > 0 ? (
                 <>
                   <span className="text-[8px] text-mono font-bold text-success leading-tight">
@@ -242,7 +241,7 @@ export default function CalendarPage() {
 
       {/* Month summary */}
       <div className="mt-3 rounded-xl border border-border overflow-hidden bg-card">
-        <div className="px-3 py-2 border-b border-border/50 bg-secondary/30">
+        <div className="px-3 py-2 border-b border-border/50">
           <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/70 uppercase">
             {format(currentDate, 'MMMM yyyy')} — Summary
           </p>
