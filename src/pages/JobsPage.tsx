@@ -4,8 +4,7 @@ import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Briefcase, Trash2, Pencil, ChevronDown, ChevronRight, Camera, ClipboardPaste } from 'lucide-react';
-import JobPasteImport from '@/components/JobPasteImport';
+import { Briefcase, Trash2, Pencil, ChevronDown, ChevronRight } from 'lucide-react';
 import JobPhotoImport from '@/components/JobPhotoImport';
 import VoiceDictation from '@/components/VoiceDictation';
 import JobForm from '@/components/JobForm';
@@ -17,7 +16,6 @@ import { cn } from '@/lib/utils';
 export default function JobsPage() {
   const { data, addJob, updateJob, deleteJob } = useData();
   const [editId, setEditId] = useState<string | null>(null);
-  const [photoOpen, setPhotoOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const editingJob = editId ? data.jobs.find(j => j.id === editId) : undefined;
@@ -54,6 +52,10 @@ export default function JobsPage() {
         <VoiceDictation onParsed={addJob} jobs={jobsList} />
       </div>
 
+      {/* Photo import */}
+      <div className="mb-4">
+        <JobPhotoImport onImport={addJob} />
+      </div>
 
       {/* Summary */}
       <div className="grid grid-cols-2 gap-3 mb-4">
@@ -69,7 +71,7 @@ export default function JobsPage() {
 
       {/* Job list */}
       {data.jobs.length === 0 ? (
-        <EmptyState icon={Briefcase} title="No jobs yet" description="Tap to snap a photo of your schedule" onUploadPhoto={() => setPhotoOpen(true)} />
+        <EmptyState icon={Briefcase} title="No jobs yet" description="Use the import box above to scan a schedule" />
       ) : (
         <div className="space-y-2">
           {groupedJobs.map(([key, group]) => {

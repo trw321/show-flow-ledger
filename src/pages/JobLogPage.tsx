@@ -15,7 +15,6 @@ import { cn } from '@/lib/utils';
 export default function JobLogPage() {
   const { data, addJob, updateJob } = useData();
   const [logId, setLogId] = useState<string | null>(null);
-  const [photoOpen, setPhotoOpen] = useState(false);
 
   const loggingJob = logId ? data.jobs.find(j => j.id === logId) : undefined;
 
@@ -51,8 +50,7 @@ export default function JobLogPage() {
       <div className="mb-4">
         <JobPhotoImport onImport={(job) => {
           addJob({ ...job, status: 'upcoming', hoursWorked: 0 });
-          toast.success('Job loaded to calendar');
-        }} externalOpen={photoOpen} onExternalOpenChange={setPhotoOpen} />
+        }} />
       </div>
 
       {/* Today / Needs Logging */}
@@ -123,7 +121,7 @@ export default function JobLogPage() {
       )}
 
       {data.jobs.length === 0 && (
-        <EmptyState icon={ClipboardCheck} title="No jobs loaded" description="Tap to upload a job schedule screenshot" onUploadPhoto={() => setPhotoOpen(true)} />
+        <EmptyState icon={ClipboardCheck} title="No jobs loaded" description="Use the import box above to scan a schedule" />
       )}
 
       {/* Log hours dialog */}
