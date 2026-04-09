@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Briefcase, Trash2, Pencil, ChevronDown, ChevronRight } from 'lucide-react';
 import JobPhotoImport from '@/components/JobPhotoImport';
-import VoiceDictation from '@/components/VoiceDictation';
 import JobForm from '@/components/JobForm';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -19,8 +18,6 @@ export default function JobsPage() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const editingJob = editId ? data.jobs.find(j => j.id === editId) : undefined;
-  const jobsList = data.jobs.map(j => ({ name: j.name, client: j.client }));
-
   const totalHours = data.jobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
   const totalEarnings = data.jobs.reduce((s, j) => s + (j.hoursWorked ?? 0) * (j.hourlyRate ?? 0), 0);
 
@@ -46,11 +43,6 @@ export default function JobsPage() {
   return (
     <>
       <PageHeader title="Jobs" description="Track gigs, hours, and earnings" />
-
-      {/* Voice mad-lib entry — the primary way to add */}
-      <div className="mb-4">
-        <VoiceDictation onParsed={addJob} jobs={jobsList} />
-      </div>
 
       {/* Photo import */}
       <div className="mb-4">
