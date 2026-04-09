@@ -3,7 +3,7 @@ import { useData } from '@/lib/DataContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Camera, Loader2, Check, ImagePlus, CheckCircle2 } from 'lucide-react';
+import { Camera, Loader2, Check, ImagePlus } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Job } from '@/lib/store';
 import { getJobDedupKey } from '@/lib/jobDedup';
@@ -26,12 +26,8 @@ interface ParsedJob {
 
 export default function JobPhotoImport({
   onImport,
-  externalOpen,
-  onExternalOpenChange,
 }: {
   onImport: (job: Omit<Job, 'id' | 'createdAt'>) => Promise<void>;
-  externalOpen?: boolean;
-  onExternalOpenChange?: (open: boolean) => void;
 }) {
   const { data: appData } = useData();
   const [open, setOpen] = useState(false);
@@ -41,8 +37,7 @@ export default function JobPhotoImport({
   const [isParsing, setIsParsing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [step, setStep] = useState<'upload' | 'review' | 'done'>('upload');
-  const [importedCount, setImportedCount] = useState(0);
+  const [step, setStep] = useState<'upload' | 'review'>('upload');
   const fileRef = useRef<HTMLInputElement>(null);
 
   const openFilePicker = useCallback(() => {
@@ -62,13 +57,6 @@ export default function JobPhotoImport({
     };
   }, [open]);
 
-  // Trigger the native picker immediately when requested externally
-  useEffect(() => {
-    if (!externalOpen) return;
-    openFilePicker();
-    onExternalOpenChange?.(false);
-  }, [externalOpen, onExternalOpenChange, openFilePicker]);
-
   const parseImage = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/')) {
       toast.error('Please upload an image file');
@@ -81,7 +69,6 @@ export default function JobPhotoImport({
 
     setOpen(true);
     setStep('upload');
-    setImportedCount(0);
     setEntries([]);
     setSelected(new Set());
 
@@ -201,17 +188,16 @@ export default function JobPhotoImport({
       setIsImporting(false);
     }
 
+    handleClose(false);
+
     if (imported === 0) {
       toast('Already got that one!', {
         description: 'This job is already in your log.',
         duration: 2500,
       });
-      handleClose(false);
-      return;
+    } else {
+      toast.success(`${imported} job${imported !== 1 ? 's' : ''} saved!`);
     }
-
-    setImportedCount(imported);
-    setStep('done');
   };
 
   const handleClose = (nextOpen: boolean) => {
@@ -222,7 +208,6 @@ export default function JobPhotoImport({
         setEntries([]);
         setSelected(new Set());
         setStep('upload');
-        setImportedCount(0);
         setIsParsing(false);
         setIsDragOver(false);
       }, 200);
@@ -386,23 +371,6 @@ export default function JobPhotoImport({
             </div>
           )}
 
-          {step === 'done' && (
-            <div className="flex flex-col items-center justify-center py-10 gap-4">
-              <div className="rounded-full bg-success/15 p-4">
-                <CheckCircle2 size={40} className="text-success" />
-              </div>
-              <div className="text-center">
-                <p className="text-lg font-bold">{importedCount} job{importedCount !== 1 ? 's' : ''} saved</p>
-                <p className="text-sm text-muted-foreground mt-1">Added to your calendar and job log</p>
-              </div>
-              <div className="flex gap-2 mt-2">
-                <Button type="button" variant="outline" onClick={openFilePicker}>
-                  Import another
-                </Button>
-                <Button type="button" onClick={() => handleClose(false)}>Done</Button>
-              </div>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
     </>

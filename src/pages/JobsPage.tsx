@@ -4,8 +4,7 @@ import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Briefcase, Trash2, Pencil, ChevronDown, ChevronRight, Camera, ClipboardPaste } from 'lucide-react';
-import JobPasteImport from '@/components/JobPasteImport';
+import { Briefcase, Trash2, Pencil, ChevronDown, ChevronRight } from 'lucide-react';
 import JobPhotoImport from '@/components/JobPhotoImport';
 import VoiceDictation from '@/components/VoiceDictation';
 import JobForm from '@/components/JobForm';
@@ -17,7 +16,6 @@ import { cn } from '@/lib/utils';
 export default function JobsPage() {
   const { data, addJob, updateJob, deleteJob } = useData();
   const [editId, setEditId] = useState<string | null>(null);
-  const [photoOpen, setPhotoOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const editingJob = editId ? data.jobs.find(j => j.id === editId) : undefined;
@@ -54,19 +52,10 @@ export default function JobsPage() {
         <VoiceDictation onParsed={addJob} jobs={jobsList} />
       </div>
 
-      {/* Photo / paste import */}
-      <div className="flex gap-2 mb-4">
+      {/* Photo import */}
+      <div className="mb-4">
         <JobPhotoImport onImport={async (job) => {
           await addJob(job);
-        }} externalOpen={photoOpen} onExternalOpenChange={setPhotoOpen} />
-        <JobPasteImport onImport={async (job) => {
-          try {
-            const result = await addJob(job);
-            if (result) toast.success('Job added');
-            else toast.error('Job already exists');
-          } catch (e) {
-            toast.error(e instanceof Error ? e.message : 'Failed to save job');
-          }
         }} />
       </div>
 

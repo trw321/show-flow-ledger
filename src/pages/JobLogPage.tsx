@@ -4,9 +4,8 @@ import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ClipboardCheck, Camera, Clock, ChevronRight } from 'lucide-react';
+import { ClipboardCheck, Clock, ChevronRight } from 'lucide-react';
 import JobPhotoImport from '@/components/JobPhotoImport';
-import JobPasteImport from '@/components/JobPasteImport';
 import LogHoursForm from '@/components/LogHoursForm';
 import { format, isToday, isPast, isFuture } from 'date-fns';
 import { toast } from 'sonner';
@@ -47,21 +46,10 @@ export default function JobLogPage() {
     <>
       <PageHeader title="Job Log" description="Pre-load jobs, then log hours on the day" />
 
-      {/* Load upcoming jobs — photo or paste */}
+      {/* Load upcoming jobs via photo */}
       <div className="mb-4">
         <JobPhotoImport onImport={async (job) => {
           await addJob({ ...job, status: 'upcoming', hoursWorked: 0 });
-        }} />
-      </div>
-      <div className="mb-4">
-        <JobPasteImport onImport={async (job) => {
-          try {
-            const result = await addJob({ ...job, status: 'upcoming', hoursWorked: 0 });
-            if (result) toast.success('Job loaded to calendar');
-            else toast.error('Job already exists or could not be saved');
-          } catch (e) {
-            toast.error(e instanceof Error ? e.message : 'Failed to save job');
-          }
         }} />
       </div>
 
@@ -133,7 +121,7 @@ export default function JobLogPage() {
       )}
 
       {data.jobs.length === 0 && (
-        <EmptyState icon={ClipboardCheck} title="No jobs loaded" description="Tap to upload a job schedule screenshot" onUploadPhoto={() => setPhotoOpen(true)} />
+        <EmptyState icon={ClipboardCheck} title="No jobs loaded" description="Use the import box above to scan a schedule" />
       )}
 
       {/* Log hours dialog */}
