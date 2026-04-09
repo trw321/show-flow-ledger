@@ -286,6 +286,11 @@ export function useAppData(userId: string | null) {
 
   // Fetch all data from Supabase on mount / user change
   useEffect(() => {
+    // Always clear stale data immediately when userId changes (sign in/out/switch)
+    // Prevents previous user's cached data from leaking into a new session
+    setData(defaultData);
+    localStorage.removeItem(CACHE_KEY);
+
     if (!userId) { setLoading(false); return; }
 
     let cancelled = false;
