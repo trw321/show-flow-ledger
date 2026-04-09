@@ -83,7 +83,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={clearAllData} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              <AlertDialogAction onClick={() => clearAllData(user?.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                 Delete Everything
               </AlertDialogAction>
             </AlertDialogFooter>

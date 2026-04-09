@@ -261,7 +261,15 @@ export function clearLegacyData() {
   localStorage.removeItem(CACHE_KEY);
 }
 
-export function clearAllData() {
+export async function clearAllData(userId?: string | null) {
+  if (userId) {
+    await Promise.all([
+      supabase.from('jobs').delete().eq('user_id', userId),
+      supabase.from('expenses').delete().eq('user_id', userId),
+      supabase.from('income').delete().eq('user_id', userId),
+      supabase.from('equipment').delete().eq('user_id', userId),
+    ]);
+  }
   localStorage.removeItem(CACHE_KEY);
   window.location.reload();
 }
