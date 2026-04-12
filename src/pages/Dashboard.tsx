@@ -8,6 +8,7 @@ import { motion } from 'framer-motion';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Sector } from 'recharts';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import { hasLegacyData, getLegacyData, clearLegacyData } from '@/lib/store';
+import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { toast } from 'sonner';
 
 function Starburst({ className, delay = 0 }: { className?: string; delay?: number }) {
@@ -60,8 +61,12 @@ function GlitterActiveShape(props: any) {
 
 export default function Dashboard() {
   const { data, migrateLocalData } = useData();
+  const { prefs } = useUserPrefs();
   const [taxRate, setTaxRate] = useState(25);
   const [showMigrate, setShowMigrate] = useState(hasLegacyData);
+  const showIncome = prefs.tabs.income;
+  const showExpenses = prefs.tabs.expenses;
+  const showTaxes = prefs.tabs.taxes;
   const [migrating, setMigrating] = useState(false);
 
   const totalExpenses = data.expenses.reduce((s, e) => s + e.amount, 0);
@@ -195,15 +200,17 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <StatCard label="Active Jobs" value={activeJobs} icon={Briefcase} variant="info" />
         <StatCard label="Hours Logged" value={totalHours.toFixed(1)} icon={Clock} variant="accent" />
-        <StatCard label="Total Income" value={`$${totalIncome.toLocaleString()}`} icon={TrendingUp} variant="success" />
-        <StatCard label="Total Expenses" value={`$${totalExpenses.toLocaleString()}`} icon={TrendingDown} variant="warning" />
+        {showIncome && <StatCard label="Total Income" value={`$${totalIncome.toLocaleString()}`} icon={TrendingUp} variant="success" />}
+        {showExpenses && <StatCard label="Total Expenses" value={`$${totalExpenses.toLocaleString()}`} icon={TrendingDown} variant="warning" />}
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        <StatCard label="Net Profit" value={`$${netProfit.toLocaleString()}`} icon={DollarSign} variant={netProfit >= 0 ? 'success' : 'destructive'} />
+        {(showIncome || showExpenses) && (
+          <StatCard label={showExpenses ? 'Net Profit' : 'Job Earnings'} value={`$${(showExpenses ? netProfit : totalEarnings).toLocaleString()}`} icon={DollarSign} variant={netProfit >= 0 ? 'success' : 'destructive'} />
+        )}
         <StatCard label="Job Earnings" value={`$${totalEarnings.toLocaleString()}`} icon={DollarSign} variant="success" />
-        <StatCard label="Pending" value={`$${pendingIncome.toLocaleString()}`} icon={AlertCircle} variant="warning" />
-        <StatCard label="Overdue" value={`$${overdueIncome.toLocaleString()}`} icon={AlertCircle} variant="destructive" />
+        {showIncome && <StatCard label="Pending" value={`$${pendingIncome.toLocaleString()}`} icon={AlertCircle} variant="warning" />}
+        {showIncome && <StatCard label="Overdue" value={`$${overdueIncome.toLocaleString()}`} icon={AlertCircle} variant="destructive" />}
       </div>
 
       {/* Weekly Export */}
@@ -218,7 +225,7 @@ export default function Dashboard() {
       </div>
 
       {/* Tax Breakdown Pie Chart */}
-      <div className="rounded-2xl border border-border bg-card p-4 mb-6">
+      {showTaxes && <div className="rounded-2xl border border-border bg-card p-4 mb-6">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-[10px] font-semibold text-mono text-muted-foreground uppercase tracking-[0.2em]">Tax Breakdown</h2>
           <div className="flex items-center gap-2">
@@ -298,7 +305,7 @@ export default function Dashboard() {
             </div>
           </div>
         )}
-      </div>
+      </div>}
 
       <div className="grid lg:grid-cols-2 gap-4">
         <div className="rounded-2xl border border-border bg-card p-4">
@@ -333,7 +340,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        <div className="rounded-2xl border border-border bg-card p-4">
+        {showExpenses && <div className="rounded-2xl border border-border bg-card p-4">
           <h2 className="text-[10px] font-semibold text-mono mb-3 text-muted-foreground uppercase tracking-[0.2em]">Recent Expenses</h2>
           {recentExpenses.length === 0 ? (
             <p className="text-xs text-muted-foreground py-4 text-center">No expenses yet</p>
@@ -353,7 +360,7 @@ export default function Dashboard() {
               ))}
             </div>
           )}
-        </div>
+        </div>}
       </div>
     </>
   );

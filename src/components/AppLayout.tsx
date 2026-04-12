@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Briefcase, Receipt, DollarSign, Speaker, Scale, CalendarDays, Sparkles, Menu, X, Trash2, ClipboardCheck, PartyPopper, PieChart, LogOut } from 'lucide-react';
+import { LayoutDashboard, Receipt, DollarSign, Speaker, Scale, CalendarDays, Sparkles, Menu, X, Trash2, ClipboardCheck, PartyPopper, PieChart, LogOut, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { clearAllData } from '@/lib/store';
 import { usePartyMode } from '@/lib/PartyModeContext';
 import { useAuth } from '@/lib/AuthContext';
+import { useUserPrefs } from '@/lib/UserPrefsContext';
 import FloatingEmojis from '@/components/FloatingEmojis';
 import {
   AlertDialog,
@@ -19,30 +20,35 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
-const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/calendar', icon: CalendarDays, label: 'Calendar' },
-  { to: '/log', icon: ClipboardCheck, label: 'Job Log' },
-  { to: '/expenses', icon: Receipt, label: 'Expenses' },
-  { to: '/taxes', icon: PieChart, label: 'Taxes' },
-  { to: '/income', icon: DollarSign, label: 'Income' },
-  { to: '/reconciliation', icon: Scale, label: 'Reconciliation' },
-  { to: '/equipment', icon: Speaker, label: 'Equipment' },
-  { to: '/discover', icon: Sparkles, label: 'Discover' },
-];
+const ALL_NAV_ITEMS = [
+  { to: '/',               icon: LayoutDashboard, label: 'Dashboard',      tabKey: null },
+  { to: '/calendar',       icon: CalendarDays,    label: 'Calendar',       tabKey: 'calendar' },
+  { to: '/log',            icon: ClipboardCheck,  label: 'Job Log',        tabKey: 'log' },
+  { to: '/expenses',       icon: Receipt,         label: 'Expenses',       tabKey: 'expenses' },
+  { to: '/taxes',          icon: PieChart,        label: 'Taxes',          tabKey: 'taxes' },
+  { to: '/income',         icon: DollarSign,      label: 'Income',         tabKey: 'income' },
+  { to: '/reconciliation', icon: Scale,           label: 'Reconciliation', tabKey: 'reconciliation' },
+  { to: '/equipment',      icon: Speaker,         label: 'Equipment',      tabKey: 'equipment' },
+  { to: '/discover',       icon: Sparkles,        label: 'Discover',       tabKey: 'discover' },
+] as const;
 
-// Bottom tab bar items (most used on mobile)
-const tabItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Home' },
-  { to: '/log', icon: ClipboardCheck, label: 'Job Log' },
-  { to: '/expenses', icon: Receipt, label: 'Expenses' },
-  { to: '/income', icon: DollarSign, label: 'Income' },
-];
+const ALL_TAB_ITEMS = [
+  { to: '/',        icon: LayoutDashboard, label: 'Home',    tabKey: null },
+  { to: '/log',     icon: ClipboardCheck,  label: 'Job Log', tabKey: 'log' },
+  { to: '/expenses',icon: Receipt,         label: 'Expenses',tabKey: 'expenses' },
+  { to: '/income',  icon: DollarSign,      label: 'Income',  tabKey: 'income' },
+] as const;
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const { partyMode, togglePartyMode } = usePartyMode();
   const { user, signOut } = useAuth();
+  const { prefs } = useUserPrefs();
+
+  const navItems = ALL_NAV_ITEMS.filter(
+    item => item.tabKey === null || prefs.tabs[item.tabKey as keyof typeof prefs.tabs]
+  );
+
   return (
     <>
       <nav className="flex-1 py-4 space-y-1 px-2">
@@ -89,6 +95,19 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        <Link
+          to="/settings"
+          onClick={onNavigate}
+          className={cn(
+            "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors w-full",
+            location.pathname === '/settings'
+              ? "bg-primary/10 text-primary border-glow border"
+              : "text-muted-foreground hover:bg-secondary"
+          )}
+        >
+          <Settings size={18} />
+          <span>Settings</span>
+        </Link>
         <button
           onClick={togglePartyMode}
           className={cn(
@@ -116,6 +135,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { prefs } = useUserPrefs();
+  const tabItems = ALL_TAB_ITEMS.filter(
+    item => item.tabKey === null || prefs.tabs[item.tabKey as keyof typeof prefs.tabs]
+  );
   const { partyMode } = usePartyMode();
 
   return (

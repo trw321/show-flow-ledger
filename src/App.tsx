@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/lib/AuthContext";
 import { DataProvider } from "@/lib/DataContext";
 import { PartyModeProvider } from "@/lib/PartyModeContext";
+import { UserPrefsProvider } from "@/lib/UserPrefsContext";
 import AppLayout from "@/components/AppLayout";
 import Dashboard from "@/pages/Dashboard";
 import LoadingScreen from "@/components/LoadingScreen";
@@ -20,6 +21,7 @@ import CalendarPage from "@/pages/CalendarPage";
 import JobLogPage from "@/pages/JobLogPage";
 import DiscoverPage from "@/pages/DiscoverPage";
 import TaxesPage from "@/pages/TaxesPage";
+import SettingsPage from "@/pages/SettingsPage";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -35,6 +37,7 @@ function AuthenticatedApp() {
     <>
       {!splashDone && <LoadingScreen onComplete={handleComplete} />}
       <DataProvider>
+        <UserPrefsProvider>
         <PartyModeProvider>
           <BrowserRouter>
             <AppLayout>
@@ -48,11 +51,13 @@ function AuthenticatedApp() {
                 <Route path="/reconciliation" element={<PayReconciliationPage />} />
                 <Route path="/taxes" element={<TaxesPage />} />
                 <Route path="/discover" element={<DiscoverPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </AppLayout>
           </BrowserRouter>
         </PartyModeProvider>
+        </UserPrefsProvider>
       </DataProvider>
     </>
   );
