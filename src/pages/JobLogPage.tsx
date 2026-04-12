@@ -1,10 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useData } from '@/lib/DataContext';
 import PageHeader from '@/components/PageHeader';
-import EmptyState from '@/components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ClipboardCheck, Clock, ChevronRight } from 'lucide-react';
+import { Clock, ChevronRight } from 'lucide-react';
 import JobPhotoImport from '@/components/JobPhotoImport';
 import LogHoursForm from '@/components/LogHoursForm';
 import { format, isToday, isPast, isFuture } from 'date-fns';
@@ -118,10 +117,6 @@ export default function JobLogPage() {
             ))}
           </div>
         </div>
-      )}
-
-      {data.jobs.length === 0 && (
-        <EmptyState icon={ClipboardCheck} title="No jobs loaded" description="Use the import box above to scan a schedule" />
       )}
 
       {/* Log hours dialog */}

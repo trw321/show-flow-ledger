@@ -66,6 +66,36 @@ export default function CalendarPage() {
     return days;
   }, [currentDate]);
 
+  const weeks = useMemo(() => {
+    const result: Date[][] = [];
+    for (let i = 0; i < monthDays.length; i += 7) result.push(monthDays.slice(i, i + 7));
+    return result;
+  }, [monthDays]);
+
+  const weekStats = useMemo(() => weeks.map(week => {
+    let hours = 0, pay = 0, jobCount = 0;
+    week.forEach(day => {
+      if (!isSameMonth(day, currentDate)) return;
+      const key = format(day, 'yyyy-MM-dd');
+      jobCount += (jobsByDate[key] || []).length;
+      hours += (jobsByDate[key] || []).reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
+      pay += payByDate[key] || 0;
+    });
+    return { hours, pay, jobCount, weekStart: week[0] };
+  }), [weeks, jobsByDate, payByDate, currentDate]);
+
+  const monthStats = useMemo(() => {
+    const prefix = format(currentDate, 'yyyy-MM');
+    let totalHours = 0, totalPay = 0, totalJobs = 0;
+    for (const [date, jobs] of Object.entries(jobsByDate)) {
+      if (!date.startsWith(prefix)) continue;
+      totalJobs += jobs.length;
+      totalHours += jobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
+      totalPay += payByDate[date] || 0;
+    }
+    return { totalHours, totalPay, totalJobs };
+  }, [jobsByDate, payByDate, currentDate]);
+
   const today = new Date();
   const selectedJobs = selectedDate ? (jobsByDate[selectedDate] || []) : [];
 
@@ -157,6 +187,46 @@ export default function CalendarPage() {
           );
         })}
       </div>
+
+      {/* Totals */}
+      {monthStats.totalJobs > 0 && (
+        <div className="mt-4 space-y-1">
+          <div className="flex items-center justify-between px-1 pb-1 border-b border-border/30">
+            <span className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground/50">
+              {format(currentDate, 'MMMM')}
+            </span>
+            <div className="flex items-center gap-3">
+              {monthStats.totalHours > 0 && (
+                <span className="text-[11px] text-mono font-semibold text-primary">
+                  {monthStats.totalHours.toFixed(1)}h
+                </span>
+              )}
+              {monthStats.totalPay > 0 && (
+                <span className="text-[11px] text-mono font-bold text-success">
+                  ${monthStats.totalPay >= 1000 ? `${(monthStats.totalPay / 1000).toFixed(1)}k` : monthStats.totalPay.toFixed(0)}
+                </span>
+              )}
+            </div>
+          </div>
+          {weekStats.filter(w => w.jobCount > 0).map((ws, i) => (
+            <div key={i} className="flex items-center justify-between px-1">
+              <span className="text-[9px] text-mono text-muted-foreground/40">
+                {format(ws.weekStart, 'MMM d')}
+              </span>
+              <div className="flex items-center gap-3">
+                {ws.hours > 0 && (
+                  <span className="text-[10px] text-mono text-muted-foreground">{ws.hours.toFixed(1)}h</span>
+                )}
+                {ws.pay > 0 && (
+                  <span className="text-[10px] text-mono text-success">
+                    ${ws.pay >= 1000 ? `${(ws.pay / 1000).toFixed(1)}k` : ws.pay.toFixed(0)}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Day detail dialog */}
       <Dialog open={!!selectedDate} onOpenChange={(o) => !o && setSelectedDate(null)}>
