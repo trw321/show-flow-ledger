@@ -1,14 +1,15 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useData } from '@/lib/DataContext';
 import PageHeader from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ChevronLeft, ChevronRight, DollarSign, Star } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Star, ArrowLeft } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay } from 'date-fns';
 import type { Job } from '@/lib/store';
 import { calculateDayPay, getDayMultiplier } from '@/lib/payCalc';
 import { cn } from '@/lib/utils';
-import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 const statusDot: Record<Job['status'], string> = {
   upcoming: 'bg-accent',
@@ -24,11 +25,167 @@ const statusColors: Record<Job['status'], string> = {
   cancelled: 'bg-destructive/20 text-destructive border-destructive/30',
 };
 
+const statusLabel: Record<Job['status'], string> = {
+  upcoming: 'Upcoming',
+  'in-progress': 'In Progress',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+};
+
+function JobDetailView({ job, onBack, onSave }: {
+  job: Job;
+  onBack: () => void;
+  onSave: (updates: Partial<Job>) => void;
+}) {
+  const [endTime, setEndTime] = useState(job.endTime ?? '');
+  const [hoursWorked, setHoursWorked] = useState(job.hoursWorked?.toString() ?? '');
+
+  useEffect(() => {
+    setEndTime(job.endTime ?? '');
+    setHoursWorked(job.hoursWorked?.toString() ?? '');
+  }, [job.id]);
+
+  const handleSave = () => {
+    const updates: Partial<Job> = {};
+    if (endTime !== (job.endTime ?? '')) updates.endTime = endTime || undefined;
+    const parsedHours = parseFloat(hoursWorked);
+    if (!isNaN(parsedHours) && parsedHours !== (job.hoursWorked ?? 0)) {
+      updates.hoursWorked = parsedHours;
+    }
+    onSave(updates);
+  };
+
+  const hasChanges =
+    endTime !== (job.endTime ?? '') ||
+    hoursWorked !== (job.hoursWorked?.toString() ?? '');
+
+  return (
+    <>
+      <DialogHeader>
+        <div className="flex items-center gap-2">
+          <button onClick={onBack} className="text-muted-foreground hover:text-foreground transition-colors p-1 -ml-1 rounded-lg hover:bg-secondary">
+            <ArrowLeft size={16} />
+          </button>
+          <DialogTitle className="text-mono text-sm">{job.name}</DialogTitle>
+        </div>
+      </DialogHeader>
+
+      <div className="space-y-4">
+        {/* Status badge */}
+        <span className={cn(
+          "inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold text-mono uppercase tracking-wider border",
+          statusColors[job.status]
+        )}>
+          {statusLabel[job.status]}
+        </span>
+
+        {/* Core info */}
+        <div className="rounded-xl border border-border bg-secondary/10 p-3 space-y-2 text-sm">
+          {job.client && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground text-xs">Client</span>
+              <span className="font-medium text-xs">{job.client}</span>
+            </div>
+          )}
+          {job.venue && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground text-xs">Venue</span>
+              <span className="font-medium text-xs">{job.venue}</span>
+            </div>
+          )}
+          {job.date && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground text-xs">Date</span>
+              <span className="font-medium text-xs text-mono">
+                {format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d, yyyy')}
+              </span>
+            </div>
+          )}
+          {job.jobNumber && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground text-xs">Job #</span>
+              <span className="font-medium text-xs text-mono">{job.jobNumber}</span>
+            </div>
+          )}
+          {job.startTime && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground text-xs">Start</span>
+              <span className="font-medium text-xs text-mono">{job.startTime}</span>
+            </div>
+          )}
+          {(job.hoursWorked ?? 0) > 0 && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground text-xs">Hours</span>
+              <span className="font-medium text-xs text-mono">{job.hoursWorked}h</span>
+            </div>
+          )}
+          {(job.hourlyRate ?? 0) > 0 && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground text-xs">Rate</span>
+              <span className="font-medium text-xs text-mono">${job.hourlyRate}/hr</span>
+            </div>
+          )}
+          {(job.hoursWorked ?? 0) > 0 && (job.hourlyRate ?? 0) > 0 && (
+            <div className="flex justify-between border-t border-border/40 pt-2">
+              <span className="text-muted-foreground text-xs">Est. Pay</span>
+              <span className="font-bold text-xs text-mono text-success">
+                ${((job.hoursWorked ?? 0) * (job.hourlyRate ?? 0)).toLocaleString()}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Editable fields */}
+        <div className="space-y-3">
+          <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/50 uppercase">
+            Update Job
+          </p>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">End Time</label>
+            <Input
+              value={endTime}
+              onChange={e => setEndTime(e.target.value)}
+              placeholder="e.g. 18:00 or 6:00 PM"
+              className="h-9 text-sm text-mono"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Hours Worked</label>
+            <Input
+              type="number"
+              min="0"
+              step="0.5"
+              value={hoursWorked}
+              onChange={e => setHoursWorked(e.target.value)}
+              placeholder="e.g. 8"
+              className="h-9 text-sm text-mono"
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <Button variant="outline" size="sm" className="flex-1" onClick={onBack}>
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            className="flex-1"
+            disabled={!hasChanges}
+            onClick={handleSave}
+          >
+            Save
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function CalendarPage() {
-  const { data } = useData();
-  const navigate = useNavigate();
+  const { data, updateJob } = useData();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
   const jobsByDate = useMemo(() => {
     const map: Record<string, Job[]> = {};
@@ -66,8 +223,41 @@ export default function CalendarPage() {
     return days;
   }, [currentDate]);
 
+  const weeks = useMemo(() => {
+    const result: Date[][] = [];
+    for (let i = 0; i < monthDays.length; i += 7) result.push(monthDays.slice(i, i + 7));
+    return result;
+  }, [monthDays]);
+
+  const weekStats = useMemo(() => weeks.map(week => {
+    let hours = 0, pay = 0, jobCount = 0;
+    week.forEach(day => {
+      if (!isSameMonth(day, currentDate)) return;
+      const key = format(day, 'yyyy-MM-dd');
+      jobCount += (jobsByDate[key] || []).length;
+      hours += (jobsByDate[key] || []).reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
+      pay += payByDate[key] || 0;
+    });
+    return { hours, pay, jobCount, weekStart: week[0] };
+  }), [weeks, jobsByDate, payByDate, currentDate]);
+
+  const monthStats = useMemo(() => {
+    const prefix = format(currentDate, 'yyyy-MM');
+    let totalHours = 0, totalPay = 0, totalJobs = 0;
+    for (const [date, jobs] of Object.entries(jobsByDate)) {
+      if (!date.startsWith(prefix)) continue;
+      totalJobs += jobs.length;
+      totalHours += jobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
+      totalPay += payByDate[date] || 0;
+    }
+    return { totalHours, totalPay, totalJobs };
+  }, [jobsByDate, payByDate, currentDate]);
+
   const today = new Date();
   const selectedJobs = selectedDate ? (jobsByDate[selectedDate] || []) : [];
+  const selectedJob = selectedJobId ? data.jobs.find(j => j.id === selectedJobId) ?? null : null;
+
+  const closeDialog = () => { setSelectedDate(null); setSelectedJobId(null); };
 
   return (
     <>
@@ -158,50 +348,109 @@ export default function CalendarPage() {
         })}
       </div>
 
-      {/* Day detail dialog */}
-      <Dialog open={!!selectedDate} onOpenChange={(o) => !o && setSelectedDate(null)}>
-        <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-mono text-sm">
-              {selectedDate && format(new Date(selectedDate + 'T12:00:00'), 'EEEE, MMMM d, yyyy')}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2">
-            {selectedJobs.map(job => {
-              const hours = job.hoursWorked ?? 0;
-              const earned = hours * (job.hourlyRate ?? 0);
-              return (
-                <div
-                  key={job.id}
-                  onClick={() => { setSelectedDate(null); navigate('/log'); }}
-                  className={cn(
-                    "rounded-xl border p-3 space-y-1 cursor-pointer hover:bg-secondary/30 transition-colors",
-                    statusColors[job.status]
-                  )}
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-medium text-sm">{job.name}</p>
-                      <p className="text-xs opacity-70">{job.client}</p>
-                    </div>
-                    <span className="text-[10px] text-mono uppercase font-medium opacity-70">{job.status}</span>
-                  </div>
-                  {job.venue && <p className="text-xs opacity-60">{job.venue}</p>}
-                  <div className="flex gap-3 text-xs text-mono">
-                    {job.startTime && <span>{job.startTime}{job.endTime ? ` – ${job.endTime}` : ''}</span>}
-                    {hours > 0 && <span>{hours}h</span>}
-                    {earned > 0 && <span className="font-semibold">${earned.toLocaleString()}</span>}
-                  </div>
-                </div>
-              );
-            })}
-            {payByDate[selectedDate!] && (
-              <div className="flex items-center justify-between pt-2 border-t border-border text-sm text-mono">
-                <span className="text-muted-foreground">Estimated pay</span>
-                <span className="font-bold text-success">${payByDate[selectedDate!].toLocaleString()}</span>
-              </div>
+      {/* Totals */}
+      <div className="mt-4 space-y-1">
+        <div className="flex items-center justify-between px-1 pb-1 border-b border-border/30">
+          <span className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground/50">
+            {format(currentDate, 'MMMM')}
+          </span>
+          <div className="flex items-center gap-3">
+            {monthStats.totalHours > 0 ? (
+              <span className="text-[11px] text-mono font-semibold text-primary">
+                {monthStats.totalHours.toFixed(1)}h
+              </span>
+            ) : (
+              <span className="text-[11px] text-mono text-muted-foreground/25">—</span>
+            )}
+            {monthStats.totalPay > 0 && (
+              <span className="text-[11px] text-mono font-bold text-success">
+                ${monthStats.totalPay >= 1000 ? `${(monthStats.totalPay / 1000).toFixed(1)}k` : monthStats.totalPay.toFixed(0)}
+              </span>
             )}
           </div>
+        </div>
+        {weekStats.map((ws, i) => (
+          <div key={i} className="flex items-center justify-between px-1">
+            <span className="text-[9px] text-mono text-muted-foreground/40">
+              {format(ws.weekStart, 'MMM d')}
+            </span>
+            <div className="flex items-center gap-3">
+              {ws.hours > 0 ? (
+                <span className="text-[10px] text-mono text-muted-foreground">{ws.hours.toFixed(1)}h</span>
+              ) : (
+                <span className="text-[10px] text-mono text-muted-foreground/25">—</span>
+              )}
+              {ws.pay > 0 && (
+                <span className="text-[10px] text-mono text-success">
+                  ${ws.pay >= 1000 ? `${(ws.pay / 1000).toFixed(1)}k` : ws.pay.toFixed(0)}
+                </span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Day / Job detail dialog */}
+      <Dialog open={!!selectedDate} onOpenChange={(o) => !o && closeDialog()}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto rounded-2xl">
+          {!selectedJob ? (
+            /* ── Day view: list of jobs ── */
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-mono text-sm">
+                  {selectedDate && format(new Date(selectedDate + 'T12:00:00'), 'EEEE, MMMM d, yyyy')}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-2">
+                {selectedJobs.map(job => {
+                  const hours = job.hoursWorked ?? 0;
+                  const earned = hours * (job.hourlyRate ?? 0);
+                  return (
+                    <div
+                      key={job.id}
+                      onClick={() => setSelectedJobId(job.id)}
+                      className={cn(
+                        "rounded-xl border p-3 space-y-1 cursor-pointer hover:opacity-90 transition-opacity",
+                        statusColors[job.status]
+                      )}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="font-medium text-sm">{job.name}</p>
+                          <p className="text-xs opacity-70">{job.client}</p>
+                        </div>
+                        <span className="text-[10px] text-mono uppercase font-medium opacity-70">{job.status}</span>
+                      </div>
+                      {job.venue && <p className="text-xs opacity-60">{job.venue}</p>}
+                      <div className="flex gap-3 text-xs text-mono">
+                        {job.startTime && <span>{job.startTime}{job.endTime ? ` – ${job.endTime}` : ''}</span>}
+                        {hours > 0 && <span>{hours}h</span>}
+                        {earned > 0 && <span className="font-semibold">${earned.toLocaleString()}</span>}
+                      </div>
+                      <p className="text-[10px] opacity-40 text-mono">Tap for details →</p>
+                    </div>
+                  );
+                })}
+                {payByDate[selectedDate!] && (
+                  <div className="flex items-center justify-between pt-2 border-t border-border text-sm text-mono">
+                    <span className="text-muted-foreground">Estimated pay</span>
+                    <span className="font-bold text-success">${payByDate[selectedDate!].toLocaleString()}</span>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            /* ── Job detail + edit view ── */
+            <JobDetailView
+              job={selectedJob}
+              onBack={() => setSelectedJobId(null)}
+              onSave={(updates) => {
+                updateJob(selectedJob.id, updates);
+                setSelectedJobId(null);
+                toast.success('Job updated');
+              }}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </>
