@@ -93,7 +93,6 @@ export default function ExpensesPage() {
   const { data, addExpense, updateExpense, deleteExpense } = useData();
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [uploadOpen, setUploadOpen] = useState(false);
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   
   const [customFrom, setCustomFrom] = useState('');
@@ -150,18 +149,20 @@ export default function ExpensesPage() {
         title="Expenses"
         description={`Total: $${total.toLocaleString()}`}
         action={
-          <div className="flex gap-2">
-            <ExpenseReceiptUpload externalOpen={uploadOpen} onExternalOpenChange={setUploadOpen} />
-            <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger asChild><Button size="sm"><Plus size={16} className="mr-1" /> New</Button></DialogTrigger>
-              <DialogContent>
-                <DialogHeader><DialogTitle className="text-mono">New Expense</DialogTitle></DialogHeader>
-                <ExpenseForm jobs={jobs} onSubmit={(exp) => { addExpense(exp); setOpen(false); }} />
-              </DialogContent>
-            </Dialog>
-          </div>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild><Button size="sm"><Plus size={16} className="mr-1" /> New</Button></DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle className="text-mono">New Expense</DialogTitle></DialogHeader>
+              <ExpenseForm jobs={jobs} onSubmit={(exp) => { addExpense(exp); setOpen(false); }} />
+            </DialogContent>
+          </Dialog>
         }
       />
+
+      {/* Receipt import */}
+      <div className="mb-4">
+        <ExpenseReceiptUpload />
+      </div>
 
       {/* Date Filter Bar */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
@@ -187,7 +188,7 @@ export default function ExpensesPage() {
       </div>
 
       {data.expenses.length === 0 ? (
-        <EmptyState icon={Receipt} title="No expenses yet" description="Tap to upload a receipt photo or use the + button above" onUploadPhoto={() => setUploadOpen(true)} />
+        <EmptyState icon={Receipt} title="No expenses yet" description="Use Receipt Upload above to scan a receipt" />
       ) : grouped.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">No expenses match this filter.</p>
       ) : (

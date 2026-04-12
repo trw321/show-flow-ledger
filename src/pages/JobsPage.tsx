@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Briefcase, Trash2, Pencil, ChevronDown, ChevronRight } from 'lucide-react';
 import JobPhotoImport from '@/components/JobPhotoImport';
+import JobPasteImport from '@/components/JobPasteImport';
 import JobForm from '@/components/JobForm';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -44,11 +45,12 @@ export default function JobsPage() {
     <>
       <PageHeader title="Jobs" description="Track gigs, hours, and earnings" />
 
-      {/* Photo import */}
-      <div className="mb-4">
-        <JobPhotoImport onImport={async (job) => {
-          await addJob(job);
-        }} />
+      {/* Import */}
+      <div className="mb-4 flex flex-col gap-2">
+        <JobPhotoImport onImport={async (job) => { await addJob(job); }} />
+        <div className="flex justify-end">
+          <JobPasteImport onImport={(job) => addJob(job)} />
+        </div>
       </div>
 
       {/* Summary */}

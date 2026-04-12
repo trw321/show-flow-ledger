@@ -81,18 +81,20 @@ export default function IncomePage() {
         title="Income"
         description={`Total: $${total.toLocaleString()}`}
         action={
-          <div className="flex gap-2">
-            <IncomeStatementUpload />
-            <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger asChild><Button size="sm"><Plus size={16} className="mr-1" /> New Income</Button></DialogTrigger>
-              <DialogContent>
-                <DialogHeader><DialogTitle className="text-mono">New Income</DialogTitle></DialogHeader>
-                <IncomeForm jobs={jobs} onSubmit={(inc) => { addIncome(inc); setOpen(false); }} />
-              </DialogContent>
-            </Dialog>
-          </div>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild><Button size="sm"><Plus size={16} className="mr-1" /> New Income</Button></DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle className="text-mono">New Income</DialogTitle></DialogHeader>
+              <IncomeForm jobs={jobs} onSubmit={(inc) => { addIncome(inc); setOpen(false); }} />
+            </DialogContent>
+          </Dialog>
         }
       />
+
+      {/* Statement import */}
+      <div className="mb-4">
+        <IncomeStatementUpload />
+      </div>
 
       {data.income.length === 0 ? (
         <EmptyState icon={DollarSign} title="No income recorded" description="Use Load Statement above to scan an invoice or bank statement" />

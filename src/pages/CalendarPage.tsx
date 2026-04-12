@@ -208,14 +208,16 @@ export default function CalendarPage() {
               )}
             </div>
           </div>
-          {weekStats.filter(w => w.jobCount > 0).map((ws, i) => (
+          {weekStats.map((ws, i) => (
             <div key={i} className="flex items-center justify-between px-1">
               <span className="text-[9px] text-mono text-muted-foreground/40">
                 {format(ws.weekStart, 'MMM d')}
               </span>
               <div className="flex items-center gap-3">
-                {ws.hours > 0 && (
+                {ws.hours > 0 ? (
                   <span className="text-[10px] text-mono text-muted-foreground">{ws.hours.toFixed(1)}h</span>
+                ) : (
+                  <span className="text-[10px] text-mono text-muted-foreground/25">—</span>
                 )}
                 {ws.pay > 0 && (
                   <span className="text-[10px] text-mono text-success">
