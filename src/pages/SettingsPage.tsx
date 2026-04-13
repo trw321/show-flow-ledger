@@ -1,9 +1,9 @@
 import { useUserPrefs, TAB_LABELS, WORKER_PRESETS, type TabKey, type WorkerType } from '@/lib/UserPrefsContext';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
-import { Briefcase, FileText, SlidersHorizontal } from 'lucide-react';
+import { Briefcase, FileText, Crown, SlidersHorizontal } from 'lucide-react';
 
-const WORKER_OPTIONS: { type: 'w2' | '1099'; label: string; subtitle: string; icon: React.ElementType }[] = [
+const WORKER_OPTIONS: { type: 'w2' | '1099' | 'boss'; label: string; subtitle: string; icon: React.ElementType }[] = [
   {
     type: 'w2',
     label: 'W2 Employee',
@@ -15,6 +15,12 @@ const WORKER_OPTIONS: { type: 'w2' | '1099'; label: string; subtitle: string; ic
     label: '1099 Contractor',
     subtitle: 'Self-employed, track everything',
     icon: FileText,
+  },
+  {
+    type: 'boss',
+    label: 'Boss',
+    subtitle: 'Owner/operator with crew & gear',
+    icon: Crown,
   },
 ];
 
@@ -38,7 +44,7 @@ export default function SettingsPage() {
         <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/60 uppercase mb-3">
           Worker Profile
         </p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           {WORKER_OPTIONS.map(({ type, label, subtitle, icon: Icon }) => {
             const isActive = prefs.workerType === type;
             return (
@@ -78,9 +84,10 @@ export default function SettingsPage() {
           {TAB_ORDER.map(tab => {
             const { label, description } = TAB_LABELS[tab];
             const enabled = prefs.tabs[tab];
+            const presetKey = prefs.workerType as 'w2' | '1099' | 'boss';
             const isPresetDiff =
               prefs.workerType !== 'custom' &&
-              WORKER_PRESETS[prefs.workerType as 'w2' | '1099'][tab] !== enabled;
+              WORKER_PRESETS[presetKey][tab] !== enabled;
             return (
               <div
                 key={tab}
@@ -111,16 +118,21 @@ export default function SettingsPage() {
         <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/50 uppercase">
           Preset Differences
         </p>
-        <div className="grid grid-cols-2 gap-4 text-[10px] text-muted-foreground">
+        <div className="grid grid-cols-3 gap-3 text-[10px] text-muted-foreground">
           <div>
             <p className="font-semibold text-foreground mb-1">W2 Employee</p>
-            <p className="text-success">+ All sections except Expenses</p>
-            <p className="text-muted-foreground/50 mt-1">Employer pays taxes for you, but you still need income tracking, reconciliation, and tax visibility across multiple gigs.</p>
+            <p className="text-success">Income, recon, taxes, calendar</p>
+            <p className="text-muted-foreground/50 mt-1">No expenses or equipment — employer pays taxes, you don't rent gear.</p>
           </div>
           <div>
             <p className="font-semibold text-foreground mb-1">1099 Contractor</p>
             <p className="text-success">+ Everything</p>
-            <p className="mt-1 text-muted-foreground/50">Full suite — expense deductions, quarterly taxes, invoicing, and reconciliation.</p>
+            <p className="text-muted-foreground/50 mt-1">Full suite — deductions, quarterly taxes, gear tracking, invoicing.</p>
+          </div>
+          <div>
+            <p className="font-semibold text-foreground mb-1">Boss</p>
+            <p className="text-success">+ Everything</p>
+            <p className="text-muted-foreground/50 mt-1">Owner/operator — tracks crew jobs, equipment rentals, and full financials.</p>
           </div>
         </div>
         <p className="text-[9px] text-mono text-accent/70 pt-1 border-t border-border/30">

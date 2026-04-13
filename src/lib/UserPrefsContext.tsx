@@ -5,7 +5,7 @@ export type TabKey =
   | 'calendar' | 'log' | 'expenses' | 'taxes'
   | 'income' | 'reconciliation' | 'equipment' | 'discover';
 
-export type WorkerType = 'w2' | '1099' | 'custom';
+export type WorkerType = 'w2' | '1099' | 'boss' | 'custom';
 
 export interface UserPrefs {
   workerType: WorkerType;
@@ -23,14 +23,18 @@ export const TAB_LABELS: Record<TabKey, { label: string; description: string }> 
   discover:       { label: 'Discover',         description: 'Crew resources and industry tools' },
 };
 
-export const WORKER_PRESETS: Record<'w2' | '1099', Record<TabKey, boolean>> = {
+export const WORKER_PRESETS: Record<'w2' | '1099' | 'boss', Record<TabKey, boolean>> = {
   w2: {
-    // W2 workers still need income (paychecks), reconciliation (verify checks),
-    // and taxes (multiple gigs = surprise tax bill). Only expenses is off by default.
+    // W2 workers: employer pays taxes, no deductible expenses, no personal equipment rentals
     calendar: true, log: true, expenses: false, taxes: true,
-    income: true, reconciliation: true, equipment: true, discover: true,
+    income: true, reconciliation: true, equipment: false, discover: true,
   },
   '1099': {
+    calendar: true, log: true, expenses: true, taxes: true,
+    income: true, reconciliation: true, equipment: true, discover: true,
+  },
+  boss: {
+    // Boss/owner: full suite — tracks crew, gear, rentals, expenses, everything
     calendar: true, log: true, expenses: true, taxes: true,
     income: true, reconciliation: true, equipment: true, discover: true,
   },
@@ -92,7 +96,7 @@ export function UserPrefsProvider({ children }: { children: React.ReactNode }) {
   };
 
   const setWorkerType = (type: WorkerType) => {
-    const tabs = type === 'custom' ? prefs.tabs : WORKER_PRESETS[type as 'w2' | '1099'];
+    const tabs = type === 'custom' ? prefs.tabs : WORKER_PRESETS[type as 'w2' | '1099' | 'boss'];
     update({ workerType: type, tabs });
   };
 
