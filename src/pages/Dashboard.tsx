@@ -205,10 +205,12 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        {(showIncome || showExpenses) && (
-          <StatCard label={showExpenses ? 'Net Profit' : 'Job Earnings'} value={`$${(showExpenses ? netProfit : totalEarnings).toLocaleString()}`} icon={DollarSign} variant={netProfit >= 0 ? 'success' : 'destructive'} />
-        )}
-        <StatCard label="Job Earnings" value={`$${totalEarnings.toLocaleString()}`} icon={DollarSign} variant="success" />
+        <StatCard
+          label={showExpenses ? 'Net Profit' : 'Job Earnings'}
+          value={`$${(showExpenses ? netProfit : totalEarnings).toLocaleString()}`}
+          icon={DollarSign}
+          variant={showExpenses && netProfit < 0 ? 'destructive' : 'success'}
+        />
         {showIncome && <StatCard label="Pending" value={`$${pendingIncome.toLocaleString()}`} icon={AlertCircle} variant="warning" />}
         {showIncome && <StatCard label="Overdue" value={`$${overdueIncome.toLocaleString()}`} icon={AlertCircle} variant="destructive" />}
       </div>
