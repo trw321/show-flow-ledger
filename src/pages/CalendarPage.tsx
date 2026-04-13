@@ -87,7 +87,10 @@ function JobDetailView({ job, onBack, onSave }: {
   const handleSave = () => {
     const updates: Partial<Job> = {};
     if (endTime !== (job.endTime ?? '')) updates.endTime = endTime || undefined;
-    if (actualHours > 0) updates.hoursWorked = actualHours;
+    if (actualHours > 0) {
+      updates.hoursWorked = actualHours;
+      updates.status = 'completed';
+    }
     const parsedMin = parseFloat(minimumHours);
     if (!isNaN(parsedMin) && parsedMin !== (job.minimumHours ?? 0)) {
       updates.minimumHours = parsedMin > 0 ? parsedMin : undefined;
