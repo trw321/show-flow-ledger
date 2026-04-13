@@ -22,6 +22,8 @@ import JobLogPage from "@/pages/JobLogPage";
 import DiscoverPage from "@/pages/DiscoverPage";
 import TaxesPage from "@/pages/TaxesPage";
 import SettingsPage from "@/pages/SettingsPage";
+import SchedulingPage from "@/pages/SchedulingPage";
+import PayOutsPage from "@/pages/PayOutsPage";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -52,6 +54,8 @@ function AuthenticatedApp() {
                 <Route path="/taxes" element={<TaxesPage />} />
                 <Route path="/discover" element={<DiscoverPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/scheduling" element={<SchedulingPage />} />
+                <Route path="/payouts" element={<PayOutsPage />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </AppLayout>

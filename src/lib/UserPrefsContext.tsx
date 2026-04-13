@@ -3,7 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 
 export type TabKey =
   | 'calendar' | 'log' | 'expenses' | 'taxes'
-  | 'income' | 'reconciliation' | 'equipment' | 'discover';
+  | 'income' | 'reconciliation' | 'equipment' | 'discover'
+  | 'scheduling' | 'payouts';
 
 export type WorkerType = 'w2' | '1099' | 'boss' | 'custom';
 
@@ -21,22 +22,25 @@ export const TAB_LABELS: Record<TabKey, { label: string; description: string }> 
   reconciliation: { label: 'Reconciliation',   description: 'Verify your paychecks match hours worked' },
   equipment:      { label: 'Equipment',        description: 'Track your gear, serial numbers, and values' },
   discover:       { label: 'Discover',         description: 'Crew resources and industry tools' },
+  scheduling:     { label: 'Scheduling',       description: 'Manage crew schedules and timesheets' },
+  payouts:        { label: 'Pay Outs',         description: 'Record and track payments made to crew' },
 };
 
 export const WORKER_PRESETS: Record<'w2' | '1099' | 'boss', Record<TabKey, boolean>> = {
   w2: {
-    // W2 workers: employer pays taxes, no deductible expenses, no personal equipment rentals
     calendar: true, log: true, expenses: false, taxes: true,
     income: true, reconciliation: true, equipment: false, discover: true,
+    scheduling: false, payouts: false,
   },
   '1099': {
     calendar: true, log: true, expenses: true, taxes: true,
     income: true, reconciliation: true, equipment: false, discover: true,
+    scheduling: false, payouts: false,
   },
   boss: {
-    // Boss/owner: full suite — tracks crew, gear, rentals, expenses, everything
     calendar: true, log: true, expenses: true, taxes: true,
     income: true, reconciliation: true, equipment: true, discover: true,
+    scheduling: true, payouts: true,
   },
 };
 

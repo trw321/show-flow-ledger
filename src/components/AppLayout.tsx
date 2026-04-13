@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Receipt, DollarSign, Speaker, Scale, CalendarDays, Sparkles, Menu, X, Trash2, ClipboardCheck, PartyPopper, PieChart, LogOut, Settings } from 'lucide-react';
+import { LayoutDashboard, Receipt, DollarSign, Speaker, Scale, CalendarDays, Sparkles, Menu, X, Trash2, ClipboardCheck, PartyPopper, PieChart, LogOut, Settings, Users, Wallet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { clearAllData } from '@/lib/store';
 import { usePartyMode } from '@/lib/PartyModeContext';
@@ -30,6 +30,8 @@ const ALL_NAV_ITEMS = [
   { to: '/reconciliation', icon: Scale,           label: 'Reconciliation', tabKey: 'reconciliation' },
   { to: '/equipment',      icon: Speaker,         label: 'Equipment',      tabKey: 'equipment' },
   { to: '/discover',       icon: Sparkles,        label: 'Discover',       tabKey: 'discover' },
+  { to: '/scheduling',    icon: Users,           label: 'Scheduling',     tabKey: 'scheduling' },
+  { to: '/payouts',       icon: Wallet,          label: 'Pay Outs',       tabKey: 'payouts' },
 ] as const;
 
 const ALL_TAB_ITEMS = [
