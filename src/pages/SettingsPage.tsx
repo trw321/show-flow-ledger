@@ -126,8 +126,8 @@ export default function SettingsPage() {
           </div>
           <div>
             <p className="font-semibold text-foreground mb-1">1099 Contractor</p>
-            <p className="text-success">+ Everything</p>
-            <p className="text-muted-foreground/50 mt-1">Full suite — deductions, quarterly taxes, gear tracking, invoicing.</p>
+            <p className="text-success">Expenses, income, recon, taxes</p>
+            <p className="text-muted-foreground/50 mt-1">Full financials — deductions, quarterly taxes, invoicing. No equipment tab.</p>
           </div>
           <div>
             <p className="font-semibold text-foreground mb-1">Boss</p>

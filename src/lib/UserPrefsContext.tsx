@@ -31,7 +31,7 @@ export const WORKER_PRESETS: Record<'w2' | '1099' | 'boss', Record<TabKey, boole
   },
   '1099': {
     calendar: true, log: true, expenses: true, taxes: true,
-    income: true, reconciliation: true, equipment: true, discover: true,
+    income: true, reconciliation: true, equipment: false, discover: true,
   },
   boss: {
     // Boss/owner: full suite — tracks crew, gear, rentals, expenses, everything
