@@ -208,30 +208,44 @@ function JobDetailView({ job, onBack, onSave }: {
               </p>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Hours Worked</label>
-              <Input
-                type="number"
-                min="0"
-                step="0.5"
-                value={hoursWorked}
-                onChange={e => setHoursWorked(e.target.value)}
-                placeholder="e.g. 3"
-                className="h-9 text-sm text-mono"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Min. Call (hrs)</label>
-              <Input
-                type="number"
-                min="0"
-                step="0.5"
-                value={minimumHours}
-                onChange={e => setMinimumHours(e.target.value)}
-                placeholder="e.g. 4"
-                className="h-9 text-sm text-mono"
-              />
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Hours Worked</label>
+            <Input
+              type="number"
+              min="0"
+              step="0.5"
+              value={hoursWorked}
+              onChange={e => setHoursWorked(e.target.value)}
+              placeholder="e.g. 3"
+              className="h-9 text-sm text-mono"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground">Min. Call</label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {[
+                { hours: 4, label: '4h', sub: 'Split shift' },
+                { hours: 5, label: '5h', sub: 'Normal call' },
+                { hours: 8, label: '8h', sub: 'Lead role' },
+              ].map(({ hours, label, sub }) => {
+                const active = minimumHours === hours.toString();
+                return (
+                  <button
+                    key={hours}
+                    type="button"
+                    onClick={() => setMinimumHours(active ? '' : hours.toString())}
+                    className={cn(
+                      "rounded-xl border py-2 px-1 text-center transition-colors",
+                      active
+                        ? "bg-primary/15 border-primary/50 text-primary"
+                        : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30"
+                    )}
+                  >
+                    <p className={cn("text-sm font-bold text-mono", active && "text-primary")}>{label}</p>
+                    <p className="text-[9px] leading-tight mt-0.5 opacity-70">{sub}</p>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
