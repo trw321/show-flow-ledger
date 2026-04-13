@@ -195,7 +195,7 @@ function IncomeMadlib({ jobs, onAdd }: {
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function IncomePage() {
-  const { data, addIncome, updateIncome, deleteIncome } = useData();
+  const { data, addIncome, updateIncome, deleteIncome } = useData(); // data used for job linking
   const [editId, setEditId] = useState<string | null>(null);
 
   const editingInc = editId ? data.income.find(i => i.id === editId) : undefined;
@@ -211,6 +211,12 @@ export default function IncomePage() {
       <div className="mb-4">
         <IncomeStatementUpload />
       </div>
+
+      {/* Madlib quick add */}
+      <IncomeMadlib
+        jobs={jobs}
+        onAdd={(inc) => { addIncome(inc); toast.success('income added'); }}
+      />
 
       {/* Income list */}
       {sorted.length === 0 ? (
@@ -238,6 +244,14 @@ export default function IncomePage() {
                   {format(new Date(inc.date + 'T12:00:00'), 'MMM d, yyyy')}
                   {inc.invoiceNumber && <span className="ml-1.5 text-muted-foreground/50">· {inc.invoiceNumber}</span>}
                 </p>
+                {inc.jobId && (() => {
+                  const job = data.jobs.find(j => j.id === inc.jobId);
+                  return job ? (
+                    <p className="text-[10px] text-mono text-primary/70 mt-0.5">
+                      → {job.name}{job.payrollCompany ? ` · ${job.payrollCompany}` : ''} · week of {format(new Date(job.date + 'T12:00:00'), 'MMM d')}
+                    </p>
+                  ) : null;
+                })()}
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
                 <span className="font-bold text-mono text-success text-sm">+${inc.amount.toLocaleString()}</span>
