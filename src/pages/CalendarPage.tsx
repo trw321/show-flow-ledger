@@ -58,13 +58,14 @@ function JobDetailView({ job, onBack, onSave }: {
 }) {
   const [endTime, setEndTime] = useState(job.endTime ?? '');
   const [hoursWorked, setHoursWorked] = useState(job.hoursWorked?.toString() ?? '');
+  const [minimumHours, setMinimumHours] = useState(job.minimumHours?.toString() ?? '');
 
   useEffect(() => {
     setEndTime(job.endTime ?? '');
     setHoursWorked(job.hoursWorked?.toString() ?? '');
+    setMinimumHours(job.minimumHours?.toString() ?? '');
   }, [job.id]);
 
-  // Auto-calculate hours when end time changes and start time is known
   const handleEndTimeChange = (val: string) => {
     setEndTime(val);
     if (job.startTime && val) {
@@ -73,17 +74,31 @@ function JobDetailView({ job, onBack, onSave }: {
     }
   };
 
+  // Live pay preview using actual payCalc logic
+  const actualHours = parseFloat(hoursWorked) || 0;
+  const minHours = parseFloat(minimumHours) || 0;
+  const billableHours = Math.max(actualHours, minHours);
+  const minimumApplied = minHours > 0 && actualHours < minHours && actualHours > 0;
+  const rate = job.hourlyRate ?? 0;
+  const payPreview = rate > 0 && billableHours > 0
+    ? calculateDayPay(actualHours, rate, minHours, job.mealPenalties ?? 0, 1, job.mealType)
+    : null;
+
   const handleSave = () => {
     const updates: Partial<Job> = {};
     if (endTime !== (job.endTime ?? '')) updates.endTime = endTime || undefined;
-    const parsedHours = parseFloat(hoursWorked);
-    if (!isNaN(parsedHours)) updates.hoursWorked = parsedHours;
+    if (actualHours > 0) updates.hoursWorked = actualHours;
+    const parsedMin = parseFloat(minimumHours);
+    if (!isNaN(parsedMin) && parsedMin !== (job.minimumHours ?? 0)) {
+      updates.minimumHours = parsedMin > 0 ? parsedMin : undefined;
+    }
     onSave(updates);
   };
 
   const hasChanges =
     endTime !== (job.endTime ?? '') ||
-    hoursWorked !== (job.hoursWorked?.toString() ?? '');
+    hoursWorked !== (job.hoursWorked?.toString() ?? '') ||
+    minimumHours !== (job.minimumHours?.toString() ?? '');
 
   return (
     <>
@@ -142,27 +157,37 @@ function JobDetailView({ job, onBack, onSave }: {
               <span className="font-medium text-xs text-mono">{job.startTime}</span>
             </div>
           )}
-          {(job.hoursWorked ?? 0) > 0 && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground text-xs">Hours</span>
-              <span className="font-medium text-xs text-mono">{job.hoursWorked}h</span>
-            </div>
-          )}
-          {(job.hourlyRate ?? 0) > 0 && (
+          {rate > 0 && (
             <div className="flex justify-between">
               <span className="text-muted-foreground text-xs">Rate</span>
-              <span className="font-medium text-xs text-mono">${job.hourlyRate}/hr</span>
-            </div>
-          )}
-          {(job.hoursWorked ?? 0) > 0 && (job.hourlyRate ?? 0) > 0 && (
-            <div className="flex justify-between border-t border-border/40 pt-2">
-              <span className="text-muted-foreground text-xs">Est. Pay</span>
-              <span className="font-bold text-xs text-mono text-success">
-                ${((job.hoursWorked ?? 0) * (job.hourlyRate ?? 0)).toLocaleString()}
-              </span>
+              <span className="font-medium text-xs text-mono">${rate}/hr</span>
             </div>
           )}
         </div>
+
+        {/* Pay preview — shown once we have enough info */}
+        {payPreview && (
+          <div className={cn(
+            "rounded-xl border p-3 space-y-1.5",
+            minimumApplied ? "border-accent/40 bg-accent/5" : "border-success/30 bg-success/5"
+          )}>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                {minimumApplied
+                  ? `Worked ${actualHours}h — paid for ${billableHours}h minimum`
+                  : `Worked ${actualHours}h`}
+              </span>
+              <span className="font-bold text-sm text-mono text-success">
+                ${payPreview.totalPay.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+            {minimumApplied && (
+              <p className="text-[10px] text-accent font-medium">
+                {minHours}h minimum call — contract guarantees payment for {minHours}h
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Editable fields */}
         <div className="space-y-3">
@@ -183,17 +208,31 @@ function JobDetailView({ job, onBack, onSave }: {
               </p>
             )}
           </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Hours Worked</label>
-            <Input
-              type="number"
-              min="0"
-              step="0.5"
-              value={hoursWorked}
-              onChange={e => setHoursWorked(e.target.value)}
-              placeholder="e.g. 8"
-              className="h-9 text-sm text-mono"
-            />
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Hours Worked</label>
+              <Input
+                type="number"
+                min="0"
+                step="0.5"
+                value={hoursWorked}
+                onChange={e => setHoursWorked(e.target.value)}
+                placeholder="e.g. 3"
+                className="h-9 text-sm text-mono"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Min. Call (hrs)</label>
+              <Input
+                type="number"
+                min="0"
+                step="0.5"
+                value={minimumHours}
+                onChange={e => setMinimumHours(e.target.value)}
+                placeholder="e.g. 4"
+                className="h-9 text-sm text-mono"
+              />
+            </div>
           </div>
         </div>
 
