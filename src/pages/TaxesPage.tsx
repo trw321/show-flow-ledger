@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useData } from '@/lib/DataContext';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import PageHeader from '@/components/PageHeader';
@@ -249,7 +250,7 @@ export default function TaxesPage() {
           <p className="text-xs font-semibold text-primary text-mono">{workerProfile.label}</p>
           <p className="text-[10px] text-muted-foreground mt-0.5">{workerProfile.note}</p>
         </div>
-        <a href="/settings" className="text-[9px] text-mono text-muted-foreground/50 hover:text-primary transition-colors underline underline-offset-2">change</a>
+        <Link to="/settings" className="text-[9px] text-mono text-muted-foreground/50 hover:text-primary transition-colors underline underline-offset-2">change</Link>
       </div>
 
       {/* ── Controls ── */}

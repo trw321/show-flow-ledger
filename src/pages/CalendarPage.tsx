@@ -59,11 +59,13 @@ function JobDetailView({ job, onBack, onSave }: {
   const [endTime, setEndTime] = useState(job.endTime ?? '');
   const [hoursWorked, setHoursWorked] = useState(job.hoursWorked?.toString() ?? '');
   const [minimumHours, setMinimumHours] = useState(job.minimumHours?.toString() ?? '');
+  const [payrollCompany, setPayrollCompany] = useState(job.payrollCompany ?? '');
 
   useEffect(() => {
     setEndTime(job.endTime ?? '');
     setHoursWorked(job.hoursWorked?.toString() ?? '');
     setMinimumHours(job.minimumHours?.toString() ?? '');
+    setPayrollCompany(job.payrollCompany ?? '');
   }, [job.id]);
 
   const handleEndTimeChange = (val: string) => {
@@ -95,13 +97,17 @@ function JobDetailView({ job, onBack, onSave }: {
     if (!isNaN(parsedMin) && parsedMin !== (job.minimumHours ?? 0)) {
       updates.minimumHours = parsedMin > 0 ? parsedMin : undefined;
     }
+    if (payrollCompany !== (job.payrollCompany ?? '')) {
+      updates.payrollCompany = payrollCompany.trim() || undefined;
+    }
     onSave(updates);
   };
 
   const hasChanges =
     endTime !== (job.endTime ?? '') ||
     hoursWorked !== (job.hoursWorked?.toString() ?? '') ||
-    minimumHours !== (job.minimumHours?.toString() ?? '');
+    minimumHours !== (job.minimumHours?.toString() ?? '') ||
+    payrollCompany !== (job.payrollCompany ?? '');
 
   return (
     <>
@@ -132,6 +138,12 @@ function JobDetailView({ job, onBack, onSave }: {
             <div className="flex justify-between">
               <span className="text-muted-foreground text-xs">Client</span>
               <span className="font-medium text-xs">{job.client}</span>
+            </div>
+          )}
+          {(job.payrollCompany || payrollCompany) && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground text-xs">Employer / Payroll</span>
+              <span className="font-medium text-xs">{payrollCompany || job.payrollCompany}</span>
             </div>
           )}
           {job.venue && (
@@ -197,6 +209,15 @@ function JobDetailView({ job, onBack, onSave }: {
           <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/50 uppercase">
             Update Job
           </p>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Employer / Payroll Company</label>
+            <Input
+              value={payrollCompany}
+              onChange={e => setPayrollCompany(e.target.value)}
+              placeholder="e.g. Nolan AV, Live Nation"
+              className="h-9 text-sm"
+            />
+          </div>
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">End Time</label>
             <Input

@@ -3,7 +3,22 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { format } from 'date-fns';
 import type { Job } from '@/lib/store';
+
+const statusColors: Record<string, string> = {
+  upcoming: 'bg-accent/20 text-accent border-accent/30',
+  'in-progress': 'bg-primary/20 text-primary border-primary/30',
+  completed: 'bg-success/20 text-success border-success/30',
+  cancelled: 'bg-destructive/20 text-destructive border-destructive/30',
+};
+
+const statusLabel: Record<string, string> = {
+  upcoming: 'Upcoming',
+  'in-progress': 'In Progress',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+};
 
 export default function LogHoursForm({ initial, onSubmit, onCancel }: {
   initial: Partial<Job>;
@@ -60,10 +75,33 @@ export default function LogHoursForm({ initial, onSubmit, onCancel }: {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {/* Job info header */}
-      <div className="rounded-xl bg-secondary/30 p-3">
-        <p className="font-medium text-sm">{initial?.name}</p>
-        <p className="text-xs text-muted-foreground">{initial?.client}{initial?.venue ? ` • ${initial.venue}` : ''}</p>
+      {/* Job info header — styled like calendar cards */}
+      <div className={cn(
+        "rounded-xl border p-3 space-y-1",
+        initial.status ? statusColors[initial.status] : 'bg-secondary/30 border-border'
+      )}>
+        <div className="flex items-start justify-between gap-2">
+          <p className="font-medium text-sm">{initial?.name}</p>
+          {initial.status && (
+            <span className="text-[9px] text-mono uppercase font-semibold opacity-70 shrink-0">
+              {statusLabel[initial.status] ?? initial.status}
+            </span>
+          )}
+        </div>
+        {initial.client && (
+          <p className="text-xs opacity-70">{initial.client}{initial.venue ? ` • ${initial.venue}` : ''}</p>
+        )}
+        {initial.date && (
+          <p className="text-xs text-mono opacity-60">
+            {format(new Date(initial.date + 'T12:00:00'), 'EEE, MMM d, yyyy')}
+            {initial.startTime && ` · ${initial.startTime}`}
+          </p>
+        )}
+        {(initial.hoursWorked ?? 0) > 0 && initial.hourlyRate && (
+          <p className="text-xs text-mono font-semibold opacity-80">
+            {initial.hoursWorked}h · ${((initial.hoursWorked ?? 0) * initial.hourlyRate).toLocaleString()}
+          </p>
+        )}
       </div>
 
       {/* Start / End */}

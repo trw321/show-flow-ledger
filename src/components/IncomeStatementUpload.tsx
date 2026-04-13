@@ -103,9 +103,11 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
   return (
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setTransactions([]); setPreview(null); } }}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="gap-1.5">
-          <Upload size={16} /> Load Statement
-        </Button>
+        <button className="w-full flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-secondary/20 py-5 hover:border-primary/50 hover:bg-secondary/40 transition-colors cursor-pointer">
+          <Upload size={22} className="text-muted-foreground" />
+          <span className="text-sm font-medium text-muted-foreground">load screenshot</span>
+          <span className="text-xs text-muted-foreground/50">paystub, invoice, or bank statement</span>
+        </button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
