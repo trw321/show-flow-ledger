@@ -112,7 +112,7 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
         <Link
           to="/settings"
           onClick={onNavigate}
-          title={collapsed ? 'Settings' : undefined}
+          title={collapsed ? 'Mode' : undefined}
           className={cn(
             iconBtn,
             location.pathname === '/settings'
@@ -121,7 +121,7 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
           )}
         >
           <Settings size={18} />
-          {!collapsed && <span>Settings</span>}
+          {!collapsed && <span>Mode</span>}
         </Link>
         <button
           onClick={togglePartyMode}

@@ -36,7 +36,7 @@ export default function SettingsPage() {
   return (
     <div className="max-w-lg space-y-8">
       <div>
-        <h1 className="text-xl font-bold text-mono tracking-widest uppercase">Settings</h1>
+        <h1 className="text-xl font-bold text-mono tracking-widest uppercase">Mode</h1>
         <p className="text-xs text-muted-foreground mt-1">Customize which sections appear in your app</p>
       </div>
 
