@@ -32,6 +32,25 @@ const statusLabel: Record<Job['status'], string> = {
   cancelled: 'Cancelled',
 };
 
+function parseTimeToMins(t: string): number {
+  const m = t.match(/(\d{1,2}):?(\d{2})?\s*(am|pm|a|p)?/i);
+  if (!m) return NaN;
+  let h = parseInt(m[1]);
+  const min = parseInt(m[2] || '0');
+  const ap = (m[3] || '').toLowerCase();
+  if (ap.startsWith('p') && h < 12) h += 12;
+  if (ap.startsWith('a') && h === 12) h = 0;
+  return h * 60 + min;
+}
+
+function calcHours(start: string, end: string): number {
+  let s = parseTimeToMins(start);
+  let e = parseTimeToMins(end);
+  if (isNaN(s) || isNaN(e)) return 0;
+  if (e <= s) e += 24 * 60; // overnight
+  return Math.max(0, (e - s) / 60);
+}
+
 function JobDetailView({ job, onBack, onSave }: {
   job: Job;
   onBack: () => void;
@@ -45,13 +64,20 @@ function JobDetailView({ job, onBack, onSave }: {
     setHoursWorked(job.hoursWorked?.toString() ?? '');
   }, [job.id]);
 
+  // Auto-calculate hours when end time changes and start time is known
+  const handleEndTimeChange = (val: string) => {
+    setEndTime(val);
+    if (job.startTime && val) {
+      const h = calcHours(job.startTime, val);
+      if (h > 0) setHoursWorked(parseFloat(h.toFixed(2)).toString());
+    }
+  };
+
   const handleSave = () => {
     const updates: Partial<Job> = {};
     if (endTime !== (job.endTime ?? '')) updates.endTime = endTime || undefined;
     const parsedHours = parseFloat(hoursWorked);
-    if (!isNaN(parsedHours) && parsedHours !== (job.hoursWorked ?? 0)) {
-      updates.hoursWorked = parsedHours;
-    }
+    if (!isNaN(parsedHours)) updates.hoursWorked = parsedHours;
     onSave(updates);
   };
 
@@ -147,10 +173,15 @@ function JobDetailView({ job, onBack, onSave }: {
             <label className="text-xs text-muted-foreground">End Time</label>
             <Input
               value={endTime}
-              onChange={e => setEndTime(e.target.value)}
+              onChange={e => handleEndTimeChange(e.target.value)}
               placeholder="e.g. 18:00 or 6:00 PM"
               className="h-9 text-sm text-mono"
             />
+            {job.startTime && endTime && calcHours(job.startTime, endTime) > 0 && (
+              <p className="text-[10px] text-mono text-muted-foreground">
+                {job.startTime} → {endTime} = <span className="text-primary font-semibold">{calcHours(job.startTime, endTime).toFixed(1)}h</span>
+              </p>
+            )}
           </div>
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Hours Worked</label>
