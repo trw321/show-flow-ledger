@@ -39,7 +39,7 @@ const ALL_TAB_ITEMS = [
   { to: '/income',  icon: DollarSign,      label: 'Income',  tabKey: 'income' },
 ] as const;
 
-function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; collapsed?: boolean }) {
   const location = useLocation();
   const { partyMode, togglePartyMode } = usePartyMode();
   const { user, signOut } = useAuth();
@@ -48,6 +48,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const navItems = ALL_NAV_ITEMS.filter(
     item => item.tabKey === null || prefs.tabs[item.tabKey as keyof typeof prefs.tabs]
   );
+
+  const iconBtn = collapsed
+    ? "flex items-center justify-center rounded-md p-2.5 text-sm transition-colors w-full"
+    : "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors w-full";
 
   return (
     <>
@@ -59,15 +63,18 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
               key={to}
               to={to}
               onClick={onNavigate}
+              title={collapsed ? label : undefined}
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors",
+                collapsed
+                  ? "flex items-center justify-center rounded-md p-2.5 transition-colors"
+                  : "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors",
                 active
                   ? "bg-primary/10 text-primary border-glow border"
                   : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               )}
             >
               <Icon size={18} />
-              <span>{label}</span>
+              {!collapsed && <span>{label}</span>}
             </Link>
           );
         })}
@@ -75,9 +82,12 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       <div className="border-t border-border px-2 py-3 space-y-2">
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <button className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors w-full">
+            <button
+              title={collapsed ? 'Clear All Data' : undefined}
+              className={cn(iconBtn, "text-destructive hover:bg-destructive/10")}
+            >
               <Trash2 size={18} />
-              <span>Clear All Data</span>
+              {!collapsed && <span>Clear All Data</span>}
             </button>
           </AlertDialogTrigger>
           <AlertDialogContent>
@@ -98,34 +108,37 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <Link
           to="/settings"
           onClick={onNavigate}
+          title={collapsed ? 'Settings' : undefined}
           className={cn(
-            "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors w-full",
+            iconBtn,
             location.pathname === '/settings'
               ? "bg-primary/10 text-primary border-glow border"
               : "text-muted-foreground hover:bg-secondary"
           )}
         >
           <Settings size={18} />
-          <span>Settings</span>
+          {!collapsed && <span>Settings</span>}
         </Link>
         <button
           onClick={togglePartyMode}
+          title={collapsed ? (partyMode ? 'Vibes ON' : 'Vibes OFF') : undefined}
           className={cn(
-            "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors w-full",
+            iconBtn,
             partyMode ? "text-primary hover:bg-primary/10" : "text-muted-foreground hover:bg-secondary"
           )}
         >
           <PartyPopper size={18} />
-          <span>{partyMode ? 'Vibes ON' : 'Vibes OFF'}</span>
+          {!collapsed && <span>{partyMode ? 'Vibes ON' : 'Vibes OFF'}</span>}
         </button>
         <button
           onClick={signOut}
-          className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-secondary transition-colors w-full"
+          title={collapsed ? 'Sign Out' : undefined}
+          className={cn(iconBtn, "text-muted-foreground hover:bg-secondary")}
         >
           <LogOut size={18} />
-          <span>Sign Out</span>
+          {!collapsed && <span>Sign Out</span>}
         </button>
-        {user && <p className="text-[10px] text-muted-foreground text-mono px-3 truncate">{user.email}</p>}
+        {user && !collapsed && <p className="text-[10px] text-muted-foreground text-mono px-3 truncate">{user.email}</p>}
       </div>
     </>
   );
@@ -161,7 +174,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </span>
           )}
         </div>
-        <SidebarContent />
+        <SidebarContent collapsed={collapsed} />
       </aside>
 
       {/* Mobile top bar + sheet nav */}
