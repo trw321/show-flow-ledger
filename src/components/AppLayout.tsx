@@ -57,7 +57,7 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
 
   return (
     <>
-      <nav className="flex-1 py-4 space-y-1 px-2">
+      <nav className="flex-1 py-4 space-y-1 px-2 overflow-y-auto">
         {navItems.map(({ to, icon: Icon, label }) => {
           const active = location.pathname === to || (to !== '/' && location.pathname.startsWith(to));
           return (
