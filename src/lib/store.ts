@@ -262,18 +262,22 @@ export function clearLegacyData() {
 }
 
 export async function clearAllData() {
-  const { data: { session } } = await supabase.auth.getSession();
-  const uid = session?.user?.id;
-  if (uid) {
-    await Promise.all([
-      supabase.from('jobs').delete().eq('user_id', uid),
-      supabase.from('expenses').delete().eq('user_id', uid),
-      supabase.from('income').delete().eq('user_id', uid),
-      supabase.from('equipment').delete().eq('user_id', uid),
-    ]);
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (uid) {
+      await Promise.all([
+        supabase.from('jobs').delete().eq('user_id', uid),
+        supabase.from('expenses').delete().eq('user_id', uid),
+        supabase.from('income').delete().eq('user_id', uid),
+        supabase.from('equipment').delete().eq('user_id', uid),
+      ]);
+    }
+  } catch {
+    // Ignore Supabase errors — still clear local data
   }
   localStorage.removeItem(CACHE_KEY);
-  window.location.reload();
+  window.location.href = '/';
 }
 
 // ── Main hook ───────────────────────────────────────────────────────────────
