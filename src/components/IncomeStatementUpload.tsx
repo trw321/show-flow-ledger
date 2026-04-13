@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useData } from '@/lib/DataContext';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -23,6 +23,8 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
   const [transactions, setTransactions] = useState<ParsedIncome[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [preview, setPreview] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const dragCounter = useRef(0);
 
   const handleFile = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/')) { toast.error('Please upload an image file'); return; }
@@ -103,10 +105,30 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
   return (
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setTransactions([]); setPreview(null); } }}>
       <DialogTrigger asChild>
-        <button className="w-full flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-secondary/20 py-5 hover:border-primary/50 hover:bg-secondary/40 transition-colors cursor-pointer">
-          <Upload size={22} className="text-muted-foreground" />
-          <span className="text-sm font-medium text-muted-foreground">load screenshot</span>
-          <span className="text-xs text-muted-foreground/50">paystub, invoice, or bank statement</span>
+        <button
+          className={`w-full flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed py-5 transition-colors cursor-pointer ${
+            dragging
+              ? 'border-primary bg-primary/10 scale-[1.01]'
+              : 'border-border bg-secondary/20 hover:border-primary/50 hover:bg-secondary/40'
+          }`}
+          onDragEnter={e => { e.preventDefault(); dragCounter.current++; setDragging(true); }}
+          onDragLeave={() => { dragCounter.current--; if (dragCounter.current === 0) setDragging(false); }}
+          onDragOver={e => e.preventDefault()}
+          onDrop={e => {
+            e.preventDefault();
+            dragCounter.current = 0;
+            setDragging(false);
+            const file = e.dataTransfer.files[0];
+            if (file) { setOpen(true); handleFile(file); }
+          }}
+        >
+          <Upload size={22} className={dragging ? 'text-primary' : 'text-muted-foreground'} />
+          <span className={`text-sm font-medium ${dragging ? 'text-primary' : 'text-muted-foreground'}`}>
+            {dragging ? 'drop to scan' : 'load screenshot'}
+          </span>
+          <span className="text-xs text-muted-foreground/50">
+            {dragging ? '' : 'paystub, invoice, or bank statement · drag & drop or click'}
+          </span>
         </button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">

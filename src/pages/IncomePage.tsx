@@ -212,12 +212,6 @@ export default function IncomePage() {
         <IncomeStatementUpload />
       </div>
 
-      {/* Madlib quick add */}
-      <IncomeMadlib
-        jobs={jobs}
-        onAdd={(inc) => { addIncome(inc); toast.success('income added'); }}
-      />
-
       {/* Income list */}
       {sorted.length === 0 ? (
         <div className="rounded-2xl border border-border/40 bg-secondary/10 p-8 text-center">
