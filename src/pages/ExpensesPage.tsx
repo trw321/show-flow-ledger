@@ -1,17 +1,17 @@
 import { useState, useMemo } from 'react';
 import { useData } from '@/lib/DataContext';
 import PageHeader from '@/components/PageHeader';
-import EmptyState from '@/components/EmptyState';
 import ExpenseReceiptUpload from '@/components/ExpenseReceiptUpload';
-
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Receipt, Plus, Trash2, Pencil, ChevronRight, Filter } from 'lucide-react';
+import { Receipt, Mic, MicOff, Trash2, Pencil, ChevronRight, Filter } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isWithinInterval } from 'date-fns';
 import type { Expense } from '@/lib/store';
+import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import { useVoiceInput, parseExpenseSpeech } from '@/lib/useVoiceInput';
 
 const categories = [
   'Travel', 'Gear Rental', 'Consumables', 'Fuel', 'Meals', 'Lodging',
@@ -22,79 +22,170 @@ const categories = [
 const categoryEmojis: Record<string, string> = {
   Travel: '✈️', 'Gear Rental': '🎛️', Consumables: '🛒', Fuel: '⛽', Meals: '🍔',
   Lodging: '🏨', Labor: '👷', Insurance: '🛡️', Software: '💻', Tools: '🔧',
-  Entertainment: '🪩', Medical: '🩺', Rent: '🏢', Other: '📦',
+  Entertainment: '🪩', Medical: '🩺', Rent: '🏢', 'IATSE Union Dues': '⚙️', Other: '📦',
 };
-
-function IATSEIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 22 22" className="inline-block shrink-0">
-      <circle cx="11" cy="11" r="9.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <circle cx="11" cy="11" r="7.5" fill="none" stroke="currentColor" strokeWidth="0.6" opacity="0.5" />
-      <text x="11" y="13.8" textAnchor="middle" fontSize="7.5" fontWeight="700" fill="currentColor"
-        fontFamily="Space Mono, monospace" letterSpacing="0.5">IA</text>
-    </svg>
-  );
-}
-
-function CategoryIcon({ cat }: { cat: string }) {
-  if (cat === 'IATSE Union Dues') return <IATSEIcon />;
-  return <span className="text-lg leading-none">{categoryEmojis[cat] || '📦'}</span>;
-}
 
 type DateFilter = 'all' | 'this-week' | 'this-month' | 'custom';
 
-function ExpenseForm({ onSubmit, initial, jobs, onCancel }: {
-  onSubmit: (expense: Omit<Expense, 'id' | 'createdAt'>) => void;
-  initial?: Partial<Expense>;
-  jobs: { id: string; name: string }[];
-  onCancel?: () => void;
-}) {
-  const [description, setDescription] = useState(initial?.description ?? '');
-  const [amount, setAmount] = useState(initial?.amount?.toString() ?? '');
-  const [category, setCategory] = useState(initial?.category ?? categories[0]);
-  const [date, setDate] = useState(initial?.date ?? new Date().toISOString().split('T')[0]);
-  const [jobId, setJobId] = useState(initial?.jobId ?? '');
+// ── Edit form ──────────────────────────────────────────────────────────────
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!description.trim() || !amount) return;
-    onSubmit({ description: description.trim(), amount: parseFloat(amount), category, date, jobId: jobId || undefined });
-  };
+function ExpenseEditForm({ initial, jobs, onSubmit, onCancel }: {
+  initial: Partial<Expense>;
+  jobs: { id: string; name: string }[];
+  onSubmit: (exp: Omit<Expense, 'id' | 'createdAt'>) => void;
+  onCancel: () => void;
+}) {
+  const [description, setDescription] = useState(initial.description ?? '');
+  const [amount, setAmount] = useState(initial.amount?.toString() ?? '');
+  const [category, setCategory] = useState(initial.category ?? categories[0]);
+  const [date, setDate] = useState(initial.date ?? new Date().toISOString().split('T')[0]);
+  const [jobId, setJobId] = useState(initial.jobId ?? '');
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <Input placeholder="Description*" value={description} onChange={e => setDescription(e.target.value)} required />
-      <div className="grid grid-cols-2 gap-4">
-        <Input type="number" step="0.01" placeholder="Amount*" value={amount} onChange={e => setAmount(e.target.value)} required />
-        <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
+    <form
+      onSubmit={e => {
+        e.preventDefault();
+        if (!description.trim() || !amount) return;
+        onSubmit({ description: description.trim(), amount: parseFloat(amount), category, date, jobId: jobId || undefined });
+      }}
+      className="space-y-3"
+    >
+      <Input placeholder="description" value={description} onChange={e => setDescription(e.target.value)} required className="rounded-xl" />
+      <div className="grid grid-cols-2 gap-3">
+        <Input type="number" step="0.01" placeholder="amount" value={amount} onChange={e => setAmount(e.target.value)} required className="rounded-xl" />
+        <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="rounded-xl" />
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <Select value={category} onValueChange={setCategory}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>{categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-        </Select>
-        <Select value={jobId || 'none'} onValueChange={v => setJobId(v === 'none' ? '' : v)}>
-          <SelectTrigger><SelectValue placeholder="Link to job" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">No job</SelectItem>
-            {jobs.map(j => <SelectItem key={j.id} value={j.id}>{j.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
+      <div className="grid grid-cols-2 gap-3">
+        <select value={category} onChange={e => setCategory(e.target.value)} className="h-9 rounded-xl border border-input bg-background px-3 text-sm">
+          {categories.map(c => <option key={c} value={c}>{c.toLowerCase()}</option>)}
+        </select>
+        <select value={jobId || 'none'} onChange={e => setJobId(e.target.value === 'none' ? '' : e.target.value)} className="h-9 rounded-xl border border-input bg-background px-3 text-sm">
+          <option value="none">no linked job</option>
+          {jobs.map(j => <option key={j.id} value={j.id}>{j.name}</option>)}
+        </select>
       </div>
-      <div className="flex gap-2 justify-end">
-        {onCancel && <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>}
-        <Button type="submit">{initial ? 'Update' : 'Add Expense'}</Button>
+      <div className="flex gap-2 justify-end pt-1">
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>cancel</Button>
+        <Button type="submit" size="sm">{initial.id ? 'update' : 'add expense'}</Button>
       </div>
     </form>
   );
 }
 
+// ── Inline madlib add block ────────────────────────────────────────────────
+
+function ExpenseMadlib({ jobs, onAdd }: {
+  jobs: { id: string; name: string }[];
+  onAdd: (exp: Omit<Expense, 'id' | 'createdAt'>) => void;
+}) {
+  const [amount, setAmount] = useState('');
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState(categories[0]);
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+
+  const { listening, supported, start, stop } = useVoiceInput((text) => {
+    const parsed = parseExpenseSpeech(text);
+    if (parsed.amount) setAmount(parsed.amount.toString());
+    if (parsed.description) setDescription(parsed.description);
+    if (parsed.category) setCategory(parsed.category);
+    toast.success(`heard: "${text}"`);
+  });
+
+  const handleAdd = () => {
+    if (!description.trim() || !amount) return;
+    onAdd({ description: description.trim(), amount: parseFloat(amount), category, date });
+    setAmount(''); setDescription('');
+    setCategory(categories[0]);
+    setDate(new Date().toISOString().split('T')[0]);
+  };
+
+  const inputCls = "h-8 rounded-lg border-0 border-b border-border bg-transparent px-1 text-sm text-mono focus:outline-none focus:border-primary transition-colors w-full";
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 mb-4 space-y-3">
+      <div className="flex items-center gap-2">
+        {supported && (
+          <button
+            onClick={listening ? stop : start}
+            className={cn(
+              "rounded-full p-1.5 transition-colors shrink-0",
+              listening ? "bg-destructive/15 text-destructive animate-pulse" : "bg-secondary text-muted-foreground hover:text-primary"
+            )}
+          >
+            {listening ? <MicOff size={14} /> : <Mic size={14} />}
+          </button>
+        )}
+        <span className="text-[10px] text-mono text-muted-foreground/50 uppercase tracking-widest">
+          {listening ? 'listening...' : 'quick add'}
+        </span>
+      </div>
+
+      {/* Madlib sentence */}
+      <div className="flex flex-wrap items-end gap-x-1.5 gap-y-2 text-sm">
+        <span className="text-muted-foreground">i spent</span>
+        <div className="w-20">
+          <span className="text-[9px] text-muted-foreground/40 block">amount</span>
+          <div className="flex items-center">
+            <span className="text-muted-foreground text-sm mr-0.5">$</span>
+            <input
+              value={amount}
+              onChange={e => setAmount(e.target.value)}
+              placeholder="0.00"
+              type="number"
+              min="0"
+              step="0.01"
+              className={cn(inputCls, "w-16")}
+            />
+          </div>
+        </div>
+        <span className="text-muted-foreground">on</span>
+        <div className="flex-1 min-w-[120px]">
+          <span className="text-[9px] text-muted-foreground/40 block">what</span>
+          <input
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            placeholder="describe it"
+            className={inputCls}
+          />
+        </div>
+        <span className="text-muted-foreground">·</span>
+        <div className="w-36">
+          <span className="text-[9px] text-muted-foreground/40 block">category</span>
+          <select
+            value={category}
+            onChange={e => setCategory(e.target.value)}
+            className="h-8 w-full rounded-lg border-0 border-b border-border bg-transparent text-sm text-mono focus:outline-none"
+          >
+            {categories.map(c => <option key={c} value={c}>{c.toLowerCase()}</option>)}
+          </select>
+        </div>
+        <span className="text-muted-foreground">on</span>
+        <div className="w-32">
+          <span className="text-[9px] text-muted-foreground/40 block">date</span>
+          <input
+            type="date"
+            value={date}
+            onChange={e => setDate(e.target.value)}
+            className={inputCls}
+          />
+        </div>
+      </div>
+
+      <div className="flex justify-end pt-1">
+        <Button size="sm" className="h-7 text-xs" disabled={!description.trim() || !amount} onClick={handleAdd}>
+          add
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ── Page ───────────────────────────────────────────────────────────────────
+
 export default function ExpensesPage() {
   const { data, addExpense, updateExpense, deleteExpense } = useData();
-  const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
-  
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [openCategories, setOpenCategories] = useState<Set<string>>(new Set());
@@ -117,10 +208,7 @@ export default function ExpensesPage() {
       start = new Date(customFrom);
       end = new Date(customTo);
     }
-    return data.expenses.filter(e => {
-      const d = new Date(e.date);
-      return isWithinInterval(d, { start, end });
-    });
+    return data.expenses.filter(e => isWithinInterval(new Date(e.date), { start, end }));
   }, [data.expenses, dateFilter, customFrom, customTo]);
 
   const grouped = useMemo(() => {
@@ -145,24 +233,18 @@ export default function ExpensesPage() {
 
   return (
     <>
-      <PageHeader
-        title="Expenses"
-        description={`Total: $${total.toLocaleString()}`}
-        action={
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild><Button size="sm"><Plus size={16} className="mr-1" /> New</Button></DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle className="text-mono">New Expense</DialogTitle></DialogHeader>
-              <ExpenseForm jobs={jobs} onSubmit={(exp) => { addExpense(exp); setOpen(false); }} />
-            </DialogContent>
-          </Dialog>
-        }
-      />
+      <PageHeader title="Expenses" description={`total: $${total.toLocaleString()}`} />
 
       {/* Receipt import */}
       <div className="mb-4">
         <ExpenseReceiptUpload />
       </div>
+
+      {/* Madlib quick add */}
+      <ExpenseMadlib
+        jobs={jobs}
+        onAdd={(exp) => { addExpense(exp); toast.success('expense added'); }}
+      />
 
       {/* Date Filter Bar */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
@@ -175,7 +257,7 @@ export default function ExpensesPage() {
             className="text-xs h-7 px-3"
             onClick={() => setDateFilter(f)}
           >
-            {f === 'all' ? 'All' : f === 'this-week' ? 'This Week' : f === 'this-month' ? 'This Month' : 'Custom'}
+            {f === 'all' ? 'all' : f === 'this-week' ? 'this week' : f === 'this-month' ? 'this month' : 'custom'}
           </Button>
         ))}
         {dateFilter === 'custom' && (
@@ -188,39 +270,47 @@ export default function ExpensesPage() {
       </div>
 
       {data.expenses.length === 0 ? (
-        <EmptyState icon={Receipt} title="No expenses yet" description="Use Receipt Upload above to scan a receipt" />
+        <div className="rounded-2xl border border-border/40 bg-secondary/10 p-8 text-center">
+          <Receipt size={28} className="text-muted-foreground/30 mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">no expenses yet</p>
+          <p className="text-xs text-muted-foreground/50 mt-1">use the quick add above or scan a receipt</p>
+        </div>
       ) : grouped.length === 0 ? (
-        <p className="text-center text-muted-foreground py-8">No expenses match this filter.</p>
+        <p className="text-center text-muted-foreground py-8 text-sm">no expenses match this filter.</p>
       ) : (
         <div className="space-y-3">
           {grouped.map(([cat, exps]) => {
             const catTotal = exps.reduce((s, e) => s + e.amount, 0);
             return (
               <Collapsible key={cat} open={openCategories.has(cat)} onOpenChange={() => toggleCategory(cat)}>
-                <CollapsibleTrigger className="flex items-center w-full gap-3 px-4 py-3 rounded-lg bg-secondary/50 hover:bg-secondary/80 transition-colors group">
-                  <ChevronRight size={16} className={`text-muted-foreground transition-transform duration-200 ${openCategories.has(cat) ? 'rotate-90' : ''}`} />
-                  <CategoryIcon cat={cat} />
-                  <span className="font-semibold text-sm flex-1 text-left">{cat}</span>
+                <CollapsibleTrigger className="flex items-center w-full gap-3 px-4 py-3 rounded-2xl bg-secondary/40 hover:bg-secondary/70 transition-colors">
+                  <ChevronRight size={15} className={cn("text-muted-foreground transition-transform duration-200 shrink-0", openCategories.has(cat) && "rotate-90")} />
+                  <span className="text-lg leading-none shrink-0">{categoryEmojis[cat] ?? '📦'}</span>
+                  <span className="font-semibold text-sm flex-1 text-left lowercase">{cat}</span>
                   <span className="text-xs text-muted-foreground">{exps.length} item{exps.length !== 1 ? 's' : ''}</span>
                   <span className="text-sm font-bold text-destructive text-mono">-${catTotal.toLocaleString()}</span>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <div className="ml-4 border-l-2 border-border/50 mt-1">
+                  <div className="mt-1.5 space-y-1.5 pl-2">
                     {exps.map(exp => {
                       const job = data.jobs.find(j => j.id === exp.jobId);
                       return (
-                        <div key={exp.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-secondary/20 transition-colors rounded-r-lg">
+                        <div key={exp.id} className="rounded-xl border border-border bg-card px-3 py-2.5 flex items-center gap-3 hover:border-primary/20 transition-colors">
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-sm truncate">{exp.description}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {format(new Date(exp.date), 'MMM d, yyyy')}
-                              {job ? ` · ${job.name}` : ''}
+                            <p className="text-[10px] text-mono text-muted-foreground mt-0.5">
+                              {format(new Date(exp.date + 'T12:00:00'), 'MMM d, yyyy')}
+                              {job && <span className="ml-1.5">· {job.name}</span>}
                             </p>
                           </div>
-                          <span className="text-sm font-bold text-destructive text-mono whitespace-nowrap">-${exp.amount.toLocaleString()}</span>
-                          <div className="flex gap-0.5">
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditId(exp.id)}><Pencil size={13} /></Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteExpense(exp.id)}><Trash2 size={13} /></Button>
+                          <span className="text-sm font-bold text-destructive text-mono shrink-0">-${exp.amount.toLocaleString()}</span>
+                          <div className="flex gap-0.5 shrink-0">
+                            <button onClick={() => setEditId(exp.id)} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+                              <Pencil size={13} />
+                            </button>
+                            <button onClick={() => deleteExpense(exp.id)} className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
+                              <Trash2 size={13} />
+                            </button>
                           </div>
                         </div>
                       );
@@ -233,11 +323,17 @@ export default function ExpensesPage() {
         </div>
       )}
 
-      <Dialog open={!!editId} onOpenChange={(o) => !o && setEditId(null)}>
-        <DialogContent>
-          <DialogHeader><DialogTitle className="text-mono">Edit Expense</DialogTitle></DialogHeader>
+      {/* Edit dialog */}
+      <Dialog open={!!editId} onOpenChange={o => !o && setEditId(null)}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader><DialogTitle className="text-mono text-sm">edit expense</DialogTitle></DialogHeader>
           {editingExp && (
-            <ExpenseForm jobs={jobs} initial={editingExp} onSubmit={(updates) => { updateExpense(editId!, updates); setEditId(null); }} onCancel={() => setEditId(null)} />
+            <ExpenseEditForm
+              jobs={jobs}
+              initial={editingExp}
+              onSubmit={updates => { updateExpense(editId!, updates); setEditId(null); toast.success('updated'); }}
+              onCancel={() => setEditId(null)}
+            />
           )}
         </DialogContent>
       </Dialog>

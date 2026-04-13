@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useData } from '@/lib/DataContext';
+import { useUserPrefs } from '@/lib/UserPrefsContext';
 import PageHeader from '@/components/PageHeader';
 import pieImage from '@/assets/pie.png';
 
@@ -176,12 +177,25 @@ function fmt(n: number) {
 
 // ── Component ─────────────────────────────────────────────────────────────
 
+const WORKER_PROFILE_LABELS: Record<string, { label: string; se: boolean; note: string }> = {
+  w2:     { label: 'W2 Employee',     se: false, note: 'Employer withholds taxes — SE tax not applicable.' },
+  '1099': { label: '1099 Contractor', se: true,  note: 'Self-employed — SE tax (15.3%) applies on top of income tax.' },
+  boss:   { label: 'Boss',            se: true,  note: 'Owner/operator — SE tax applies. Deduct business expenses below.' },
+};
+
 export default function TaxesPage() {
   const { data } = useData();
+  const { prefs } = useUserPrefs();
+  const workerProfile = WORKER_PROFILE_LABELS[prefs.workerType] ?? WORKER_PROFILE_LABELS['1099'];
 
   const [filingStatus, setFilingStatus]     = useState<FilingStatus>('single');
-  const [isSelfEmployed, setIsSelfEmployed] = useState(true);
+  const [isSelfEmployed, setIsSelfEmployed] = useState(workerProfile.se);
   const [stateRate, setStateRate]           = useState(0);
+
+  // Sync SE toggle when profile changes
+  useEffect(() => {
+    setIsSelfEmployed(workerProfile.se);
+  }, [prefs.workerType]);
   const [useCustomDeduction, setUseCustomDeduction] = useState(false);
   const [customDeduction, setCustomDeduction]       = useState(0);
 
@@ -228,6 +242,15 @@ export default function TaxesPage() {
   return (
     <>
       <PageHeader title="Taxes" description="Your estimated tax breakdown as a real pie 🥧" />
+
+      {/* Worker profile context */}
+      <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 mb-4 flex items-center justify-between">
+        <div>
+          <p className="text-xs font-semibold text-primary text-mono">{workerProfile.label}</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">{workerProfile.note}</p>
+        </div>
+        <a href="/settings" className="text-[9px] text-mono text-muted-foreground/50 hover:text-primary transition-colors underline underline-offset-2">change</a>
+      </div>
 
       {/* ── Controls ── */}
       <div className="rounded-2xl border border-border bg-card p-5 mb-5 space-y-4">

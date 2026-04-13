@@ -8,9 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  MapPin, Utensils, Music, Gamepad2, Clock, ExternalLink, Sparkles, Heart,
+  MapPin, Utensils, Music, Gamepad2, Clock, Sparkles, Heart,
   Coffee, Pizza, Beer, Popcorn, Dumbbell, TreePine, Palette,
-  RefreshCw,
+  RefreshCw, Search,
 } from 'lucide-react';
 import { startOfWeek, endOfWeek, isWithinInterval, parseISO } from 'date-fns';
 
@@ -89,13 +89,33 @@ export default function DiscoverPage() {
     return { hours, earnings };
   }, [data.jobs, weekStart.toISOString(), weekEnd.toISOString()]);
 
-  // Get unique venues from jobs
+  // Get unique venues + cities from jobs
   const venues = useMemo(() => {
     const v = new Set(data.jobs.map(j => j.venue).filter(Boolean));
     return Array.from(v);
   }, [data.jobs]);
 
+  // Try to extract city-ish tokens from venue names (last word or common city keywords)
+  const suggestedAreas = useMemo(() => {
+    const areas = new Set<string>();
+    data.jobs.forEach(j => {
+      // venue like "Convention Center Philadelphia" → "Philadelphia"
+      // or client city hints
+      [j.venue, j.client].forEach(s => {
+        if (!s) return;
+        const words = s.split(/[\s,]+/);
+        // Grab last capitalized word that looks like a city (>3 chars, not all-caps)
+        const last = words.reverse().find(w => w.length > 3 && /^[A-Z][a-z]/.test(w));
+        if (last) areas.add(last);
+      });
+    });
+    return Array.from(areas).slice(0, 6);
+  }, [data.jobs]);
+
+  const [citySearch, setCitySearch] = useState('');
   const [selectedVenue, setSelectedVenue] = useState<string>('');
+
+  const activeArea = citySearch.trim() || selectedVenue;
 
   // Shuffle and filter suggestions
   const suggestions = useMemo(() => {
@@ -127,8 +147,35 @@ export default function DiscoverPage() {
 
       <PageHeader
         title="Discover"
-        description={selectedVenue ? `Things to do near ${selectedVenue}` : 'Find something fun after work'}
+        description={activeArea ? `things to do near ${activeArea}` : 'find something fun after work'}
       />
+
+      {/* City / area search */}
+      <div className="mb-4 space-y-2">
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={citySearch}
+            onChange={e => setCitySearch(e.target.value)}
+            placeholder="search by city or neighborhood..."
+            className="w-full h-9 pl-8 pr-3 rounded-xl border border-border bg-card text-sm focus:outline-none focus:border-primary/50 transition-colors"
+          />
+        </div>
+        {suggestedAreas.length > 0 && !citySearch && (
+          <div className="flex gap-1.5 flex-wrap">
+            <span className="text-[9px] text-mono text-muted-foreground/40 uppercase tracking-widest self-center">from your jobs:</span>
+            {suggestedAreas.map(area => (
+              <button
+                key={area}
+                onClick={() => setCitySearch(area)}
+                className="rounded-full border border-border bg-secondary/30 px-2.5 py-0.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors"
+              >
+                {area}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Weekly Progress Bar */}
       <motion.div
@@ -168,10 +215,10 @@ export default function DiscoverPage() {
       {/* Venue selector + filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
         {venues.length > 0 && (
-          <Select value={selectedVenue} onValueChange={setSelectedVenue}>
+          <Select value={selectedVenue} onValueChange={v => { setSelectedVenue(v); setCitySearch(''); }}>
             <SelectTrigger className="sm:w-56">
               <MapPin size={14} className="mr-1 text-primary shrink-0" />
-              <SelectValue placeholder="Pick a venue" />
+              <SelectValue placeholder="pick a venue" />
             </SelectTrigger>
             <SelectContent>
               {venues.map(v => (
