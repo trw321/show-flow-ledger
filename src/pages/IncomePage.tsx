@@ -5,8 +5,8 @@ import IncomeStatementUpload from '@/components/IncomeStatementUpload';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { DollarSign, Mic, MicOff, ChevronRight, Trash2, Pencil } from 'lucide-react';
-import { format } from 'date-fns';
+import { DollarSign, Mic, MicOff, Trash2, Pencil, Clock } from 'lucide-react';
+import { format, differenceInDays } from 'date-fns';
 import type { Income } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -245,10 +245,18 @@ export default function IncomePage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {sorted.map(inc => (
+          {sorted.map(inc => {
+            const daysOld = differenceInDays(new Date(), new Date(inc.date + 'T12:00:00'));
+            const isWaiting = inc.status === 'pending' && daysOld > 14;
+            return (
             <div
               key={inc.id}
-              className="rounded-2xl border border-border bg-card p-3.5 flex items-start gap-3 hover:border-primary/20 transition-colors"
+              className={cn(
+                "rounded-2xl border bg-card p-3.5 flex items-start gap-3 transition-colors",
+                isWaiting
+                  ? "border-amber-500/50 bg-amber-500/5 hover:border-amber-500/70"
+                  : "border-border hover:border-primary/20"
+              )}
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -275,6 +283,11 @@ export default function IncomePage() {
                     </p>
                   ) : null;
                 })()}
+                {isWaiting && (
+                  <p className="text-[10px] text-amber-400 font-medium mt-1 flex items-center gap-1">
+                    <Clock size={10} /> {daysOld}d since logged — still waiting on payment
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
                 <span className="font-bold text-mono text-success text-sm">+${inc.amount.toLocaleString()}</span>
@@ -286,7 +299,8 @@ export default function IncomePage() {
                 </button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
