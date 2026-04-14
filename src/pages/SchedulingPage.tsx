@@ -23,11 +23,12 @@ interface CrewMember {
 interface Shift {
   id: string;
   crewMemberId: string;
-  jobRef?: string; // free-text job/show name
+  jobRef?: string;
   date: string;
   startTime?: string;
   endTime?: string;
   hoursWorked?: number;
+  mealBreak?: 'ywa' | 'nwa_fed' | 'nwa_pass';
   notes?: string;
 }
 
@@ -90,6 +91,7 @@ export default function SchedulingPage() {
   const [shiftDate, setShiftDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [shiftStart, setShiftStart] = useState('');
   const [shiftEnd, setShiftEnd] = useState('');
+  const [shiftMeal, setShiftMeal] = useState<Shift['mealBreak']>(undefined);
   const [shiftNotes, setShiftNotes] = useState('');
 
   // Load user + data
@@ -134,7 +136,8 @@ export default function SchedulingPage() {
 
   const addShift = () => {
     if (!shiftMemberId || !shiftDate) return;
-    const hours = calcHours(shiftStart, shiftEnd);
+    let hours = calcHours(shiftStart, shiftEnd);
+    if (shiftMeal === 'ywa' && hours > 0) hours = Math.max(0, hours - 1);
     const shift: Shift = {
       id: crypto.randomUUID(),
       crewMemberId: shiftMemberId,
@@ -143,11 +146,12 @@ export default function SchedulingPage() {
       startTime: shiftStart.trim() || undefined,
       endTime: shiftEnd.trim() || undefined,
       hoursWorked: hours > 0 ? parseFloat(hours.toFixed(2)) : undefined,
+      mealBreak: shiftMeal,
       notes: shiftNotes.trim() || undefined,
     };
     persistShifts([...shifts, shift]);
     setShiftJob(''); setShiftDate(format(new Date(), 'yyyy-MM-dd'));
-    setShiftStart(''); setShiftEnd(''); setShiftNotes('');
+    setShiftStart(''); setShiftEnd(''); setShiftMeal(undefined); setShiftNotes('');
     setShiftDialog(false);
     toast.success('Shift logged');
   };
@@ -159,7 +163,8 @@ export default function SchedulingPage() {
   const totalHours = (memberId: string) =>
     memberShifts(memberId).reduce((s, sh) => s + (sh.hoursWorked ?? 0), 0);
 
-  const shiftHours = calcHours(shiftStart, shiftEnd);
+  const rawShiftHours = calcHours(shiftStart, shiftEnd);
+  const shiftHours = shiftMeal === 'ywa' ? Math.max(0, rawShiftHours - 1) : rawShiftHours;
 
   // Upcoming job names for quick-fill
   const jobNames = useMemo(() =>
@@ -254,6 +259,9 @@ export default function SchedulingPage() {
                               {(sh.startTime || sh.endTime) && (
                                 <p className="text-[10px] text-mono text-muted-foreground">
                                   {sh.startTime}{sh.endTime ? ` – ${sh.endTime}` : ''}
+                                  {sh.mealBreak === 'ywa' && <span className="ml-1.5 text-muted-foreground/50">· 1hr walk away</span>}
+                                  {sh.mealBreak === 'nwa_fed' && <span className="ml-1.5 text-muted-foreground/50">· 30min fed</span>}
+                                  {sh.mealBreak === 'nwa_pass' && <span className="ml-1.5 text-amber-400">· 30min pass ⚠</span>}
                                 </p>
                               )}
                             </div>
@@ -361,14 +369,47 @@ export default function SchedulingPage() {
                 <Input value={shiftEnd} onChange={e => setShiftEnd(e.target.value)} placeholder="5:00 PM" className="h-9 text-mono text-sm" />
               </div>
             </div>
-            {shiftHours > 0 && (
-              <p className="text-xs text-mono text-muted-foreground flex items-center gap-1">
-                <Clock size={11} /> {shiftHours.toFixed(1)} hours
-                {(() => {
-                  const m = crew.find(c => c.id === shiftMemberId);
-                  return m?.rate ? <span className="text-success ml-1">${(shiftHours * m.rate).toFixed(0)}</span> : null;
-                })()}
-              </p>
+            {/* Meal break */}
+            <div className="space-y-1.5">
+              <label className="text-xs text-muted-foreground">Meal Break</label>
+              <div className="grid grid-cols-3 gap-1.5">
+                {([
+                  { key: 'ywa',     label: '1hr Walk Away',        sub: 'deducted from pay' },
+                  { key: 'nwa_fed', label: '30min On Clock',        sub: 'fed — no penalty' },
+                  { key: 'nwa_pass',label: '30min On Clock',        sub: 'pass — penalty owed' },
+                ] as const).map(opt => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setShiftMeal(shiftMeal === opt.key ? undefined : opt.key)}
+                    className={cn(
+                      "rounded-xl border py-2 px-1 text-center transition-colors",
+                      shiftMeal === opt.key
+                        ? "bg-primary/15 border-primary/50 text-primary"
+                        : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30"
+                    )}
+                  >
+                    <p className="text-[11px] font-semibold leading-tight">{opt.label}</p>
+                    <p className="text-[9px] leading-tight mt-0.5 opacity-60">{opt.sub}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {rawShiftHours > 0 && (
+              <div className="text-xs text-mono text-muted-foreground space-y-0.5">
+                <p className="flex items-center gap-1">
+                  <Clock size={11} /> {shiftHours.toFixed(1)} hours paid
+                  {shiftMeal === 'ywa' && <span className="text-muted-foreground/50">(−1h meal)</span>}
+                  {(() => {
+                    const m = crew.find(c => c.id === shiftMemberId);
+                    return m?.rate ? <span className="text-success ml-1">${(shiftHours * m.rate).toFixed(0)}</span> : null;
+                  })()}
+                </p>
+                {shiftMeal === 'nwa_pass' && (
+                  <p className="text-amber-400">⚠ meal penalty owed — log separately in Pay Outs</p>
+                )}
+              </div>
             )}
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Notes</label>
