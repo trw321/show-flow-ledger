@@ -18,6 +18,13 @@ const statusColors: Record<Income['status'], string> = {
   overdue: 'bg-destructive/15 text-destructive border-destructive/30',
 };
 
+const payMethodConfig: Record<string, { label: string; cls: string; note?: string }> = {
+  direct_deposit: { label: 'direct deposit', cls: 'bg-blue-500/15 text-blue-400 border-blue-500/30' },
+  check:          { label: 'check', cls: 'bg-amber-500/15 text-amber-400 border-amber-500/30', note: 'may be delayed in mail' },
+  cash:           { label: 'cash', cls: 'bg-success/15 text-success border-success/30' },
+  other:          { label: 'other', cls: 'bg-secondary text-muted-foreground border-border' },
+};
+
 // ── Edit form (used in dialog for existing records) ────────────────────────
 
 function IncomeEditForm({ initial, jobs, onSubmit, onCancel }: {
@@ -31,6 +38,7 @@ function IncomeEditForm({ initial, jobs, onSubmit, onCancel }: {
   const [amount, setAmount] = useState(initial.amount?.toString() ?? '');
   const [date, setDate] = useState(initial.date ?? new Date().toISOString().split('T')[0]);
   const [status, setStatus] = useState<Income['status']>(initial.status ?? 'pending');
+  const [paymentMethod, setPaymentMethod] = useState<Income['paymentMethod']>(initial.paymentMethod ?? 'direct_deposit');
   const [invoiceNumber, setInvoiceNumber] = useState(initial.invoiceNumber ?? '');
   const [jobId, setJobId] = useState(initial.jobId ?? '');
 
@@ -39,7 +47,7 @@ function IncomeEditForm({ initial, jobs, onSubmit, onCancel }: {
       onSubmit={e => {
         e.preventDefault();
         if (!client.trim() || !amount) return;
-        onSubmit({ client: client.trim(), description: description.trim(), amount: parseFloat(amount), date, status, invoiceNumber: invoiceNumber.trim() || undefined, jobId: jobId || undefined });
+        onSubmit({ client: client.trim(), description: description.trim(), amount: parseFloat(amount), date, status, paymentMethod, invoiceNumber: invoiceNumber.trim() || undefined, jobId: jobId || undefined });
       }}
       className="space-y-3"
     >
@@ -52,21 +60,19 @@ function IncomeEditForm({ initial, jobs, onSubmit, onCancel }: {
         <Input type="number" step="0.01" placeholder="amount" value={amount} onChange={e => setAmount(e.target.value)} required className="rounded-xl" />
         <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="rounded-xl" />
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <select
-          value={status}
-          onChange={e => setStatus(e.target.value as Income['status'])}
-          className="h-9 rounded-xl border border-input bg-background px-3 text-sm"
-        >
+      <div className="grid grid-cols-3 gap-3">
+        <select value={status} onChange={e => setStatus(e.target.value as Income['status'])} className="h-9 rounded-xl border border-input bg-background px-3 text-sm">
           <option value="pending">pending</option>
           <option value="paid">paid</option>
           <option value="overdue">overdue</option>
         </select>
-        <select
-          value={jobId || 'none'}
-          onChange={e => setJobId(e.target.value === 'none' ? '' : e.target.value)}
-          className="h-9 rounded-xl border border-input bg-background px-3 text-sm"
-        >
+        <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as Income['paymentMethod'])} className="h-9 rounded-xl border border-input bg-background px-3 text-sm">
+          <option value="direct_deposit">direct deposit</option>
+          <option value="check">check</option>
+          <option value="cash">cash</option>
+          <option value="other">other</option>
+        </select>
+        <select value={jobId || 'none'} onChange={e => setJobId(e.target.value === 'none' ? '' : e.target.value)} className="h-9 rounded-xl border border-input bg-background px-3 text-sm">
           <option value="none">no linked job</option>
           {jobs.map(j => <option key={j.id} value={j.id}>{j.name}</option>)}
         </select>
@@ -89,6 +95,7 @@ function IncomeMadlib({ jobs, onAdd }: {
   const [client, setClient] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [status, setStatus] = useState<Income['status']>('paid');
+  const [paymentMethod, setPaymentMethod] = useState<Income['paymentMethod']>('direct_deposit');
   const [invoice, setInvoice] = useState('');
 
   const { listening, supported, start, stop } = useVoiceInput((text) => {
@@ -100,10 +107,11 @@ function IncomeMadlib({ jobs, onAdd }: {
 
   const handleAdd = () => {
     if (!client.trim() || !amount) return;
-    onAdd({ client: client.trim(), description: '', amount: parseFloat(amount), date, status, invoiceNumber: invoice.trim() || undefined });
+    onAdd({ client: client.trim(), description: '', amount: parseFloat(amount), date, status, paymentMethod, invoiceNumber: invoice.trim() || undefined });
     setAmount(''); setClient(''); setInvoice('');
     setDate(new Date().toISOString().split('T')[0]);
     setStatus('paid');
+    setPaymentMethod('direct_deposit');
   };
 
   const inputCls = "h-8 rounded-lg border-0 border-b border-border bg-transparent px-1 text-sm text-mono focus:outline-none focus:border-primary transition-colors w-full";
@@ -178,6 +186,16 @@ function IncomeMadlib({ jobs, onAdd }: {
           <option value="pending">pending</option>
           <option value="overdue">overdue</option>
         </select>
+        <select
+          value={paymentMethod}
+          onChange={e => setPaymentMethod(e.target.value as Income['paymentMethod'])}
+          className="h-7 rounded-lg border border-border bg-background px-2 text-xs text-mono"
+        >
+          <option value="direct_deposit">direct deposit</option>
+          <option value="check">check 📮</option>
+          <option value="cash">cash</option>
+          <option value="other">other</option>
+        </select>
         <input
           value={invoice}
           onChange={e => setInvoice(e.target.value)}
@@ -238,6 +256,11 @@ export default function IncomePage() {
                   <span className={cn("text-[9px] font-bold text-mono uppercase rounded-full px-2 py-0.5 border", statusColors[inc.status])}>
                     {inc.status}
                   </span>
+                  {inc.paymentMethod && (
+                    <span className={cn("text-[9px] font-bold text-mono rounded-full px-2 py-0.5 border", payMethodConfig[inc.paymentMethod]?.cls)}>
+                      {payMethodConfig[inc.paymentMethod]?.label}
+                    </span>
+                  )}
                 </div>
                 {inc.description && <p className="text-xs text-muted-foreground mt-0.5">{inc.description}</p>}
                 <p className="text-[10px] text-mono text-muted-foreground mt-1">

@@ -50,14 +50,15 @@ function getPayPeriods(job: Job, rangeStart: Date, rangeEnd: Date) {
 
 type LagStatus = 'early' | 'on-time' | 'late' | 'unusual';
 
-function getLagStatus(lagDays: number, paySchedule: string): LagStatus {
+function getLagStatus(lagDays: number, paySchedule: string, paymentMethod?: string): LagStatus {
   if (lagDays < 0) return 'early';
-  // Expected window per schedule type
-  const maxNormal = paySchedule === 'weekly' ? 10
+  // Checks can sit in the mail or at a wrong address — add 14-day buffer
+  const checkBuffer = paymentMethod === 'check' ? 14 : 0;
+  const maxNormal = (paySchedule === 'weekly' ? 10
     : paySchedule === 'bi-weekly' ? 18
     : paySchedule === 'semi-monthly' ? 18
     : paySchedule === 'monthly' ? 35
-    : 30; // per-project / unknown
+    : 30) + checkBuffer;
   if (lagDays <= maxNormal) return 'on-time';
   if (lagDays <= maxNormal * 2) return 'late';
   return 'unusual';
@@ -94,6 +95,7 @@ interface ReconciliationRow {
     description: string;
     invoiceNumber?: string;
     payorName: string;
+    paymentMethod?: string;
     lagDays: number;
     lagStatus: LagStatus;
   }[];
@@ -175,8 +177,9 @@ export default function PayReconciliationPage() {
                 description: i.description,
                 invoiceNumber: i.invoiceNumber,
                 payorName: i.client,
+                paymentMethod: i.paymentMethod,
                 lagDays,
-                lagStatus: getLagStatus(lagDays, referenceJob.paySchedule || ''),
+                lagStatus: getLagStatus(lagDays, referenceJob.paySchedule || '', i.paymentMethod),
               };
             }),
           });
@@ -377,14 +380,16 @@ export default function PayReconciliationPage() {
                                 <div className="space-y-1">
                                   {row.incomeDetails.map((inc, j) => {
                                     const lagLabel = inc.lagStatus === 'early' ? 'early'
-                                      : inc.lagStatus === 'on-time' ? `${inc.lagDays}d after`
+                                      : inc.lagStatus === 'on-time' ? `${inc.lagDays}d after period`
                                       : inc.lagStatus === 'late' ? `${inc.lagDays}d — late`
                                       : `${inc.lagDays}d — unusual`;
                                     const lagColor = inc.lagStatus === 'on-time' || inc.lagStatus === 'early'
                                       ? 'text-success' : inc.lagStatus === 'late' ? 'text-accent' : 'text-destructive';
                                     const payorDiffers = !namesMatch(inc.payorName, row.client);
+                                    const isCheck = inc.paymentMethod === 'check';
+                                    const isLateCheck = isCheck && (inc.lagStatus === 'late' || inc.lagStatus === 'unusual');
                                     return (
-                                      <div key={j} className="rounded bg-background px-3 py-1.5 text-xs space-y-0.5">
+                                      <div key={j} className={`rounded px-3 py-1.5 text-xs space-y-0.5 ${isLateCheck ? 'bg-amber-500/5 border border-amber-500/20' : 'bg-background'}`}>
                                         <div className="flex justify-between items-center gap-2">
                                           <div className="min-w-0">
                                             <span>{format(parseISO(inc.date), 'MMM d')}</span>
@@ -394,12 +399,27 @@ export default function PayReconciliationPage() {
                                           <span className="text-mono font-medium text-success shrink-0">+${inc.amount.toFixed(2)}</span>
                                         </div>
                                         <div className="flex items-center gap-2 flex-wrap">
+                                          {inc.paymentMethod && (
+                                            <span className={`text-[10px] text-mono px-1.5 py-0.5 rounded border ${
+                                              inc.paymentMethod === 'direct_deposit' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                              : inc.paymentMethod === 'check' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                              : inc.paymentMethod === 'cash' ? 'bg-success/10 text-success border-success/20'
+                                              : 'bg-secondary text-muted-foreground border-border'
+                                            }`}>
+                                              {inc.paymentMethod === 'direct_deposit' ? 'direct deposit'
+                                                : inc.paymentMethod === 'check' ? '📮 check'
+                                                : inc.paymentMethod}
+                                            </span>
+                                          )}
                                           {payorDiffers && (
                                             <span className="text-[10px] text-mono text-accent bg-accent/10 px-1.5 py-0.5 rounded">
                                               paid by {inc.payorName}
                                             </span>
                                           )}
                                           <span className={`text-[10px] text-mono ${lagColor}`}>{lagLabel}</span>
+                                          {isLateCheck && (
+                                            <span className="text-[10px] text-amber-400">check may have been delayed or sent to wrong address</span>
+                                          )}
                                         </div>
                                       </div>
                                     );

@@ -50,6 +50,7 @@ export interface Income {
   amount: number;
   date: string;
   status: 'pending' | 'paid' | 'overdue';
+  paymentMethod?: 'direct_deposit' | 'check' | 'cash' | 'other';
   invoiceNumber?: string;
   createdAt: string;
 }
