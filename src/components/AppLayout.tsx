@@ -82,33 +82,31 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
         })}
       </nav>
       <div className="border-t border-border px-2 py-3 space-y-2">
-        {import.meta.env.DEV && (
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <button
-                title={collapsed ? 'Clear All Data' : undefined}
-                className={cn(iconBtn, "text-destructive hover:bg-destructive/10")}
-              >
-                <Trash2 size={18} />
-                {!collapsed && <span>Clear All Data</span>}
-              </button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Clear all data?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will permanently delete all jobs, expenses, income, and equipment data. This action cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={() => clearAllData()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                  Delete Everything
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        )}
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <button
+              title={collapsed ? 'Clear All Data' : undefined}
+              className={cn(iconBtn, "text-destructive hover:bg-destructive/10")}
+            >
+              <Trash2 size={18} />
+              {!collapsed && <span>Clear All Data</span>}
+            </button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Clear all data?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete all jobs, expenses, income, and equipment data. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={() => clearAllData()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Delete Everything
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         <Link
           to="/settings"
           onClick={onNavigate}
