@@ -1,7 +1,19 @@
 import { useUserPrefs, TAB_LABELS, WORKER_PRESETS, type TabKey, type WorkerType } from '@/lib/UserPrefsContext';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
-import { Briefcase, FileText, Crown, SlidersHorizontal } from 'lucide-react';
+import { Briefcase, FileText, Crown, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { clearAllData } from '@/lib/store';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 const WORKER_OPTIONS: { type: 'w2' | '1099' | 'boss'; label: string; subtitle: string; icon: React.ElementType }[] = [
   {
@@ -139,6 +151,40 @@ export default function SettingsPage() {
         <p className="text-[9px] text-mono text-accent/70 pt-1 border-t border-border/30">
           Note: Reconciliation requires Income — toggling one will sync the other.
         </p>
+      </section>
+
+      {/* Danger zone */}
+      <section className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 space-y-3">
+        <p className="text-[9px] text-mono font-bold tracking-widest text-destructive/60 uppercase">
+          Danger Zone
+        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">Clear All Data</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Permanently delete all jobs, income, expenses, and equipment</p>
+          </div>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-destructive/40 text-destructive text-xs font-semibold hover:bg-destructive/10 transition-colors">
+                <Trash2 size={13} /> Clear Data
+              </button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Clear all data?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete all jobs, expenses, income, and equipment. This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => clearAllData()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                  Delete Everything
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       </section>
     </div>
   );

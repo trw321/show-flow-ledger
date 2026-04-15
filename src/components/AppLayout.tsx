@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Receipt, DollarSign, Speaker, Scale, CalendarDays, Sparkles, Menu, X, Trash2, ClipboardCheck, PartyPopper, PieChart, LogOut, Settings, Users, Wallet } from 'lucide-react';
+import { LayoutDashboard, Receipt, DollarSign, Speaker, Scale, CalendarDays, Sparkles, Menu, X, ClipboardCheck, PartyPopper, PieChart, LogOut, Settings, Users, Wallet } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { clearAllData } from '@/lib/store';
 import { usePartyMode } from '@/lib/PartyModeContext';
 import { useAuth } from '@/lib/AuthContext';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
@@ -82,31 +81,6 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
         })}
       </nav>
       <div className="border-t border-border px-2 py-3 space-y-2">
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <button
-              title={collapsed ? 'Clear All Data' : undefined}
-              className={cn(iconBtn, "text-destructive hover:bg-destructive/10")}
-            >
-              <Trash2 size={18} />
-              {!collapsed && <span>Clear All Data</span>}
-            </button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Clear all data?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This will permanently delete all jobs, expenses, income, and equipment data. This action cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={() => clearAllData()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                Delete Everything
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
         <Link
           to="/settings"
           onClick={onNavigate}
@@ -132,14 +106,29 @@ function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; co
           <PartyPopper size={18} />
           {!collapsed && <span>{partyMode ? 'Vibes ON' : 'Vibes OFF'}</span>}
         </button>
-        <button
-          onClick={signOut}
-          title={collapsed ? 'Sign Out' : undefined}
-          className={cn(iconBtn, "text-muted-foreground hover:bg-secondary")}
-        >
-          <LogOut size={18} />
-          {!collapsed && <span>Sign Out</span>}
-        </button>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <button
+              title={collapsed ? 'Sign Out' : undefined}
+              className={cn(iconBtn, "text-muted-foreground hover:bg-secondary")}
+            >
+              <LogOut size={18} />
+              {!collapsed && <span>Sign Out</span>}
+            </button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Sign out?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Your data is saved to your account. You can sign back in anytime.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={signOut}>Sign Out</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         {user && !collapsed && <p className="text-[10px] text-muted-foreground text-mono px-3 truncate">{user.email}</p>}
       </div>
     </>
