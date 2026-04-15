@@ -14,30 +14,30 @@ serve(async (req) => {
   try {
     const { base64: imageBase64, mimeType } = await req.json();
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (!OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY is not configured");
     }
 
     const today = new Date().toISOString().split("T")[0];
 
     const response = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
+      "https://api.openai.com/v1/chat/completions",
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model: "gpt-4o",
           messages: [
             {
               role: "system",
               content: `You are a job history parser for an AV technician's bookkeeping app. Parse the image into structured job data. Today's date is ${today}.
 
 Extract these fields for each job found in the image:
-- jobNumber: the last 4 digits only of the job/dispatch number (e.g. "2026-0496" → "0496")
+- jobNumber: the FULL job/dispatch number in YYYY-NNNN format (e.g. "2026-0496"). Never truncate it.
 - date: in YYYY-MM-DD format. For 2-digit years like "2/21/26", assume 2000s (2026-02-21).
 - startTime: call/start time (e.g. "08:00 AM")
 - endTime: wrap/end time if present (e.g. "05:00 PM")
@@ -86,7 +86,7 @@ Be flexible — the image may be a screenshot of a dispatch email, a schedule, a
                       items: {
                         type: "object",
                         properties: {
-                          jobNumber: { type: "string", description: "Last 4 digits of job/dispatch number" },
+                          jobNumber: { type: "string", description: "Full job/dispatch number in YYYY-NNNN format (e.g. 2026-0496)" },
                           date: { type: "string", description: "Date in YYYY-MM-DD format" },
                           startTime: { type: "string", description: "Start/call time" },
                           endTime: { type: "string", description: "End/wrap time" },

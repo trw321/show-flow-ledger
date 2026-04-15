@@ -62,7 +62,7 @@ export default function JobPasteImport({ onImport }: { onImport: (job: Omit<Job,
     }
   };
 
-  const updateEntry = (idx: number, field: keyof ParsedJob, value: string | number) => {
+  const updateEntry = (idx: number, field: keyof ParsedJob, value: string | number | undefined) => {
     setEntries(prev => prev.map((e, i) => i === idx ? { ...e, [field]: value } : e));
   };
 
@@ -98,6 +98,7 @@ export default function JobPasteImport({ onImport }: { onImport: (job: Omit<Job,
         parkingCost: j.parkingCost,
         notes: j.notes || '',
         has6th7thDayRule: false,
+        hasVacationPay: false,
       };
       const key = getJobDedupKey(draft);
 
@@ -214,13 +215,13 @@ export default function JobPasteImport({ onImport }: { onImport: (job: Omit<Job,
                         <Input value={entry.venue} onChange={e => updateEntry(i, 'venue', e.target.value)} className="h-7 text-xs" />
                       </td>
                       <td className="px-2 py-1.5">
-                        <Input type="number" step="0.01" value={entry.hourlyRate ?? ''} onChange={e => updateEntry(i, 'hourlyRate', parseFloat(e.target.value) || 0)} placeholder="$" className="h-7 text-xs w-20" />
+                        <Input type="number" step="0.01" value={entry.hourlyRate ?? ''} onChange={e => updateEntry(i, 'hourlyRate', e.target.value === '' ? undefined : parseFloat(e.target.value))} placeholder="$" className="h-7 text-xs w-20" />
                       </td>
                       <td className="px-2 py-1.5">
                         <Input value={entry.steward ?? ''} onChange={e => updateEntry(i, 'steward', e.target.value)} className="h-7 text-xs" />
                       </td>
                       <td className="px-2 py-1.5">
-                        <Input type="number" step="0.01" value={entry.parkingCost ?? ''} onChange={e => updateEntry(i, 'parkingCost', parseFloat(e.target.value) || 0)} placeholder="$" className="h-7 text-xs w-20" />
+                        <Input type="number" step="0.01" value={entry.parkingCost ?? ''} onChange={e => updateEntry(i, 'parkingCost', e.target.value === '' ? undefined : parseFloat(e.target.value))} placeholder="$" className="h-7 text-xs w-20" />
                       </td>
                     </tr>
                   ))}

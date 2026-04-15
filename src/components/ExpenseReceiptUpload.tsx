@@ -2,86 +2,82 @@ import { useState, useCallback } from 'react';
 import { useData } from '@/lib/DataContext';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Upload, Loader2, Check, X, FileImage } from 'lucide-react';
 import { toast } from 'sonner';
 
-interface ParsedTransaction {
+const categories = [
+  'Travel', 'Gear Rental', 'Consumables', 'Fuel', 'Meals', 'Lodging',
+  'Labor', 'Insurance', 'Software', 'Tools', 'Entertainment', 'Medical',
+  'Rent', 'IATSE Union Dues', 'Other',
+];
+
+interface ParsedExpense {
   description: string;
   amount: number;
   date: string;
   category: string;
 }
 
-export default function StatementUpload({ externalOpen, onExternalOpenChange }: { externalOpen?: boolean; onExternalOpenChange?: (open: boolean) => void } = {}) {
+export default function ExpenseReceiptUpload({ externalOpen, onExternalOpenChange }: { externalOpen?: boolean; onExternalOpenChange?: (open: boolean) => void } = {}) {
   const { addExpense } = useData();
   const isControlled = externalOpen !== undefined;
   const [internalOpen, setInternalOpen] = useState(false);
   const open = isControlled ? externalOpen : internalOpen;
   const setOpen = (v: boolean) => { if (isControlled) onExternalOpenChange?.(v); else setInternalOpen(v); };
+
   const [loading, setLoading] = useState(false);
-  const [transactions, setTransactions] = useState<ParsedTransaction[]>([]);
+  const [transactions, setTransactions] = useState<ParsedExpense[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [preview, setPreview] = useState<string | null>(null);
 
+  // Allow overriding category per row before import
+  const [overrides, setOverrides] = useState<Record<number, string>>({});
+
   const handleFile = useCallback(async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      toast.error('Please upload an image file');
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('File too large (max 10MB)');
-      return;
-    }
+    if (!file.type.startsWith('image/')) { toast.error('Please upload an image file'); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.error('File too large (max 10MB)'); return; }
 
     setLoading(true);
     setTransactions([]);
     setSelected(new Set());
+    setOverrides({});
 
-    // Preview
     const reader = new FileReader();
     reader.onload = () => setPreview(reader.result as string);
     reader.readAsDataURL(file);
 
-    // Convert to base64
     const buffer = await file.arrayBuffer();
     const bytes = new Uint8Array(buffer);
     let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
+    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
     const base64 = btoa(binary);
 
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
-      const resp = await fetch(`${supabaseUrl}/functions/v1/parse-statement`, {
+      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-statement`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${supabaseKey}`,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ imageBase64: base64, mimeType: file.type }),
+        body: JSON.stringify({ imageBase64: base64, mimeType: file.type, type: 'expense' }),
       });
 
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: 'Failed to parse' }));
-        throw new Error(err.error || 'Failed to parse statement');
+        throw new Error(err.error || 'Failed to parse receipt');
       }
 
       const data = await resp.json();
-      const txns = data.transactions || [];
+      const txns: ParsedExpense[] = data.transactions || [];
       setTransactions(txns);
-      setSelected(new Set(txns.map((_: ParsedTransaction, i: number) => i)));
-
-      if (txns.length === 0) {
-        toast.info('No transactions found in this image');
-      } else {
-        toast.success(`Found ${txns.length} transaction(s)`);
-      }
+      setSelected(new Set(txns.map((_, i) => i)));
+      toast[txns.length ? 'success' : 'info'](
+        txns.length ? `Found ${txns.length} expense(s)` : 'No expenses found in this image'
+      );
     } catch (err) {
       console.error(err);
-      toast.error(err instanceof Error ? err.message : 'Failed to parse statement');
+      toast.error(err instanceof Error ? err.message : 'Failed to parse receipt');
     } finally {
       setLoading(false);
     }
@@ -90,8 +86,7 @@ export default function StatementUpload({ externalOpen, onExternalOpenChange }: 
   const toggleSelect = (idx: number) => {
     setSelected(prev => {
       const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx);
-      else next.add(idx);
+      next.has(idx) ? next.delete(idx) : next.add(idx);
       return next;
     });
   };
@@ -104,7 +99,7 @@ export default function StatementUpload({ externalOpen, onExternalOpenChange }: 
           description: txn.description,
           amount: Math.abs(txn.amount),
           date: txn.date,
-          category: txn.category,
+          category: overrides[i] ?? txn.category,
         });
         count++;
       }
@@ -113,40 +108,34 @@ export default function StatementUpload({ externalOpen, onExternalOpenChange }: 
     setOpen(false);
     setTransactions([]);
     setSelected(new Set());
+    setOverrides({});
     setPreview(null);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
-  };
-
   return (
-    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setTransactions([]); setPreview(null); } }}>
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setTransactions([]); setPreview(null); setOverrides({}); } }}>
       <DialogTrigger asChild>
         <Button size="sm" variant="outline" className="gap-1.5">
-          <Upload size={16} /> Load Statement
+          <Upload size={16} /> Upload Receipt
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-mono">Upload Bank Statement / Receipt</DialogTitle>
+          <DialogTitle className="text-mono">Upload Receipt / Statement</DialogTitle>
         </DialogHeader>
 
-        {/* Drop zone */}
         {!loading && transactions.length === 0 && (
           <div
-            onDrop={handleDrop}
+            onDrop={e => { e.preventDefault(); e.dataTransfer.files[0] && handleFile(e.dataTransfer.files[0]); }}
             onDragOver={e => e.preventDefault()}
             className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-border bg-secondary/30 p-10 cursor-pointer hover:border-primary/50 transition-colors"
-            onClick={() => document.getElementById('statement-input')?.click()}
+            onClick={() => document.getElementById('expense-receipt-input')?.click()}
           >
             <FileImage size={32} className="text-muted-foreground mb-3" />
-            <p className="text-sm text-muted-foreground">Drop an image here or click to browse</p>
+            <p className="text-sm text-muted-foreground">Drop a receipt photo here or click to browse</p>
             <p className="text-xs text-muted-foreground mt-1">JPG, PNG, WEBP • Max 10MB</p>
             <input
-              id="statement-input"
+              id="expense-receipt-input"
               type="file"
               accept="image/*"
               className="hidden"
@@ -156,39 +145,25 @@ export default function StatementUpload({ externalOpen, onExternalOpenChange }: 
           </div>
         )}
 
-        {/* Loading */}
         {loading && (
           <div className="flex flex-col items-center py-10">
             <Loader2 size={32} className="text-primary animate-spin mb-3" />
-            <p className="text-sm text-muted-foreground text-mono">Analyzing statement...</p>
-            {preview && (
-              <img src={preview} alt="Preview" className="mt-4 max-h-40 rounded-md border border-border opacity-50" />
-            )}
+            <p className="text-sm text-muted-foreground text-mono">Analyzing receipt...</p>
+            {preview && <img src={preview} alt="Preview" className="mt-4 max-h-40 rounded-md border border-border opacity-50" />}
           </div>
         )}
 
-        {/* Results */}
         {!loading && transactions.length > 0 && (
           <div className="space-y-4">
-            {preview && (
-              <img src={preview} alt="Statement" className="max-h-32 rounded-md border border-border" />
-            )}
+            {preview && <img src={preview} alt="Receipt" className="max-h-32 rounded-md border border-border" />}
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">{selected.size} of {transactions.length} selected</p>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  if (selected.size === transactions.length) setSelected(new Set());
-                  else setSelected(new Set(transactions.map((_, i) => i)));
-                }}
-              >
+              <Button size="sm" variant="ghost" onClick={() => setSelected(selected.size === transactions.length ? new Set() : new Set(transactions.map((_, i) => i)))}>
                 {selected.size === transactions.length ? 'Deselect all' : 'Select all'}
               </Button>
             </div>
-
-            <div className="rounded-lg border border-border overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="rounded-lg border border-border overflow-x-auto">
+              <table className="w-full text-sm min-w-[520px]">
                 <thead>
                   <tr className="bg-secondary/50 text-muted-foreground text-xs uppercase tracking-wider text-mono">
                     <th className="w-8 px-3 py-2"></th>
@@ -200,26 +175,30 @@ export default function StatementUpload({ externalOpen, onExternalOpenChange }: 
                 </thead>
                 <tbody>
                   {transactions.map((txn, i) => (
-                    <tr
-                      key={i}
-                      onClick={() => toggleSelect(i)}
-                      className={`border-t border-border cursor-pointer transition-colors ${selected.has(i) ? 'bg-primary/5' : 'hover:bg-secondary/30'}`}
-                    >
-                      <td className="px-3 py-2 text-center">
-                        {selected.has(i) ? <Check size={14} className="text-primary" /> : <span className="w-3.5 h-3.5 rounded-sm border border-border inline-block" />}
+                    <tr key={i} onClick={() => toggleSelect(i)} className={`border-t border-border cursor-pointer transition-colors ${selected.has(i) ? 'bg-primary/5' : 'hover:bg-secondary/30'}`}>
+                      <td className="px-3 py-2 text-center" onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={selected.has(i)} onChange={() => toggleSelect(i)} className="accent-primary" />
                       </td>
-                      <td className="px-3 py-2">{txn.description}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{txn.category}</td>
+                      <td className="px-3 py-2 font-medium">{txn.description}</td>
+                      <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                        <Select value={overrides[i] ?? txn.category} onValueChange={v => setOverrides(prev => ({ ...prev, [i]: v }))}>
+                          <SelectTrigger className="h-7 text-xs w-36">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </td>
                       <td className="px-3 py-2 text-mono text-xs">{txn.date}</td>
-                      <td className="px-3 py-2 text-right text-mono font-bold text-destructive">${Math.abs(txn.amount).toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right text-mono font-bold text-destructive">-${Math.abs(txn.amount).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-
             <div className="flex gap-2 justify-end">
-              <Button variant="ghost" onClick={() => { setTransactions([]); setPreview(null); }}>
+              <Button variant="ghost" onClick={() => { setTransactions([]); setPreview(null); setOverrides({}); }}>
                 <X size={14} className="mr-1" /> Cancel
               </Button>
               <Button onClick={addSelected} disabled={selected.size === 0}>

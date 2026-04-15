@@ -32,6 +32,25 @@ const statusLabel: Record<Job['status'], string> = {
   cancelled: 'Cancelled',
 };
 
+function parseTimeToMins(t: string): number {
+  const m = t.match(/(\d{1,2}):?(\d{2})?\s*(am|pm|a|p)?/i);
+  if (!m) return NaN;
+  let h = parseInt(m[1]);
+  const min = parseInt(m[2] || '0');
+  const ap = (m[3] || '').toLowerCase();
+  if (ap.startsWith('p') && h < 12) h += 12;
+  if (ap.startsWith('a') && h === 12) h = 0;
+  return h * 60 + min;
+}
+
+function calcHours(start: string, end: string): number {
+  let s = parseTimeToMins(start);
+  let e = parseTimeToMins(end);
+  if (isNaN(s) || isNaN(e)) return 0;
+  if (e <= s) e += 24 * 60; // overnight
+  return Math.max(0, (e - s) / 60);
+}
+
 function JobDetailView({ job, onBack, onSave }: {
   job: Job;
   onBack: () => void;
@@ -39,31 +58,65 @@ function JobDetailView({ job, onBack, onSave }: {
 }) {
   const [endTime, setEndTime] = useState(job.endTime ?? '');
   const [hoursWorked, setHoursWorked] = useState(job.hoursWorked?.toString() ?? '');
+  const [minimumHours, setMinimumHours] = useState(job.minimumHours?.toString() ?? '');
+  const [payrollCompany, setPayrollCompany] = useState(job.payrollCompany ?? '');
 
   useEffect(() => {
     setEndTime(job.endTime ?? '');
     setHoursWorked(job.hoursWorked?.toString() ?? '');
+    setMinimumHours(job.minimumHours?.toString() ?? '');
+    setPayrollCompany(job.payrollCompany ?? '');
   }, [job.id]);
+
+  const handleEndTimeChange = (val: string) => {
+    setEndTime(val);
+    if (job.startTime && val) {
+      const h = calcHours(job.startTime, val);
+      if (h > 0) setHoursWorked(parseFloat(h.toFixed(2)).toString());
+    }
+  };
+
+  // Live pay preview using actual payCalc logic
+  const actualHours = parseFloat(hoursWorked) || 0;
+  const minHours = parseFloat(minimumHours) || 0;
+  const billableHours = Math.max(actualHours, minHours);
+  const minimumApplied = minHours > 0 && actualHours < minHours && actualHours > 0;
+  const rate = job.hourlyRate ?? 0;
+  const payPreview = rate > 0 && billableHours > 0
+    ? calculateDayPay(actualHours, rate, minHours, job.mealPenalties ?? 0, 1, job.mealType)
+    : null;
 
   const handleSave = () => {
     const updates: Partial<Job> = {};
     if (endTime !== (job.endTime ?? '')) updates.endTime = endTime || undefined;
-    const parsedHours = parseFloat(hoursWorked);
-    if (!isNaN(parsedHours) && parsedHours !== (job.hoursWorked ?? 0)) {
-      updates.hoursWorked = parsedHours;
+    if (actualHours > 0) {
+      updates.hoursWorked = actualHours;
+      updates.status = 'completed';
+    }
+    const parsedMin = parseFloat(minimumHours);
+    if (!isNaN(parsedMin) && parsedMin !== (job.minimumHours ?? 0)) {
+      updates.minimumHours = parsedMin > 0 ? parsedMin : undefined;
+    }
+    if (payrollCompany !== (job.payrollCompany ?? '')) {
+      updates.payrollCompany = payrollCompany.trim() || undefined;
     }
     onSave(updates);
   };
 
   const hasChanges =
     endTime !== (job.endTime ?? '') ||
-    hoursWorked !== (job.hoursWorked?.toString() ?? '');
+    hoursWorked !== (job.hoursWorked?.toString() ?? '') ||
+    minimumHours !== (job.minimumHours?.toString() ?? '') ||
+    payrollCompany !== (job.payrollCompany ?? '');
 
   return (
     <>
       <DialogHeader>
         <div className="flex items-center gap-2">
-          <button onClick={onBack} className="text-muted-foreground hover:text-foreground transition-colors p-1 -ml-1 rounded-lg hover:bg-secondary">
+          <button
+            onClick={onBack}
+            className="text-muted-foreground hover:text-foreground transition-colors p-1 -ml-1 rounded-lg hover:bg-secondary"
+          >
             <ArrowLeft size={16} />
           </button>
           <DialogTitle className="text-mono text-sm">{job.name}</DialogTitle>
@@ -80,11 +133,17 @@ function JobDetailView({ job, onBack, onSave }: {
         </span>
 
         {/* Core info */}
-        <div className="rounded-xl border border-border bg-secondary/10 p-3 space-y-2 text-sm">
+        <div className="rounded-xl border border-border bg-secondary/10 p-3 space-y-2">
           {job.client && (
             <div className="flex justify-between">
               <span className="text-muted-foreground text-xs">Client</span>
               <span className="font-medium text-xs">{job.client}</span>
+            </div>
+          )}
+          {(job.payrollCompany || payrollCompany) && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground text-xs">Employer / Payroll</span>
+              <span className="font-medium text-xs">{payrollCompany || job.payrollCompany}</span>
             </div>
           )}
           {job.venue && (
@@ -113,27 +172,37 @@ function JobDetailView({ job, onBack, onSave }: {
               <span className="font-medium text-xs text-mono">{job.startTime}</span>
             </div>
           )}
-          {(job.hoursWorked ?? 0) > 0 && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground text-xs">Hours</span>
-              <span className="font-medium text-xs text-mono">{job.hoursWorked}h</span>
-            </div>
-          )}
-          {(job.hourlyRate ?? 0) > 0 && (
+          {rate > 0 && (
             <div className="flex justify-between">
               <span className="text-muted-foreground text-xs">Rate</span>
-              <span className="font-medium text-xs text-mono">${job.hourlyRate}/hr</span>
-            </div>
-          )}
-          {(job.hoursWorked ?? 0) > 0 && (job.hourlyRate ?? 0) > 0 && (
-            <div className="flex justify-between border-t border-border/40 pt-2">
-              <span className="text-muted-foreground text-xs">Est. Pay</span>
-              <span className="font-bold text-xs text-mono text-success">
-                ${((job.hoursWorked ?? 0) * (job.hourlyRate ?? 0)).toLocaleString()}
-              </span>
+              <span className="font-medium text-xs text-mono">${rate}/hr</span>
             </div>
           )}
         </div>
+
+        {/* Pay preview — shown once we have enough info */}
+        {payPreview && (
+          <div className={cn(
+            "rounded-xl border p-3 space-y-1.5",
+            minimumApplied ? "border-accent/40 bg-accent/5" : "border-success/30 bg-success/5"
+          )}>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                {minimumApplied
+                  ? `Worked ${actualHours}h — paid for ${billableHours}h minimum`
+                  : `Worked ${actualHours}h`}
+              </span>
+              <span className="font-bold text-sm text-mono text-success">
+                ${payPreview.totalPay.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+            {minimumApplied && (
+              <p className="text-[10px] text-accent font-medium">
+                {minHours}h minimum call — contract guarantees payment for {minHours}h
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Editable fields */}
         <div className="space-y-3">
@@ -141,13 +210,27 @@ function JobDetailView({ job, onBack, onSave }: {
             Update Job
           </p>
           <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Employer / Payroll Company</label>
+            <Input
+              value={payrollCompany}
+              onChange={e => setPayrollCompany(e.target.value)}
+              placeholder="e.g. Nolan AV, Live Nation"
+              className="h-9 text-sm"
+            />
+          </div>
+          <div className="space-y-1">
             <label className="text-xs text-muted-foreground">End Time</label>
             <Input
               value={endTime}
-              onChange={e => setEndTime(e.target.value)}
+              onChange={e => handleEndTimeChange(e.target.value)}
               placeholder="e.g. 18:00 or 6:00 PM"
               className="h-9 text-sm text-mono"
             />
+            {job.startTime && endTime && calcHours(job.startTime, endTime) > 0 && (
+              <p className="text-[10px] text-mono text-muted-foreground">
+                {job.startTime} → {endTime} = <span className="text-primary font-semibold">{calcHours(job.startTime, endTime).toFixed(1)}h</span>
+              </p>
+            )}
           </div>
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Hours Worked</label>
@@ -157,9 +240,37 @@ function JobDetailView({ job, onBack, onSave }: {
               step="0.5"
               value={hoursWorked}
               onChange={e => setHoursWorked(e.target.value)}
-              placeholder="e.g. 8"
+              placeholder="e.g. 3"
               className="h-9 text-sm text-mono"
             />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground">Min. Call</label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {[
+                { hours: 4, label: '4h', sub: 'Split shift' },
+                { hours: 5, label: '5h', sub: 'Normal call' },
+                { hours: 8, label: '8h', sub: 'Lead role' },
+              ].map(({ hours, label, sub }) => {
+                const active = minimumHours === hours.toString();
+                return (
+                  <button
+                    key={hours}
+                    type="button"
+                    onClick={() => setMinimumHours(active ? '' : hours.toString())}
+                    className={cn(
+                      "rounded-xl border py-2 px-1 text-center transition-colors",
+                      active
+                        ? "bg-primary/15 border-primary/50 text-primary"
+                        : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30"
+                    )}
+                  >
+                    <p className={cn("text-sm font-bold text-mono", active && "text-primary")}>{label}</p>
+                    <p className="text-[9px] leading-tight mt-0.5 opacity-70">{sub}</p>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 

@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
 import { useData } from '@/lib/DataContext';
 import PageHeader from '@/components/PageHeader';
-import EmptyState from '@/components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ClipboardCheck, Camera, Clock, ChevronRight } from 'lucide-react';
+import { Clock, ChevronRight } from 'lucide-react';
 import JobPhotoImport from '@/components/JobPhotoImport';
+import JobPasteImport from '@/components/JobPasteImport';
+import HoursNoteImport from '@/components/HoursNoteImport';
 import LogHoursForm from '@/components/LogHoursForm';
 import { format, isToday, isPast, isFuture } from 'date-fns';
 import { toast } from 'sonner';
@@ -46,11 +47,19 @@ export default function JobLogPage() {
     <>
       <PageHeader title="Job Log" description="Pre-load jobs, then log hours on the day" />
 
-      {/* Load upcoming jobs via screenshot */}
+      {/* Load upcoming jobs via photo */}
       <div className="mb-4">
-        <JobPhotoImport onImport={(job) => {
-          addJob({ ...job, status: 'upcoming', hoursWorked: 0 });
+        <JobPhotoImport onImport={async (job) => {
+          await addJob({ ...job, status: 'upcoming', hoursWorked: 0 });
         }} />
+      </div>
+      <div className="mb-4">
+        <JobPasteImport onImport={async (job) => {
+          await addJob({ ...job, status: 'upcoming', hoursWorked: 0 });
+        }} />
+      </div>
+      <div className="mb-4">
+        <HoursNoteImport />
       </div>
 
       {/* Today / Needs Logging */}
@@ -84,7 +93,11 @@ export default function JobLogPage() {
           <h3 className="text-xs text-mono uppercase tracking-wider text-muted-foreground mb-2">Upcoming</h3>
           <div className="space-y-1.5">
             {upcoming.map(job => (
-              <div key={job.id} className="rounded-xl border border-border bg-card p-2.5 flex items-center gap-2">
+              <button
+                key={job.id}
+                onClick={() => setLogId(job.id)}
+                className="w-full rounded-xl border border-border bg-card p-2.5 flex items-center gap-2 text-left hover:border-primary/30 hover:bg-primary/5 transition-colors"
+              >
                 <div className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm truncate">{job.name} <span className="text-muted-foreground">• {job.client}</span></p>
@@ -93,7 +106,8 @@ export default function JobLogPage() {
                     {job.startTime && ` • ${job.startTime}`}
                   </p>
                 </div>
-              </div>
+                <ChevronRight size={14} className="text-muted-foreground/40 shrink-0" />
+              </button>
             ))}
           </div>
         </div>
@@ -105,23 +119,28 @@ export default function JobLogPage() {
           <h3 className="text-xs text-mono uppercase tracking-wider text-muted-foreground mb-2">Recently Logged</h3>
           <div className="space-y-1.5">
             {logged.map(job => (
-              <div key={job.id} className="rounded-xl border border-border bg-card p-2.5 flex items-center gap-2 opacity-70">
+              <button
+                key={job.id}
+                onClick={() => setLogId(job.id)}
+                className={cn(
+                  "w-full rounded-xl border border-border bg-card p-2.5 flex items-center gap-2 text-left opacity-70",
+                  "hover:opacity-100 hover:border-primary/30 hover:bg-primary/5 transition-all"
+                )}
+              >
                 <div className="w-1.5 h-1.5 rounded-full bg-success shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm truncate">{job.name} <span className="text-muted-foreground">• {job.client}</span></p>
                   <p className="text-[11px] text-mono text-muted-foreground">
                     {format(new Date(job.date + 'T12:00:00'), 'MMM d')} • {job.hoursWorked}h
                     {job.hourlyRate ? ` • $${((job.hoursWorked ?? 0) * job.hourlyRate).toLocaleString()}` : ''}
+                    {job.endTime ? ` • ends ${job.endTime}` : ''}
                   </p>
                 </div>
-              </div>
+                <ChevronRight size={14} className="text-muted-foreground/40 shrink-0" />
+              </button>
             ))}
           </div>
         </div>
-      )}
-
-      {data.jobs.length === 0 && (
-        <EmptyState icon={ClipboardCheck} title="No jobs loaded" description="Use the import box above to scan a schedule" />
       )}
 
       {/* Log hours dialog */}

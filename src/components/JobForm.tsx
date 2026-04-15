@@ -28,6 +28,7 @@ export default function JobForm({ onSubmit, initial, onCancel }: {
   const [hourlyRate, setHourlyRate] = useState(initial?.hourlyRate?.toString() ?? '');
   const [minimumHours, setMinimumHours] = useState(initial?.minimumHours?.toString() ?? '');
   const [has6th7thDayRule, setHas6th7thDayRule] = useState(initial?.has6th7thDayRule ?? false);
+  const [hasVacationPay, setHasVacationPay] = useState(initial?.hasVacationPay ?? false);
   const [steward, setSteward] = useState(initial?.steward ?? '');
   const [parkingCost, setParkingCost] = useState(initial?.parkingCost?.toString() ?? '');
   const [hoursWorked, setHoursWorked] = useState(initial?.hoursWorked?.toString() ?? '');
@@ -66,6 +67,7 @@ export default function JobForm({ onSubmit, initial, onCancel }: {
       hourlyRate: hourlyRate ? parseFloat(hourlyRate) : undefined,
       minimumHours: minimumHours ? parseFloat(minimumHours) : undefined,
       has6th7thDayRule,
+      hasVacationPay,
       steward: steward.trim() || undefined,
       parkingCost: parkingCost ? parseFloat(parkingCost) : undefined,
       hoursWorked: hoursWorked ? parseFloat(hoursWorked) : undefined,
@@ -154,6 +156,10 @@ export default function JobForm({ onSubmit, initial, onCancel }: {
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input type="checkbox" checked={has6th7thDayRule} onChange={e => setHas6th7thDayRule(e.target.checked)} className="rounded border-border" />
             <span className="text-xs">6th/7th day rule (1.5× / 2×)</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={hasVacationPay} onChange={e => setHasVacationPay(e.target.checked)} className="rounded border-border" />
+            <span className="text-xs">Vacation pay (8% of gross)</span>
           </label>
         </div>
       )}

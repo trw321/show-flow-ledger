@@ -2,10 +2,14 @@ import { useState } from 'react';
 import { useData } from '@/lib/DataContext';
 import StatCard from '@/components/StatCard';
 import PageHeader from '@/components/PageHeader';
-import { Briefcase, Receipt, DollarSign, TrendingUp, TrendingDown, AlertCircle, Clock } from 'lucide-react';
+import { Briefcase, Receipt, DollarSign, TrendingUp, TrendingDown, AlertCircle, Clock, Download, Upload, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Sector } from 'recharts';
+import { exportWeeklyToExcel } from '@/lib/exportWeekly';
+import { hasLegacyData, getLegacyData, clearLegacyData } from '@/lib/store';
+import { useUserPrefs } from '@/lib/UserPrefsContext';
+import { toast } from 'sonner';
 
 function Starburst({ className, delay = 0 }: { className?: string; delay?: number }) {
   return (
@@ -34,9 +38,36 @@ function FloatingOrb({ className, delay = 0 }: { className?: string; delay?: num
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function GlitterActiveShape(props: any) {
+  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
+  return (
+    <g style={{ filter: `drop-shadow(0 0 12px ${fill}) drop-shadow(0 0 4px #fff4)` }}>
+      {/* soft outer pulse ring */}
+      <Sector cx={cx} cy={cy} innerRadius={outerRadius + 3} outerRadius={outerRadius + 10}
+        startAngle={startAngle} endAngle={endAngle} fill={fill} opacity={0.25} />
+      {/* main segment, popped out */}
+      <Sector cx={cx} cy={cy} innerRadius={innerRadius - 2} outerRadius={outerRadius + 5}
+        startAngle={startAngle} endAngle={endAngle} fill={fill} />
+      {/* glitter shimmer — bright half-lens highlight */}
+      <Sector cx={cx} cy={cy}
+        innerRadius={innerRadius - 2}
+        outerRadius={innerRadius + (outerRadius - innerRadius) * 0.52}
+        startAngle={startAngle} endAngle={endAngle}
+        fill="rgba(255,255,255,0.22)" />
+    </g>
+  );
+}
+
 export default function Dashboard() {
-  const { data } = useData();
+  const { data, migrateLocalData } = useData();
+  const { prefs } = useUserPrefs();
   const [taxRate, setTaxRate] = useState(25);
+  const [showMigrate, setShowMigrate] = useState(hasLegacyData);
+  const showIncome = prefs.tabs.income;
+  const showExpenses = prefs.tabs.expenses;
+  const showTaxes = prefs.tabs.taxes;
+  const [migrating, setMigrating] = useState(false);
 
   const totalExpenses = data.expenses.reduce((s, e) => s + e.amount, 0);
   const totalIncome = data.income.reduce((s, i) => s + i.amount, 0);
@@ -51,16 +82,52 @@ export default function Dashboard() {
   const afterTax = netProfit - estimatedTax;
 
   const pieData = [
-    { name: 'Take Home', value: Math.max(0, afterTax), color: 'hsl(142, 76%, 46%)' },
+    { name: 'Take Home', value: Math.max(0, afterTax), color: 'hsl(76, 92%, 48%)' },
     { name: 'Estimated Tax', value: estimatedTax, color: 'hsl(50, 100%, 55%)' },
-    { name: 'Expenses', value: totalExpenses, color: 'hsl(0, 84%, 60%)' },
+    { name: 'Expenses', value: totalExpenses, color: 'hsl(0, 72%, 55%)' },
   ].filter(d => d.value > 0);
 
   const recentJobs = [...data.jobs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
   const recentExpenses = [...data.expenses].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
 
+  const handleMigrate = async () => {
+    setMigrating(true);
+    try {
+      const legacy = getLegacyData();
+      const count = await migrateLocalData(legacy);
+      clearLegacyData();
+      setShowMigrate(false);
+      toast.success(`Migrated ${count} records to your account`);
+    } catch (err) {
+      console.error(err);
+      toast.error('Migration failed — your local data is still safe');
+    } finally {
+      setMigrating(false);
+    }
+  };
+
   return (
     <>
+      {/* Migration banner */}
+      {showMigrate && (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 mb-4 flex items-center gap-3 flex-wrap">
+          <Upload size={18} className="text-primary shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium">Local data found</p>
+            <p className="text-xs text-muted-foreground">Import your existing jobs, expenses, and income into your account.</p>
+          </div>
+          <button
+            onClick={handleMigrate}
+            disabled={migrating}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
+          >
+            {migrating ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+            {migrating ? 'Migrating...' : 'Import Data'}
+          </button>
+          <button onClick={() => setShowMigrate(false)} className="text-xs text-muted-foreground hover:text-foreground">Dismiss</button>
+        </div>
+      )}
+
       {/* Hero area with funky animated background */}
       <div className="relative overflow-hidden rounded-2xl border border-border mb-6 p-5 bg-card">
         {/* Animated gradient background */}
@@ -133,19 +200,34 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <StatCard label="Active Jobs" value={activeJobs} icon={Briefcase} variant="info" />
         <StatCard label="Hours Logged" value={totalHours.toFixed(1)} icon={Clock} variant="accent" />
-        <StatCard label="Total Income" value={`$${totalIncome.toLocaleString()}`} icon={TrendingUp} variant="success" />
-        <StatCard label="Total Expenses" value={`$${totalExpenses.toLocaleString()}`} icon={TrendingDown} variant="warning" />
+        {showIncome && <StatCard label="Total Income" value={`$${totalIncome.toLocaleString()}`} icon={TrendingUp} variant="success" />}
+        {showExpenses && <StatCard label="Total Expenses" value={`$${totalExpenses.toLocaleString()}`} icon={TrendingDown} variant="warning" />}
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        <StatCard label="Net Profit" value={`$${netProfit.toLocaleString()}`} icon={DollarSign} variant={netProfit >= 0 ? 'success' : 'destructive'} />
-        <StatCard label="Job Earnings" value={`$${totalEarnings.toLocaleString()}`} icon={DollarSign} variant="success" />
-        <StatCard label="Pending" value={`$${pendingIncome.toLocaleString()}`} icon={AlertCircle} variant="warning" />
-        <StatCard label="Overdue" value={`$${overdueIncome.toLocaleString()}`} icon={AlertCircle} variant="destructive" />
+        <StatCard
+          label={showExpenses ? 'Net Profit' : 'Job Earnings'}
+          value={`$${(showExpenses ? netProfit : totalEarnings).toLocaleString()}`}
+          icon={DollarSign}
+          variant={showExpenses && netProfit < 0 ? 'destructive' : 'success'}
+        />
+        {showIncome && <StatCard label="Pending" value={`$${pendingIncome.toLocaleString()}`} icon={AlertCircle} variant="warning" />}
+        {showIncome && <StatCard label="Overdue" value={`$${overdueIncome.toLocaleString()}`} icon={AlertCircle} variant="destructive" />}
+      </div>
+
+      {/* Weekly Export */}
+      <div className="flex justify-end mb-4">
+        <button
+          onClick={() => exportWeeklyToExcel(data.jobs, data.expenses, data.income)}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 border border-primary/30 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors"
+        >
+          <Download size={14} />
+          Export to CSV
+        </button>
       </div>
 
       {/* Tax Breakdown Pie Chart */}
-      <div className="rounded-2xl border border-border bg-card p-4 mb-6">
+      {showTaxes && <div className="rounded-2xl border border-border bg-card p-4 mb-6">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-[10px] font-semibold text-mono text-muted-foreground uppercase tracking-[0.2em]">Tax Breakdown</h2>
           <div className="flex items-center gap-2">
@@ -178,14 +260,31 @@ export default function Dashboard() {
                     paddingAngle={3}
                     dataKey="value"
                     strokeWidth={0}
+                    activeShape={GlitterActiveShape}
                   >
                     {pieData.map((entry, i) => (
-                      <Cell key={i} fill={entry.color} />
+                      <Cell
+                        key={i}
+                        fill={entry.color}
+                        stroke="rgba(255,255,255,0.15)"
+                        strokeWidth={1.5}
+                      />
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value: number) => `$${value.toLocaleString()}`}
-                    contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
+                    formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name]}
+                    contentStyle={{
+                      background: '#ffffff',
+                      border: 'none',
+                      borderRadius: '12px',
+                      fontSize: '12px',
+                      fontFamily: 'Space Mono, monospace',
+                      boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                      padding: '10px 14px',
+                      color: '#111111',
+                    }}
+                    labelStyle={{ color: '#111111', fontWeight: 700, marginBottom: 2 }}
+                    itemStyle={{ color: '#333333' }}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -208,7 +307,7 @@ export default function Dashboard() {
             </div>
           </div>
         )}
-      </div>
+      </div>}
 
       <div className="grid lg:grid-cols-2 gap-4">
         <div className="rounded-2xl border border-border bg-card p-4">
@@ -243,7 +342,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        <div className="rounded-2xl border border-border bg-card p-4">
+        {showExpenses && <div className="rounded-2xl border border-border bg-card p-4">
           <h2 className="text-[10px] font-semibold text-mono mb-3 text-muted-foreground uppercase tracking-[0.2em]">Recent Expenses</h2>
           {recentExpenses.length === 0 ? (
             <p className="text-xs text-muted-foreground py-4 text-center">No expenses yet</p>
@@ -263,7 +362,7 @@ export default function Dashboard() {
               ))}
             </div>
           )}
-        </div>
+        </div>}
       </div>
     </>
   );

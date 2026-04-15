@@ -6,16 +6,19 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { useEffect } from 'react';
 import { Speaker, Plus, Trash2, Pencil } from 'lucide-react';
 import type { Equipment } from '@/lib/store';
 
 const eqCategories = ['Audio', 'Video', 'Lighting', 'Rigging', 'Staging', 'Cables', 'Cases', 'Power', 'Communication', 'Other'];
 const statusOptions = ['available', 'deployed', 'maintenance', 'retired'] as const;
 
-function EquipmentForm({ onSubmit, initial, jobs, onCancel }: {
+function EquipmentForm({ onSubmit, initial, jobs, customJobNames, onSaveCustomJobName, onCancel }: {
   onSubmit: (equip: Omit<Equipment, 'id' | 'createdAt'>) => void;
   initial?: Partial<Equipment>;
   jobs: { id: string; name: string }[];
+  customJobNames: string[];
+  onSaveCustomJobName: (name: string) => void;
   onCancel?: () => void;
 }) {
   const [name, setName] = useState(initial?.name ?? '');
@@ -23,16 +26,27 @@ function EquipmentForm({ onSubmit, initial, jobs, onCancel }: {
   const [serialNumber, setSerialNumber] = useState(initial?.serialNumber ?? '');
   const [value, setValue] = useState(initial?.value?.toString() ?? '');
   const [status, setStatus] = useState<Equipment['status']>(initial?.status ?? 'available');
-  const [assignedJobId, setAssignedJobId] = useState(initial?.assignedJobId ?? '');
+  // Display as job name (look up from ID) or custom string
+  const [assignedRef, setAssignedRef] = useState(() => {
+    if (!initial?.assignedJobId) return '';
+    const job = jobs.find(j => j.id === initial.assignedJobId);
+    return job ? job.name : (initial.assignedJobId ?? '');
+  });
   const [notes, setNotes] = useState(initial?.notes ?? '');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+    // If the typed value matches a real job name, store its ID; otherwise store the string
+    const matchingJob = jobs.find(j => j.name.toLowerCase() === assignedRef.trim().toLowerCase());
+    const finalJobId = matchingJob ? matchingJob.id : (assignedRef.trim() || undefined);
+    if (assignedRef.trim() && !matchingJob) {
+      onSaveCustomJobName(assignedRef.trim());
+    }
     onSubmit({
       name: name.trim(), category, serialNumber: serialNumber.trim() || undefined,
       value: value ? parseFloat(value) : undefined, status,
-      assignedJobId: assignedJobId || undefined, notes: notes.trim(),
+      assignedJobId: finalJobId, notes: notes.trim(),
     });
   };
 
@@ -54,13 +68,18 @@ function EquipmentForm({ onSubmit, initial, jobs, onCancel }: {
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>{statusOptions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
         </Select>
-        <Select value={assignedJobId || 'none'} onValueChange={v => setAssignedJobId(v === 'none' ? '' : v)}>
-          <SelectTrigger><SelectValue placeholder="Assign to job" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">Unassigned</SelectItem>
-            {jobs.map(j => <SelectItem key={j.id} value={j.id}>{j.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <div>
+          <Input
+            value={assignedRef}
+            onChange={e => setAssignedRef(e.target.value)}
+            placeholder="Unassigned"
+            list="eq-job-names"
+          />
+          <datalist id="eq-job-names">
+            {jobs.map(j => <option key={j.id} value={j.name} />)}
+            {customJobNames.map(n => <option key={n} value={n} />)}
+          </datalist>
+        </div>
       </div>
       <Input placeholder="Notes" value={notes} onChange={e => setNotes(e.target.value)} />
       <div className="flex gap-2 justify-end">
@@ -71,12 +90,28 @@ function EquipmentForm({ onSubmit, initial, jobs, onCancel }: {
   );
 }
 
+const CUSTOM_JOBS_KEY = 'av-equipment-custom-jobs';
+
 export default function EquipmentPage() {
   const { data, addEquipment, updateEquipment, deleteEquipment } = useData();
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [customJobNames, setCustomJobNames] = useState<string[]>([]);
   const editingEq = editId ? data.equipment.find(e => e.id === editId) : undefined;
   const jobs = data.jobs.map(j => ({ id: j.id, name: j.name }));
+
+  useEffect(() => {
+    try { setCustomJobNames(JSON.parse(localStorage.getItem(CUSTOM_JOBS_KEY) ?? '[]')); } catch { /* ignore */ }
+  }, []);
+
+  const saveCustomJobName = (name: string) => {
+    setCustomJobNames(prev => {
+      if (prev.includes(name)) return prev;
+      const next = [...prev, name];
+      localStorage.setItem(CUSTOM_JOBS_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
 
   return (
     <>
@@ -88,7 +123,7 @@ export default function EquipmentPage() {
             <DialogTrigger asChild><Button size="sm"><Plus size={16} className="mr-1" /> Add Equipment</Button></DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle className="text-mono">Add Equipment</DialogTitle></DialogHeader>
-              <EquipmentForm jobs={jobs} onSubmit={(eq) => { addEquipment(eq); setOpen(false); }} />
+              <EquipmentForm jobs={jobs} customJobNames={customJobNames} onSaveCustomJobName={saveCustomJobName} onSubmit={(eq) => { addEquipment(eq); setOpen(false); }} />
             </DialogContent>
           </Dialog>
         }
@@ -126,7 +161,7 @@ export default function EquipmentPage() {
                         'bg-muted text-muted-foreground'
                       }`}>{eq.status}</span>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground">{job?.name ?? '—'}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{job?.name ?? eq.assignedJobId ?? '—'}</td>
                     <td className="px-4 py-3 text-right text-mono">{eq.value ? `$${eq.value.toLocaleString()}` : '—'}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex gap-1 justify-end">
@@ -146,7 +181,7 @@ export default function EquipmentPage() {
         <DialogContent>
           <DialogHeader><DialogTitle className="text-mono">Edit Equipment</DialogTitle></DialogHeader>
           {editingEq && (
-            <EquipmentForm jobs={jobs} initial={editingEq} onSubmit={(updates) => { updateEquipment(editId!, updates); setEditId(null); }} onCancel={() => setEditId(null)} />
+            <EquipmentForm jobs={jobs} customJobNames={customJobNames} onSaveCustomJobName={saveCustomJobName} initial={editingEq} onSubmit={(updates) => { updateEquipment(editId!, updates); setEditId(null); }} onCancel={() => setEditId(null)} />
           )}
         </DialogContent>
       </Dialog>

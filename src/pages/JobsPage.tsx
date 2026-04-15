@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Briefcase, Trash2, Pencil, ChevronDown, ChevronRight } from 'lucide-react';
 import JobPhotoImport from '@/components/JobPhotoImport';
-import VoiceDictation from '@/components/VoiceDictation';
+import JobPasteImport from '@/components/JobPasteImport';
 import JobForm from '@/components/JobForm';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -19,8 +19,6 @@ export default function JobsPage() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const editingJob = editId ? data.jobs.find(j => j.id === editId) : undefined;
-  const jobsList = data.jobs.map(j => ({ name: j.name, client: j.client }));
-
   const totalHours = data.jobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
   const totalEarnings = data.jobs.reduce((s, j) => s + (j.hoursWorked ?? 0) * (j.hourlyRate ?? 0), 0);
 
@@ -47,14 +45,12 @@ export default function JobsPage() {
     <>
       <PageHeader title="Jobs" description="Track gigs, hours, and earnings" />
 
-      {/* Voice mad-lib entry — the primary way to add */}
-      <div className="mb-4">
-        <VoiceDictation onParsed={addJob} jobs={jobsList} />
-      </div>
-
-      {/* Photo import */}
-      <div className="mb-4">
-        <JobPhotoImport onImport={addJob} />
+      {/* Import */}
+      <div className="mb-4 flex flex-col gap-2">
+        <JobPhotoImport onImport={async (job) => { await addJob(job); }} />
+        <div className="flex justify-end">
+          <JobPasteImport onImport={(job) => addJob(job)} />
+        </div>
       </div>
 
       {/* Summary */}
@@ -71,7 +67,7 @@ export default function JobsPage() {
 
       {/* Job list */}
       {data.jobs.length === 0 ? (
-        <EmptyState icon={Briefcase} title="No jobs yet" description="Use the import box above to scan a schedule" />
+        <EmptyState icon={Briefcase} title="No jobs yet" description="Use Photo Import above to scan a dispatch email or schedule" />
       ) : (
         <div className="space-y-2">
           {groupedJobs.map(([key, group]) => {

@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Briefcase, Receipt, DollarSign, Speaker, Scale, CalendarDays, Sparkles, Menu, X, Trash2, ClipboardCheck, PartyPopper, PieChart } from 'lucide-react';
+import { LayoutDashboard, Receipt, DollarSign, Speaker, Scale, CalendarDays, Sparkles, Menu, X, Trash2, ClipboardCheck, PartyPopper, PieChart, LogOut, Settings, Users, Wallet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { clearAllData } from '@/lib/store';
 import { usePartyMode } from '@/lib/PartyModeContext';
+import { useAuth } from '@/lib/AuthContext';
+import { useUserPrefs } from '@/lib/UserPrefsContext';
 import FloatingEmojis from '@/components/FloatingEmojis';
 import {
   AlertDialog,
@@ -18,32 +20,44 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
-const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/calendar', icon: CalendarDays, label: 'Calendar' },
-  { to: '/log', icon: ClipboardCheck, label: 'Job Log' },
-  { to: '/expenses', icon: Receipt, label: 'Expenses' },
-  { to: '/taxes', icon: PieChart, label: 'Taxes' },
-  { to: '/income', icon: DollarSign, label: 'Income' },
-  { to: '/discover', icon: Sparkles, label: 'Discover' },
-  { to: '/reconciliation', icon: Scale, label: 'Reconciliation' },
-  { to: '/equipment', icon: Speaker, label: 'Equipment' },
-];
+const ALL_NAV_ITEMS = [
+  { to: '/',               icon: LayoutDashboard, label: 'Dashboard',      tabKey: null },
+  { to: '/calendar',       icon: CalendarDays,    label: 'Calendar',       tabKey: 'calendar' },
+  { to: '/log',            icon: ClipboardCheck,  label: 'Job Log',        tabKey: 'log' },
+  { to: '/expenses',       icon: Receipt,         label: 'Expenses',       tabKey: 'expenses' },
+  { to: '/taxes',          icon: PieChart,        label: 'Taxes',          tabKey: 'taxes' },
+  { to: '/income',         icon: DollarSign,      label: 'Income',         tabKey: 'income' },
+  { to: '/reconciliation', icon: Scale,           label: 'Reconciliation', tabKey: 'reconciliation' },
+  { to: '/equipment',      icon: Speaker,         label: 'Equipment',      tabKey: 'equipment' },
+  { to: '/discover',       icon: Sparkles,        label: 'Discover',       tabKey: 'discover' },
+  { to: '/scheduling',    icon: Users,           label: 'Scheduling',     tabKey: 'scheduling' },
+  { to: '/payouts',       icon: Wallet,          label: 'Pay Outs',       tabKey: 'payouts' },
+] as const;
 
-// Bottom tab bar items (most used on mobile)
-const tabItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Home' },
-  { to: '/log', icon: ClipboardCheck, label: 'Job Log' },
-  { to: '/expenses', icon: Receipt, label: 'Expenses' },
-  { to: '/income', icon: DollarSign, label: 'Income' },
-];
+const ALL_TAB_ITEMS = [
+  { to: '/',        icon: LayoutDashboard, label: 'Home',    tabKey: null },
+  { to: '/log',     icon: ClipboardCheck,  label: 'Job Log', tabKey: 'log' },
+  { to: '/expenses',icon: Receipt,         label: 'Expenses',tabKey: 'expenses' },
+  { to: '/income',  icon: DollarSign,      label: 'Income',  tabKey: 'income' },
+] as const;
 
-function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarContent({ onNavigate, collapsed }: { onNavigate?: () => void; collapsed?: boolean }) {
   const location = useLocation();
   const { partyMode, togglePartyMode } = usePartyMode();
+  const { user, signOut } = useAuth();
+  const { prefs } = useUserPrefs();
+
+  const navItems = ALL_NAV_ITEMS.filter(
+    item => item.tabKey === null || prefs.tabs[item.tabKey as keyof typeof prefs.tabs]
+  );
+
+  const iconBtn = collapsed
+    ? "flex items-center justify-center rounded-md p-2.5 text-sm transition-colors w-full"
+    : "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors w-full";
+
   return (
     <>
-      <nav className="flex-1 py-4 space-y-1 px-2">
+      <nav className="flex-1 py-4 space-y-1 px-2 overflow-y-auto">
         {navItems.map(({ to, icon: Icon, label }) => {
           const active = location.pathname === to || (to !== '/' && location.pathname.startsWith(to));
           return (
@@ -51,53 +65,84 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
               key={to}
               to={to}
               onClick={onNavigate}
+              title={collapsed ? label : undefined}
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors",
+                collapsed
+                  ? "flex items-center justify-center rounded-md p-2.5 transition-colors"
+                  : "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors",
                 active
                   ? "bg-primary/10 text-primary border-glow border"
                   : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               )}
             >
               <Icon size={18} />
-              <span>{label}</span>
+              {!collapsed && <span>{label}</span>}
             </Link>
           );
         })}
       </nav>
       <div className="border-t border-border px-2 py-3 space-y-2">
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <button className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors w-full">
-              <Trash2 size={18} />
-              <span>Clear All Data</span>
-            </button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Clear all data?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This will permanently delete all jobs, expenses, income, and equipment data. This action cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={clearAllData} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                Delete Everything
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        {import.meta.env.DEV && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <button
+                title={collapsed ? 'Clear All Data' : undefined}
+                className={cn(iconBtn, "text-destructive hover:bg-destructive/10")}
+              >
+                <Trash2 size={18} />
+                {!collapsed && <span>Clear All Data</span>}
+              </button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Clear all data?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete all jobs, expenses, income, and equipment data. This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => clearAllData()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                  Delete Everything
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+        <Link
+          to="/settings"
+          onClick={onNavigate}
+          title={collapsed ? 'Mode' : undefined}
+          className={cn(
+            iconBtn,
+            location.pathname === '/settings'
+              ? "bg-primary/10 text-primary border-glow border"
+              : "text-muted-foreground hover:bg-secondary"
+          )}
+        >
+          <Settings size={18} />
+          {!collapsed && <span>Mode</span>}
+        </Link>
         <button
           onClick={togglePartyMode}
+          title={collapsed ? (partyMode ? 'Vibes ON' : 'Vibes OFF') : undefined}
           className={cn(
-            "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors w-full",
+            iconBtn,
             partyMode ? "text-primary hover:bg-primary/10" : "text-muted-foreground hover:bg-secondary"
           )}
         >
           <PartyPopper size={18} />
-          <span>{partyMode ? 'Vibes ON' : 'Vibes OFF'}</span>
+          {!collapsed && <span>{partyMode ? 'Vibes ON' : 'Vibes OFF'}</span>}
         </button>
-        <p className="text-xs text-muted-foreground text-mono px-3">LOCAL MODE</p>
+        <button
+          onClick={signOut}
+          title={collapsed ? 'Sign Out' : undefined}
+          className={cn(iconBtn, "text-muted-foreground hover:bg-secondary")}
+        >
+          <LogOut size={18} />
+          {!collapsed && <span>Sign Out</span>}
+        </button>
+        {user && !collapsed && <p className="text-[10px] text-muted-foreground text-mono px-3 truncate">{user.email}</p>}
       </div>
     </>
   );
@@ -107,6 +152,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { prefs } = useUserPrefs();
+  const tabItems = ALL_TAB_ITEMS.filter(
+    item => item.tabKey === null || prefs.tabs[item.tabKey as keyof typeof prefs.tabs]
+  );
   const { partyMode } = usePartyMode();
 
   return (
@@ -129,7 +178,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </span>
           )}
         </div>
-        <SidebarContent />
+        <SidebarContent collapsed={collapsed} />
       </aside>
 
       {/* Mobile top bar + sheet nav */}

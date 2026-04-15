@@ -141,5 +141,17 @@ export function calculateExpectedPay(
     details.push({ date, hours, pay: result.totalPay, breakdown: result.breakdown });
   }
 
+  // Vacation pay: 8% of gross earnings (common union benefit)
+  if (referenceJob.hasVacationPay && total > 0) {
+    const vacPay = total * 0.08;
+    total += vacPay;
+    details.push({
+      date: '',
+      hours: 0,
+      pay: vacPay,
+      breakdown: [`Vacation pay (8% of gross) = $${vacPay.toFixed(2)}`],
+    });
+  }
+
   return { total, details };
 }
