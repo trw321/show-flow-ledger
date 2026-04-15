@@ -17,7 +17,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUserId(session?.user?.id ?? null);
     });
-    return () => subscription.unsubscribe();
+    // Keepalive: ping DB every 4 days to prevent Supabase free-tier auto-pause
+    const keepalive = setInterval(() => supabase.from('jobs').select('id').limit(1), 4 * 24 * 60 * 60 * 1000);
+    return () => { subscription.unsubscribe(); clearInterval(keepalive); };
   }, []);
 
   const appData = useAppData(userId);
