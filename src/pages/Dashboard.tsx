@@ -219,7 +219,7 @@ export default function Dashboard() {
       {/* Weekly Export */}
       <div className="flex justify-end mb-4">
         <button
-          onClick={() => exportWeeklyToExcel(data.jobs, data.expenses, data.income)}
+          onClick={() => exportWeeklyToExcel(data.jobs, showExpenses ? data.expenses : [], showIncome ? data.income : [])}
           className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 border border-primary/30 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors"
         >
           <Download size={14} />

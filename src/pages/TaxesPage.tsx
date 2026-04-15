@@ -200,8 +200,9 @@ export default function TaxesPage() {
   const [useCustomDeduction, setUseCustomDeduction] = useState(false);
   const [customDeduction, setCustomDeduction]       = useState(0);
 
+  const showExpenses = prefs.tabs.expenses;
   const totalIncome   = data.income.reduce((s, i) => s + i.amount, 0);
-  const totalExpenses = data.expenses.reduce((s, e) => s + e.amount, 0);
+  const totalExpenses = showExpenses ? data.expenses.reduce((s, e) => s + e.amount, 0) : 0;
   const netProfit     = totalIncome - totalExpenses;
 
   const calc = useMemo(() => {
@@ -236,7 +237,7 @@ export default function TaxesPage() {
   const offset   = 12;
   const sliceTransform = `translate(${(offset * Math.cos(rad)).toFixed(2)}px, ${(offset * Math.sin(rad)).toFixed(2)}px)`;
 
-  const hasData = totalIncome > 0 || totalExpenses > 0;
+  const hasData = totalIncome > 0 || (showExpenses && totalExpenses > 0);
 
   const effectiveRate = totalIncome > 0 ? (calc.totalTax / totalIncome) * 100 : 0;
 
@@ -367,9 +368,9 @@ export default function TaxesPage() {
             </h2>
             <div className="space-y-1 text-sm">
               <Row label="Gross Income" value={totalIncome} />
-              <Row label="Business Expenses" value={-totalExpenses} color="text-warning" />
-              <Divider />
-              <Row label="Net Profit (Schedule C)" value={netProfit} bold />
+              {showExpenses && <Row label="Business Expenses" value={-totalExpenses} color="text-warning" />}
+              {showExpenses && <Divider />}
+              <Row label={showExpenses ? 'Net Profit (Schedule C)' : 'Net Income'} value={netProfit} bold />
 
               {isSelfEmployed && (
                 <>
