@@ -78,13 +78,14 @@ export default function Dashboard() {
   const totalEarnings = data.jobs.reduce((s, j) => s + (j.hoursWorked ?? 0) * (j.hourlyRate ?? 0), 0);
   const netProfit = totalIncome - totalExpenses;
 
-  const estimatedTax = Math.max(0, netProfit * (taxRate / 100));
-  const afterTax = netProfit - estimatedTax;
+  const displayTotal = showExpenses ? netProfit : totalIncome;
+  const estimatedTax = Math.max(0, displayTotal * (taxRate / 100));
+  const afterTax = displayTotal - estimatedTax;
 
   const pieData = [
     { name: 'Take Home', value: Math.max(0, afterTax), color: 'hsl(76, 92%, 48%)' },
     { name: 'Estimated Tax', value: estimatedTax, color: 'hsl(50, 100%, 55%)' },
-    { name: 'Expenses', value: totalExpenses, color: 'hsl(0, 72%, 55%)' },
+    ...(showExpenses ? [{ name: 'Expenses', value: totalExpenses, color: 'hsl(0, 72%, 55%)' }] : []),
   ].filter(d => d.value > 0);
 
   const recentJobs = [...data.jobs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
@@ -177,10 +178,10 @@ export default function Dashboard() {
             transition={{ duration: 0.5, delay: 0.2 }}
           >
             <span className="text-3xl md:text-4xl font-bold text-mono text-foreground">
-              ${netProfit.toLocaleString()}
+              ${displayTotal.toLocaleString()}
             </span>
-            <span className={`text-xs font-medium text-mono uppercase tracking-wider ${netProfit >= 0 ? 'text-success' : 'text-destructive'}`}>
-              net {netProfit >= 0 ? '↑' : '↓'}
+            <span className={`text-xs font-medium text-mono uppercase tracking-wider ${displayTotal >= 0 ? 'text-success' : 'text-destructive'}`}>
+              {showExpenses ? 'net' : 'income'} {displayTotal >= 0 ? '↑' : '↓'}
             </span>
           </motion.div>
 
