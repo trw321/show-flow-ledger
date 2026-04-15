@@ -4,7 +4,7 @@ import PageHeader from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Clock, ChevronRight, Users, Trash2, X } from 'lucide-react';
+import { Plus, Clock, ChevronRight, Users, Trash2, X, Pencil } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -85,7 +85,8 @@ export default function SchedulingPage() {
   const [newPhone, setNewPhone] = useState('');
   const [newRate, setNewRate] = useState('');
 
-  // New shift form
+  // New/edit shift form
+  const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [shiftMemberId, setShiftMemberId] = useState('');
   const [shiftJob, setShiftJob] = useState('');
   const [shiftDate, setShiftDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -93,6 +94,9 @@ export default function SchedulingPage() {
   const [shiftEnd, setShiftEnd] = useState('');
   const [shiftMeal, setShiftMeal] = useState<Shift['mealBreak']>(undefined);
   const [shiftNotes, setShiftNotes] = useState('');
+
+  // Saved show names for autocomplete
+  const [savedShowNames, setSavedShowNames] = useState<string[]>([]);
 
   // Load user + data
   useEffect(() => {
@@ -102,6 +106,7 @@ export default function SchedulingPage() {
       setUid(id);
       setCrew(loadList<CrewMember>(storageKey(id, 'crew')));
       setShifts(loadList<Shift>(storageKey(id, 'shifts')));
+      setSavedShowNames(loadList<string>(`av-show-names-${id}`));
     });
   }, []);
 
@@ -134,12 +139,29 @@ export default function SchedulingPage() {
     persistShifts(shifts.filter(s => s.crewMemberId !== id));
   };
 
-  const addShift = () => {
+  const resetShiftForm = () => {
+    setEditingShiftId(null);
+    setShiftJob(''); setShiftDate(format(new Date(), 'yyyy-MM-dd'));
+    setShiftStart(''); setShiftEnd(''); setShiftMeal(undefined); setShiftNotes('');
+  };
+
+  const startEditShift = (sh: Shift) => {
+    setEditingShiftId(sh.id);
+    setShiftMemberId(sh.crewMemberId);
+    setShiftJob(sh.jobRef ?? '');
+    setShiftDate(sh.date);
+    setShiftStart(sh.startTime ?? '');
+    setShiftEnd(sh.endTime ?? '');
+    setShiftMeal(sh.mealBreak);
+    setShiftNotes(sh.notes ?? '');
+    setShiftDialog(true);
+  };
+
+  const saveShift = () => {
     if (!shiftMemberId || !shiftDate) return;
     let hours = calcHours(shiftStart, shiftEnd);
     if (shiftMeal === 'ywa' && hours > 0) hours = Math.max(0, hours - 1);
-    const shift: Shift = {
-      id: crypto.randomUUID(),
+    const shiftData = {
       crewMemberId: shiftMemberId,
       jobRef: shiftJob.trim() || undefined,
       date: shiftDate,
@@ -149,11 +171,21 @@ export default function SchedulingPage() {
       mealBreak: shiftMeal,
       notes: shiftNotes.trim() || undefined,
     };
-    persistShifts([...shifts, shift]);
-    setShiftJob(''); setShiftDate(format(new Date(), 'yyyy-MM-dd'));
-    setShiftStart(''); setShiftEnd(''); setShiftMeal(undefined); setShiftNotes('');
+    if (editingShiftId) {
+      persistShifts(shifts.map(s => s.id === editingShiftId ? { ...s, ...shiftData } : s));
+      toast.success('Shift updated');
+    } else {
+      persistShifts([...shifts, { id: crypto.randomUUID(), ...shiftData }]);
+      toast.success('Shift logged');
+    }
+    // Save custom show name for future autocomplete
+    if (shiftJob.trim() && uid && !savedShowNames.includes(shiftJob.trim())) {
+      const next = [...savedShowNames, shiftJob.trim()];
+      setSavedShowNames(next);
+      saveList(`av-show-names-${uid}`, next);
+    }
+    resetShiftForm();
     setShiftDialog(false);
-    toast.success('Shift logged');
   };
 
   const memberShifts = (memberId: string) =>
@@ -166,10 +198,13 @@ export default function SchedulingPage() {
   const rawShiftHours = calcHours(shiftStart, shiftEnd);
   const shiftHours = shiftMeal === 'ywa' ? Math.max(0, rawShiftHours - 1) : rawShiftHours;
 
-  // Upcoming job names for quick-fill
-  const jobNames = useMemo(() =>
-    [...new Set(data.jobs.map(j => j.name).filter(Boolean))].slice(0, 8),
-    [data.jobs]
+  // All show names for autocomplete (from jobs + saved custom entries)
+  const allShowNames = useMemo(() =>
+    [...new Set([
+      ...data.jobs.map(j => j.name).filter(Boolean),
+      ...savedShowNames,
+    ])],
+    [data.jobs, savedShowNames]
   );
 
   return (
@@ -273,6 +308,12 @@ export default function SchedulingPage() {
                                 <span className="text-xs text-mono text-success">${((sh.hoursWorked ?? 0) * member.rate).toLocaleString()}</span>
                               )}
                               <button
+                                onClick={() => startEditShift(sh)}
+                                className="text-muted-foreground/30 hover:text-primary transition-colors"
+                              >
+                                <Pencil size={12} />
+                              </button>
+                              <button
                                 onClick={() => persistShifts(shifts.filter(s => s.id !== sh.id))}
                                 className="text-muted-foreground/30 hover:text-destructive transition-colors"
                               >
@@ -327,10 +368,10 @@ export default function SchedulingPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Log Shift dialog */}
-      <Dialog open={shiftDialog} onOpenChange={setShiftDialog}>
+      {/* Log / Edit Shift dialog */}
+      <Dialog open={shiftDialog} onOpenChange={o => { if (!o) { resetShiftForm(); } setShiftDialog(o); }}>
         <DialogContent className="max-w-sm rounded-2xl">
-          <DialogHeader><DialogTitle className="text-mono text-sm">Log Shift</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-mono text-sm">{editingShiftId ? 'Edit Shift' : 'Log Shift'}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Crew Member *</label>
@@ -352,7 +393,7 @@ export default function SchedulingPage() {
                 list="job-names"
               />
               <datalist id="job-names">
-                {jobNames.map(n => <option key={n} value={n} />)}
+                {allShowNames.map(n => <option key={n} value={n} />)}
               </datalist>
             </div>
             <div className="space-y-1">
@@ -416,8 +457,8 @@ export default function SchedulingPage() {
               <Input value={shiftNotes} onChange={e => setShiftNotes(e.target.value)} placeholder="Optional notes" className="h-9" />
             </div>
             <div className="flex gap-2 pt-1">
-              <Button variant="outline" size="sm" className="flex-1" onClick={() => setShiftDialog(false)}>Cancel</Button>
-              <Button size="sm" className="flex-1" disabled={!shiftMemberId || !shiftDate} onClick={addShift}>Save</Button>
+              <Button variant="outline" size="sm" className="flex-1" onClick={() => { resetShiftForm(); setShiftDialog(false); }}>Cancel</Button>
+              <Button size="sm" className="flex-1" disabled={!shiftMemberId || !shiftDate} onClick={saveShift}>{editingShiftId ? 'Update' : 'Save'}</Button>
             </div>
           </div>
         </DialogContent>

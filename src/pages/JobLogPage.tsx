@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Clock, ChevronRight } from 'lucide-react';
 import JobPhotoImport from '@/components/JobPhotoImport';
 import JobPasteImport from '@/components/JobPasteImport';
+import HoursNoteImport from '@/components/HoursNoteImport';
 import LogHoursForm from '@/components/LogHoursForm';
 import { format, isToday, isPast, isFuture } from 'date-fns';
 import { toast } from 'sonner';
@@ -56,6 +57,9 @@ export default function JobLogPage() {
         <JobPasteImport onImport={async (job) => {
           await addJob({ ...job, status: 'upcoming', hoursWorked: 0 });
         }} />
+      </div>
+      <div className="mb-4">
+        <HoursNoteImport />
       </div>
 
       {/* Today / Needs Logging */}
