@@ -80,18 +80,20 @@ export default function PatternAuthPage({ onUnlocked }: { onUnlocked: () => void
 
   const unlock = async () => {
     setLoading(true);
-    // If already have a valid session, skip anonymous sign-in
-    const { data: { session: existing } } = await supabase.auth.getSession();
-    if (!existing) {
-      const { error } = await supabase.auth.signInAnonymously();
-      if (error) {
-        setError('Sign-in failed — check your connection and try again');
-        setLoading(false);
-        return;
-      }
+    try {
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 12000)
+      );
+      await Promise.race([supabase.auth.signInAnonymously(), timeout]);
+    } catch (err) {
+      const isTimeout = err instanceof Error && err.message === 'timeout';
+      setError(isTimeout
+        ? 'Taking too long — Supabase may be waking up. Wait 30 seconds and try again.'
+        : 'Sign-in failed — check your connection and try again.'
+      );
+      setLoading(false);
+      return;
     }
-    // Wait for the session to be fully propagated before unlocking
-    await supabase.auth.getSession();
     setLoading(false);
     onUnlocked();
   };
