@@ -81,15 +81,18 @@ export default function PatternAuthPage({ onUnlocked }: { onUnlocked: () => void
   const unlock = async () => {
     setLoading(true);
     try {
+      const signIn = supabase.auth.signInAnonymously().then(({ error }) => {
+        if (error) throw error;
+      });
       const timeout = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('timeout')), 12000)
       );
-      await Promise.race([supabase.auth.signInAnonymously(), timeout]);
+      await Promise.race([signIn, timeout]);
     } catch (err) {
       const isTimeout = err instanceof Error && err.message === 'timeout';
       setError(isTimeout
-        ? 'Taking too long — Supabase may be waking up. Wait 30 seconds and try again.'
-        : 'Sign-in failed — check your connection and try again.'
+        ? 'Taking too long — wait 30s and try again (server waking up)'
+        : `Sign-in failed: ${err instanceof Error ? err.message : 'unknown error'}. Enable Anonymous sign-ins in your Supabase dashboard → Authentication → Providers.`
       );
       setLoading(false);
       return;
