@@ -332,7 +332,7 @@ export function useAppData(userId: string | null) {
   // ── Jobs ──────────────────────────────────────────────────────────────────
 
   const addJob = useCallback(async (job: Omit<Job, 'id' | 'createdAt'>): Promise<Job | null> => {
-    if (!userId) { console.error('addJob: no userId'); return null; }
+    if (!userId) throw new Error('Not signed in — please refresh and try again');
 
     // Check dedup against current data via ref (never stale, never hangs)
     if (isDuplicateJob(job, dataRef.current.jobs)) return null;

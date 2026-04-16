@@ -80,8 +80,18 @@ export default function PatternAuthPage({ onUnlocked }: { onUnlocked: () => void
 
   const unlock = async () => {
     setLoading(true);
-    // Sign in anonymously to Supabase for data storage
-    await supabase.auth.signInAnonymously();
+    // If already have a valid session, skip anonymous sign-in
+    const { data: { session: existing } } = await supabase.auth.getSession();
+    if (!existing) {
+      const { error } = await supabase.auth.signInAnonymously();
+      if (error) {
+        setError('Sign-in failed — check your connection and try again');
+        setLoading(false);
+        return;
+      }
+    }
+    // Wait for the session to be fully propagated before unlocking
+    await supabase.auth.getSession();
     setLoading(false);
     onUnlocked();
   };

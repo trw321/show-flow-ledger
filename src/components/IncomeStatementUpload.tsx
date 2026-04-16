@@ -134,11 +134,17 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
     });
   };
 
-  const addSelected = () => {
+  const [isSaving, setIsSaving] = useState(false);
+
+  const addSelected = async () => {
+    setIsSaving(true);
     let count = 0;
-    transactions.forEach((txn, i) => {
-      if (selected.has(i)) {
-        addIncome({
+    let failed = 0;
+    for (let i = 0; i < transactions.length; i++) {
+      if (!selected.has(i)) continue;
+      const txn = transactions[i];
+      try {
+        await addIncome({
           client: txn.client,
           description: txn.description,
           amount: Math.abs(txn.amount),
@@ -148,9 +154,17 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
           jobId: linkedJobs[i]?.id || undefined,
         });
         count++;
+      } catch (err) {
+        console.error('Failed to save income:', txn.client, err);
+        failed++;
       }
-    });
-    toast.success(`Added ${count} income entry(ies)`);
+    }
+    setIsSaving(false);
+    if (count === 0) {
+      toast.error(failed > 0 ? 'Failed to save — check your connection' : 'Nothing to add');
+      return;
+    }
+    toast.success(`Added ${count} income entry(ies)${failed ? ` • ${failed} failed` : ''}`);
     setOpen(false);
     setTransactions([]);
     setLinkedJobs([]);
@@ -267,7 +281,9 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
             </div>
             <div className="flex gap-2 justify-end">
               <Button variant="ghost" onClick={() => { setTransactions([]); setLinkedJobs([]); setPreview(null); }}><X size={14} className="mr-1" /> Cancel</Button>
-              <Button onClick={addSelected} disabled={selected.size === 0}>Add {selected.size} income{selected.size !== 1 ? 's' : ''}</Button>
+              <Button onClick={addSelected} disabled={selected.size === 0 || isSaving}>
+                {isSaving ? <><Loader2 size={14} className="mr-1 animate-spin" /> Saving...</> : <>Add {selected.size} income{selected.size !== 1 ? 's' : ''}</>}
+              </Button>
             </div>
           </div>
         )}
