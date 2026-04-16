@@ -61,25 +61,6 @@ function generateRecoveryPhrase(): string {
   return picked.join('-');
 }
 
-// ── Auto-generated device credentials (replaces anonymous auth) ─────────────
-
-const CRED_EMAIL_KEY = 'showflow-cred-email';
-const CRED_PWD_KEY   = 'showflow-cred-pwd';
-
-function getOrCreateCredentials(): { email: string; pwd: string } {
-  let email = localStorage.getItem(CRED_EMAIL_KEY);
-  let pwd   = localStorage.getItem(CRED_PWD_KEY);
-  if (!email || !pwd) {
-    const rand = () => Array.from(crypto.getRandomValues(new Uint8Array(12)))
-      .map(b => b.toString(16).padStart(2, '0')).join('');
-    email = `device-${rand()}@avledger.app`;
-    pwd   = rand() + rand();
-    localStorage.setItem(CRED_EMAIL_KEY, email);
-    localStorage.setItem(CRED_PWD_KEY, pwd);
-  }
-  return { email, pwd };
-}
-
 // ── Component ────────────────────────────────────────────────────────────────
 
 type Screen = 'unlock' | 'setup-name' | 'setup-draw' | 'setup-confirm' | 'setup-phrase' | 'recovery';

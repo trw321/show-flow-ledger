@@ -1,56 +1,16 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import { useAppData } from './store';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
 
-const CRED_EMAIL_KEY = 'showflow-cred-email';
-const CRED_PWD_KEY   = 'showflow-cred-pwd';
+const DEVICE_ID_KEY = 'showflow-device-id';
 
-function getOrCreateCredentials() {
-  let email = localStorage.getItem(CRED_EMAIL_KEY);
-  let pwd   = localStorage.getItem(CRED_PWD_KEY);
-  if (!email || !pwd) {
-    const rand = () => Array.from(crypto.getRandomValues(new Uint8Array(12)))
-      .map(b => b.toString(16).padStart(2, '0')).join('');
-    email = `device-${rand()}@avledger.app`;
-    pwd   = rand() + rand();
-    localStorage.setItem(CRED_EMAIL_KEY, email);
-    localStorage.setItem(CRED_PWD_KEY, pwd);
+function getDeviceId(): string {
+  let id = localStorage.getItem(DEVICE_ID_KEY);
+  if (!id) {
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    id = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+    localStorage.setItem(DEVICE_ID_KEY, id);
   }
-  return { email, pwd };
-}
-
-async function ensureSignedIn(): Promise<string | null> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.user) return null;
-
-  const { email, pwd } = getOrCreateCredentials();
-  const errors: string[] = [];
-
-  const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password: pwd });
-  if (!signInErr) return null;
-  errors.push(`pw-login: ${signInErr.message}`);
-
-  if (signInErr.message.toLowerCase().includes('not confirmed')) {
-    // Stale unconfirmed account — bin it, start fresh
-    localStorage.removeItem(CRED_EMAIL_KEY);
-    localStorage.removeItem(CRED_PWD_KEY);
-    const fresh = getOrCreateCredentials();
-    const { data, error } = await supabase.auth.signUp({ email: fresh.email, password: fresh.pwd });
-    if (!error && data.session) return null;
-    errors.push(error ? `fresh-signup: ${error.message}` : 'fresh-signup: still no session');
-  } else {
-    const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({ email, password: pwd });
-    if (!signUpErr && signUpData.session) return null;
-    errors.push(signUpErr ? `signup: ${signUpErr.message}` : 'signup: no session returned');
-  }
-
-  // Last resort: anonymous
-  const { error: anonErr } = await supabase.auth.signInAnonymously();
-  if (!anonErr) return null;
-  errors.push(`anon: ${anonErr.message}`);
-
-  return errors.join(' | ');
+  return id;
 }
 
 type AppDataReturn = ReturnType<typeof useAppData>;
@@ -59,28 +19,14 @@ type DataContextValue = AppDataReturn & { authReady: boolean };
 const DataContext = createContext<DataContextValue | null>(null);
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  const [userId, setUserId] = useState<string | null>(null);
-  const [authReady, setAuthReady] = useState(false);
-
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUserId(session?.user?.id ?? null);
-      setAuthReady(true);
-    });
-
-    ensureSignedIn().then(errMsg => {
-      if (errMsg) {
-        toast.error(`Server connection failed: ${errMsg}`, { duration: 20000 });
-      }
-      setAuthReady(true);
-    });
-
-    const keepalive = setInterval(() => supabase.from('jobs').select('id').limit(1), 4 * 24 * 60 * 60 * 1000);
-    return () => { subscription.unsubscribe(); clearInterval(keepalive); };
-  }, []);
+  const [userId] = useState(() => getDeviceId());
 
   const appData = useAppData(userId);
-  return <DataContext.Provider value={{ ...appData, authReady }}>{children}</DataContext.Provider>;
+  return (
+    <DataContext.Provider value={{ ...appData, authReady: true }}>
+      {children}
+    </DataContext.Provider>
+  );
 }
 
 export function useData() {
