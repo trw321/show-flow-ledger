@@ -44,6 +44,8 @@ function clearPattern() {
   localStorage.removeItem(PATTERN_KEY);
   localStorage.removeItem(NAME_KEY);
   localStorage.removeItem(RECOVERY_KEY);
+  localStorage.removeItem('showflow-cred-email');
+  localStorage.removeItem('showflow-cred-pwd');
 }
 
 function generateRecoveryPhrase(): string {
@@ -58,6 +60,25 @@ function generateRecoveryPhrase(): string {
     if (!used.has(i)) { used.add(i); picked.push(words[i]); }
   }
   return picked.join('-');
+}
+
+// ── Auto-generated device credentials (replaces anonymous auth) ─────────────
+
+const CRED_EMAIL_KEY = 'showflow-cred-email';
+const CRED_PWD_KEY   = 'showflow-cred-pwd';
+
+function getOrCreateCredentials(): { email: string; pwd: string } {
+  let email = localStorage.getItem(CRED_EMAIL_KEY);
+  let pwd   = localStorage.getItem(CRED_PWD_KEY);
+  if (!email || !pwd) {
+    const rand = () => Array.from(crypto.getRandomValues(new Uint8Array(12)))
+      .map(b => b.toString(16).padStart(2, '0')).join('');
+    email = `device-${rand()}@avledger.app`;
+    pwd   = rand() + rand();
+    localStorage.setItem(CRED_EMAIL_KEY, email);
+    localStorage.setItem(CRED_PWD_KEY, pwd);
+  }
+  return { email, pwd };
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -82,26 +103,35 @@ export default function PatternAuthPage({ onUnlocked }: { onUnlocked: () => void
   const unlock = async () => {
     setLoading(true);
     setLoadingMsg('');
-    const slowTimer = setTimeout(() => setLoadingMsg('Server waking up, please wait…'), 8000);
+    const slowTimer = setTimeout(() => setLoadingMsg('Connecting to server…'), 6000);
+
     try {
-      const signIn = supabase.auth.signInAnonymously().then(({ error }) => {
-        if (error) throw error;
-      });
-      const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), 40000)
-      );
-      await Promise.race([signIn, timeout]);
+      const { email, pwd } = getOrCreateCredentials();
+
+      // Try sign-in with stored credentials first
+      const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password: pwd });
+
+      if (signInErr) {
+        // First time on this device — create account
+        const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({ email, password: pwd });
+        if (signUpErr) throw signUpErr;
+        if (!signUpData.session) {
+          throw new Error('email-confirm-required');
+        }
+      }
     } catch (err) {
-      const isTimeout = err instanceof Error && err.message === 'timeout';
-      setError(isTimeout
-        ? 'Server is taking too long to respond — draw your pattern again to retry'
-        : `Sign-in failed: ${err instanceof Error ? err.message : 'unknown error'}`
-      );
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === 'email-confirm-required') {
+        setError('One setup step needed: Supabase → Authentication → Settings → turn OFF "Enable email confirmations" → Save');
+      } else {
+        setError(`Sign-in failed: ${msg}`);
+      }
+      clearTimeout(slowTimer);
       setLoading(false);
       setLoadingMsg('');
-      clearTimeout(slowTimer);
       return;
     }
+
     clearTimeout(slowTimer);
     setLoading(false);
     setLoadingMsg('');
