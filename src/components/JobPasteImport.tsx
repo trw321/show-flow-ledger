@@ -85,6 +85,7 @@ export default function JobPasteImport({ onImport }: { onImport: (job: Omit<Job,
     let imported = 0;
     let skipped = 0;
     let failed = 0;
+    let lastError: string | null = null;
 
     for (const j of toImport) {
       const draft = {
@@ -114,6 +115,7 @@ export default function JobPasteImport({ onImport }: { onImport: (job: Omit<Job,
         imported++;
       } catch (err) {
         console.error('Failed to save job:', j.name, err);
+        lastError = err instanceof Error ? err.message : String(err);
         failed++;
       }
     }
@@ -121,7 +123,7 @@ export default function JobPasteImport({ onImport }: { onImport: (job: Omit<Job,
     setIsImporting(false);
 
     if (imported === 0 && failed > 0) {
-      toast.error(`Failed to save jobs — check your connection and try again`);
+      toast.error(lastError ?? 'Failed to save — check your connection and try again');
       return;
     }
     if (imported === 0) {
