@@ -25,30 +25,32 @@ async function ensureSignedIn(): Promise<string | null> {
   if (session?.user) return null;
 
   const { email, pwd } = getOrCreateCredentials();
+  const errors: string[] = [];
 
   const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password: pwd });
   if (!signInErr) return null;
+  errors.push(`pw-login: ${signInErr.message}`);
 
-  // If account exists but unconfirmed, clear credentials and make a fresh account
-  if (signInErr.message.includes('Email not confirmed') || signInErr.message.includes('not confirmed')) {
+  if (signInErr.message.toLowerCase().includes('not confirmed')) {
+    // Stale unconfirmed account — bin it, start fresh
     localStorage.removeItem(CRED_EMAIL_KEY);
     localStorage.removeItem(CRED_PWD_KEY);
     const fresh = getOrCreateCredentials();
-    const { data: freshSignUp, error: freshErr } = await supabase.auth.signUp({ email: fresh.email, password: fresh.pwd });
-    if (!freshErr && freshSignUp.session) return null;
+    const { data, error } = await supabase.auth.signUp({ email: fresh.email, password: fresh.pwd });
+    if (!error && data.session) return null;
+    errors.push(error ? `fresh-signup: ${error.message}` : 'fresh-signup: still no session');
+  } else {
+    const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({ email, password: pwd });
+    if (!signUpErr && signUpData.session) return null;
+    errors.push(signUpErr ? `signup: ${signUpErr.message}` : 'signup: no session returned');
   }
 
-  const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({ email, password: pwd });
-  if (!signUpErr && signUpData.session) return null;
-
+  // Last resort: anonymous
   const { error: anonErr } = await supabase.auth.signInAnonymously();
   if (!anonErr) return null;
+  errors.push(`anon: ${anonErr.message}`);
 
-  return [
-    signInErr ? `pw-login: ${signInErr.message}` : null,
-    signUpErr ? `signup: ${signUpErr.message}` : (!signUpData?.session ? 'signup: email confirmation required — go to Supabase → Auth → Settings → turn OFF Confirm Email → Save' : null),
-    anonErr ? `anon: ${anonErr.message}` : null,
-  ].filter(Boolean).join(' | ');
+  return errors.join(' | ');
 }
 
 type AppDataReturn = ReturnType<typeof useAppData>;
