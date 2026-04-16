@@ -29,16 +29,24 @@ async function ensureSignedIn(): Promise<string | null> {
   const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password: pwd });
   if (!signInErr) return null;
 
+  // If account exists but unconfirmed, clear credentials and make a fresh account
+  if (signInErr.message.includes('Email not confirmed') || signInErr.message.includes('not confirmed')) {
+    localStorage.removeItem(CRED_EMAIL_KEY);
+    localStorage.removeItem(CRED_PWD_KEY);
+    const fresh = getOrCreateCredentials();
+    const { data: freshSignUp, error: freshErr } = await supabase.auth.signUp({ email: fresh.email, password: fresh.pwd });
+    if (!freshErr && freshSignUp.session) return null;
+  }
+
   const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({ email, password: pwd });
   if (!signUpErr && signUpData.session) return null;
 
   const { error: anonErr } = await supabase.auth.signInAnonymously();
   if (!anonErr) return null;
 
-  // All methods failed — return combined error message for diagnosis
   return [
     signInErr ? `pw-login: ${signInErr.message}` : null,
-    signUpErr ? `signup: ${signUpErr.message}` : (!signUpData?.session ? 'signup: email confirmation required' : null),
+    signUpErr ? `signup: ${signUpErr.message}` : (!signUpData?.session ? 'signup: email confirmation required — go to Supabase → Auth → Settings → turn OFF Confirm Email → Save' : null),
     anonErr ? `anon: ${anonErr.message}` : null,
   ].filter(Boolean).join(' | ');
 }
