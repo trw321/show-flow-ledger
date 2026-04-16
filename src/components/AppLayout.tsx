@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Receipt, DollarSign, Speaker, Scale, CalendarDays, Sparkles, Menu, X, ClipboardCheck, PartyPopper, PieChart, LogOut, Settings, Users, Wallet } from 'lucide-react';
+import { LayoutDashboard, Receipt, DollarSign, Speaker, Scale, CalendarDays, Sparkles, Menu, X, ClipboardCheck, PartyPopper, PieChart, LogOut, Settings, Users, Wallet, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePartyMode } from '@/lib/PartyModeContext';
 import { useAuth } from '@/lib/AuthContext';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
+import { useData } from '@/lib/DataContext';
 import FloatingEmojis from '@/components/FloatingEmojis';
 import {
   AlertDialog,
@@ -144,10 +145,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     item => item.tabKey === null || prefs.tabs[item.tabKey as keyof typeof prefs.tabs]
   );
   const { partyMode } = usePartyMode();
+  const { authReady } = useData();
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {partyMode && <FloatingEmojis />}
+      {!authReady && (
+        <div className="fixed top-0 inset-x-0 z-50 flex items-center justify-center gap-2 bg-primary/90 text-primary-foreground text-xs py-1.5 font-mono">
+          <Loader2 size={12} className="animate-spin" />
+          Connecting to server…
+        </div>
+      )}
       {/* Desktop sidebar — hidden on mobile */}
       <aside
         className={cn(

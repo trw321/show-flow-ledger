@@ -25,38 +25,38 @@ async function ensureSignedIn() {
 
   const { email, pwd } = getOrCreateCredentials();
 
-  // Try sign-in with stored device credentials
   const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password: pwd });
   if (!signInErr) return;
 
-  // New device — create account (requires email confirmations OFF in Supabase)
   const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({ email, password: pwd });
   if (!signUpErr && signUpData.session) return;
 
-  // Fallback: anonymous sign-in (requires anonymous auth ON in Supabase)
   await supabase.auth.signInAnonymously();
 }
 
 type AppDataReturn = ReturnType<typeof useAppData>;
+type DataContextValue = AppDataReturn & { authReady: boolean };
 
-const DataContext = createContext<AppDataReturn | null>(null);
+const DataContext = createContext<DataContextValue | null>(null);
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const [userId, setUserId] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUserId(session?.user?.id ?? null);
+      setAuthReady(true);
     });
 
-    ensureSignedIn();
+    ensureSignedIn().finally(() => setAuthReady(true));
 
     const keepalive = setInterval(() => supabase.from('jobs').select('id').limit(1), 4 * 24 * 60 * 60 * 1000);
     return () => { subscription.unsubscribe(); clearInterval(keepalive); };
   }, []);
 
   const appData = useAppData(userId);
-  return <DataContext.Provider value={appData}>{children}</DataContext.Provider>;
+  return <DataContext.Provider value={{ ...appData, authReady }}>{children}</DataContext.Provider>;
 }
 
 export function useData() {
