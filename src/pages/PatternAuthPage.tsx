@@ -73,6 +73,7 @@ export default function PatternAuthPage({ onUnlocked }: { onUnlocked: () => void
   const [hasStarted, setHasStarted] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState('');
   const [recoveryPhrase, setRecoveryPhrase] = useState('');
   const [recoveryInput, setRecoveryInput] = useState('');
   const [showPhrase, setShowPhrase] = useState(false);
@@ -80,24 +81,30 @@ export default function PatternAuthPage({ onUnlocked }: { onUnlocked: () => void
 
   const unlock = async () => {
     setLoading(true);
+    setLoadingMsg('');
+    const slowTimer = setTimeout(() => setLoadingMsg('Server waking up, please wait…'), 8000);
     try {
       const signIn = supabase.auth.signInAnonymously().then(({ error }) => {
         if (error) throw error;
       });
       const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), 12000)
+        setTimeout(() => reject(new Error('timeout')), 40000)
       );
       await Promise.race([signIn, timeout]);
     } catch (err) {
       const isTimeout = err instanceof Error && err.message === 'timeout';
       setError(isTimeout
-        ? 'Taking too long — wait 30s and try again (server waking up)'
-        : `Sign-in failed: ${err instanceof Error ? err.message : 'unknown error'}. Enable Anonymous sign-ins in your Supabase dashboard → Authentication → Providers.`
+        ? 'Server is taking too long to respond — draw your pattern again to retry'
+        : `Sign-in failed: ${err instanceof Error ? err.message : 'unknown error'}`
       );
       setLoading(false);
+      setLoadingMsg('');
+      clearTimeout(slowTimer);
       return;
     }
+    clearTimeout(slowTimer);
     setLoading(false);
+    setLoadingMsg('');
     onUnlocked();
   };
 
@@ -179,7 +186,12 @@ export default function PatternAuthPage({ onUnlocked }: { onUnlocked: () => void
             <motion.div key="unlock" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-4 w-full">
               <p className="text-sm text-muted-foreground">Hey {getStoredName()} — draw your pattern</p>
               <PatternLock onComplete={handleUnlock} disabled={loading} error={patternError} size={220} />
-              {loading && <Loader2 size={20} className="animate-spin text-primary" />}
+              {loading && (
+                <div className="flex flex-col items-center gap-1">
+                  <Loader2 size={20} className="animate-spin text-primary" />
+                  {loadingMsg && <p className="text-xs text-muted-foreground text-center">{loadingMsg}</p>}
+                </div>
+              )}
               {error && <p className="text-xs text-destructive text-center">{error}</p>}
               <button onClick={() => setScreen('recovery')} className="text-xs text-muted-foreground hover:text-primary underline underline-offset-2">
                 Forgot pattern? Use recovery phrase
@@ -252,6 +264,7 @@ export default function PatternAuthPage({ onUnlocked }: { onUnlocked: () => void
                   {copied ? <><Check size={14} className="mr-1" /> Copied!</> : <><Copy size={14} className="mr-1" /> Copy phrase</>}
                 </Button>
               </div>
+              {loadingMsg && <p className="text-xs text-muted-foreground text-center">{loadingMsg}</p>}
               <Button onClick={unlock} disabled={loading} className="w-full">
                 {loading && <Loader2 size={14} className="mr-1 animate-spin" />}
                 I saved it — let me in
