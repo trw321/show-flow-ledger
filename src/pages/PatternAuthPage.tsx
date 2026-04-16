@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '@/integrations/supabase/client';
 import PatternLock from '@/components/PatternLock';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Eye, EyeOff, Copy, Check, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Copy, Check } from 'lucide-react';
 
 // ── Local pattern storage ────────────────────────────────────────────────────
 
@@ -93,50 +92,14 @@ export default function PatternAuthPage({ onUnlocked }: { onUnlocked: () => void
   const [patternError, setPatternError] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [loadingMsg, setLoadingMsg] = useState('');
   const [recoveryPhrase, setRecoveryPhrase] = useState('');
   const [recoveryInput, setRecoveryInput] = useState('');
   const [showPhrase, setShowPhrase] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const unlock = async () => {
-    setLoading(true);
-    setLoadingMsg('');
-    const slowTimer = setTimeout(() => setLoadingMsg('Connecting to server…'), 6000);
-
-    try {
-      const { email, pwd } = getOrCreateCredentials();
-
-      // Try sign-in with stored credentials first
-      const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password: pwd });
-
-      if (signInErr) {
-        // First time on this device — create account
-        const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({ email, password: pwd });
-        if (signUpErr) throw signUpErr;
-        if (!signUpData.session) {
-          throw new Error('email-confirm-required');
-        }
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg === 'email-confirm-required') {
-        setError('One setup step needed: Supabase → Authentication → Settings → turn OFF "Enable email confirmations" → Save');
-      } else {
-        setError(`Sign-in failed: ${msg}`);
-      }
-      clearTimeout(slowTimer);
-      setLoading(false);
-      setLoadingMsg('');
-      return;
-    }
-
-    clearTimeout(slowTimer);
-    setLoading(false);
-    setLoadingMsg('');
-    onUnlocked();
-  };
+  // Pattern is validated locally — no Supabase required to open the app.
+  // DataContext handles Supabase sign-in silently in the background.
+  const unlock = () => { onUnlocked(); };
 
   // ── Unlock ───────────────────────────────────────────────────────────────
   const handleUnlock = async (pattern: number[]) => {
@@ -215,13 +178,7 @@ export default function PatternAuthPage({ onUnlocked }: { onUnlocked: () => void
           {screen === 'unlock' && (
             <motion.div key="unlock" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-4 w-full">
               <p className="text-sm text-muted-foreground">Hey {getStoredName()} — draw your pattern</p>
-              <PatternLock onComplete={handleUnlock} disabled={loading} error={patternError} size={220} />
-              {loading && (
-                <div className="flex flex-col items-center gap-1">
-                  <Loader2 size={20} className="animate-spin text-primary" />
-                  {loadingMsg && <p className="text-xs text-muted-foreground text-center">{loadingMsg}</p>}
-                </div>
-              )}
+              <PatternLock onComplete={handleUnlock} error={patternError} size={220} />
               {error && <p className="text-xs text-destructive text-center">{error}</p>}
               <button onClick={() => setScreen('recovery')} className="text-xs text-muted-foreground hover:text-primary underline underline-offset-2">
                 Forgot pattern? Use recovery phrase
@@ -294,9 +251,7 @@ export default function PatternAuthPage({ onUnlocked }: { onUnlocked: () => void
                   {copied ? <><Check size={14} className="mr-1" /> Copied!</> : <><Copy size={14} className="mr-1" /> Copy phrase</>}
                 </Button>
               </div>
-              {loadingMsg && <p className="text-xs text-muted-foreground text-center">{loadingMsg}</p>}
-              <Button onClick={unlock} disabled={loading} className="w-full">
-                {loading && <Loader2 size={14} className="mr-1 animate-spin" />}
+              <Button onClick={unlock} className="w-full">
                 I saved it — let me in
               </Button>
             </motion.div>
