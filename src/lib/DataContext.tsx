@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAppData } from './store';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 const CRED_EMAIL_KEY = 'showflow-cred-email';
 const CRED_PWD_KEY   = 'showflow-cred-pwd';
@@ -19,19 +20,27 @@ function getOrCreateCredentials() {
   return { email, pwd };
 }
 
-async function ensureSignedIn() {
+async function ensureSignedIn(): Promise<string | null> {
   const { data: { session } } = await supabase.auth.getSession();
-  if (session?.user) return;
+  if (session?.user) return null;
 
   const { email, pwd } = getOrCreateCredentials();
 
   const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password: pwd });
-  if (!signInErr) return;
+  if (!signInErr) return null;
 
   const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({ email, password: pwd });
-  if (!signUpErr && signUpData.session) return;
+  if (!signUpErr && signUpData.session) return null;
 
-  await supabase.auth.signInAnonymously();
+  const { error: anonErr } = await supabase.auth.signInAnonymously();
+  if (!anonErr) return null;
+
+  // All methods failed — return combined error message for diagnosis
+  return [
+    signInErr ? `pw-login: ${signInErr.message}` : null,
+    signUpErr ? `signup: ${signUpErr.message}` : (!signUpData?.session ? 'signup: email confirmation required' : null),
+    anonErr ? `anon: ${anonErr.message}` : null,
+  ].filter(Boolean).join(' | ');
 }
 
 type AppDataReturn = ReturnType<typeof useAppData>;
@@ -49,7 +58,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setAuthReady(true);
     });
 
-    ensureSignedIn().finally(() => setAuthReady(true));
+    ensureSignedIn().then(errMsg => {
+      if (errMsg) {
+        toast.error(`Server connection failed: ${errMsg}`, { duration: 20000 });
+      }
+      setAuthReady(true);
+    });
 
     const keepalive = setInterval(() => supabase.from('jobs').select('id').limit(1), 4 * 24 * 60 * 60 * 1000);
     return () => { subscription.unsubscribe(); clearInterval(keepalive); };
