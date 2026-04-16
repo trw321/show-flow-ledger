@@ -25,7 +25,7 @@ interface ParsedJob {
   notes?: string;
 }
 
-export default function JobPasteImport({ onImport }: { onImport: (job: Omit<Job, 'id' | 'createdAt'>) => void }) {
+export default function JobPasteImport({ onImport }: { onImport: (job: Omit<Job, 'id' | 'createdAt'>) => Promise<void> | void }) {
   const { data: appData } = useData();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
@@ -74,15 +74,19 @@ export default function JobPasteImport({ onImport }: { onImport: (job: Omit<Job,
     });
   };
 
-  const handleImport = () => {
+  const [isImporting, setIsImporting] = useState(false);
+
+  const handleImport = async () => {
     const toImport = entries.filter((_, i) => selected.has(i));
     if (toImport.length === 0) { toast.error('Select at least one job'); return; }
 
+    setIsImporting(true);
     const existingKeys = new Set(appData.jobs.map(job => getJobDedupKey(job)));
     let imported = 0;
     let skipped = 0;
+    let failed = 0;
 
-    toImport.forEach(j => {
+    for (const j of toImport) {
       const draft = {
         jobNumber: j.jobNumber,
         name: j.name,
@@ -102,22 +106,30 @@ export default function JobPasteImport({ onImport }: { onImport: (job: Omit<Job,
       };
       const key = getJobDedupKey(draft);
 
-      if (existingKeys.has(key)) {
-        skipped++;
-        return;
+      if (existingKeys.has(key)) { skipped++; continue; }
+
+      try {
+        await onImport(draft);
+        existingKeys.add(key);
+        imported++;
+      } catch (err) {
+        console.error('Failed to save job:', j.name, err);
+        failed++;
       }
+    }
 
-      existingKeys.add(key);
-      onImport(draft);
-      imported++;
-    });
+    setIsImporting(false);
 
+    if (imported === 0 && failed > 0) {
+      toast.error(`Failed to save jobs — check your connection and try again`);
+      return;
+    }
     if (imported === 0) {
       toast.error('All selected jobs were already imported');
       return;
     }
 
-    toast.success(`Imported ${imported} job(s)${skipped ? ` • skipped ${skipped} duplicate(s)` : ''}`);
+    toast.success(`Imported ${imported} job(s)${skipped ? ` • skipped ${skipped} duplicate(s)` : ''}${failed ? ` • ${failed} failed` : ''}`);
     handleClose(false);
   };
 
@@ -232,8 +244,10 @@ export default function JobPasteImport({ onImport }: { onImport: (job: Omit<Job,
               <Button variant="ghost" onClick={() => setStep('paste')}>← Back</Button>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => handleClose(false)}>Cancel</Button>
-                <Button onClick={handleImport}>
-                  <Check size={14} className="mr-1" /> Import {selected.size} Job(s)
+                <Button onClick={handleImport} disabled={isImporting}>
+                  {isImporting
+                    ? <><Loader2 size={14} className="mr-1 animate-spin" /> Saving...</>
+                    : <><Check size={14} className="mr-1" /> Import {selected.size} Job(s)</>}
                 </Button>
               </div>
             </div>
