@@ -83,7 +83,8 @@ CB variations:
 - "CB 3/15 0900" → CB job on 3/15, startTime=09:00 AM
 - Any descriptive prefix before CB (e.g. "IN/OUT: HANG, FOCUS CB 2/3 @10PM FOR OUT") → prefix text goes in parent notes, CB is parsed normally
 - "SAME DAY CB, 10:00PM FOR LOAD OUT" → second job on SAME date, startTime=10:00 PM, notes="FOR LOAD OUT"
-- "CB @ 1030PM FOR LOAD OUT" or "CB @ 10:30PM" → same-day CB at that time, notes="FOR LOAD OUT". No date = same date as parent. Any plain text before "CB" (e.g. "ASSIST ALL DEPTS. AS NEEDED") goes into the parent job's notes.
+- "CB @ 1030PM FOR LOAD OUT" or "CB, 10:00PM FOR LOAD OUT" or "CB @ 10:30PM" → same-day CB at that time. "SAME DAY" is optional — if CB has a time but NO date, it is always same-day. Any plain text before "CB" (e.g. "ASSIST ALL DEPTS. AS NEEDED") goes into the parent job's notes.
+- Times may use letter O instead of zero (e.g. "1O30PM" = 10:30 PM) — treat O as 0.
 - Times may use letter O instead of zero (e.g. "1O30PM" = 10:30 PM) — treat O as 0.
 - Text after dates that is not a time/date (e.g. "FOR LOAD OUT") → goes in notes on those CB jobs only
 
