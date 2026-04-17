@@ -32,33 +32,66 @@ export default function JobPasteImport({ onImport }: { onImport: (job: Omit<Job,
   const [entries, setEntries] = useState<ParsedJob[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [isParsing, setIsParsing] = useState(false);
+  const [parseProgress, setParseProgress] = useState('');
   const [step, setStep] = useState<'paste' | 'review'>('paste');
+
+  function splitRecords(raw: string): string[] {
+    // Each record starts with a job number line like "2026-0929" (with optional trailing whitespace)
+    const parts = raw.split(/(?=^\d{4}-\d{4}[\t ]*\r?$)/m);
+    return parts.map(p => p.trim()).filter(p => p.length > 0);
+  }
+
+  async function callParseAPI(chunk: string): Promise<ParsedJob[]> {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+    const resp = await fetch(`${supabaseUrl}/functions/v1/parse-jobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${supabaseKey}` },
+      body: JSON.stringify({ text: chunk }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: 'Failed to parse' }));
+      throw new Error(err.error || 'Failed to parse');
+    }
+    const data = await resp.json();
+    return data.jobs || [];
+  }
 
   const handleParse = async () => {
     if (!text.trim()) { toast.error('Paste some text first'); return; }
     setIsParsing(true);
+    setParseProgress('');
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      const resp = await fetch(`${supabaseUrl}/functions/v1/parse-jobs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${supabaseKey}` },
-        body: JSON.stringify({ text }),
-      });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: 'Failed to parse' }));
-        throw new Error(err.error || 'Failed to parse');
+      const records = splitRecords(text);
+      const BATCH = 5;
+      const allJobs: ParsedJob[] = [];
+
+      if (records.length <= BATCH) {
+        // Small paste — send all at once
+        setParseProgress('Parsing...');
+        const jobs = await callParseAPI(text);
+        allJobs.push(...jobs);
+      } else {
+        // Large paste — batch in groups of 5
+        for (let i = 0; i < records.length; i += BATCH) {
+          const batch = records.slice(i, i + BATCH);
+          const batchNum = Math.floor(i / BATCH) + 1;
+          const total = Math.ceil(records.length / BATCH);
+          setParseProgress(`Parsing batch ${batchNum} of ${total}...`);
+          const jobs = await callParseAPI(batch.join('\n\n'));
+          allJobs.push(...jobs);
+        }
       }
-      const data = await resp.json();
-      const jobs: ParsedJob[] = data.jobs || [];
-      if (jobs.length === 0) { toast.error('No jobs found in pasted text'); return; }
-      setEntries(jobs);
-      setSelected(new Set(jobs.map((_, i) => i)));
+
+      if (allJobs.length === 0) { toast.error('No jobs found in pasted text'); return; }
+      setEntries(allJobs);
+      setSelected(new Set(allJobs.map((_, i) => i)));
       setStep('review');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to parse');
     } finally {
       setIsParsing(false);
+      setParseProgress('');
     }
   };
 
@@ -162,7 +195,7 @@ export default function JobPasteImport({ onImport }: { onImport: (job: Omit<Job,
             />
             <div className="flex justify-end">
               <Button onClick={handleParse} disabled={isParsing || !text.trim()}>
-                {isParsing ? <><Loader2 size={14} className="mr-1 animate-spin" /> Parsing...</> : 'Parse Jobs'}
+                {isParsing ? <><Loader2 size={14} className="mr-1 animate-spin" /> {parseProgress || 'Parsing...'}</> : 'Parse Jobs'}
               </Button>
             </div>
           </div>
