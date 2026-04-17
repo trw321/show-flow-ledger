@@ -78,7 +78,9 @@ CB variations:
 - "CB THRU 10/7 THEN 10/17 & 10/18" → jobs on 10/5–10/7, PLUS 10/17 and 10/18 ("THEN" and "&" add more dates)
 - "CB THRU 5/30, DARK 5/27" (parent date 5/25) → jobs on 5/25, 5/26, 5/28, 5/29, 5/30 — DARK means day off, skip that date entirely
 - "CB 3/15 @10A FOR LOAD OUT" → CB job on 3/15, startTime=10:00 AM, notes="FOR LOAD OUT"
+- "CB 2/3 @10PM FOR OUT" → CB job on 2/3, startTime=10:00 PM, notes="FOR OUT"
 - "CB 3/15 0900" → CB job on 3/15, startTime=09:00 AM
+- Any descriptive prefix before CB (e.g. "IN/OUT: HANG, FOCUS CB 2/3 @10PM FOR OUT") → prefix text goes in parent notes, CB is parsed normally
 - "SAME DAY CB, 10:00PM FOR LOAD OUT" → second job on SAME date, startTime=10:00 PM, notes="FOR LOAD OUT"
 - "CB @ 1030PM FOR LOAD OUT" or "CB @ 10:30PM" → same-day CB at that time, notes="FOR LOAD OUT". No date = same date as parent. Any plain text before "CB" (e.g. "ASSIST ALL DEPTS. AS NEEDED") goes into the parent job's notes.
 - Times may use letter O instead of zero (e.g. "1O30PM" = 10:30 PM) — treat O as 0.
