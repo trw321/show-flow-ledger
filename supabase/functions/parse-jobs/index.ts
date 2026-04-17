@@ -44,16 +44,12 @@ DATA FORMAT — each job record looks like this:
 
   [Line Notes] TAB [Skill] TAB [Employer] TAB [Payroll Co.] TAB [Job Site] TAB [Show] TAB [Location] TAB [Job Notes] TAB [Contract] TAB [Rate] TAB [Dress Code] TAB [Steward]
 
-Example record:
-  2026-0929
-  3/17/26 01:00 PM
-
-  CB 3/18, 3/20	P VIDEO WALL	FREEMAN AV	FREEMAN AV	MOSCONE SOUTH	RSA CONF	BOOTH 5744	NOTES	CONTRACT	$55.72	NWB	CESAR ESCOBAR
+NOTE: Line Notes may itself span multiple lines (the website wraps long cells). Treat all lines before the first TAB-separated data as part of Line Notes.
 
 FIELD MAPPINGS:
 - Job Number → jobNumber (keep full YYYY-NNNN format, e.g. "2026-0929")
 - Start Date line → date (YYYY-MM-DD) AND startTime. 2-digit year "3/17/26" = 2026-03-17. NEVER use today's date.
-- Line Notes (first tab-column on the data line) → parse for CB/split (see rules below)
+- Line Notes → parse for end time / CB / split shift (see rules below)
 - Employer → client
 - Payroll Co. → payrollCompany
 - Job Site + Location → venue (combine both)
@@ -61,6 +57,12 @@ FIELD MAPPINGS:
 - Rate → hourlyRate (strip $, e.g. $55.72 → 55.72)
 - Steward → steward
 - Skill + Job Notes + Contract + Dress Code → combine into notes
+
+════════════════════════════════════════
+LINE NOTES — END TIME RULE:
+════════════════════════════════════════
+If Line Notes contains a standalone time AND also contains CB info → the time is an endTime for the parent job (not a split shift).
+  Example: Line Notes "09:00 PM\nCB THRU 10/7..." → parent gets endTime=09:00 PM, then CB jobs are created normally.
 
 ════════════════════════════════════════
 CRITICAL RULE — CALLBACKS:
@@ -71,40 +73,44 @@ If Line Notes contains "CB", "C/B", "CB's", "C/B's", or "SAME DAY CB":
   ⚠️ ONE RECORD WITH CB DATES = MULTIPLE JOBS. Never skip CB jobs.
 
 CB variations:
-- "CB 3/18, 3/20, 3/26, 3/27" → 4 extra jobs on those dates (inherit year from parent)
+- "CB 3/18, 3/20, 3/26, 3/27" → extra jobs on each date (inherit year from parent)
+- "CB THRU 10/7" (parent date 10/5) → jobs on 10/5, 10/6, 10/7 (every day inclusive)
+- "CB THRU 10/7 THEN 10/17 & 10/18" → jobs on 10/5–10/7, PLUS 10/17 and 10/18 ("THEN" and "&" add more dates)
 - "CB 3/15 @10A FOR LOAD OUT" → CB job on 3/15, startTime=10:00 AM, notes="FOR LOAD OUT"
 - "CB 3/15 0900" → CB job on 3/15, startTime=09:00 AM
-- "CB thru 3/18" (parent date 3/15) → jobs on 3/15, 3/16, 3/17, 3/18 (every day inclusive)
-- "SAME DAY CB, 10:00PM FOR LOAD OUT" → second job on SAME date as parent, startTime=10:00 PM, notes="FOR LOAD OUT"
-- Text after dates that is not a time (e.g. "FOR LOAD OUT") → goes in notes on CB jobs
+- "SAME DAY CB, 10:00PM FOR LOAD OUT" → second job on SAME date, startTime=10:00 PM, notes="FOR LOAD OUT"
+- Text after dates that is not a time/date (e.g. "FOR LOAD OUT") → goes in notes on those CB jobs only
 
 WORKED EXAMPLE A — multiple CB dates:
-  Job: 2026-0929 | Start Date: 3/17/26 01:00 PM | Line Notes: "CB 3/18, 3/20, 3/26, 3/27"
-  → Output 5 jobs: dates 2026-03-17, 2026-03-18, 2026-03-20, 2026-03-26, 2026-03-27
-  → All share same name/client/venue/rate/startTime (01:00 PM)
+  Job: 2026-0929 | Start: 3/17/26 01:00 PM | Line Notes: "CB 3/18, 3/20, 3/26, 3/27"
+  → 5 jobs: 2026-03-17, 2026-03-18, 2026-03-20, 2026-03-26, 2026-03-27 (all startTime=01:00 PM)
 
-WORKED EXAMPLE B — same-day CB with time:
-  Job: 2026-0902 | Start Date: 3/14/26 10:00 AM | Line Notes: "SAME DAY CB, 10:00PM FOR LOAD OUT"
-  → Output 2 jobs: both date=2026-03-14
-    Job 1: startTime=10:00 AM
-    Job 2: startTime=10:00 PM, notes="FOR LOAD OUT"
+WORKED EXAMPLE B — end time + CB THRU + THEN + &:
+  Job: 2025-2952 | Start: 10/5/25 08:00 AM | Line Notes: "09:00 PM\nCB THRU 10/7 THEN 10/17 & 10/18 FOR LOAD OUT"
+  → 6 jobs:
+    Job 1: date=2025-10-05, startTime=08:00 AM, endTime=09:00 PM (parent)
+    Job 2: date=2025-10-06, startTime=08:00 AM (CB thru)
+    Job 3: date=2025-10-07, startTime=08:00 AM (CB thru)
+    Job 4: date=2025-10-17, startTime=08:00 AM, notes="FOR LOAD OUT"
+    Job 5: date=2025-10-18, startTime=08:00 AM, notes="FOR LOAD OUT"
 
-WORKED EXAMPLE C — CB with @ time:
-  Job: 2026-0864 | Start Date: 3/13/26 07:00 AM | Line Notes: "CB 3/15 @10A FOR LOAD OUT"
-  → Output 2 jobs:
-    Job 1: date=2026-03-13, startTime=07:00 AM (parent)
-    Job 2: date=2026-03-15, startTime=10:00 AM, notes="FOR LOAD OUT" (CB)
+WORKED EXAMPLE C — same-day CB:
+  Job: 2026-0902 | Start: 3/14/26 10:00 AM | Line Notes: "SAME DAY CB, 10:00PM FOR LOAD OUT"
+  → 2 jobs: both 2026-03-14 — Job 1: 10:00 AM, Job 2: 10:00 PM, notes="FOR LOAD OUT"
+
+WORKED EXAMPLE D — CB with @ time:
+  Job: 2026-0864 | Start: 3/13/26 07:00 AM | Line Notes: "CB 3/15 @10A FOR LOAD OUT"
+  → 2 jobs: Job 1: 2026-03-13 07:00 AM | Job 2: 2026-03-15 10:00 AM, notes="FOR LOAD OUT"
 
 ════════════════════════════════════════
 SPLIT SHIFT RULE:
 ════════════════════════════════════════
-If Line Notes has a time but NO date and NO "CB" keyword, create two jobs on the same date:
-  Job 1: startTime from Start Date
-  Job 2: startTime = the time in Line Notes
+If Line Notes has a standalone time but NO CB keyword and NO other date info → split shift: create two jobs on the same date.
+  Job 1: startTime from Start Date | Job 2: startTime = the time in Line Notes
 
-If Line Notes is empty or plain descriptive text with no CB and no time, ignore it.
+If Line Notes is empty or plain descriptive text only, ignore it.
 
-Normalize all times to "HH:MM AM/PM" format (e.g. "0800"→"08:00 AM", "1030PM"→"10:30 PM", "@10A"→"10:00 AM", "10:00PM"→"10:00 PM").
+Normalize all times to "HH:MM AM/PM" (e.g. "0800"→"08:00 AM", "1030PM"→"10:30 PM", "@10A"→"10:00 AM").
 Status: "upcoming" for future dates, "completed" for past dates.`,
             },
             { role: "user", content: text },
