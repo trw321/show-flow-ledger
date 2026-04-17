@@ -76,6 +76,7 @@ CB variations:
 - "CB 3/18, 3/20, 3/26, 3/27" → extra jobs on each date (inherit year from parent)
 - "CB THRU 10/7" (parent date 10/5) → jobs on 10/5, 10/6, 10/7 (every day inclusive)
 - "CB THRU 10/7 THEN 10/17 & 10/18" → jobs on 10/5–10/7, PLUS 10/17 and 10/18 ("THEN" and "&" add more dates)
+- "CB THRU 5/30, DARK 5/27" (parent date 5/25) → jobs on 5/25, 5/26, 5/28, 5/29, 5/30 — DARK means day off, skip that date entirely
 - "CB 3/15 @10A FOR LOAD OUT" → CB job on 3/15, startTime=10:00 AM, notes="FOR LOAD OUT"
 - "CB 3/15 0900" → CB job on 3/15, startTime=09:00 AM
 - "SAME DAY CB, 10:00PM FOR LOAD OUT" → second job on SAME date, startTime=10:00 PM, notes="FOR LOAD OUT"
