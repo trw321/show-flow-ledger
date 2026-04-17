@@ -36,34 +36,40 @@ serve(async (req) => {
               role: "system",
               content: `You are a job history parser for an AV technician's bookkeeping app. Parse pasted text into structured job data. Today's date is ${today}.
 
-CRITICAL JOB NUMBER FORMAT: Job entries begin with a job number in YYYY-NNNN format (e.g. "2026-0959" — year 2026, job 0959). The date for that job comes immediately after the job number. Always store the FULL job number (e.g. "2026-0959"), never strip it to just the last digits.
+COLUMN ORDER (tab-separated from dispatch website):
+Job # | Start Date | Line Notes | Skill | Employer | Payroll Co. | Job Site | Show | Location | Job Notes | Contract | Rate | Dress Code | Steward
 
-CRITICAL DATE RULE: Extract the EXACT date from the source text for each job. The date appears right after the YYYY-NNNN job number. Dates may also appear in many formats (e.g. "2/2/26", "Feb 2", "02/02/2026"). NEVER default to today's date. For 2-digit years like "2/2/26", assume 2000s (= 2026-02-02).
+FIELD MAPPINGS:
+- Job # → jobNumber (FULL number in YYYY-NNNN format, e.g. "2026-0959" — never truncate)
+- Start Date → date (YYYY-MM-DD). NEVER default to today. For 2-digit years like "2/2/26" assume 2000s (= 2026-02-02).
+- Employer → client
+- Payroll Co. → payrollCompany
+- Job Site + Location → venue (combine if both present)
+- Show → name (event/show name)
+- Rate → hourlyRate (number only, e.g. $55.72 → 55.72)
+- Steward → steward
+- Skill, Job Notes, Contract, Dress Code → combine into notes
 
-Extract these fields for each job:
-- jobNumber: the FULL job/dispatch number in YYYY-NNNN format (e.g. "2026-0496"). Never truncate it.
-- date: in YYYY-MM-DD format. MUST come from the text, not assumed.
-- startTime: call/start time (e.g. "08:00 AM")
-- endTime: wrap/end time if present (e.g. "05:00 PM")
-- client: production company or project name (e.g. "METRO MEDIA PRODUCTIONS INC")
-- name: the event/show name (e.g. "PELOSI DINNER")
-- payrollCompany: payroll agency if mentioned (e.g. "UNION PAYROLL AGENCY INC")
-- venue: venue/location (e.g. "Marriott - 4th & Mission")
-- hourlyRate: hourly rate as a number (e.g. $55.72 → 55.72)
-- steward: steward or contact person name (e.g. "DAWN ROTH-GOLDEN")
-- parkingCost: parking cost as a number if mentioned
-- status: "upcoming" for future dates, "completed" for past dates
-- notes: any remaining info — room/salon numbers, setup descriptions, special instructions like "BRING 2 FORMS OF ID", rate codes, etc.
+LINE NOTES PARSING — this is critical, read carefully:
+The "Line Notes" column contains the start time for the main shift (e.g. "0800" or "8:00AM"). It may also contain callback or split-shift info:
 
-Common AV industry text formats:
-- Job numbers like "2026-0496"
-- Times like "08:00 AM" / "05:00 PM"
-- Concatenated text without clear delimiters
-- Rate codes like "2023-2028 BASIC ENTERTAINMENT"
-- Setup descriptions like "SETUP: HANG, FOCUS CB FOR OUTT ELEC X"
-- "SAME DAY CB" or "same day callback" means a callback for more work — it may be on the same day or a different date. Treat it as a separate job entry. The CB time is the START time of the callback job. End times are rarely provided — leave endTime empty unless explicitly stated.
+RULE 1 — CALLBACK (CB): If Line Notes contains "CB" or "C/B" followed by one or more dates, create a SEPARATE job entry for EACH callback date. The callback job copies all fields from the parent row (same show, employer, payroll, venue, rate, steward) but uses the callback date. The CB time after the date (if any) is the startTime of that callback shift.
+Examples:
+  "0800 CB 3/15/26" → Job 1: date=original, startTime=08:00 AM | Job 2: date=2026-03-15, startTime unknown (leave blank)
+  "0800 CB 3/15/26 0900" → Job 1: date=original, startTime=08:00 AM | Job 2: date=2026-03-15, startTime=09:00 AM
+  "0800 CB 3/15/26 C/B 3/16/26" → 3 jobs total
 
-Be flexible — data may be from tables, lists, emails, or messy concatenated text.`,
+RULE 2 — SPLIT SHIFT: If Line Notes contains a time but NO date after it (just a raw time like "1030PM" or "22:30"), that is a split shift — create TWO job entries for the SAME date:
+  - Job 1: startTime = main call time from beginning of Line Notes
+  - Job 2: startTime = the split time found later in Line Notes
+  Both jobs share the same date and all other fields.
+Example: "0800 1030PM" → Job 1: startTime=08:00 AM | Job 2: startTime=10:30 PM (same date)
+
+RULE 3 — PLAIN START TIME: If Line Notes is just a time with no CB or split, it's simply the startTime.
+
+Always normalize times to "HH:MM AM/PM" format (e.g. "0800" → "08:00 AM", "1030PM" → "10:30 PM").
+Status: "upcoming" for future dates, "completed" for past dates.
+Be flexible — data may be messy concatenated text from a copied table.`,
             },
             { role: "user", content: text },
           ],
