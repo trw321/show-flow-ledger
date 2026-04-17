@@ -74,6 +74,7 @@ If Line Notes contains "CB", "C/B", "CB's", "C/B's", or "SAME DAY CB":
 
 CB variations:
 - "CB 3/18, 3/20, 3/26, 3/27" → extra jobs on each date (inherit year from parent)
+- "CB 2/6," → trailing comma means nothing follows, treat as single CB date 2/6
 - "CB THRU 10/7" (parent date 10/5) → jobs on 10/5, 10/6, 10/7 (every day inclusive)
 - "CB THRU 10/7 THEN 10/17 & 10/18" → jobs on 10/5–10/7, PLUS 10/17 and 10/18 ("THEN" and "&" add more dates)
 - "CB THRU 5/30, DARK 5/27" (parent date 5/25) → jobs on 5/25, 5/26, 5/28, 5/29, 5/30 — DARK means day off, skip that date entirely
