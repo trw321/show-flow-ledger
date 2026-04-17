@@ -41,8 +41,8 @@ Job # | Start Date | Line Notes | Skill | Employer | Payroll Co. | Job Site | Sh
 
 FIELD MAPPINGS:
 - Job # → jobNumber (FULL number in YYYY-NNNN format, e.g. "2026-0959" — never truncate)
-- Start Date → date AND startTime. The Start Date cell often contains both the date and the call time (e.g. "3/22/26 07:00 AM"). Extract the date as YYYY-MM-DD and the time as startTime. For 2-digit years like "3/22/26" assume 2000s (= 2026-03-22). NEVER default to today's date.
-- Line Notes → parse for CB/split info (see rules below). Any leftover text after parsing is notes.
+- Start Date → date AND startTime. Often contains both (e.g. "3/22/26 07:00 AM"). Extract date as YYYY-MM-DD and time as startTime. 2-digit years like "3/22/26" = 2026-03-22. NEVER default to today's date.
+- Line Notes → parse for CB/split info (see CRITICAL RULES below)
 - Employer → client
 - Payroll Co. → payrollCompany
 - Job Site + Location → venue (combine if both present)
@@ -51,32 +51,45 @@ FIELD MAPPINGS:
 - Steward → steward
 - Skill, Job Notes, Contract, Dress Code → combine into notes
 
-LINE NOTES RULES — read carefully:
+════════════════════════════════════════
+CRITICAL RULE — CALLBACKS (CB):
+════════════════════════════════════════
+If Line Notes contains "CB", "C/B", "CB's", or "C/B's":
+  1. Keep the PARENT job using the Start Date as-is.
+  2. For EACH callback date found, create an ADDITIONAL separate job entry.
+  3. Each CB job copies ALL fields from the parent (same name, client, payrollCompany, venue, hourlyRate, steward, jobNumber) but with the callback date.
 
-RULE 1 — CALLBACK (CB): If Line Notes starts with or contains "CB", "C/B", or "CB's", create a SEPARATE job entry for EACH callback date. Each CB job copies ALL fields from the parent row (same show, employer, payroll, venue, rate, steward, startTime) but uses the callback date.
+⚠️ ONE INPUT ROW WITH CB DATES = MULTIPLE JOBS IN OUTPUT. Do not skip the CB jobs.
 
-CB DATE FORMATS:
-- Dates may have no year (e.g. "3/24", "3/25") — inherit the year from the parent job's date
-- Dates may be comma-separated (e.g. "CB 3/24, 3/25") — create one job per date
-- A time after a CB date (e.g. "CB 3/24 0900") is the startTime for that CB job
-- Any text after the dates that is not a time/date (e.g. "FOR LOAD OUT") goes into notes for all CB jobs
+CB date parsing:
+- No year on CB date (e.g. "3/24") → inherit year from parent date
+- Comma-separated dates (e.g. "CB 3/24, 3/25") → one job per date
+- Time after CB date (e.g. "CB 3/24 0900") → that time is startTime for that CB job only
+- "CB thru 3/18" with parent date 3/15 → jobs on 3/15, 3/16, 3/17, 3/18 (every day inclusive)
+- Text after dates that is NOT a time (e.g. "FOR LOAD OUT") → put in notes on all CB jobs
 
-Special — "CB thru [date]" or "C/B thru [date]": create one job per day FROM the parent's Start Date THROUGH the CB date inclusive.
+WORKED EXAMPLE:
+  Input row: Start Date "3/22/26 07:00 AM", Line Notes "CB 3/24, 3/25 FOR LOAD OUT"
+  Output → 3 jobs:
+    Job 1: date=2026-03-22, startTime=07:00 AM (parent)
+    Job 2: date=2026-03-24, startTime=07:00 AM, notes="FOR LOAD OUT" (CB)
+    Job 3: date=2026-03-25, startTime=07:00 AM, notes="FOR LOAD OUT" (CB)
 
-Examples:
-  Parent date 3/22/26, Line Notes "CB 3/24, 3/25 FOR LOAD OUT"
-    → Job 1: date=2026-03-22 | Job 2: date=2026-03-24, notes="FOR LOAD OUT" | Job 3: date=2026-03-25, notes="FOR LOAD OUT"
-  Line Notes "CB 3/15/26 0900" → CB job: date=2026-03-15, startTime=09:00 AM
-  Line Notes "CB thru 3/18/26" (parent date 3/15/26) → jobs on 3/15, 3/16, 3/17, 3/18
+WORKED EXAMPLE 2:
+  Input row: Start Date "3/15/26 08:00 AM", Line Notes "CB thru 3/18/26"
+  Output → 4 jobs: dates 2026-03-15, 2026-03-16, 2026-03-17, 2026-03-18
 
-RULE 2 — SPLIT SHIFT: If Line Notes contains a second time with NO date (e.g. "1030PM"), it is a split shift — create TWO jobs for the SAME date:
-  - Job 1: startTime from Start Date column
-  - Job 2: startTime = the time in Line Notes
-Example: Line Notes "1030PM" with Start Date "3/22/26 08:00 AM" → Job 1: 08:00 AM | Job 2: 10:30 PM same date
+════════════════════════════════════════
+SPLIT SHIFT RULE:
+════════════════════════════════════════
+If Line Notes contains a time but NO date (e.g. "1030PM"), create TWO jobs for the same date:
+  Job 1: startTime from Start Date column
+  Job 2: startTime = the time in Line Notes
+Example: Line Notes "1030PM", Start Date "3/22/26 08:00 AM" → Job 1: 08:00 AM | Job 2: 10:30 PM
 
-RULE 3 — EMPTY / PLAIN TEXT: If Line Notes has no CB and no extra time, ignore it (start time already came from Start Date).
+If Line Notes is empty or plain text with no CB and no extra time, ignore it.
 
-Always normalize times to "HH:MM AM/PM" format (e.g. "0800" → "08:00 AM", "1030PM" → "10:30 PM").
+Always normalize times to "HH:MM AM/PM" (e.g. "0800" → "08:00 AM", "1030PM" → "10:30 PM").
 Status: "upcoming" for future dates, "completed" for past dates.`,
             },
             { role: "user", content: text },
