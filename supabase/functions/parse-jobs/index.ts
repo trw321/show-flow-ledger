@@ -111,7 +111,7 @@ SPLIT SHIFT RULE:
 If Line Notes has a standalone time but NO CB keyword and NO other date info → split shift: create two jobs on the same date.
   Job 1: startTime from Start Date | Job 2: startTime = the time in Line Notes
 
-If Line Notes is empty or plain descriptive text only, ignore it.
+If Line Notes is empty or plain descriptive text with no CB and no time (e.g. "ADDED FOR SHOWRUN/OUT. WILL WORK WITH ROAD TECH - REPLACE ALEX ZEH"), put it in the job's notes field and create only the one parent job.
 
 Normalize all times to "HH:MM AM/PM" (e.g. "0800"→"08:00 AM", "1030PM"→"10:30 PM", "@10A"→"10:00 AM").
 Status: "upcoming" for future dates, "completed" for past dates.`,
