@@ -40,6 +40,8 @@ interface ParsedHourUpdate {
   endTime?: string;
   hoursWorked?: number;
   venue?: string;
+  steward?: string;
+  hourlyRate?: number;
   mealType?: 'YWA' | 'NWA';
 }
 
@@ -223,6 +225,8 @@ export default function SmartImport() {
               endTime: upd.endTime || match.endTime,
               hoursWorked: upd.hoursWorked,
               mealType: upd.mealType,
+              steward: upd.steward || match.steward,
+              hourlyRate: upd.hourlyRate || match.hourlyRate,
               status: 'completed',
             });
             imported++;

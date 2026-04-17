@@ -120,12 +120,25 @@ Extract deposits/payments only (ignore withdrawals, fees):
 ═══════════════════════════════
 IF "hours":
 ═══════════════════════════════
-Parse scratch notes (e.g. "3/17 9-4 YWA Staples Ctr"):
-- date: YYYY-MM-DD
-- startTime/endTime: "HH:MM AM/PM"
-- hoursWorked: decimal hours after meal deduction (YWA=-1hr, NWA=-0.5hr)
-- venue: location hint for matching to existing jobs
-- mealType: "YWA" or "NWA" (omit if none)`
+Entries are separated by blank lines (one or more empty lines). Each entry does NOT need to start with a date — the fields can appear in any order within the entry.
+
+For each blank-line-separated entry, extract:
+- date: find any line matching date patterns (MM-DD-YY, MM/DD/YY, M/D/YY, etc.) → YYYY-MM-DD. "10-6-25" = 2025-10-06
+- startTime / endTime: find a time range line like "8am ... 7p" or "9am-5pm" or "8am = - (1hr walk away) 7p" → "08:00 AM" / "07:00 PM"
+- mealType: "walk away" or "WA" → "YWA"; "on the clock" or "NWA" → "NWA"
+- hoursWorked:
+  - If "N+M" format (e.g. "8+2"): N regular + M overtime = N+M total hours worked BEFORE meal deduction
+  - Then apply meal deduction: YWA = -1hr, NWA = -0.5hr
+  - If only a time range: calculate end - start, then apply deduction
+- venue: any line that looks like a venue name (not a date, time, number, or emoji)
+- steward: person's name if present (e.g. "Rein ratsep")
+- hourlyRate: dollar amount if present (e.g. "$55.72" → 55.72)
+
+EXAMPLE:
+  "moscone c Rein ratsep $55.72\n10-6-25\n8am = - (1hr walk away) 7p\n8+2\n445+ 167 = 612\n💰"
+  → date=2025-10-06, venue="moscone c", steward="Rein ratsep", hourlyRate=55.72
+    startTime=08:00 AM, endTime=07:00 PM, mealType=YWA
+    hoursWorked = 8+2 = 10, minus 1hr YWA = 9.0 (or use 10 if "8+2" already accounts for break)`
           },
           { role: "user", content: inputText }
         ],
@@ -185,6 +198,8 @@ Parse scratch notes (e.g. "3/17 9-4 YWA Staples Ctr"):
                         endTime: { type: "string" },
                         hoursWorked: { type: "number" },
                         venue: { type: "string" },
+                        steward: { type: "string" },
+                        hourlyRate: { type: "number" },
                         mealType: { type: "string", enum: ["YWA", "NWA"] }
                       },
                       required: ["date"]
