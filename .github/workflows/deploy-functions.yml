@@ -22,5 +22,6 @@ jobs:
         with:
           version: 1.207.9
       - run: supabase functions deploy parse-jobs --project-ref yuoculbvburpdmgwjcem
+      - run: supabase functions deploy smart-import --project-ref yuoculbvburpdmgwjcem
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}

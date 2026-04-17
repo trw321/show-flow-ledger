@@ -4,9 +4,7 @@ import PageHeader from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Clock, ChevronRight } from 'lucide-react';
-import JobPhotoImport from '@/components/JobPhotoImport';
-import JobPasteImport from '@/components/JobPasteImport';
-import HoursNoteImport from '@/components/HoursNoteImport';
+import SmartImport from '@/components/SmartImport';
 import LogHoursForm from '@/components/LogHoursForm';
 import { format, isToday, isPast, isFuture } from 'date-fns';
 import { toast } from 'sonner';
@@ -47,19 +45,9 @@ export default function JobLogPage() {
     <>
       <PageHeader title="Job Log" description="Pre-load jobs, then log hours on the day" />
 
-      {/* Load upcoming jobs via photo */}
+      {/* Import jobs or log hours */}
       <div className="mb-4">
-        <JobPhotoImport onImport={async (job) => {
-          await addJob({ ...job, status: 'upcoming', hoursWorked: 0 });
-        }} />
-      </div>
-      <div className="mb-4">
-        <JobPasteImport onImport={async (job) => {
-          await addJob({ ...job, status: 'upcoming', hoursWorked: 0 });
-        }} />
-      </div>
-      <div className="mb-4">
-        <HoursNoteImport />
+        <SmartImport />
       </div>
 
       {/* Today / Needs Logging */}
