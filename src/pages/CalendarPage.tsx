@@ -60,12 +60,14 @@ function JobDetailView({ job, onBack, onSave }: {
   const [hoursWorked, setHoursWorked] = useState(job.hoursWorked?.toString() ?? '');
   const [minimumHours, setMinimumHours] = useState(job.minimumHours?.toString() ?? '');
   const [payrollCompany, setPayrollCompany] = useState(job.payrollCompany ?? '');
+  const [mealType, setMealType] = useState<Job['mealType']>(job.mealType ?? undefined);
 
   useEffect(() => {
     setEndTime(job.endTime ?? '');
     setHoursWorked(job.hoursWorked?.toString() ?? '');
     setMinimumHours(job.minimumHours?.toString() ?? '');
     setPayrollCompany(job.payrollCompany ?? '');
+    setMealType(job.mealType ?? undefined);
   }, [job.id]);
 
   const handleEndTimeChange = (val: string) => {
@@ -82,7 +84,7 @@ function JobDetailView({ job, onBack, onSave }: {
   const minimumApplied = minHours > 0 && actualHours < minHours && actualHours > 0;
   const rate = job.hourlyRate ?? 0;
   const payPreview = rate > 0 && billableHours > 0
-    ? calculateDayPay(actualHours, rate, minHours, job.mealPenalties ?? 0, 1, job.mealType)
+    ? calculateDayPay(actualHours, rate, minHours, job.mealPenalties ?? 0, 1, mealType)
     : null;
 
   const handleSave = () => {
@@ -99,6 +101,9 @@ function JobDetailView({ job, onBack, onSave }: {
     if (payrollCompany !== (job.payrollCompany ?? '')) {
       updates.payrollCompany = payrollCompany.trim() || undefined;
     }
+    if (mealType !== (job.mealType ?? undefined)) {
+      updates.mealType = mealType;
+    }
     onSave(updates);
   };
 
@@ -106,7 +111,8 @@ function JobDetailView({ job, onBack, onSave }: {
     endTime !== (job.endTime ?? '') ||
     hoursWorked !== (job.hoursWorked?.toString() ?? '') ||
     minimumHours !== (job.minimumHours?.toString() ?? '') ||
-    payrollCompany !== (job.payrollCompany ?? '');
+    payrollCompany !== (job.payrollCompany ?? '') ||
+    mealType !== (job.mealType ?? undefined);
 
   return (
     <>
@@ -253,6 +259,36 @@ function JobDetailView({ job, onBack, onSave }: {
                     key={hours}
                     type="button"
                     onClick={() => setMinimumHours(active ? '' : hours.toString())}
+                    className={cn(
+                      "rounded-xl border py-2 px-1 text-center transition-colors",
+                      active
+                        ? "bg-primary/15 border-primary/50 text-primary"
+                        : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30"
+                    )}
+                  >
+                    <p className={cn("text-sm font-bold text-mono", active && "text-primary")}>{label}</p>
+                    <p className="text-[9px] leading-tight mt-0.5 opacity-70">{sub}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Meal break */}
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground">Meal Break</label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {[
+                { value: 'YWA' as const, label: 'YWA', sub: '1hr walk away' },
+                { value: 'NWA' as const, label: 'NWA', sub: '30min on clock' },
+                { value: undefined, label: 'None', sub: 'No meal' },
+              ].map(({ value, label, sub }) => {
+                const active = mealType === value;
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => setMealType(active ? undefined : value)}
                     className={cn(
                       "rounded-xl border py-2 px-1 text-center transition-colors",
                       active
