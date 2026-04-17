@@ -53,11 +53,15 @@ FIELD MAPPINGS:
 LINE NOTES PARSING — this is critical, read carefully:
 The "Line Notes" column contains the start time for the main shift (e.g. "0800" or "8:00AM"). It may also contain callback or split-shift info:
 
-RULE 1 — CALLBACK (CB): If Line Notes contains "CB" or "C/B" followed by one or more dates, create a SEPARATE job entry for EACH callback date. The callback job copies all fields from the parent row (same show, employer, payroll, venue, rate, steward) but uses the callback date. The CB time after the date (if any) is the startTime of that callback shift.
+RULE 1 — CALLBACK (CB): If Line Notes contains "CB", "C/B", or "CB's" followed by one or more dates, create a SEPARATE job entry for EACH callback date. The callback job copies all fields from the parent row (same show, employer, payroll, venue, rate, steward) but uses the callback date. The CB time after the date (if any) is the startTime of that callback shift.
+
+Special — "CB thru [date]" or "C/B thru [date]": means the job runs every day FROM the row's Start Date THROUGH the CB date (inclusive). Create one job entry per day in that date range (including the original date).
 Examples:
-  "0800 CB 3/15/26" → Job 1: date=original, startTime=08:00 AM | Job 2: date=2026-03-15, startTime unknown (leave blank)
+  "0800 CB 3/15/26" → Job 1: date=original, startTime=08:00 AM | Job 2: date=2026-03-15
   "0800 CB 3/15/26 0900" → Job 1: date=original, startTime=08:00 AM | Job 2: date=2026-03-15, startTime=09:00 AM
   "0800 CB 3/15/26 C/B 3/16/26" → 3 jobs total
+  "0800 CB thru 3/18/26" (original date 3/15/26) → jobs on 3/15, 3/16, 3/17, 3/18 all with startTime=08:00 AM
+  "0800 CB's 3/15/26 3/16/26" → 3 jobs total (original + 2 CBs)
 
 RULE 2 — SPLIT SHIFT: If Line Notes contains a time but NO date after it (just a raw time like "1030PM" or "22:30"), that is a split shift — create TWO job entries for the SAME date:
   - Job 1: startTime = main call time from beginning of Line Notes
