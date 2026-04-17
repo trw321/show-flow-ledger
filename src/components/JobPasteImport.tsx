@@ -63,22 +63,17 @@ export default function JobPasteImport({ onImport }: { onImport: (job: Omit<Job,
     setParseProgress('');
     try {
       const records = splitRecords(text);
-      const BATCH = 5;
       const allJobs: ParsedJob[] = [];
 
-      if (records.length <= BATCH) {
-        // Small paste — send all at once
+      if (records.length <= 1) {
         setParseProgress('Parsing...');
         const jobs = await callParseAPI(text);
         allJobs.push(...jobs);
       } else {
-        // Large paste — batch in groups of 5
-        for (let i = 0; i < records.length; i += BATCH) {
-          const batch = records.slice(i, i + BATCH);
-          const batchNum = Math.floor(i / BATCH) + 1;
-          const total = Math.ceil(records.length / BATCH);
-          setParseProgress(`Parsing batch ${batchNum} of ${total}...`);
-          const jobs = await callParseAPI(batch.join('\n\n'));
+        // One record per API call — guarantees CB expansion works reliably
+        for (let i = 0; i < records.length; i++) {
+          setParseProgress(`Parsing ${i + 1} of ${records.length}...`);
+          const jobs = await callParseAPI(records[i]);
           allJobs.push(...jobs);
         }
       }
