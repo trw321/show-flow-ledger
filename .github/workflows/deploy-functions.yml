@@ -10,6 +10,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
     steps:
       - uses: actions/checkout@v3
       - name: Test token access
@@ -23,5 +25,3 @@ jobs:
           version: 1.207.9
       - run: supabase functions deploy parse-jobs --project-ref yuoculbvburpdmgwjcem
       - run: supabase functions deploy smart-import --project-ref yuoculbvburpdmgwjcem
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
