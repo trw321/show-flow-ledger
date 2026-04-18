@@ -120,25 +120,36 @@ Extract deposits/payments only (ignore withdrawals, fees):
 ═══════════════════════════════
 IF "hours":
 ═══════════════════════════════
-Entries are separated by blank lines (one or more empty lines). Each entry does NOT need to start with a date — the fields can appear in any order within the entry.
+Entries may be separated by blank lines OR each line may be its own entry (one line per date/shift). Each entry does NOT need to start with a date — fields can appear in any order.
 
-For each blank-line-separated entry, extract:
-- date: find any line matching date patterns (MM-DD-YY, MM/DD/YY, M/D/YY, etc.) → YYYY-MM-DD. "10-6-25" = 2025-10-06
-- startTime / endTime: find a time range line like "8am ... 7p" or "9am-5pm" or "8am = - (1hr walk away) 7p" → "08:00 AM" / "07:00 PM"
-- mealType: "walk away" or "WA" → "YWA"; "on the clock" or "NWA" → "NWA"
+For each entry, extract:
+- date: any date pattern (MM-DD, MM-DD-YY, M/D/YY, etc.) → YYYY-MM-DD. For bare month-day like "3-14" without year, use the year implied by context or the current year. "10-6-25"=2025-10-06
+- startTime / endTime: parse a time range like "10a-14:00", "8am-7p", "22:00-2:00am", "6:30-14:30" → "HH:MM AM/PM". Times after midnight (e.g. 2:00am after 22:00) are the end time on the same date entry.
+- mealType: "walk away", "WA", "YWA", "1MP" → "YWA"; "on the clock", "NWA" → "NWA"
 - hoursWorked:
-  - If "N+M" format (e.g. "8+2"): N regular + M overtime = N+M total hours worked BEFORE meal deduction
-  - Then apply meal deduction: YWA = -1hr, NWA = -0.5hr
-  - If only a time range: calculate end - start, then apply deduction
-- venue: any line that looks like a venue name (not a date, time, number, or emoji)
-- steward: person's name if present (e.g. "Rein ratsep")
-- hourlyRate: dollar amount if present (e.g. "$55.72" → 55.72)
+  - Minimum call "(Nhr mini)" or "(Nmini)": compute actual hours from time range. If actual < N, use N as hoursWorked (before meal deduction). If actual ≥ N, use actual.
+  - If "N+M" format (e.g. "8+2"): N regular + M overtime = N+M total, then apply meal deduction
+  - Meal deduction: YWA/1MP = -1hr, NWA = -0.5hr
+  - Overtime notes like "(after 5 OT?)", "(1.5 after 5)" are informational only — put in notes, do not affect hoursWorked
+- venue: location/venue name (not a date, time, dollar amount, or emoji). Multi-word venues are common: "chase center backline", "bill graham civic center", "palace hotel", "moscone cesar"
+- steward: person's name if present
+- hourlyRate: dollar amount if present ("$55.72" → 55.72)
 
-EXAMPLE:
+EXAMPLE 1 — minimum call, no meal:
+  "3-14 chase center backline 10a-14:00 (5mini)"
+  → date=2026-03-14, venue="chase center backline", startTime=10:00 AM, endTime=02:00 PM
+    actual=4hrs < 5hr minimum → hoursWorked=5.0
+
+EXAMPLE 2 — overnight minimum call:
+  "3-14 chase center backline out 22:00-2:00am (5hr mini)"
+  → date=2026-03-14, venue="chase center backline out", startTime=10:00 PM, endTime=02:00 AM
+    actual=4hrs < 5hr minimum → hoursWorked=5.0
+
+EXAMPLE 3 — walk away with N+M format:
   "moscone c Rein ratsep $55.72\n10-6-25\n8am = - (1hr walk away) 7p\n8+2\n445+ 167 = 612\n💰"
   → date=2025-10-06, venue="moscone c", steward="Rein ratsep", hourlyRate=55.72
     startTime=08:00 AM, endTime=07:00 PM, mealType=YWA
-    hoursWorked = 8+2 = 10, minus 1hr YWA = 9.0 (or use 10 if "8+2" already accounts for break)`
+    hoursWorked = 8+2=10 minus 1hr YWA = 9.0`
           },
           { role: "user", content: inputText }
         ],

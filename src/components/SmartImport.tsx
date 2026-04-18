@@ -165,6 +165,7 @@ export default function SmartImport() {
       const total = type === 'jobs' ? allJobs.length : type === 'income' ? allIncome.length : allHours.length;
       if (total === 0) { toast.error('Nothing found to import'); return; }
 
+      allJobs.sort((a, b) => a.date.localeCompare(b.date));
       setDetectedType(type);
       setJobs(allJobs);
       setIncome(allIncome);
