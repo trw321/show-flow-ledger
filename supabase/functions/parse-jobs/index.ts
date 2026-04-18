@@ -88,9 +88,17 @@ CB variations:
 - Times may use letter O instead of zero (e.g. "1O30PM" = 10:30 PM) — treat O as 0.
 - Text after dates that is not a time/date (e.g. "FOR LOAD OUT") → goes in notes on those CB jobs only
 
-WORKED EXAMPLE A — multiple CB dates:
+WORKED EXAMPLE A — multiple CB dates, no trailing text:
   Job: 2026-0929 | Start: 3/17/26 01:00 PM | Line Notes: "CB 3/18, 3/20, 3/26, 3/27"
   → 5 jobs: 2026-03-17, 2026-03-18, 2026-03-20, 2026-03-26, 2026-03-27 (all startTime=01:00 PM)
+
+WORKED EXAMPLE A2 — comma-list CBs WITH trailing note text:
+  Job: 2026-0959 | Start: 3/22/26 07:00 AM | Line Notes: "CB 3/24, 3/25 FOR LOAD OUT"
+  → 3 jobs:
+    Job 1: date=2026-03-22, startTime=07:00 AM (parent, no notes)
+    Job 2: date=2026-03-24, startTime=07:00 AM, notes="FOR LOAD OUT"
+    Job 3: date=2026-03-25, startTime=07:00 AM, notes="FOR LOAD OUT"
+  ⚠️ "FOR LOAD OUT" comes after the last date — it applies as notes to ALL CB jobs in the list.
 
 WORKED EXAMPLE B — end time + CB THRU + THEN + &:
   Job: 2025-2952 | Start: 10/5/25 08:00 AM | Line Notes: "09:00 PM\nCB THRU 10/7 THEN 10/17 & 10/18 FOR LOAD OUT"
