@@ -85,7 +85,7 @@ DATA FORMAT — each record spans multiple lines:
 
 Line Notes may span multiple lines before the first tab-separated data.
 
-FIELDS: Job Number→jobNumber | Start Date→date+startTime | Employer→client | Payroll Co.→payrollCompany
+FIELDS: Job Number→jobNumber (ALL CB/split jobs inherit same jobNumber) | Start Date→date+startTime | Employer→client | Payroll Co.→payrollCompany
 Job Site+Location→venue | Show→name | Rate→hourlyRate (strip $) | Steward→steward
 Skill+Job Notes+Contract+Dress Code→notes | 2-digit year "3/17/26"=2026-03-17
 
@@ -96,6 +96,7 @@ LINE NOTES:
 
 CALLBACKS ⚠️ ONE RECORD WITH CB = MULTIPLE JOBS — never skip:
 - "CB 3/18, 3/20" → extra job per date (inherit year from parent)
+- "CB 3/24, 3/25 FOR LOAD OUT" → extra jobs on 3/24 AND 3/25; "FOR LOAD OUT" is trailing note text (not a date) → notes on both CB jobs. Output = 3 jobs total.
 - "CB 2/6," trailing comma → single date 2/6
 - "CB THRU 10/7" (parent 10/5) → jobs on 10/5, 10/6, 10/7
 - "CB THRU 10/7 THEN 10/17 & 10/18 FOR LOAD OUT" → 10/5–10/7 plus 10/17, 10/18, notes="FOR LOAD OUT"
@@ -103,9 +104,16 @@ CALLBACKS ⚠️ ONE RECORD WITH CB = MULTIPLE JOBS — never skip:
 - "CB 3/15 @10A FOR LOAD OUT" → CB on 3/15, startTime=10:00 AM, notes="FOR LOAD OUT"
 - "CB 2/3 @10PM FOR OUT" → CB on 2/3, startTime=10:00 PM, notes="FOR OUT"
 - "CB @ 10PM" / "SAME DAY CB, 10PM" / "CB, 10PM" (no date) → same-day CB at that time
+- "CB FOR OUT" or "CB" with no date and no time → same-day CB, no startTime, notes=text after "CB"
 - Prefix text before CB (e.g. "IN/OUT: HANG, FOCUS CB 2/3 @10PM") → prefix in parent notes
 - "O" in times = zero (1O30PM = 10:30 PM)
 Status: "upcoming" for future, "completed" for past.
+
+WORKED EXAMPLE — comma CBs with trailing note (MUST produce 3 jobs):
+  Input: jobNumber=2026-0959, date=3/22/26 07:00 AM, Line Notes="CB 3/24, 3/25 FOR LOAD OUT"
+  Job 1: jobNumber=2026-0959, date=2026-03-22, startTime=07:00 AM
+  Job 2: jobNumber=2026-0959, date=2026-03-24, startTime=07:00 AM, notes="FOR LOAD OUT"
+  Job 3: jobNumber=2026-0959, date=2026-03-25, startTime=07:00 AM, notes="FOR LOAD OUT"
 
 ═══════════════════════════════
 IF "income":
