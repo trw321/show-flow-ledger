@@ -186,6 +186,15 @@ export default function SmartImport() {
               }
             }
           }
+          // Inherit missing fields from the first job in the group (parent)
+          if (jobs.length > 1) {
+            const parent = jobs[0];
+            for (let j = 1; j < jobs.length; j++) {
+              if (!jobs[j].hourlyRate && parent.hourlyRate) jobs[j].hourlyRate = parent.hourlyRate;
+              if (!jobs[j].payrollCompany && parent.payrollCompany) jobs[j].payrollCompany = parent.payrollCompany;
+              if (!jobs[j].steward && parent.steward) jobs[j].steward = parent.steward;
+            }
+          }
           allJobs.push(...jobs);
         }
       } else {

@@ -162,6 +162,7 @@ EXAMPLE 3 — walk away with N+M format:
           },
           { role: "user", content: inputText }
         ],
+        max_tokens: 4000,
         tools: [
           {
             type: "function",
