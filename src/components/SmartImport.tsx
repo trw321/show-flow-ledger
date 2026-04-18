@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Upload, Loader2, Check, X } from 'lucide-react';
+import { Upload, Loader2, Check, X, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Job } from '@/lib/store';
 import { getJobDedupKey } from '@/lib/jobDedup';
@@ -297,6 +297,19 @@ export default function SmartImport() {
   const updateJob_ = (idx: number, field: keyof ParsedJob, value: string | number | undefined) =>
     setJobs(prev => prev.map((e, i) => i === idx ? { ...e, [field]: value } : e));
 
+  const addCBJob = (parentIdx: number) => {
+    const parent = jobs[parentIdx];
+    const insertAt = parentIdx + 1;
+    const cbJob: ParsedJob = { ...parent, date: '', endTime: undefined, notes: '' };
+    setJobs(prev => [...prev.slice(0, insertAt), cbJob, ...prev.slice(insertAt)]);
+    setSelectedJobs(prev => {
+      const n = new Set<number>();
+      prev.forEach(i => n.add(i >= insertAt ? i + 1 : i));
+      n.add(insertAt);
+      return n;
+    });
+  };
+
   const selCount = detectedType === 'jobs' ? selectedJobs.size : detectedType === 'income' ? selectedIncome.size : selectedHours.size;
 
   return (
@@ -394,7 +407,7 @@ export default function SmartImport() {
                         onChange={() => setSelectedJobs(selectedJobs.size === jobs.length ? new Set() : new Set(jobs.map((_, i) => i)))}
                         className="rounded border-border" />
                     </th>
-                    {['Job #','Date','Start','End','Client','Event','Payroll','Venue','Rate','Steward','Parking'].map(h => (
+                    {['Job #','Date','Start','End','Client','Event','Payroll','Venue','Rate','Steward','Parking',''].map(h => (
                       <th key={h} className="px-2 py-2 text-left">{h}</th>
                     ))}
                   </tr>
@@ -418,6 +431,11 @@ export default function SmartImport() {
                       <td className="px-2 py-1.5"><Input type="number" step="0.01" value={entry.hourlyRate ?? ''} onChange={e => updateJob_(i, 'hourlyRate', e.target.value ? parseFloat(e.target.value) : undefined)} placeholder="$" className="h-7 text-xs w-20" /></td>
                       <td className="px-2 py-1.5"><Input value={entry.steward ?? ''} onChange={e => updateJob_(i, 'steward', e.target.value)} className="h-7 text-xs" /></td>
                       <td className="px-2 py-1.5"><Input type="number" step="0.01" value={entry.parkingCost ?? ''} onChange={e => updateJob_(i, 'parkingCost', e.target.value ? parseFloat(e.target.value) : undefined)} placeholder="$" className="h-7 text-xs w-20" /></td>
+                      <td className="px-2 py-1.5">
+                        <button onClick={() => addCBJob(i)} title="Add callback" className="text-muted-foreground hover:text-primary transition-colors p-0.5 rounded">
+                          <Plus size={13} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
