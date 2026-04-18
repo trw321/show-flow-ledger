@@ -259,13 +259,16 @@ export default function SmartImport() {
       } else if (detectedType === 'hours') {
         for (const [i, upd] of hourUpdates.entries()) {
           if (!selectedHours.has(i)) continue;
+          const venueWords = upd.venue?.toLowerCase().split(/\s+/).filter(w => w.length > 3) ?? [];
           const match = data.jobs.find(j => {
             if (j.date !== upd.date) return false;
-            if (upd.venue) {
-              const v = upd.venue.toLowerCase();
-              return j.venue?.toLowerCase().includes(v) || v.includes(j.venue?.toLowerCase() ?? '');
-            }
-            return true;
+            if (!upd.venue) return true;
+            const jv = j.venue?.toLowerCase() ?? '';
+            const v = upd.venue.toLowerCase();
+            // substring match
+            if (jv.includes(v) || v.includes(jv)) return true;
+            // word overlap — any significant word in common
+            return venueWords.some(w => jv.includes(w));
           });
           if (match) {
             await updateJob(match.id, {
@@ -529,13 +532,14 @@ export default function SmartImport() {
                 </thead>
                 <tbody>
                   {hourUpdates.map((upd, i) => {
+                    const vWords = upd.venue?.toLowerCase().split(/\s+/).filter(w => w.length > 3) ?? [];
                     const match = data.jobs.find(j => {
                       if (j.date !== upd.date) return false;
-                      if (upd.venue) {
-                        const v = upd.venue.toLowerCase();
-                        return j.venue?.toLowerCase().includes(v) || v.includes(j.venue?.toLowerCase() ?? '');
-                      }
-                      return true;
+                      if (!upd.venue) return true;
+                      const jv = j.venue?.toLowerCase() ?? '';
+                      const v = upd.venue.toLowerCase();
+                      if (jv.includes(v) || v.includes(jv)) return true;
+                      return vWords.some(w => jv.includes(w));
                     });
                     return (
                       <tr key={i} className={cn("border-t border-border", selectedHours.has(i) ? 'bg-primary/5' : 'opacity-50')}>
