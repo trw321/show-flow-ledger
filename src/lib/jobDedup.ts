@@ -4,30 +4,28 @@ type JobIdentity = Pick<Job, 'jobNumber' | 'name' | 'client' | 'date' | 'startTi
 
 const normalize = (value?: string) => value?.trim().toLowerCase().replace(/\s+/g, ' ') ?? '';
 
-const hasStartTime = (job: Partial<JobIdentity>) => !!job.startTime?.trim();
+// Normalize "7:00 AM" / "07:00 AM" / "7:00AM" → "07:00 am"
+const normalizeTime = (value?: string) => {
+  if (!value?.trim()) return '';
+  const m = value.trim().match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
+  if (!m) return normalize(value);
+  return `${m[1].padStart(2, '0')}:${m[2]} ${m[3].toLowerCase()}`;
+};
 
 export function getJobDedupKey(job: Partial<JobIdentity>) {
-  if (hasStartTime(job)) {
-    return `time|${normalize(job.date)}|${normalize(job.startTime)}`;
+  const date = normalize(job.date);
+  // Most reliable: job number + date (CBs share number but differ by date)
+  if (job.jobNumber?.trim()) {
+    return `dispatch|${normalize(job.jobNumber)}|${date}`;
   }
-  return `fallback|${normalize(job.date)}|${normalize(job.client)}|${normalize(job.name)}`;
+  // With startTime: date + normalized time
+  if (job.startTime?.trim()) {
+    return `time|${date}|${normalizeTime(job.startTime)}`;
+  }
+  return `fallback|${date}|${normalize(job.client)}|${normalize(job.name)}`;
 }
 
 export function isDuplicateJob(incoming: Partial<JobIdentity>, existing: Partial<JobIdentity>[]) {
-  const incomingHasTime = hasStartTime(incoming);
-
-  return existing.some((ex) => {
-    const exHasTime = hasStartTime(ex);
-
-    // Both have startTime → match on date + startTime only
-    if (incomingHasTime && exHasTime) {
-      return normalize(incoming.date) === normalize(ex.date) &&
-             normalize(incoming.startTime) === normalize(ex.startTime);
-    }
-
-    // Either missing startTime → fall back to date + client + name
-    return normalize(incoming.date) === normalize(ex.date) &&
-           normalize(incoming.client) === normalize(ex.client) &&
-           normalize(incoming.name) === normalize(ex.name);
-  });
+  const incomingKey = getJobDedupKey(incoming);
+  return existing.some(ex => getJobDedupKey(ex) === incomingKey);
 }
