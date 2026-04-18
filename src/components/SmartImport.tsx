@@ -59,6 +59,28 @@ function splitJobRecords(raw: string): string[] {
   return parts.map(p => p.trim()).filter(p => p.length > 0);
 }
 
+// Extract parent date from a dispatch record's date line (e.g. "3/22/26 07:00 AM" → "2026-03-22")
+function extractParentDate(record: string): string | null {
+  const m = record.match(/(\d{1,2})\/(\d{1,2})\/(\d{2})/);
+  if (!m) return null;
+  const year = 2000 + parseInt(m[3]);
+  return `${year}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+}
+
+// Strip trailing note text from "CB M/D, M/D FOR LOAD OUT" so the AI doesn't choke on it.
+// Returns the cleaned record and the extracted note string.
+function stripCBTrailingNote(record: string): { record: string; cbNote: string } {
+  let cbNote = '';
+  const cleaned = record.replace(
+    /(\bCB\s+(?:\d{1,2}\/\d{1,2}[\s,]*)+)\s+((?:FOR|WITH|AT)\s+[^\t\n]+)/gi,
+    (_match, cbPart, trailingText) => {
+      cbNote = trailingText.trim();
+      return cbPart.trimEnd();
+    }
+  );
+  return { record: cleaned, cbNote };
+}
+
 async function callAPI(url: string, key: string, body: object): Promise<Response> {
   return fetch(url, {
     method: 'POST',
@@ -146,15 +168,25 @@ export default function SmartImport() {
         const records = splitJobRecords(text);
         for (let i = 0; i < records.length; i++) {
           setParseProgress(`Parsing ${i + 1} of ${records.length}...`);
-          const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-jobs`, supabaseKey, { text: records[i] });
+          const { record: cleanedRecord, cbNote } = stripCBTrailingNote(records[i]);
+          const parentDate = extractParentDate(records[i]);
+          const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-jobs`, supabaseKey, { text: cleanedRecord });
           if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
             console.error(`parse-jobs record ${i + 1} failed:`, resp.status, err);
             continue;
           }
           const data = await resp.json();
-          console.log(`parse-jobs record ${i + 1} returned:`, data);
-          allJobs.push(...(data.jobs || []));
+          const jobs: ParsedJob[] = data.jobs || [];
+          // Re-attach stripped trailing note to CB jobs (any job that isn't the parent date)
+          if (cbNote && parentDate) {
+            for (const job of jobs) {
+              if (job.date !== parentDate) {
+                job.notes = job.notes ? `${job.notes}; ${cbNote}` : cbNote;
+              }
+            }
+          }
+          allJobs.push(...jobs);
         }
       } else {
         // Non-job text → smart-import for classification
