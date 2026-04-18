@@ -141,15 +141,20 @@ export default function SmartImport() {
         allIncome = result.income || [];
         allHours = result.hourUpdates || [];
       } else if (/^\d{4}-\d{4}/m.test(text)) {
-        // Job text → split per record, send each through smart-import
+        // Job text → split per record, call parse-jobs one at a time
         type = 'jobs';
         const records = splitJobRecords(text);
         for (let i = 0; i < records.length; i++) {
           setParseProgress(`Parsing ${i + 1} of ${records.length}...`);
-          const resp = await callAPI(`${supabaseUrl}/functions/v1/smart-import`, supabaseKey, { text: records[i] });
-          if (!resp.ok) continue;
-          const result = await resp.json();
-          allJobs.push(...(result.jobs || []));
+          const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-jobs`, supabaseKey, { text: records[i] });
+          if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            console.error(`parse-jobs record ${i + 1} failed:`, resp.status, err);
+            continue;
+          }
+          const data = await resp.json();
+          console.log(`parse-jobs record ${i + 1} returned:`, data);
+          allJobs.push(...(data.jobs || []));
         }
       } else {
         // Non-job text → smart-import for classification
