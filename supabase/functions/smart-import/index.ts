@@ -130,7 +130,8 @@ For each entry, extract:
   - Minimum call "(Nhr mini)" or "(Nmini)": compute actual hours from time range. If actual < N, use N as hoursWorked (before meal deduction). If actual ≥ N, use actual.
   - If "N+M" format (e.g. "8+2"): N regular + M overtime = N+M total, then apply meal deduction
   - Meal deduction: YWA/1MP = -1hr, NWA = -0.5hr
-  - Overtime notes like "(after 5 OT?)", "(1.5 after 5)" are informational only — put in notes, do not affect hoursWorked
+  - Overtime pay modifiers: "(1.5 after 5)" = time-and-a-half (1.5x pay rate) kicks in after 5 hours. Put in notes as "OT: 1.5x after 5h". Do NOT affect hoursWorked.
+  - "?" anywhere in the entry = uncertain/needs verification → append "(verify)" to notes
 - venue: location/venue name (not a date, time, dollar amount, or emoji). Multi-word venues are common: "chase center backline", "bill graham civic center", "palace hotel", "moscone cesar"
 - steward: person's name if present
 - hourlyRate: dollar amount if present ("$55.72" → 55.72)
@@ -211,7 +212,8 @@ EXAMPLE 3 — walk away with N+M format:
                         venue: { type: "string" },
                         steward: { type: "string" },
                         hourlyRate: { type: "number" },
-                        mealType: { type: "string", enum: ["YWA", "NWA"] }
+                        mealType: { type: "string", enum: ["YWA", "NWA"] },
+                        notes: { type: "string" }
                       },
                       required: ["date"]
                     }

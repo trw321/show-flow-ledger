@@ -43,6 +43,7 @@ interface ParsedHourUpdate {
   steward?: string;
   hourlyRate?: number;
   mealType?: 'YWA' | 'NWA';
+  notes?: string;
 }
 
 type ImportType = 'jobs' | 'income' | 'hours';
@@ -228,6 +229,7 @@ export default function SmartImport() {
               mealType: upd.mealType,
               steward: upd.steward || match.steward,
               hourlyRate: upd.hourlyRate || match.hourlyRate,
+              notes: upd.notes ? (match.notes ? `${match.notes}\n${upd.notes}` : upd.notes) : match.notes,
               status: 'completed',
             });
             imported++;
@@ -456,7 +458,7 @@ export default function SmartImport() {
                         onChange={() => setSelectedHours(selectedHours.size === hourUpdates.length ? new Set() : new Set(hourUpdates.map((_, i) => i)))}
                         className="rounded border-border" />
                     </th>
-                    {['Date','Start','End','Hours','Meal','Venue','Matched Job'].map(h => (
+                    {['Date','Start','End','Hours','Meal','Venue','Notes','Matched Job'].map(h => (
                       <th key={h} className="px-2 py-2 text-left">{h}</th>
                     ))}
                   </tr>
@@ -484,6 +486,11 @@ export default function SmartImport() {
                         <td className="px-2 py-1.5 text-mono font-semibold">{upd.hoursWorked?.toFixed(1) ?? '—'}</td>
                         <td className="px-2 py-1.5">{upd.mealType ?? '—'}</td>
                         <td className="px-2 py-1.5 text-muted-foreground">{upd.venue ?? '—'}</td>
+                        <td className="px-2 py-1.5 text-muted-foreground max-w-[160px]">
+                          {upd.notes
+                            ? <span className={upd.notes.includes('verify') ? 'text-amber-500' : ''}>{upd.notes}</span>
+                            : '—'}
+                        </td>
                         <td className="px-2 py-1.5">
                           {match
                             ? <span className="text-success font-medium">{match.name}</span>
