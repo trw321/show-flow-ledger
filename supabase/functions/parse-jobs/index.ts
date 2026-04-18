@@ -196,6 +196,7 @@ Status: "upcoming" for future dates, "completed" for past dates.`,
     }
 
     const parsed = JSON.parse(toolCall.function.arguments);
+    console.log("parse-jobs result:", JSON.stringify(parsed));
 
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
