@@ -77,17 +77,28 @@ CLASSIFICATION:
 ═══════════════════════════════
 IF "jobs":
 ═══════════════════════════════
-DATA FORMAT — each record spans multiple lines:
+Two possible layouts — handle both:
+
+LAYOUT A — tab-separated (desktop copy/paste):
   [Job Number]
   [Start Date with call time]
 
   [Line Notes] TAB [Skill] TAB [Employer] TAB [Payroll Co.] TAB [Job Site] TAB [Show] TAB [Location] TAB [Job Notes] TAB [Contract] TAB [Rate] TAB [Dress Code] TAB [Steward]
 
-Line Notes may span multiple lines before the first tab-separated data.
+  Line Notes may span multiple lines before the first tab-separated data.
 
-FIELDS: Job Number→jobNumber (ALL CB/split jobs inherit same jobNumber) | Start Date→date+startTime | Employer→client | Payroll Co.→payrollCompany
-Job Site+Location→venue | Show→name | Rate→hourlyRate (strip $) | Steward→steward
-Skill+Job Notes+Contract+Dress Code→notes | 2-digit year "3/17/26"=2026-03-17
+LAYOUT B — labeled card (mobile screenshot):
+  Labels appear as section headers (JOB, START DATE, START TIME, SKILL, RATE, SITE,
+  STEWARD, REPORT TO LOCATION, LINE NOTES) with values directly below them.
+  The JOB card contains: [YYYY-NNNN job number] on one line, [Employer name] on following lines.
+  Multiple cards may appear in a single screenshot.
+
+FIELD MAPPINGS (both layouts):
+  Job Number→jobNumber (ALL CB/split jobs inherit same jobNumber) | Start Date→date+startTime
+  Employer / JOB card employer→client | Payroll Co.→payrollCompany
+  Job Site / SITE card→venue (append REPORT TO LOCATION if present) | Show→name (use venue if no show name)
+  Rate / RATE card→hourlyRate (strip $) | Steward / STEWARD card→steward
+  Skill+Job Notes+Contract+Dress Code→notes | 2-digit year "3/17/26"=2026-03-17
 
 LINE NOTES:
 - Standalone time + CB present → time is endTime for parent
@@ -109,11 +120,24 @@ CALLBACKS ⚠️ ONE RECORD WITH CB = MULTIPLE JOBS — never skip:
 - "O" in times = zero (1O30PM = 10:30 PM)
 Status: "upcoming" for future, "completed" for past.
 
-WORKED EXAMPLE — comma CBs with trailing note (MUST produce 3 jobs):
+WORKED EXAMPLE A — comma CBs with trailing note (MUST produce 3 jobs):
   Input: jobNumber=2026-0959, date=3/22/26 07:00 AM, Line Notes="CB 3/24, 3/25 FOR LOAD OUT"
   Job 1: jobNumber=2026-0959, date=2026-03-22, startTime=07:00 AM
   Job 2: jobNumber=2026-0959, date=2026-03-24, startTime=07:00 AM, notes="FOR LOAD OUT"
   Job 3: jobNumber=2026-0959, date=2026-03-25, startTime=07:00 AM, notes="FOR LOAD OUT"
+
+WORKED EXAMPLE B — mobile card layout with @time CB (MUST produce 2 jobs):
+  Input (mobile screenshot text):
+    JOB: 2026-0864 / BGCA MANAGEMENT LLC
+    START DATE: 3/13/26  START TIME: 07:00 AM
+    SKILL: T ELEC X  RATE: 42.45  SITE: Civic Auditorium
+    STEWARD: MARK HETRICK
+    REPORT TO LOCATION: STAGE LEFT STEWARDS OFFICE
+    LINE NOTES: CB 3/15 @10A FOR LOAD OUT
+  Job 1: jobNumber=2026-0864, date=2026-03-13, startTime=07:00 AM, client="BGCA MANAGEMENT LLC",
+          venue="Civic Auditorium", hourlyRate=42.45, steward="MARK HETRICK", notes="T ELEC X"
+  Job 2: jobNumber=2026-0864, date=2026-03-15, startTime=10:00 AM, client="BGCA MANAGEMENT LLC",
+          venue="Civic Auditorium", hourlyRate=42.45, steward="MARK HETRICK", notes="FOR LOAD OUT"
 
 ═══════════════════════════════
 IF "income":
