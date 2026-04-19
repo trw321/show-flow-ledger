@@ -18,6 +18,7 @@ serve(async (req) => {
 
     const today = new Date().toISOString().split("T")[0];
 
+    console.log("smart-import v2: imageBase64=", !!imageBase64, "textLen=", text?.length ?? 0);
     if (!imageBase64 && !text?.trim()) throw new Error("No text to parse");
 
     // Classify + parse in one call. If an image is provided, pass it directly

@@ -75,9 +75,10 @@ function expandCBRecord(record: string): string[] {
 
   // Line notes can be wrapped onto separate lines before the tab line,
   // or inline (before the first tab on the data line), or both.
-  const wrappedLines = lines.slice(dateLineIdx + 1, dataLineIdx).filter(l => l.trim());
+  const wrappedLines = lines.slice(dateLineIdx + 1, dataLineIdx).map(l => l.trim()).filter(Boolean);
   const inlinePrefix = dataLine.slice(0, firstTab).trim();
-  const lineNotes = [...wrappedLines, inlinePrefix].join(' ').trim();
+  // Normalize whitespace and strip carriage returns
+  const lineNotes = [...wrappedLines, inlinePrefix].join(' ').replace(/\r/g, '').replace(/\s+/g, ' ').trim();
 
   console.log('[expandCB] lineNotes:', JSON.stringify(lineNotes));
 
@@ -133,20 +134,27 @@ async function callAPI(url: string, key: string, body: object): Promise<Response
 }
 
 // Resize + JPEG-compress before sending to keep payload under Supabase's body limit
-function compressImage(file: File, maxWidth = 1024): Promise<string> {
+// Resize + compress to keep payload small (Supabase body limit ~4MB)
+function compressImage(file: File, maxPx = 800): Promise<{ base64: string; mimeType: string }> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
       URL.revokeObjectURL(url);
-      const scale = Math.min(1, maxWidth / img.width);
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
       const canvas = document.createElement('canvas');
-      canvas.width = Math.round(img.width * scale);
-      canvas.height = Math.round(img.height * scale);
-      canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL('image/jpeg', 0.88).split(',')[1]);
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('Canvas not supported')); return; }
+      ctx.drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+      console.log(`[img] compressed to ${w}x${h}, ~${Math.round(dataUrl.length * 0.75 / 1024)}KB`);
+      resolve({ base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' });
     };
-    img.onerror = reject;
+    img.onerror = () => reject(new Error('Failed to load image'));
     img.src = url;
   });
 }
@@ -204,10 +212,10 @@ export default function SmartImport() {
       if (imageFile) {
         // Image path → smart-import with vision
         setParseProgress('Reading image...');
-        const imageBase64 = await compressImage(imageFile);
+        const { base64: imageBase64, mimeType: imageMimeType } = await compressImage(imageFile);
         const resp = await callAPI(`${supabaseUrl}/functions/v1/smart-import`, supabaseKey, {
           imageBase64,
-          imageMimeType: imageFile.type,
+          imageMimeType,
         });
         if (!resp.ok) throw new Error((await resp.json()).error || 'Failed to parse image');
         const result = await resp.json();
