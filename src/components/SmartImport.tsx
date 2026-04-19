@@ -231,38 +231,27 @@ export default function SmartImport() {
           setParseProgress(`Parsing ${i + 1} of ${records.length}...`);
           const expandedRecords = expandCBRecord(records[i]);
           console.log(`[parse] record ${i + 1}: ${expandedRecords.length} sub-record(s)`);
-          let parentJob: ParsedJob | null = null;
-          for (const subRecord of expandedRecords) {
-            const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-jobs`, supabaseKey, { text: subRecord });
-            if (!resp.ok) {
-              const err = await resp.json().catch(() => ({}));
-              console.error(`parse-jobs record ${i + 1} failed:`, resp.status, err);
-              continue;
-            }
-            const data = await resp.json();
-            const subJobs: ParsedJob[] = data.jobs || [];
-            if (!parentJob && subJobs.length > 0) {
-              parentJob = subJobs[0];
-            } else if (parentJob) {
-              // Inherit missing fields from parent into CB jobs
-              for (const job of subJobs) {
-                if (!job.jobNumber && parentJob.jobNumber) job.jobNumber = parentJob.jobNumber;
-                if (!job.hourlyRate && parentJob.hourlyRate) job.hourlyRate = parentJob.hourlyRate;
-                if (!job.payrollCompany && parentJob.payrollCompany) job.payrollCompany = parentJob.payrollCompany;
-                if (!job.steward && parentJob.steward) job.steward = parentJob.steward;
-              }
-            }
-            // Also inherit within a single response (non-expanded CBs handled by AI)
-            if (subJobs.length > 1) {
-              const first = subJobs[0];
-              for (let j = 1; j < subJobs.length; j++) {
-                if (!subJobs[j].hourlyRate && first.hourlyRate) subJobs[j].hourlyRate = first.hourlyRate;
-                if (!subJobs[j].payrollCompany && first.payrollCompany) subJobs[j].payrollCompany = first.payrollCompany;
-                if (!subJobs[j].steward && first.steward) subJobs[j].steward = first.steward;
-              }
-            }
-            allJobs.push(...subJobs);
+          // Send all expanded sub-records as one batch — fewer API calls, no silent skips
+          const batchText = expandedRecords.join('\n\n');
+          const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-jobs`, supabaseKey, { text: batchText });
+          if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            console.error(`parse-jobs record ${i + 1} failed:`, resp.status, err);
+            continue;
           }
+          const data = await resp.json();
+          const subJobs: ParsedJob[] = data.jobs || [];
+          // Inherit missing fields from the first job (parent) to all siblings
+          if (subJobs.length > 1) {
+            const parent = subJobs[0];
+            for (let j = 1; j < subJobs.length; j++) {
+              if (!subJobs[j].jobNumber && parent.jobNumber) subJobs[j].jobNumber = parent.jobNumber;
+              if (!subJobs[j].hourlyRate && parent.hourlyRate) subJobs[j].hourlyRate = parent.hourlyRate;
+              if (!subJobs[j].payrollCompany && parent.payrollCompany) subJobs[j].payrollCompany = parent.payrollCompany;
+              if (!subJobs[j].steward && parent.steward) subJobs[j].steward = parent.steward;
+            }
+          }
+          allJobs.push(...subJobs);
         }
       } else {
         // Non-job text → smart-import for classification
