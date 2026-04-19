@@ -130,12 +130,22 @@ async function callAPI(url: string, key: string, body: object): Promise<Response
   });
 }
 
-function fileToBase64(file: File): Promise<string> {
+// Resize + JPEG-compress before sending to keep payload under Supabase's body limit
+function compressImage(file: File, maxWidth = 1024): Promise<string> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve((reader.result as string).split(',')[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxWidth / img.width);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', 0.88).split(',')[1]);
+    };
+    img.onerror = reject;
+    img.src = url;
   });
 }
 
@@ -192,7 +202,7 @@ export default function SmartImport() {
       if (imageFile) {
         // Image path → smart-import with vision
         setParseProgress('Reading image...');
-        const imageBase64 = await fileToBase64(imageFile);
+        const imageBase64 = await compressImage(imageFile);
         const resp = await callAPI(`${supabaseUrl}/functions/v1/smart-import`, supabaseKey, {
           imageBase64,
           imageMimeType: imageFile.type,
