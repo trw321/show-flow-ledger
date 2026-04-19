@@ -17,46 +17,24 @@ serve(async (req) => {
     if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured");
 
     const today = new Date().toISOString().split("T")[0];
-    let inputText = text;
 
-    // Step 1: Extract text from image if provided
-    if (imageBase64) {
-      const visionResp = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "gpt-4o",
-          messages: [{
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Extract all text from this image exactly as it appears. Preserve columns using tabs and rows using newlines. Output only the raw extracted text, nothing else."
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:${imageMimeType || "image/jpeg"};base64,${imageBase64}`,
-                  detail: "high"
-                }
-              }
-            ]
-          }],
-          max_tokens: 4000
-        })
-      });
-      if (!visionResp.ok) {
-        const t = await visionResp.text();
-        console.error("Vision error:", visionResp.status, t);
-        throw new Error("Failed to read image");
-      }
-      const visionData = await visionResp.json();
-      inputText = visionData.choices[0]?.message?.content ?? "";
-    }
+    if (!imageBase64 && !text?.trim()) throw new Error("No text to parse");
 
-    if (!inputText?.trim()) throw new Error("No text to parse");
+    // Classify + parse in one call. If an image is provided, pass it directly
+    // so the model sees the visual layout rather than lossy extracted text.
+    const userContent: unknown = imageBase64
+      ? [
+          {
+            type: "image_url",
+            image_url: {
+              url: `data:${imageMimeType || "image/jpeg"};base64,${imageBase64}`,
+              detail: "high"
+            }
+          },
+          { type: "text", text: "Parse this image according to the instructions above." }
+        ]
+      : text;
 
-    // Step 2: Classify + parse in one call
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
@@ -184,7 +162,7 @@ EXAMPLE 3 — walk away with N+M format:
     startTime=08:00 AM, endTime=07:00 PM, mealType=YWA
     hoursWorked = 8+2=10 minus 1hr YWA = 9.0`
           },
-          { role: "user", content: inputText }
+          { role: "user", content: userContent }
         ],
         max_tokens: 4000,
         tools: [
