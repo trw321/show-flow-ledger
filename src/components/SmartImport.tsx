@@ -79,11 +79,14 @@ function expandCBRecord(record: string): string[] {
   const inlinePrefix = dataLine.slice(0, firstTab).trim();
   const lineNotes = [...wrappedLines, inlinePrefix].join(' ').trim();
 
-  if (!/\bCB\b/i.test(lineNotes)) return [record];
-  if (/THRU|SAME\s*DAY|@\d/i.test(lineNotes)) return [record];
+  console.log('[expandCB] lineNotes:', JSON.stringify(lineNotes));
+
+  if (!/\bCB\b/i.test(lineNotes)) { console.log('[expandCB] no CB'); return [record]; }
+  if (/THRU|SAME\s*DAY|@\d/i.test(lineNotes)) { console.log('[expandCB] complex CB → AI'); return [record]; }
 
   // Match: optional prefix + CB + comma-separated M/D dates + optional trailing note
   const cbMatch = lineNotes.match(/^(.*?)\s*\bCB\s+((?:\d{1,2}\/\d{1,2}\s*,?\s*)+?)\s*((?:FOR|WITH|AT)\s+.+)?$/i);
+  console.log('[expandCB] cbMatch:', cbMatch);
   if (!cbMatch) return [record];
 
   const prefix = cbMatch[1].trim();
@@ -207,6 +210,7 @@ export default function SmartImport() {
         for (let i = 0; i < records.length; i++) {
           setParseProgress(`Parsing ${i + 1} of ${records.length}...`);
           const expandedRecords = expandCBRecord(records[i]);
+          console.log(`[parse] record ${i + 1}: ${expandedRecords.length} sub-record(s)`);
           let parentJob: ParsedJob | null = null;
           for (const subRecord of expandedRecords) {
             const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-jobs`, supabaseKey, { text: subRecord });
