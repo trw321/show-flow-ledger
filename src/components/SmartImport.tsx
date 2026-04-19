@@ -96,9 +96,10 @@ function expandCBRecord(record: string): string[] {
   const cbDates = datesStr.split(/\s*,\s*/).map(d => d.trim()).filter(d => /^\d{1,2}\/\d{1,2}$/.test(d));
   if (cbDates.length === 0) return [record];
 
-  const dtMatch = lines[dateLineIdx].match(/(\d+)\/(\d+)\/(\d{2})\s+(.*)/);
-  if (!dtMatch) return [record];
-  const [, , , yr, time] = dtMatch;
+  const dtMatch = lines[dateLineIdx].match(/(\d+)\/(\d+)\/(\d{2})(?:\s+(.*))?/);
+  if (!dtMatch) { console.log('[expandCB] no date match'); return [record]; }
+  const yr = dtMatch[3];
+  const time = (dtMatch[4] ?? '').trim();
 
   // Build a record with given date string and note prefix before the tab data.
   // Wrapped note lines are removed; the note goes inline before the first tab.
@@ -119,6 +120,7 @@ function expandCBRecord(record: string): string[] {
     return makeRecord(`${m}/${d}/${yr} ${time}`, trailingNote);
   });
 
+  console.log(`[expandCB] expanded to ${1 + cbRecords.length} records, dates:`, cbDates);
   return [parentRecord, ...cbRecords];
 }
 
