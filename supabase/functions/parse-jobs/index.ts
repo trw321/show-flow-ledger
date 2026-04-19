@@ -174,6 +174,7 @@ Status: "upcoming" for future dates, "completed" for past dates.`,
               },
             },
           ],
+          max_tokens: 8000,
           tool_choice: {
             type: "function",
             function: { name: "create_jobs" },

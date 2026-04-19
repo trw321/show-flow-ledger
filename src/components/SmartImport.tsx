@@ -226,32 +226,31 @@ export default function SmartImport() {
       } else if (/^\d{4}-\d{4}/m.test(text)) {
         // Job text → split per record, call parse-jobs one at a time
         type = 'jobs';
+        // Expand all records deterministically in JS first
         const records = splitJobRecords(text);
-        for (let i = 0; i < records.length; i++) {
-          setParseProgress(`Parsing ${i + 1} of ${records.length}...`);
-          const expandedRecords = expandCBRecord(records[i]);
-          console.log(`[parse] record ${i + 1}: ${expandedRecords.length} sub-record(s)`);
-          // Send all expanded sub-records as one batch — fewer API calls, no silent skips
-          const batchText = expandedRecords.join('\n\n');
-          const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-jobs`, supabaseKey, { text: batchText });
+        const expanded: string[] = [];
+        for (const rec of records) {
+          const sub = expandCBRecord(rec);
+          console.log(`[parse] expanded ${sub.length} sub-record(s)`);
+          expanded.push(...sub);
+        }
+
+        // Batch into groups of 5 → ~4 calls for 20 records instead of 20+
+        const BATCH = 5;
+        const batches = Array.from({ length: Math.ceil(expanded.length / BATCH) }, (_, i) =>
+          expanded.slice(i * BATCH, i * BATCH + BATCH)
+        );
+        for (let b = 0; b < batches.length; b++) {
+          setParseProgress(`Parsing batch ${b + 1} of ${batches.length}...`);
+          const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-jobs`, supabaseKey, {
+            text: batches[b].join('\n\n'),
+          });
           if (!resp.ok) {
-            const err = await resp.json().catch(() => ({}));
-            console.error(`parse-jobs record ${i + 1} failed:`, resp.status, err);
+            console.error(`batch ${b + 1} failed:`, resp.status, await resp.json().catch(() => ({})));
             continue;
           }
-          const data = await resp.json();
-          const subJobs: ParsedJob[] = data.jobs || [];
-          // Inherit missing fields from the first job (parent) to all siblings
-          if (subJobs.length > 1) {
-            const parent = subJobs[0];
-            for (let j = 1; j < subJobs.length; j++) {
-              if (!subJobs[j].jobNumber && parent.jobNumber) subJobs[j].jobNumber = parent.jobNumber;
-              if (!subJobs[j].hourlyRate && parent.hourlyRate) subJobs[j].hourlyRate = parent.hourlyRate;
-              if (!subJobs[j].payrollCompany && parent.payrollCompany) subJobs[j].payrollCompany = parent.payrollCompany;
-              if (!subJobs[j].steward && parent.steward) subJobs[j].steward = parent.steward;
-            }
-          }
-          allJobs.push(...subJobs);
+          const { jobs: batchJobs = [] }: { jobs: ParsedJob[] } = await resp.json();
+          allJobs.push(...batchJobs);
         }
       } else {
         // Non-job text → smart-import for classification
