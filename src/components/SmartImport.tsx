@@ -59,26 +59,64 @@ function splitJobRecords(raw: string): string[] {
   return parts.map(p => p.trim()).filter(p => p.length > 0);
 }
 
-// Extract parent date from a dispatch record's date line (e.g. "3/22/26 07:00 AM" → "2026-03-22")
-function extractParentDate(record: string): string | null {
-  const m = record.match(/(\d{1,2})\/(\d{1,2})\/(\d{2})/);
-  if (!m) return null;
-  const year = 2000 + parseInt(m[3]);
-  return `${year}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
-}
+// Deterministically expand "CB M/D, M/D [optional note]" into individual records.
+// Complex CB patterns (THRU, SAME DAY, @time) are left untouched for the AI.
+function expandCBRecord(record: string): string[] {
+  const lines = record.split('\n');
+  const dataLineIdx = lines.findIndex(l => l.includes('\t'));
+  if (dataLineIdx === -1) return [record];
 
-// Strip trailing note text from "CB M/D, M/D FOR LOAD OUT" so the AI doesn't choke on it.
-// Returns the cleaned record and the extracted note string.
-function stripCBTrailingNote(record: string): { record: string; cbNote: string } {
-  let cbNote = '';
-  const cleaned = record.replace(
-    /(\bCB\s+(?:\d{1,2}\/\d{1,2}[\s,]*)+)\s+((?:FOR|WITH|AT)\s+[^\t\n]+)/gi,
-    (_match, cbPart, trailingText) => {
-      cbNote = trailingText.trim();
-      return cbPart.trimEnd();
+  const dateLineIdx = lines.findIndex(l => /\d+\/\d+\/\d{2}/.test(l));
+  if (dateLineIdx === -1) return [record];
+
+  const dataLine = lines[dataLineIdx];
+  const firstTab = dataLine.indexOf('\t');
+  const rest = dataLine.slice(firstTab); // "\tSkill\tEmployer\t..."
+
+  // Line notes can be wrapped onto separate lines before the tab line,
+  // or inline (before the first tab on the data line), or both.
+  const wrappedLines = lines.slice(dateLineIdx + 1, dataLineIdx).filter(l => l.trim());
+  const inlinePrefix = dataLine.slice(0, firstTab).trim();
+  const lineNotes = [...wrappedLines, inlinePrefix].join(' ').trim();
+
+  if (!/\bCB\b/i.test(lineNotes)) return [record];
+  if (/THRU|SAME\s*DAY|@\d/i.test(lineNotes)) return [record];
+
+  // Match: optional prefix + CB + comma-separated M/D dates + optional trailing note
+  const cbMatch = lineNotes.match(/^(.*?)\s*\bCB\s+((?:\d{1,2}\/\d{1,2}\s*,?\s*)+?)\s*((?:FOR|WITH|AT)\s+.+)?$/i);
+  if (!cbMatch) return [record];
+
+  const prefix = cbMatch[1].trim();
+  const datesStr = cbMatch[2].trim().replace(/,\s*$/, '');
+  const trailingNote = (cbMatch[3] ?? '').trim();
+
+  const cbDates = datesStr.split(/\s*,\s*/).map(d => d.trim()).filter(d => /^\d{1,2}\/\d{1,2}$/.test(d));
+  if (cbDates.length === 0) return [record];
+
+  const dtMatch = lines[dateLineIdx].match(/(\d+)\/(\d+)\/(\d{2})\s+(.*)/);
+  if (!dtMatch) return [record];
+  const [, , , yr, time] = dtMatch;
+
+  // Build a record with given date string and note prefix before the tab data.
+  // Wrapped note lines are removed; the note goes inline before the first tab.
+  const makeRecord = (newDate: string, notePrefix: string) => {
+    const out: string[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      if (i > dateLineIdx && i < dataLineIdx) continue; // drop wrapped note lines
+      if (i === dateLineIdx) { out.push(newDate); continue; }
+      if (i === dataLineIdx) { out.push(notePrefix + rest); continue; }
+      out.push(lines[i]);
     }
-  );
-  return { record: cleaned, cbNote };
+    return out.join('\n');
+  };
+
+  const parentRecord = makeRecord(lines[dateLineIdx], prefix);
+  const cbRecords = cbDates.map(cbDate => {
+    const [m, d] = cbDate.split('/');
+    return makeRecord(`${m}/${d}/${yr} ${time}`, trailingNote);
+  });
+
+  return [parentRecord, ...cbRecords];
 }
 
 async function callAPI(url: string, key: string, body: object): Promise<Response> {
@@ -168,34 +206,39 @@ export default function SmartImport() {
         const records = splitJobRecords(text);
         for (let i = 0; i < records.length; i++) {
           setParseProgress(`Parsing ${i + 1} of ${records.length}...`);
-          const { record: cleanedRecord, cbNote } = stripCBTrailingNote(records[i]);
-          const parentDate = extractParentDate(records[i]);
-          const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-jobs`, supabaseKey, { text: cleanedRecord });
-          if (!resp.ok) {
-            const err = await resp.json().catch(() => ({}));
-            console.error(`parse-jobs record ${i + 1} failed:`, resp.status, err);
-            continue;
-          }
-          const data = await resp.json();
-          const jobs: ParsedJob[] = data.jobs || [];
-          // Re-attach stripped trailing note to CB jobs (any job that isn't the parent date)
-          if (cbNote && parentDate) {
-            for (const job of jobs) {
-              if (job.date !== parentDate) {
-                job.notes = job.notes ? `${job.notes}; ${cbNote}` : cbNote;
+          const expandedRecords = expandCBRecord(records[i]);
+          let parentJob: ParsedJob | null = null;
+          for (const subRecord of expandedRecords) {
+            const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-jobs`, supabaseKey, { text: subRecord });
+            if (!resp.ok) {
+              const err = await resp.json().catch(() => ({}));
+              console.error(`parse-jobs record ${i + 1} failed:`, resp.status, err);
+              continue;
+            }
+            const data = await resp.json();
+            const subJobs: ParsedJob[] = data.jobs || [];
+            if (!parentJob && subJobs.length > 0) {
+              parentJob = subJobs[0];
+            } else if (parentJob) {
+              // Inherit missing fields from parent into CB jobs
+              for (const job of subJobs) {
+                if (!job.jobNumber && parentJob.jobNumber) job.jobNumber = parentJob.jobNumber;
+                if (!job.hourlyRate && parentJob.hourlyRate) job.hourlyRate = parentJob.hourlyRate;
+                if (!job.payrollCompany && parentJob.payrollCompany) job.payrollCompany = parentJob.payrollCompany;
+                if (!job.steward && parentJob.steward) job.steward = parentJob.steward;
               }
             }
-          }
-          // Inherit missing fields from the first job in the group (parent)
-          if (jobs.length > 1) {
-            const parent = jobs[0];
-            for (let j = 1; j < jobs.length; j++) {
-              if (!jobs[j].hourlyRate && parent.hourlyRate) jobs[j].hourlyRate = parent.hourlyRate;
-              if (!jobs[j].payrollCompany && parent.payrollCompany) jobs[j].payrollCompany = parent.payrollCompany;
-              if (!jobs[j].steward && parent.steward) jobs[j].steward = parent.steward;
+            // Also inherit within a single response (non-expanded CBs handled by AI)
+            if (subJobs.length > 1) {
+              const first = subJobs[0];
+              for (let j = 1; j < subJobs.length; j++) {
+                if (!subJobs[j].hourlyRate && first.hourlyRate) subJobs[j].hourlyRate = first.hourlyRate;
+                if (!subJobs[j].payrollCompany && first.payrollCompany) subJobs[j].payrollCompany = first.payrollCompany;
+                if (!subJobs[j].steward && first.steward) subJobs[j].steward = first.steward;
+              }
             }
+            allJobs.push(...subJobs);
           }
-          allJobs.push(...jobs);
         }
       } else {
         // Non-job text → smart-import for classification
