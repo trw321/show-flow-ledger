@@ -65,11 +65,17 @@ function expandCBRecord(record: string): string[] {
   const lines = record.split('\n');
 
   // Find the date line first (M/D/YY format)
-  const dateLineIdx = lines.findIndex(l => /\d+\/\d+\/\d{2}/.test(l));
+  let dateLineIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (/\d+\/\d+\/\d{2}/.test(lines[i])) { dateLineIdx = i; break; }
+  }
   if (dateLineIdx === -1) return [record];
 
-  // Data line = first tab-containing line AFTER the date line (not the job-number line before it)
-  const dataLineIdx = lines.findIndex((l, i) => i > dateLineIdx && l.includes('\t'));
+  // Data line = first tab-containing line AFTER the date line
+  let dataLineIdx = -1;
+  for (let i = dateLineIdx + 1; i < lines.length; i++) {
+    if (lines[i].includes('\t')) { dataLineIdx = i; break; }
+  }
   if (dataLineIdx === -1) return [record];
 
   const dataLine = lines[dataLineIdx];
