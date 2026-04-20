@@ -60,41 +60,54 @@ function splitJobRecords(raw: string): string[] {
 }
 
 // Deterministically expand "CB M/D, M/D [optional note]" into individual records.
+// Handles two paste formats from the IATSE16 site:
+//   Format A (multi-line): Date on own line, then later [LineNotes]\t[Skill]\t...
+//   Format B (single-line): [Date+Time]\t[LineNotes]\t[Skill]\t... all on one line
 // Complex CB patterns (THRU, SAME DAY, @time) are left untouched for the AI.
 function expandCBRecord(record: string): string[] {
   const lines = record.split('\n');
 
-  // Find the date line first (M/D/YY format)
+  // Find the date line (first line matching M/D/YY)
   let dateLineIdx = -1;
   for (let i = 0; i < lines.length; i++) {
     if (/\d+\/\d+\/\d{2}/.test(lines[i])) { dateLineIdx = i; break; }
   }
   if (dateLineIdx === -1) return [record];
 
-  // Data line = first tab-containing line AFTER the date line
-  let dataLineIdx = -1;
-  for (let i = dateLineIdx + 1; i < lines.length; i++) {
-    if (lines[i].includes('\t')) { dataLineIdx = i; break; }
+  const dateLine = lines[dateLineIdx];
+  const dateHasTabs = dateLine.includes('\t');
+
+  // Determine data line and extract lineNotes + rest (Skill\tEmployer\t...)
+  let dataLineIdx: number;
+  let lineNotes: string;
+  let rest: string; // leading \t + Skill\tEmployer\t...
+
+  if (dateHasTabs) {
+    // Format B: [Date+Time]\t[LineNotes]\t[Skill]\t[Employer]\t...
+    dataLineIdx = dateLineIdx;
+    const fields = dateLine.split('\t');
+    lineNotes = (fields[1] ?? '').trim();
+    rest = '\t' + fields.slice(2).join('\t');
+  } else {
+    // Format A: date on own line, then [LineNotes]\t[Skill]\t... on a later line
+    dataLineIdx = -1;
+    for (let i = dateLineIdx + 1; i < lines.length; i++) {
+      if (lines[i].includes('\t')) { dataLineIdx = i; break; }
+    }
+    if (dataLineIdx === -1) return [record];
+    const dataLine = lines[dataLineIdx];
+    const firstTab = dataLine.indexOf('\t');
+    const wrappedLines = lines.slice(dateLineIdx + 1, dataLineIdx).map(l => l.trim()).filter(Boolean);
+    lineNotes = [...wrappedLines, dataLine.slice(0, firstTab).trim()].join(' ');
+    rest = dataLine.slice(firstTab);
   }
-  if (dataLineIdx === -1) return [record];
 
-  const dataLine = lines[dataLineIdx];
-  const firstTab = dataLine.indexOf('\t');
-  const rest = dataLine.slice(firstTab); // "\tSkill\tEmployer\t..."
-
-  // Line notes can be wrapped onto separate lines before the tab line,
-  // or inline (before the first tab on the data line), or both.
-  const wrappedLines = lines.slice(dateLineIdx + 1, dataLineIdx).map(l => l.trim()).filter(Boolean);
-  const inlinePrefix = dataLine.slice(0, firstTab).trim();
-  // Normalize whitespace and strip carriage returns
-  const lineNotes = [...wrappedLines, inlinePrefix].join(' ').replace(/\r/g, '').replace(/\s+/g, ' ').trim();
-
+  lineNotes = lineNotes.replace(/\r/g, '').replace(/\s+/g, ' ').trim();
   console.log('[expandCB] lineNotes:', JSON.stringify(lineNotes));
 
   if (!/\bCB\b/i.test(lineNotes)) { console.log('[expandCB] no CB'); return [record]; }
   if (/THRU|SAME\s*DAY|@\d/i.test(lineNotes)) { console.log('[expandCB] complex CB → AI'); return [record]; }
 
-  // Match: optional prefix + CB + comma-separated M/D dates + optional trailing note
   const cbMatch = lineNotes.match(/^(.*?)\s*\bCB\s+((?:\d{1,2}\/\d{1,2}\s*,?\s*)+?)\s*((?:FOR|WITH|AT)\s+.+)?$/i);
   console.log('[expandCB] cbMatch:', cbMatch);
   if (!cbMatch) return [record];
@@ -106,28 +119,34 @@ function expandCBRecord(record: string): string[] {
   const cbDates = datesStr.split(/\s*,\s*/).map(d => d.trim()).filter(d => /^\d{1,2}\/\d{1,2}$/.test(d));
   if (cbDates.length === 0) return [record];
 
-  const dtMatch = lines[dateLineIdx].match(/(\d+)\/(\d+)\/(\d{2})(?:\s+(.*))?/);
+  const dtMatch = dateLine.match(/(\d+)\/(\d+)\/(\d{2})(?:\s+([^\t]*))?/);
   if (!dtMatch) { console.log('[expandCB] no date match'); return [record]; }
   const yr = dtMatch[3];
   const time = (dtMatch[4] ?? '').trim();
 
-  // Build a record with given date string and note prefix before the tab data.
-  // Wrapped note lines are removed; the note goes inline before the first tab.
-  const makeRecord = (newDate: string, notePrefix: string) => {
+  const makeRecord = (newDateStr: string, notePfx: string) => {
     const out: string[] = [];
     for (let i = 0; i < lines.length; i++) {
-      if (i > dateLineIdx && i < dataLineIdx) continue; // drop wrapped note lines
-      if (i === dateLineIdx) { out.push(newDate); continue; }
-      if (i === dataLineIdx) { out.push(notePrefix + rest); continue; }
-      out.push(lines[i]);
+      if (i > dateLineIdx && i < dataLineIdx) continue; // drop wrapped note lines (Format A)
+      if (i === dateLineIdx && dateHasTabs) {
+        // Format B: rebuild the single line with new date and note
+        out.push(`${newDateStr}\t${notePfx}${rest}`);
+      } else if (i === dateLineIdx) {
+        out.push(newDateStr);
+      } else if (i === dataLineIdx) {
+        out.push(notePfx + rest);
+      } else {
+        out.push(lines[i]);
+      }
     }
     return out.join('\n');
   };
 
-  const parentRecord = makeRecord(lines[dateLineIdx], prefix);
+  const parentDateStr = dateHasTabs ? dateLine.split('\t')[0].trim() : dateLine;
+  const parentRecord = makeRecord(parentDateStr, prefix);
   const cbRecords = cbDates.map(cbDate => {
     const [m, d] = cbDate.split('/');
-    return makeRecord(`${m}/${d}/${yr} ${time}`, trailingNote);
+    return makeRecord(`${m}/${d}/${yr}${time ? ' ' + time : ''}`, trailingNote);
   });
 
   console.log(`[expandCB] expanded to ${1 + cbRecords.length} records, dates:`, cbDates);
