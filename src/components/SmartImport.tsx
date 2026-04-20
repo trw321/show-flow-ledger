@@ -65,6 +65,7 @@ function splitJobRecords(raw: string): string[] {
 //   Format B (single-line): [Date+Time]\t[LineNotes]\t[Skill]\t... all on one line
 // Complex CB patterns (THRU, SAME DAY, @time) are left untouched for the AI.
 function expandCBRecord(record: string): string[] {
+  console.log('[expandCB] record start:', JSON.stringify(record.slice(0, 200)));
   const lines = record.split('\n');
 
   // Find the date line (first line matching M/D/YY)
