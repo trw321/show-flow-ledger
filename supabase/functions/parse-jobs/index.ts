@@ -46,7 +46,7 @@ DATA FORMAT — each job record looks like this:
 
 NOTE: Line Notes may itself span multiple lines (the website wraps long cells). Treat all lines before the first TAB-separated data as part of Line Notes.
 
-⚠️ IMPORTANT: You may receive multiple pre-expanded records that already have one date each. Each block starting with a YYYY-NNNN job number is ONE independent job — parse it as-is. Do NOT re-apply CB expansion to already-expanded records. Multiple blocks sharing the same job number are separate jobs on different dates, not callbacks to expand further.
+NOTE: You may receive multiple records in one call. Each block starting with a YYYY-NNNN line is a separate record — parse each independently. If Line Notes contain CB/THRU/split-shift rules, apply them normally to that record.
 
 FIELD MAPPINGS:
 - Job Number → jobNumber (keep full YYYY-NNNN format, e.g. "2026-0929"). ALL CB/split-shift jobs created from this record inherit the same jobNumber as the parent.
