@@ -59,20 +59,273 @@ function splitJobRecords(raw: string): string[] {
   return parts.map(p => p.trim()).filter(p => p.length > 0);
 }
 
+// ─── CB expansion helpers ────────────────────────────────────────────────────
+
+function toAmPm(s: string): string {
+  const u = s.toUpperCase();
+  return u === 'A' ? 'AM' : u === 'P' ? 'PM' : u;
+}
+
+function normTime(t: string): string {
+  t = t.replace(/[Oo]/g, '0').trim();
+  let m: RegExpMatchArray | null;
+  // HH:MM(AM|PM)
+  m = t.match(/^@?(\d{1,2}):(\d{2})\s*(A(?:M)?|P(?:M)?)$/i);
+  if (m) return `${m[1].padStart(2, '0')}:${m[2]} ${toAmPm(m[3])}`;
+  // HHMM(AM|PM)
+  m = t.match(/^@?(\d{1,2})(\d{2})\s*(A(?:M)?|P(?:M)?)$/i);
+  if (m) return `${m[1].padStart(2, '0')}:${m[2]} ${toAmPm(m[3])}`;
+  // HH(AM|PM)
+  m = t.match(/^@?(\d{1,2})\s*(A(?:M)?|P(?:M)?)$/i);
+  if (m) return `${m[1].padStart(2, '0')}:00 ${toAmPm(m[2])}`;
+  // 4-digit 24h e.g. 0800
+  m = t.match(/^(\d{2})(\d{2})$/);
+  if (m) {
+    const h = parseInt(m[1]);
+    if (h < 24) {
+      const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      return `${String(h12).padStart(2, '0')}:${m[2]} ${h >= 12 ? 'PM' : 'AM'}`;
+    }
+  }
+  return t;
+}
+
+function isTimeToken(tok: string): boolean {
+  const c = tok.replace(/[Oo]/g, '0');
+  return (
+    /^@?\d{1,2}(?::\d{2})?\s*(?:A(?:M)?|P(?:M)?)$/i.test(c) ||
+    /^@?\d{1,2}\d{2}\s*(?:A(?:M)?|P(?:M)?)$/i.test(c) ||
+    /^\d{4}$/.test(c)
+  );
+}
+
+// Deterministically expand all CB patterns into individual records so the AI
+// only ever receives simple single-job records with no CB logic to handle.
+//
+// Handles both paste formats from the IATSE16 site:
+//   Format A (multi-line): Job# / Date / blank / [LineNotes]\t[Skill]\t...
+//   Format B (single-line): Job# / [Date+Time]\t[LineNotes]\t[Skill]\t...
+//
+// Supported CB patterns:
+//   "CB 3/18, 3/20"                          → extra job per date
+//   "CB 3/24, 3/25 FOR LOAD OUT"             → CB jobs + trailing note on both
+//   "CB THRU 10/7"                            → range from parent+1 through 10/7
+//   "CB THRU 10/7 THEN 10/17 & 10/18 note"  → range + extra dates + note
+//   "CB THRU 5/30, DARK 5/27"               → range skipping DARK dates
+//   "CB 3/15 @10A FOR LOAD OUT"             → explicit time on CB date
+//   "SAME DAY CB, 10PM FOR LOAD OUT"        → second job same date, new time
+//   "CB @ 10PM" / "CB, 10PM"               → same-day CB at that time
+//   "CB FOR OUT" / bare "CB"               → same-day CB, time TBD
+function expandCBRecord(record: string): string[] {
+  const lines = record.split('\n');
+
+  // Find the date line (first line with M/D/YY)
+  let dateLineIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (/\d+\/\d+\/\d{2}/.test(lines[i])) { dateLineIdx = i; break; }
+  }
+  if (dateLineIdx === -1) return [record];
+
+  const dateLine = lines[dateLineIdx];
+  const dateHasTabs = dateLine.includes('\t');
+
+  // Extract lineNotes and rest (\t[Skill]\t[Employer]\t...)
+  let dataLineIdx: number;
+  let lineNotes: string;
+  let rest: string;
+
+  if (dateHasTabs) {
+    // Format B: everything on the date line
+    dataLineIdx = dateLineIdx;
+    const fields = dateLine.split('\t');
+    lineNotes = (fields[1] ?? '').trim();
+    rest = '\t' + fields.slice(2).join('\t');
+  } else {
+    // Format A: find the first tab-containing line after the date
+    dataLineIdx = -1;
+    for (let i = dateLineIdx + 1; i < lines.length; i++) {
+      if (lines[i].includes('\t')) { dataLineIdx = i; break; }
+    }
+    if (dataLineIdx === -1) return [record];
+    const dataLine = lines[dataLineIdx];
+    const firstTab = dataLine.indexOf('\t');
+    const wrapped = lines.slice(dateLineIdx + 1, dataLineIdx).map(l => l.trim()).filter(Boolean);
+    lineNotes = [...wrapped, dataLine.slice(0, firstTab).trim()].join(' ');
+    rest = dataLine.slice(firstTab);
+  }
+
+  lineNotes = lineNotes.replace(/\r/g, '').replace(/\s+/g, ' ').trim();
+
+  if (!/\bC\/?B\b/i.test(lineNotes)) return [record];
+
+  // Parse parent date
+  const dtMatch = dateLine.match(/(\d{1,2})\/(\d{1,2})\/(\d{2})(?:\s+([^\t\n]*))?/);
+  if (!dtMatch) return [record];
+  const parentM = parseInt(dtMatch[1]);
+  const parentD = parseInt(dtMatch[2]);
+  const yr = dtMatch[3];
+  const fullYr = 2000 + parseInt(yr);
+  const parentTime = (dtMatch[4] ?? '').trim();
+  const parentDate = new Date(fullYr, parentM - 1, parentD);
+  const parentDateOnly = `${parentM}/${parentD}/${yr}`;
+
+  // Split into prefix (before CB) and cbContent (after CB keyword)
+  const cbKeyMatch = lineNotes.match(/^(.*?)\s*\bC\/?B(?:'?[Ss])?\b[,\s]*/i);
+  if (!cbKeyMatch) return [record];
+  const prefix = cbKeyMatch[1].trim();
+  let cbContent = lineNotes.slice(cbKeyMatch[0].length).trim();
+
+  // Strip optional "SAME DAY" prefix and leading comma
+  cbContent = cbContent.replace(/^SAME\s*DAY\s*,?\s*/i, '').replace(/^@\s*/, '').replace(/^,\s*/, '').trim();
+
+  const parseMD = (md: string): Date => {
+    const [m, d] = md.split('/').map(Number);
+    return new Date(fullYr, m - 1, d);
+  };
+  const fmtDate = (d: Date): string => `${d.getMonth() + 1}/${d.getDate()}/${yr}`;
+
+  // Rebuild a record with a new date, lineNotes prefix, and optional time override
+  const makeRecord = (dateOnly: string, notePfx: string, timeOverride?: string): string => {
+    const tPart = timeOverride !== undefined ? timeOverride : parentTime;
+    const dateTime = tPart ? `${dateOnly} ${tPart}` : dateOnly;
+    const out: string[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      if (!dateHasTabs && i > dateLineIdx && i < dataLineIdx) continue;
+      if (i === dateLineIdx && dateHasTabs) {
+        out.push(`${dateTime}\t${notePfx}${rest}`);
+      } else if (i === dateLineIdx) {
+        out.push(dateTime);
+      } else if (!dateHasTabs && i === dataLineIdx) {
+        out.push(notePfx + rest);
+      } else {
+        out.push(lines[i]);
+      }
+    }
+    return out.join('\n');
+  };
+
+  type CBEntry = { date: Date; time?: string; note?: string };
+  const cbEntries: CBEntry[] = [];
+
+  const hasLeadingDate = /^\d{1,2}\/\d{1,2}/.test(cbContent);
+  const hasThru = /^THRU\b/i.test(cbContent);
+
+  if (hasThru) {
+    // ── THRU range ──────────────────────────────────────────────────────────
+    const thruM = cbContent.match(/^THRU\s+(\d{1,2}\/\d{1,2})(.*)/i)!;
+    const thruEnd = parseMD(thruM[1]);
+    let rem = thruM[2].trim();
+
+    // Extract DARK (skip) dates
+    const dark = new Set<string>();
+    rem = rem.replace(/,?\s*\bDARK\s+(\d{1,2}\/\d{1,2})/gi, (_: string, d: string) => {
+      dark.add(d.trim()); return '';
+    }).trim();
+
+    // Expand range: day after parent through thruEnd
+    const cur = new Date(parentDate);
+    cur.setDate(cur.getDate() + 1);
+    while (cur <= thruEnd) {
+      const md = `${cur.getMonth() + 1}/${cur.getDate()}`;
+      if (!dark.has(md)) cbEntries.push({ date: new Date(cur) });
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    // THEN block: additional dates after the range
+    const thenStart = rem.search(/\bTHEN\b/i);
+    if (thenStart !== -1) {
+      const thenPart = rem.slice(thenStart + 4).trim();
+      const thenDates = [...thenPart.matchAll(/\d{1,2}\/\d{1,2}/g)];
+      let lastEnd = 0;
+      for (const tdm of thenDates) lastEnd = (tdm.index ?? 0) + tdm[0].length;
+      const thenNote = thenPart.slice(lastEnd).replace(/^[\s&,]+/, '').trim() || undefined;
+      for (const tdm of thenDates) cbEntries.push({ date: parseMD(tdm[0]), note: thenNote });
+    } else {
+      // Trailing note applies to all THRU dates
+      const noteM = rem.match(/\b(FOR|WITH)\b\s*(.+)/i);
+      if (noteM) for (const e of cbEntries) e.note = noteM[0].trim();
+    }
+
+  } else if (hasLeadingDate) {
+    // ── Comma-separated date list ────────────────────────────────────────────
+    const parts = cbContent.split(/\s*,\s*/);
+    let trailingNote = '';
+
+    for (const part of parts) {
+      const dm = part.match(/^(\d{1,2}\/\d{1,2})(.*)/);
+      if (!dm) { if (part.trim()) trailingNote = part.trim(); continue; }
+
+      let rem2 = dm[2].trim();
+      let timeOverride: string | undefined;
+
+      // @time immediately after the date
+      const atM = rem2.match(/^(@\S+)\s*(.*)/);
+      if (atM && isTimeToken(atM[1])) {
+        timeOverride = normTime(atM[1]);
+        rem2 = atM[2].trim();
+      }
+      if (rem2) trailingNote = rem2;
+      cbEntries.push({ date: parseMD(dm[1]), time: timeOverride, note: rem2 || undefined });
+    }
+
+    // Trailing note applies retroactively to all entries that don't have one
+    if (trailingNote) for (const e of cbEntries) if (!e.note) e.note = trailingNote;
+
+  } else {
+    // ── Same-day CB ──────────────────────────────────────────────────────────
+    let timeOverride: string | undefined;
+    let note: string | undefined;
+    const tokM = cbContent.match(/^(@?\S+)\s*(.*)/);
+    if (tokM && isTimeToken(tokM[1])) {
+      timeOverride = normTime(tokM[1]);
+      note = tokM[2].trim() || undefined;
+    } else {
+      note = cbContent || undefined;
+    }
+    cbEntries.push({ date: new Date(parentDate), time: timeOverride, note });
+  }
+
+  if (cbEntries.length === 0) return [record];
+
+  const parentRecord = makeRecord(parentDateOnly, prefix);
+  const cbRecords = cbEntries.map(e => makeRecord(fmtDate(e.date), e.note ?? '', e.time));
+  console.log(`[expandCB] ${record.slice(0, 9)} → ${1 + cbRecords.length} records`);
+  return [parentRecord, ...cbRecords];
+}
+
+// ─── Image compression ───────────────────────────────────────────────────────
+
+// Resize + JPEG-compress before upload to stay under Supabase's body limit (~4MB)
+function compressImage(file: File, maxPx = 800): Promise<{ base64: string; mimeType: string }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('Canvas not supported')); return; }
+      ctx.drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+      console.log(`[img] compressed to ${w}x${h}, ~${Math.round(dataUrl.length * 0.75 / 1024)}KB`);
+      resolve({ base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' });
+    };
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = url;
+  });
+}
+
+// ─── API helper ──────────────────────────────────────────────────────────────
+
 async function callAPI(url: string, key: string, body: object): Promise<Response> {
   return fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify(body),
-  });
-}
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve((reader.result as string).split(',')[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
   });
 }
 
@@ -127,12 +380,12 @@ export default function SmartImport() {
       let type: ImportType = 'jobs';
 
       if (imageFile) {
-        // Image path → smart-import with vision
+        // Image path → compress then send to smart-import with vision
         setParseProgress('Reading image...');
-        const imageBase64 = await fileToBase64(imageFile);
+        const { base64: imageBase64, mimeType: imageMimeType } = await compressImage(imageFile);
         const resp = await callAPI(`${supabaseUrl}/functions/v1/smart-import`, supabaseKey, {
           imageBase64,
-          imageMimeType: imageFile.type,
+          imageMimeType,
         });
         if (!resp.ok) throw new Error((await resp.json()).error || 'Failed to parse image');
         const result = await resp.json();
@@ -141,15 +394,24 @@ export default function SmartImport() {
         allIncome = result.income || [];
         allHours = result.hourUpdates || [];
       } else if (/^\d{4}-\d{4}/m.test(text)) {
-        // Job text → split per record, call parse-jobs one at a time
+        // Job text → expand all CB records in JS, then batch to parse-jobs (5 per call)
         type = 'jobs';
         const records = splitJobRecords(text);
-        for (let i = 0; i < records.length; i++) {
-          setParseProgress(`Parsing ${i + 1} of ${records.length}...`);
-          const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-jobs`, supabaseKey, { text: records[i] });
-          if (!resp.ok) continue;
-          const data = await resp.json();
-          allJobs.push(...(data.jobs || []));
+        const expanded: string[] = [];
+        for (const rec of records) expanded.push(...expandCBRecord(rec));
+
+        const BATCH = 5;
+        const batches: string[][] = [];
+        for (let i = 0; i < expanded.length; i += BATCH) batches.push(expanded.slice(i, i + BATCH));
+
+        for (let b = 0; b < batches.length; b++) {
+          setParseProgress(`Parsing ${b + 1} of ${batches.length}...`);
+          const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-jobs`, supabaseKey, {
+            text: batches[b].join('\n\n'),
+          });
+          if (!resp.ok) { console.error(`batch ${b + 1} failed:`, resp.status); continue; }
+          const batchData = await resp.json();
+          allJobs.push(...(batchData.jobs || []));
         }
       } else {
         // Non-job text → smart-import for classification
