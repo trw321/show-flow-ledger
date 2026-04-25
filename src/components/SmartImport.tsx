@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Upload, Loader2, Check, X, Plus } from 'lucide-react';
+import { Upload, Loader2, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Job } from '@/lib/store';
 import { getJobDedupKey } from '@/lib/jobDedup';
@@ -59,16 +59,67 @@ function splitJobRecords(raw: string): string[] {
   return parts.map(p => p.trim()).filter(p => p.length > 0);
 }
 
-// Deterministically expand "CB M/D, M/D [optional note]" into individual records.
-// Handles two paste formats from the IATSE16 site:
-//   Format A (multi-line): Date on own line, then later [LineNotes]\t[Skill]\t...
-//   Format B (single-line): [Date+Time]\t[LineNotes]\t[Skill]\t... all on one line
-// Complex CB patterns (THRU, SAME DAY, @time) are left untouched for the AI.
+// ─── CB expansion helpers ────────────────────────────────────────────────────
+
+function toAmPm(s: string): string {
+  const u = s.toUpperCase();
+  return u === 'A' ? 'AM' : u === 'P' ? 'PM' : u;
+}
+
+function normTime(t: string): string {
+  t = t.replace(/[Oo]/g, '0').trim();
+  let m: RegExpMatchArray | null;
+  // HH:MM(AM|PM)
+  m = t.match(/^@?(\d{1,2}):(\d{2})\s*(A(?:M)?|P(?:M)?)$/i);
+  if (m) return `${m[1].padStart(2, '0')}:${m[2]} ${toAmPm(m[3])}`;
+  // HHMM(AM|PM)
+  m = t.match(/^@?(\d{1,2})(\d{2})\s*(A(?:M)?|P(?:M)?)$/i);
+  if (m) return `${m[1].padStart(2, '0')}:${m[2]} ${toAmPm(m[3])}`;
+  // HH(AM|PM)
+  m = t.match(/^@?(\d{1,2})\s*(A(?:M)?|P(?:M)?)$/i);
+  if (m) return `${m[1].padStart(2, '0')}:00 ${toAmPm(m[2])}`;
+  // 4-digit 24h e.g. 0800
+  m = t.match(/^(\d{2})(\d{2})$/);
+  if (m) {
+    const h = parseInt(m[1]);
+    if (h < 24) {
+      const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      return `${String(h12).padStart(2, '0')}:${m[2]} ${h >= 12 ? 'PM' : 'AM'}`;
+    }
+  }
+  return t;
+}
+
+function isTimeToken(tok: string): boolean {
+  const c = tok.replace(/[Oo]/g, '0');
+  return (
+    /^@?\d{1,2}(?::\d{2})?\s*(?:A(?:M)?|P(?:M)?)$/i.test(c) ||
+    /^@?\d{1,2}\d{2}\s*(?:A(?:M)?|P(?:M)?)$/i.test(c) ||
+    /^\d{4}$/.test(c)
+  );
+}
+
+// Deterministically expand all CB patterns into individual records so the AI
+// only ever receives simple single-job records with no CB logic to handle.
+//
+// Handles both paste formats from the IATSE16 site:
+//   Format A (multi-line): Job# / Date / blank / [LineNotes]\t[Skill]\t...
+//   Format B (single-line): Job# / [Date+Time]\t[LineNotes]\t[Skill]\t...
+//
+// Supported CB patterns:
+//   "CB 3/18, 3/20"                          → extra job per date
+//   "CB 3/24, 3/25 FOR LOAD OUT"             → CB jobs + trailing note on both
+//   "CB THRU 10/7"                            → range from parent+1 through 10/7
+//   "CB THRU 10/7 THEN 10/17 & 10/18 note"  → range + extra dates + note
+//   "CB THRU 5/30, DARK 5/27"               → range skipping DARK dates
+//   "CB 3/15 @10A FOR LOAD OUT"             → explicit time on CB date
+//   "SAME DAY CB, 10PM FOR LOAD OUT"        → second job same date, new time
+//   "CB @ 10PM" / "CB, 10PM"               → same-day CB at that time
+//   "CB FOR OUT" / bare "CB"               → same-day CB, time TBD
 function expandCBRecord(record: string): string[] {
-  console.log('[expandCB] record start:', JSON.stringify(record.slice(0, 200)));
   const lines = record.split('\n');
 
-  // Find the date line (first line matching M/D/YY)
+  // Find the date line (first line with M/D/YY)
   let dateLineIdx = -1;
   for (let i = 0; i < lines.length; i++) {
     if (/\d+\/\d+\/\d{2}/.test(lines[i])) { dateLineIdx = i; break; }
@@ -78,19 +129,19 @@ function expandCBRecord(record: string): string[] {
   const dateLine = lines[dateLineIdx];
   const dateHasTabs = dateLine.includes('\t');
 
-  // Determine data line and extract lineNotes + rest (Skill\tEmployer\t...)
+  // Extract lineNotes and rest (\t[Skill]\t[Employer]\t...)
   let dataLineIdx: number;
   let lineNotes: string;
-  let rest: string; // leading \t + Skill\tEmployer\t...
+  let rest: string;
 
   if (dateHasTabs) {
-    // Format B: [Date+Time]\t[LineNotes]\t[Skill]\t[Employer]\t...
+    // Format B: everything on the date line
     dataLineIdx = dateLineIdx;
     const fields = dateLine.split('\t');
     lineNotes = (fields[1] ?? '').trim();
     rest = '\t' + fields.slice(2).join('\t');
   } else {
-    // Format A: date on own line, then [LineNotes]\t[Skill]\t... on a later line
+    // Format A: find the first tab-containing line after the date
     dataLineIdx = -1;
     for (let i = dateLineIdx + 1; i < lines.length; i++) {
       if (lines[i].includes('\t')) { dataLineIdx = i; break; }
@@ -98,43 +149,53 @@ function expandCBRecord(record: string): string[] {
     if (dataLineIdx === -1) return [record];
     const dataLine = lines[dataLineIdx];
     const firstTab = dataLine.indexOf('\t');
-    const wrappedLines = lines.slice(dateLineIdx + 1, dataLineIdx).map(l => l.trim()).filter(Boolean);
-    lineNotes = [...wrappedLines, dataLine.slice(0, firstTab).trim()].join(' ');
+    const wrapped = lines.slice(dateLineIdx + 1, dataLineIdx).map(l => l.trim()).filter(Boolean);
+    lineNotes = [...wrapped, dataLine.slice(0, firstTab).trim()].join(' ');
     rest = dataLine.slice(firstTab);
   }
 
   lineNotes = lineNotes.replace(/\r/g, '').replace(/\s+/g, ' ').trim();
-  console.log('[expandCB] lineNotes:', JSON.stringify(lineNotes));
 
-  if (!/\bCB\b/i.test(lineNotes)) { console.log('[expandCB] no CB'); return [record]; }
-  if (/THRU|SAME\s*DAY|@\d/i.test(lineNotes)) { console.log('[expandCB] complex CB → AI'); return [record]; }
+  if (!/\bC\/?B\b/i.test(lineNotes)) return [record];
 
-  const cbMatch = lineNotes.match(/^(.*?)\s*\bCB\s+((?:\d{1,2}\/\d{1,2}\s*,?\s*)+?)\s*((?:FOR|WITH|AT)\s+.+)?$/i);
-  console.log('[expandCB] cbMatch:', cbMatch);
-  if (!cbMatch) return [record];
-
-  const prefix = cbMatch[1].trim();
-  const datesStr = cbMatch[2].trim().replace(/,\s*$/, '');
-  const trailingNote = (cbMatch[3] ?? '').trim();
-
-  const cbDates = datesStr.split(/\s*,\s*/).map(d => d.trim()).filter(d => /^\d{1,2}\/\d{1,2}$/.test(d));
-  if (cbDates.length === 0) return [record];
-
-  const dtMatch = dateLine.match(/(\d+)\/(\d+)\/(\d{2})(?:\s+([^\t]*))?/);
-  if (!dtMatch) { console.log('[expandCB] no date match'); return [record]; }
+  // Parse parent date
+  const dtMatch = dateLine.match(/(\d{1,2})\/(\d{1,2})\/(\d{2})(?:\s+([^\t\n]*))?/);
+  if (!dtMatch) return [record];
+  const parentM = parseInt(dtMatch[1]);
+  const parentD = parseInt(dtMatch[2]);
   const yr = dtMatch[3];
-  const time = (dtMatch[4] ?? '').trim();
+  const fullYr = 2000 + parseInt(yr);
+  const parentTime = (dtMatch[4] ?? '').trim();
+  const parentDate = new Date(fullYr, parentM - 1, parentD);
+  const parentDateOnly = `${parentM}/${parentD}/${yr}`;
 
-  const makeRecord = (newDateStr: string, notePfx: string) => {
+  // Split into prefix (before CB) and cbContent (after CB keyword)
+  const cbKeyMatch = lineNotes.match(/^(.*?)\s*\bC\/?B(?:'?[Ss])?\b[,\s]*/i);
+  if (!cbKeyMatch) return [record];
+  const prefix = cbKeyMatch[1].trim();
+  let cbContent = lineNotes.slice(cbKeyMatch[0].length).trim();
+
+  // Strip optional "SAME DAY" prefix and leading comma
+  cbContent = cbContent.replace(/^SAME\s*DAY\s*,?\s*/i, '').replace(/^@\s*/, '').replace(/^,\s*/, '').trim();
+
+  const parseMD = (md: string): Date => {
+    const [m, d] = md.split('/').map(Number);
+    return new Date(fullYr, m - 1, d);
+  };
+  const fmtDate = (d: Date): string => `${d.getMonth() + 1}/${d.getDate()}/${yr}`;
+
+  // Rebuild a record with a new date, lineNotes prefix, and optional time override
+  const makeRecord = (dateOnly: string, notePfx: string, timeOverride?: string): string => {
+    const tPart = timeOverride !== undefined ? timeOverride : parentTime;
+    const dateTime = tPart ? `${dateOnly} ${tPart}` : dateOnly;
     const out: string[] = [];
     for (let i = 0; i < lines.length; i++) {
-      if (i > dateLineIdx && i < dataLineIdx) continue; // drop wrapped note lines (Format A)
+      if (!dateHasTabs && i > dateLineIdx && i < dataLineIdx) continue;
       if (i === dateLineIdx && dateHasTabs) {
-        // Format B: rebuild the single line with new date and note
-        out.push(`${newDateStr}\t${notePfx}${rest}`);
+        out.push(`${dateTime}\t${notePfx}${rest}`);
       } else if (i === dateLineIdx) {
-        out.push(newDateStr);
-      } else if (i === dataLineIdx) {
+        out.push(dateTime);
+      } else if (!dateHasTabs && i === dataLineIdx) {
         out.push(notePfx + rest);
       } else {
         out.push(lines[i]);
@@ -143,27 +204,98 @@ function expandCBRecord(record: string): string[] {
     return out.join('\n');
   };
 
-  const parentDateStr = dateHasTabs ? dateLine.split('\t')[0].trim() : dateLine;
-  const parentRecord = makeRecord(parentDateStr, prefix);
-  const cbRecords = cbDates.map(cbDate => {
-    const [m, d] = cbDate.split('/');
-    return makeRecord(`${m}/${d}/${yr}${time ? ' ' + time : ''}`, trailingNote);
-  });
+  type CBEntry = { date: Date; time?: string; note?: string };
+  const cbEntries: CBEntry[] = [];
 
-  console.log(`[expandCB] expanded to ${1 + cbRecords.length} records, dates:`, cbDates);
+  const hasLeadingDate = /^\d{1,2}\/\d{1,2}/.test(cbContent);
+  const hasThru = /^THRU\b/i.test(cbContent);
+
+  if (hasThru) {
+    // ── THRU range ──────────────────────────────────────────────────────────
+    const thruM = cbContent.match(/^THRU\s+(\d{1,2}\/\d{1,2})(.*)/i)!;
+    const thruEnd = parseMD(thruM[1]);
+    let rem = thruM[2].trim();
+
+    // Extract DARK (skip) dates
+    const dark = new Set<string>();
+    rem = rem.replace(/,?\s*\bDARK\s+(\d{1,2}\/\d{1,2})/gi, (_: string, d: string) => {
+      dark.add(d.trim()); return '';
+    }).trim();
+
+    // Expand range: day after parent through thruEnd
+    const cur = new Date(parentDate);
+    cur.setDate(cur.getDate() + 1);
+    while (cur <= thruEnd) {
+      const md = `${cur.getMonth() + 1}/${cur.getDate()}`;
+      if (!dark.has(md)) cbEntries.push({ date: new Date(cur) });
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    // THEN block: additional dates after the range
+    const thenStart = rem.search(/\bTHEN\b/i);
+    if (thenStart !== -1) {
+      const thenPart = rem.slice(thenStart + 4).trim();
+      const thenDates = [...thenPart.matchAll(/\d{1,2}\/\d{1,2}/g)];
+      let lastEnd = 0;
+      for (const tdm of thenDates) lastEnd = (tdm.index ?? 0) + tdm[0].length;
+      const thenNote = thenPart.slice(lastEnd).replace(/^[\s&,]+/, '').trim() || undefined;
+      for (const tdm of thenDates) cbEntries.push({ date: parseMD(tdm[0]), note: thenNote });
+    } else {
+      // Trailing note applies to all THRU dates
+      const noteM = rem.match(/\b(FOR|WITH)\b\s*(.+)/i);
+      if (noteM) for (const e of cbEntries) e.note = noteM[0].trim();
+    }
+
+  } else if (hasLeadingDate) {
+    // ── Comma-separated date list ────────────────────────────────────────────
+    const parts = cbContent.split(/\s*,\s*/);
+    let trailingNote = '';
+
+    for (const part of parts) {
+      const dm = part.match(/^(\d{1,2}\/\d{1,2})(.*)/);
+      if (!dm) { if (part.trim()) trailingNote = part.trim(); continue; }
+
+      let rem2 = dm[2].trim();
+      let timeOverride: string | undefined;
+
+      // @time immediately after the date
+      const atM = rem2.match(/^(@\S+)\s*(.*)/);
+      if (atM && isTimeToken(atM[1])) {
+        timeOverride = normTime(atM[1]);
+        rem2 = atM[2].trim();
+      }
+      if (rem2) trailingNote = rem2;
+      cbEntries.push({ date: parseMD(dm[1]), time: timeOverride, note: rem2 || undefined });
+    }
+
+    // Trailing note applies retroactively to all entries that don't have one
+    if (trailingNote) for (const e of cbEntries) if (!e.note) e.note = trailingNote;
+
+  } else {
+    // ── Same-day CB ──────────────────────────────────────────────────────────
+    let timeOverride: string | undefined;
+    let note: string | undefined;
+    const tokM = cbContent.match(/^(@?\S+)\s*(.*)/);
+    if (tokM && isTimeToken(tokM[1])) {
+      timeOverride = normTime(tokM[1]);
+      note = tokM[2].trim() || undefined;
+    } else {
+      note = cbContent || undefined;
+    }
+    cbEntries.push({ date: new Date(parentDate), time: timeOverride, note });
+  }
+
+  if (cbEntries.length === 0) return [record];
+
+  const parentRecord = makeRecord(parentDateOnly, prefix);
+  const cbRecords = cbEntries.map(e => makeRecord(fmtDate(e.date), e.note ?? '', e.time));
+  console.log(`[expandCB] ${record.slice(0, 9)} → ${1 + cbRecords.length} records`);
   return [parentRecord, ...cbRecords];
 }
 
-async function callAPI(url: string, key: string, body: object): Promise<Response> {
-  return fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-    body: JSON.stringify(body),
-  });
-}
+// ─── Image compression ───────────────────────────────────────────────────────
 
-// Resize + JPEG-compress before sending to keep payload under Supabase's body limit
-// Resize + compress to keep payload small (Supabase body limit ~4MB)
+// Resize + JPEG-compress before upload to stay under Supabase's body limit (~4MB)
 function compressImage(file: File, maxPx = 800): Promise<{ base64: string; mimeType: string }> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -174,8 +306,7 @@ function compressImage(file: File, maxPx = 800): Promise<{ base64: string; mimeT
       const w = Math.round(img.width * scale);
       const h = Math.round(img.height * scale);
       const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
+      canvas.width = w; canvas.height = h;
       const ctx = canvas.getContext('2d');
       if (!ctx) { reject(new Error('Canvas not supported')); return; }
       ctx.drawImage(img, 0, 0, w, h);
@@ -185,6 +316,16 @@ function compressImage(file: File, maxPx = 800): Promise<{ base64: string; mimeT
     };
     img.onerror = () => reject(new Error('Failed to load image'));
     img.src = url;
+  });
+}
+
+// ─── API helper ──────────────────────────────────────────────────────────────
+
+async function callAPI(url: string, key: string, body: object): Promise<Response> {
+  return fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    body: JSON.stringify(body),
   });
 }
 
@@ -239,7 +380,7 @@ export default function SmartImport() {
       let type: ImportType = 'jobs';
 
       if (imageFile) {
-        // Image path → smart-import with vision
+        // Image path → compress then send to smart-import with vision
         setParseProgress('Reading image...');
         const { base64: imageBase64, mimeType: imageMimeType } = await compressImage(imageFile);
         const resp = await callAPI(`${supabaseUrl}/functions/v1/smart-import`, supabaseKey, {
@@ -253,33 +394,24 @@ export default function SmartImport() {
         allIncome = result.income || [];
         allHours = result.hourUpdates || [];
       } else if (/^\d{4}-\d{4}/m.test(text)) {
-        // Job text → split per record, call parse-jobs one at a time
+        // Job text → expand all CB records in JS, then batch to parse-jobs (5 per call)
         type = 'jobs';
-        // Expand all records deterministically in JS first
         const records = splitJobRecords(text);
         const expanded: string[] = [];
-        for (const rec of records) {
-          const sub = expandCBRecord(rec);
-          console.log(`[parse] expanded ${sub.length} sub-record(s)`);
-          expanded.push(...sub);
-        }
+        for (const rec of records) expanded.push(...expandCBRecord(rec));
 
-        // Batch into groups of 5 → ~4 calls for 20 records instead of 20+
         const BATCH = 5;
-        const batches = Array.from({ length: Math.ceil(expanded.length / BATCH) }, (_, i) =>
-          expanded.slice(i * BATCH, i * BATCH + BATCH)
-        );
+        const batches: string[][] = [];
+        for (let i = 0; i < expanded.length; i += BATCH) batches.push(expanded.slice(i, i + BATCH));
+
         for (let b = 0; b < batches.length; b++) {
-          setParseProgress(`Parsing batch ${b + 1} of ${batches.length}...`);
+          setParseProgress(`Parsing ${b + 1} of ${batches.length}...`);
           const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-jobs`, supabaseKey, {
             text: batches[b].join('\n\n'),
           });
-          if (!resp.ok) {
-            console.error(`batch ${b + 1} failed:`, resp.status, await resp.json().catch(() => ({})));
-            continue;
-          }
-          const { jobs: batchJobs = [] }: { jobs: ParsedJob[] } = await resp.json();
-          allJobs.push(...batchJobs);
+          if (!resp.ok) { console.error(`batch ${b + 1} failed:`, resp.status); continue; }
+          const batchData = await resp.json();
+          allJobs.push(...(batchData.jobs || []));
         }
       } else {
         // Non-job text → smart-import for classification
@@ -343,16 +475,13 @@ export default function SmartImport() {
       } else if (detectedType === 'hours') {
         for (const [i, upd] of hourUpdates.entries()) {
           if (!selectedHours.has(i)) continue;
-          const venueWords = upd.venue?.toLowerCase().split(/\s+/).filter(w => w.length > 3) ?? [];
           const match = data.jobs.find(j => {
             if (j.date !== upd.date) return false;
-            if (!upd.venue) return true;
-            const jv = j.venue?.toLowerCase() ?? '';
-            const v = upd.venue.toLowerCase();
-            // substring match
-            if (jv.includes(v) || v.includes(jv)) return true;
-            // word overlap — any significant word in common
-            return venueWords.some(w => jv.includes(w));
+            if (upd.venue) {
+              const v = upd.venue.toLowerCase();
+              return j.venue?.toLowerCase().includes(v) || v.includes(j.venue?.toLowerCase() ?? '');
+            }
+            return true;
           });
           if (match) {
             await updateJob(match.id, {
@@ -392,19 +521,6 @@ export default function SmartImport() {
 
   const updateJob_ = (idx: number, field: keyof ParsedJob, value: string | number | undefined) =>
     setJobs(prev => prev.map((e, i) => i === idx ? { ...e, [field]: value } : e));
-
-  const addCBJob = (parentIdx: number) => {
-    const parent = jobs[parentIdx];
-    const insertAt = parentIdx + 1;
-    const cbJob: ParsedJob = { ...parent, date: '', endTime: undefined, notes: '' };
-    setJobs(prev => [...prev.slice(0, insertAt), cbJob, ...prev.slice(insertAt)]);
-    setSelectedJobs(prev => {
-      const n = new Set<number>();
-      prev.forEach(i => n.add(i >= insertAt ? i + 1 : i));
-      n.add(insertAt);
-      return n;
-    });
-  };
 
   const selCount = detectedType === 'jobs' ? selectedJobs.size : detectedType === 'income' ? selectedIncome.size : selectedHours.size;
 
@@ -503,7 +619,7 @@ export default function SmartImport() {
                         onChange={() => setSelectedJobs(selectedJobs.size === jobs.length ? new Set() : new Set(jobs.map((_, i) => i)))}
                         className="rounded border-border" />
                     </th>
-                    {['Job #','Date','Start','End','Client','Event','Payroll','Venue','Rate','Steward','Parking',''].map(h => (
+                    {['Job #','Date','Start','End','Client','Event','Payroll','Venue','Rate','Steward','Parking'].map(h => (
                       <th key={h} className="px-2 py-2 text-left">{h}</th>
                     ))}
                   </tr>
@@ -527,11 +643,6 @@ export default function SmartImport() {
                       <td className="px-2 py-1.5"><Input type="number" step="0.01" value={entry.hourlyRate ?? ''} onChange={e => updateJob_(i, 'hourlyRate', e.target.value ? parseFloat(e.target.value) : undefined)} placeholder="$" className="h-7 text-xs w-20" /></td>
                       <td className="px-2 py-1.5"><Input value={entry.steward ?? ''} onChange={e => updateJob_(i, 'steward', e.target.value)} className="h-7 text-xs" /></td>
                       <td className="px-2 py-1.5"><Input type="number" step="0.01" value={entry.parkingCost ?? ''} onChange={e => updateJob_(i, 'parkingCost', e.target.value ? parseFloat(e.target.value) : undefined)} placeholder="$" className="h-7 text-xs w-20" /></td>
-                      <td className="px-2 py-1.5">
-                        <button onClick={() => addCBJob(i)} title="Add callback" className="text-muted-foreground hover:text-primary transition-colors p-0.5 rounded">
-                          <Plus size={13} />
-                        </button>
-                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -616,14 +727,13 @@ export default function SmartImport() {
                 </thead>
                 <tbody>
                   {hourUpdates.map((upd, i) => {
-                    const vWords = upd.venue?.toLowerCase().split(/\s+/).filter(w => w.length > 3) ?? [];
                     const match = data.jobs.find(j => {
                       if (j.date !== upd.date) return false;
-                      if (!upd.venue) return true;
-                      const jv = j.venue?.toLowerCase() ?? '';
-                      const v = upd.venue.toLowerCase();
-                      if (jv.includes(v) || v.includes(jv)) return true;
-                      return vWords.some(w => jv.includes(w));
+                      if (upd.venue) {
+                        const v = upd.venue.toLowerCase();
+                        return j.venue?.toLowerCase().includes(v) || v.includes(j.venue?.toLowerCase() ?? '');
+                      }
+                      return true;
                     });
                     return (
                       <tr key={i} className={cn("border-t border-border", selectedHours.has(i) ? 'bg-primary/5' : 'opacity-50')}>
