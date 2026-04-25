@@ -17,46 +17,25 @@ serve(async (req) => {
     if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured");
 
     const today = new Date().toISOString().split("T")[0];
-    let inputText = text;
 
-    // Step 1: Extract text from image if provided
-    if (imageBase64) {
-      const visionResp = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "gpt-4o",
-          messages: [{
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Extract all text from this image exactly as it appears. Preserve columns using tabs and rows using newlines. Output only the raw extracted text, nothing else."
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:${imageMimeType || "image/jpeg"};base64,${imageBase64}`,
-                  detail: "high"
-                }
-              }
-            ]
-          }],
-          max_tokens: 4000
-        })
-      });
-      if (!visionResp.ok) {
-        const t = await visionResp.text();
-        console.error("Vision error:", visionResp.status, t);
-        throw new Error("Failed to read image");
-      }
-      const visionData = await visionResp.json();
-      inputText = visionData.choices[0]?.message?.content ?? "";
-    }
+    console.log("smart-import v2: imageBase64=", !!imageBase64, "textLen=", text?.length ?? 0);
+    if (!imageBase64 && !text?.trim()) throw new Error("No text to parse");
 
-    if (!inputText?.trim()) throw new Error("No text to parse");
+    // Classify + parse in one call. If an image is provided, pass it directly
+    // so the model sees the visual layout rather than lossy extracted text.
+    const userContent: unknown = imageBase64
+      ? [
+          {
+            type: "image_url",
+            image_url: {
+              url: `data:${imageMimeType || "image/jpeg"};base64,${imageBase64}`,
+              detail: "high"
+            }
+          },
+          { type: "text", text: "Parse this image according to the instructions above." }
+        ]
+      : text;
 
-    // Step 2: Classify + parse in one call
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
@@ -77,17 +56,28 @@ CLASSIFICATION:
 ═══════════════════════════════
 IF "jobs":
 ═══════════════════════════════
-DATA FORMAT — each record spans multiple lines:
+Two possible layouts — handle both:
+
+LAYOUT A — tab-separated (desktop copy/paste):
   [Job Number]
   [Start Date with call time]
 
   [Line Notes] TAB [Skill] TAB [Employer] TAB [Payroll Co.] TAB [Job Site] TAB [Show] TAB [Location] TAB [Job Notes] TAB [Contract] TAB [Rate] TAB [Dress Code] TAB [Steward]
 
-Line Notes may span multiple lines before the first tab-separated data.
+  Line Notes may span multiple lines before the first tab-separated data.
 
-FIELDS: Job Number→jobNumber | Start Date→date+startTime | Employer→client | Payroll Co.→payrollCompany
-Job Site+Location→venue | Show→name | Rate→hourlyRate (strip $) | Steward→steward
-Skill+Job Notes+Contract+Dress Code→notes | 2-digit year "3/17/26"=2026-03-17
+LAYOUT B — labeled card (mobile screenshot):
+  Labels appear as section headers (JOB, START DATE, START TIME, SKILL, RATE, SITE,
+  STEWARD, REPORT TO LOCATION, LINE NOTES) with values directly below them.
+  The JOB card contains: [YYYY-NNNN job number] on one line, [Employer name] on following lines.
+  Multiple cards may appear in a single screenshot.
+
+FIELD MAPPINGS (both layouts):
+  Job Number→jobNumber (ALL CB/split jobs inherit same jobNumber) | Start Date→date+startTime
+  Employer / JOB card employer→client | Payroll Co.→payrollCompany
+  Job Site / SITE card→venue (append REPORT TO LOCATION if present) | Show→name (use venue if no show name)
+  Rate / RATE card→hourlyRate (strip $) | Steward / STEWARD card→steward
+  Skill+Job Notes+Contract+Dress Code→notes | 2-digit year "3/17/26"=2026-03-17
 
 LINE NOTES:
 - Standalone time + CB present → time is endTime for parent
@@ -96,6 +86,7 @@ LINE NOTES:
 
 CALLBACKS ⚠️ ONE RECORD WITH CB = MULTIPLE JOBS — never skip:
 - "CB 3/18, 3/20" → extra job per date (inherit year from parent)
+- "CB 3/24, 3/25 FOR LOAD OUT" → extra jobs on 3/24 AND 3/25; "FOR LOAD OUT" is trailing note text (not a date) → notes on both CB jobs. Output = 3 jobs total.
 - "CB 2/6," trailing comma → single date 2/6
 - "CB THRU 10/7" (parent 10/5) → jobs on 10/5, 10/6, 10/7
 - "CB THRU 10/7 THEN 10/17 & 10/18 FOR LOAD OUT" → 10/5–10/7 plus 10/17, 10/18, notes="FOR LOAD OUT"
@@ -103,9 +94,29 @@ CALLBACKS ⚠️ ONE RECORD WITH CB = MULTIPLE JOBS — never skip:
 - "CB 3/15 @10A FOR LOAD OUT" → CB on 3/15, startTime=10:00 AM, notes="FOR LOAD OUT"
 - "CB 2/3 @10PM FOR OUT" → CB on 2/3, startTime=10:00 PM, notes="FOR OUT"
 - "CB @ 10PM" / "SAME DAY CB, 10PM" / "CB, 10PM" (no date) → same-day CB at that time
+- "CB FOR OUT" or "CB" with no date and no time → same-day CB, no startTime, notes=text after "CB"
 - Prefix text before CB (e.g. "IN/OUT: HANG, FOCUS CB 2/3 @10PM") → prefix in parent notes
 - "O" in times = zero (1O30PM = 10:30 PM)
 Status: "upcoming" for future, "completed" for past.
+
+WORKED EXAMPLE A — comma CBs with trailing note (MUST produce 3 jobs):
+  Input: jobNumber=2026-0959, date=3/22/26 07:00 AM, Line Notes="CB 3/24, 3/25 FOR LOAD OUT"
+  Job 1: jobNumber=2026-0959, date=2026-03-22, startTime=07:00 AM
+  Job 2: jobNumber=2026-0959, date=2026-03-24, startTime=07:00 AM, notes="FOR LOAD OUT"
+  Job 3: jobNumber=2026-0959, date=2026-03-25, startTime=07:00 AM, notes="FOR LOAD OUT"
+
+WORKED EXAMPLE B — mobile card layout with @time CB (MUST produce 2 jobs):
+  Input (mobile screenshot text):
+    JOB: 2026-0864 / BGCA MANAGEMENT LLC
+    START DATE: 3/13/26  START TIME: 07:00 AM
+    SKILL: T ELEC X  RATE: 42.45  SITE: Civic Auditorium
+    STEWARD: MARK HETRICK
+    REPORT TO LOCATION: STAGE LEFT STEWARDS OFFICE
+    LINE NOTES: CB 3/15 @10A FOR LOAD OUT
+  Job 1: jobNumber=2026-0864, date=2026-03-13, startTime=07:00 AM, client="BGCA MANAGEMENT LLC",
+          venue="Civic Auditorium", hourlyRate=42.45, steward="MARK HETRICK", notes="T ELEC X"
+  Job 2: jobNumber=2026-0864, date=2026-03-15, startTime=10:00 AM, client="BGCA MANAGEMENT LLC",
+          venue="Civic Auditorium", hourlyRate=42.45, steward="MARK HETRICK", notes="FOR LOAD OUT"
 
 ═══════════════════════════════
 IF "income":
@@ -152,8 +163,9 @@ EXAMPLE 3 — walk away with N+M format:
     startTime=08:00 AM, endTime=07:00 PM, mealType=YWA
     hoursWorked = 8+2=10 minus 1hr YWA = 9.0`
           },
-          { role: "user", content: inputText }
+          { role: "user", content: userContent }
         ],
+        max_tokens: 4000,
         tools: [
           {
             type: "function",
