@@ -163,6 +163,8 @@ function expandCBRecord(record: string): string[] {
   lineNotes = lineNotes.replace(/\r/g, '').replace(/\s+/g, ' ').trim();
 
   if (!/\bC\/?B\b/i.test(lineNotes)) return [record];
+  // "NO CB" / "ONE DAY NO CB" — CB keyword present but negated, not a callback
+  if (/\bNO\s+C\/?B\b/i.test(lineNotes)) return [record];
 
   // Parse parent date
   const dtMatch = dateLine.match(/(\d{1,2})\/(\d{1,2})\/(\d{2})(?:\s+([^\t\n]*))?/);
