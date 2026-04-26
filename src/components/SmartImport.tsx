@@ -239,15 +239,35 @@ function expandCBRecord(record: string): string[] {
       cur.setDate(cur.getDate() + 1);
     }
 
-    // THEN block: additional dates after the range
-    const thenStart = rem.search(/\bTHEN\b/i);
-    if (thenStart !== -1) {
-      const thenPart = rem.slice(thenStart + 4).trim();
-      const thenDates = [...thenPart.matchAll(/\d{1,2}\/\d{1,2}/g)];
-      let lastEnd = 0;
-      for (const tdm of thenDates) lastEnd = (tdm.index ?? 0) + tdm[0].length;
-      const thenNote = thenPart.slice(lastEnd).replace(/^[\s&,]+/, '').trim() || undefined;
-      for (const tdm of thenDates) cbEntries.push({ date: parseMD(tdm[0]), note: thenNote });
+    // THEN / AND block: additional dates after the range
+    const thenMatch = rem.match(/\b(THEN|AND)\b(.*)/i);
+    if (thenMatch) {
+      // Normalize "AT time" → "@time" so isTimeToken catches it
+      const thenPart = thenMatch[2].trim().replace(/\bAT\s+/gi, '@');
+      const parts = thenPart.split(/\s*,\s*/);
+      let trailingTime: string | undefined;
+      let trailingNote: string | undefined;
+      const thenEntries: CBEntry[] = [];
+      for (const part of parts) {
+        const dm = part.match(/^(\d{1,2}\/\d{1,2})(.*)/);
+        if (!dm) continue;
+        let rem2 = dm[2].trim();
+        let timeOverride: string | undefined;
+        const atM = rem2.match(/^(@\S+)\s*(.*)/);
+        if (atM && isTimeToken(atM[1])) {
+          timeOverride = normTime(atM[1]);
+          trailingTime = timeOverride;
+          rem2 = atM[2].trim();
+        }
+        if (rem2) trailingNote = rem2;
+        thenEntries.push({ date: parseMD(dm[1]), time: timeOverride, note: rem2 || undefined });
+      }
+      // Apply trailing time/note retroactively
+      for (const e of thenEntries) {
+        if (!e.time && trailingTime) e.time = trailingTime;
+        if (!e.note && trailingNote) e.note = trailingNote;
+      }
+      cbEntries.push(...thenEntries);
     } else {
       // Trailing note applies to all THRU dates
       const noteM = rem.match(/\b(FOR|WITH)\b\s*(.+)/i);
@@ -437,6 +457,16 @@ export default function SmartImport() {
       if (total === 0) { toast.error('Nothing found to import'); return; }
 
       allJobs.sort((a, b) => a.date.localeCompare(b.date));
+
+      // Warn about dates with multiple jobs (double-booked callbacks)
+      if (type === 'jobs') {
+        const dateCounts = new Map<string, number>();
+        for (const j of allJobs) dateCounts.set(j.date, (dateCounts.get(j.date) ?? 0) + 1);
+        const conflicts = [...dateCounts.entries()].filter(([, n]) => n > 1).map(([d]) => d);
+        if (conflicts.length > 0)
+          toast.warning(`Multiple jobs on ${conflicts.join(', ')} — review highlighted rows`);
+      }
+
       setDetectedType(type);
       setJobs(allJobs);
       setIncome(allIncome);
@@ -633,8 +663,15 @@ export default function SmartImport() {
                   </tr>
                 </thead>
                 <tbody>
-                  {jobs.map((entry, i) => (
-                    <tr key={i} className={cn("border-t border-border", selectedJobs.has(i) ? 'bg-primary/5' : 'opacity-50')}>
+                  {(() => {
+                    const dateCounts = new Map<string, number>();
+                    jobs.forEach(j => dateCounts.set(j.date, (dateCounts.get(j.date) ?? 0) + 1));
+                    const conflictDates = new Set([...dateCounts.entries()].filter(([, n]) => n > 1).map(([d]) => d));
+                    return jobs.map((entry, i) => {
+                      const isConflict = conflictDates.has(entry.date);
+                      return (
+                    <tr key={i} className={cn("border-t border-border",
+                      selectedJobs.has(i) ? (isConflict ? 'bg-amber-500/10' : 'bg-primary/5') : 'opacity-50')}>
                       <td className="px-2 py-1.5 text-center">
                         <input type="checkbox" checked={selectedJobs.has(i)}
                           onChange={() => setSelectedJobs(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; })}
@@ -651,8 +688,11 @@ export default function SmartImport() {
                       <td className="px-2 py-1.5"><Input type="number" step="0.01" value={entry.hourlyRate ?? ''} onChange={e => updateJob_(i, 'hourlyRate', e.target.value ? parseFloat(e.target.value) : undefined)} placeholder="$" className="h-7 text-xs w-20" /></td>
                       <td className="px-2 py-1.5"><Input value={entry.steward ?? ''} onChange={e => updateJob_(i, 'steward', e.target.value)} className="h-7 text-xs" /></td>
                       <td className="px-2 py-1.5"><Input type="number" step="0.01" value={entry.parkingCost ?? ''} onChange={e => updateJob_(i, 'parkingCost', e.target.value ? parseFloat(e.target.value) : undefined)} placeholder="$" className="h-7 text-xs w-20" /></td>
+                      {isConflict && <td className="px-2 py-1.5 text-amber-500 font-bold text-[10px] whitespace-nowrap">⚠ same date</td>}
                     </tr>
-                  ))}
+                  );
+                  });
+                  })()}
                 </tbody>
               </table>
             </div>
