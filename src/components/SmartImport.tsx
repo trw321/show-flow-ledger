@@ -146,12 +146,18 @@ function expandCBRecord(record: string): string[] {
     for (let i = dateLineIdx + 1; i < lines.length; i++) {
       if (lines[i].includes('\t')) { dataLineIdx = i; break; }
     }
-    if (dataLineIdx === -1) return [record];
-    const dataLine = lines[dataLineIdx];
-    const firstTab = dataLine.indexOf('\t');
-    const wrapped = lines.slice(dateLineIdx + 1, dataLineIdx).map(l => l.trim()).filter(Boolean);
-    lineNotes = [...wrapped, dataLine.slice(0, firstTab).trim()].join(' ');
-    rest = dataLine.slice(firstTab);
+    if (dataLineIdx === -1) {
+      // No tab columns — treat all remaining lines as lineNotes (partial paste / test input)
+      lineNotes = lines.slice(dateLineIdx + 1).map(l => l.trim()).filter(Boolean).join(' ');
+      rest = '';
+      dataLineIdx = lines.length; // sentinel: makeRecord drops all lines after date
+    } else {
+      const dataLine = lines[dataLineIdx];
+      const firstTab = dataLine.indexOf('\t');
+      const wrapped = lines.slice(dateLineIdx + 1, dataLineIdx).map(l => l.trim()).filter(Boolean);
+      lineNotes = [...wrapped, dataLine.slice(0, firstTab).trim()].join(' ');
+      rest = dataLine.slice(firstTab);
+    }
   }
 
   lineNotes = lineNotes.replace(/\r/g, '').replace(/\s+/g, ' ').trim();
@@ -201,6 +207,8 @@ function expandCBRecord(record: string): string[] {
         out.push(lines[i]);
       }
     }
+    // sentinel case: no tab columns — append notePfx as plain line if non-empty
+    if (!dateHasTabs && dataLineIdx >= lines.length && notePfx) out.push(notePfx);
     return out.join('\n');
   };
 
