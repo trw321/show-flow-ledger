@@ -116,6 +116,7 @@ function isTimeToken(tok: string): boolean {
 //   "SAME DAY CB, 10PM FOR LOAD OUT"        → second job same date, new time
 //   "CB @ 10PM" / "CB, 10PM"               → same-day CB at that time
 //   "CB FOR OUT" / bare "CB"               → same-day CB, time TBD
+//   "CB LOAD OUT 5/21"                      → future-dated CB, time TBD
 function expandCBRecord(record: string): string[] {
   const lines = record.split('\n');
 
@@ -167,7 +168,7 @@ function expandCBRecord(record: string): string[] {
   if (/\bNO\s+C\/?B\b/i.test(lineNotes)) return [record];
 
   // Parse parent date
-  const dtMatch = dateLine.match(/(\d{1,2})\/(\d{1,2})\/(\d{2})(?:\s+([^\t\n]*))?/);
+  const dtMatch = dateLine.match(/(\d{1,2})\/(\d{1,2})\/(\d{2})(?:\s+([^\t\n]*))/);
   if (!dtMatch) return [record];
   const parentM = parseInt(dtMatch[1]);
   const parentD = parseInt(dtMatch[2]);
@@ -305,14 +306,20 @@ function expandCBRecord(record: string): string[] {
     // ── Same-day CB ──────────────────────────────────────────────────────────
     let timeOverride: string | undefined;
     let note: string | undefined;
-    const tokM = cbContent.match(/^(@?\S+)\s*(.*)/);
-    if (tokM && isTimeToken(tokM[1])) {
-      timeOverride = normTime(tokM[1]);
-      note = tokM[2].trim() || undefined;
+    // "CB LOAD OUT 5/21" — description with trailing date → future-dated CB, time TBD
+    const trailingDateM = cbContent.match(/^(.+)\s+(\d{1,2}\/\d{1,2})\s*$/);
+    if (trailingDateM) {
+      cbEntries.push({ date: parseMD(trailingDateM[2]), time: '', note: trailingDateM[1].trim() || undefined });
     } else {
-      note = cbContent || undefined;
+      const tokM = cbContent.match(/^(@?\S+)\s*(.*)/);
+      if (tokM && isTimeToken(tokM[1])) {
+        timeOverride = normTime(tokM[1]);
+        note = tokM[2].trim() || undefined;
+      } else {
+        note = cbContent || undefined;
+      }
+      cbEntries.push({ date: new Date(parentDate), time: timeOverride, note });
     }
-    cbEntries.push({ date: new Date(parentDate), time: timeOverride, note });
   }
 
   if (cbEntries.length === 0) return [record];
