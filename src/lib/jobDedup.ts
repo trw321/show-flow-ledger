@@ -14,9 +14,10 @@ const normalizeTime = (value?: string) => {
 
 export function getJobDedupKey(job: Partial<JobIdentity>) {
   const date = normalize(job.date);
-  // Most reliable: job number + date (CBs share number but differ by date)
+  // Include startTime so same-day callbacks (same job#, same date, different time) are distinct
   if (job.jobNumber?.trim()) {
-    return `dispatch|${normalize(job.jobNumber)}|${date}`;
+    const time = normalizeTime(job.startTime);
+    return `dispatch|${normalize(job.jobNumber)}|${date}${time ? `|${time}` : ''}`;
   }
   // With startTime: date + normalized time
   if (job.startTime?.trim()) {
