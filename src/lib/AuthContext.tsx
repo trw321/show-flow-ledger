@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import posthog from 'posthog-js';
 import type { User, Session } from '@supabase/supabase-js';
 
 interface AuthContextValue {
@@ -19,17 +20,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
       setUser(s?.user ?? null);
+      if (s?.user) posthog.identify(s.user.id, { email: s.user.email });
       setLoading(false);
     });
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
       setUser(s?.user ?? null);
+      if (s?.user) {
+        posthog.identify(s.user.id, { email: s.user.email });
+      } else {
+        posthog.reset();
+      }
       setLoading(false);
     });
 
@@ -37,7 +42,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signUp = async (email: string, password: string) => {
-    // Sign up without email confirmation required
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -53,6 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    posthog.reset();
     window.location.href = '/';
   };
 

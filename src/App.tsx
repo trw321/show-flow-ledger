@@ -8,6 +8,7 @@ import { AuthProvider } from "@/lib/AuthContext";
 import { DataProvider } from "@/lib/DataContext";
 import { PartyModeProvider } from "@/lib/PartyModeContext";
 import { UserPrefsProvider } from "@/lib/UserPrefsContext";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import AppLayout from "@/components/AppLayout";
 import Dashboard from "@/pages/Dashboard";
 import LoadingScreen from "@/components/LoadingScreen";
@@ -69,15 +70,17 @@ function AuthenticatedApp() {
 
 const App = () => {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <AuthProvider>
-          <AuthenticatedApp />
-        </AuthProvider>
-      </TooltipProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <AuthProvider>
+            <AuthenticatedApp />
+          </AuthProvider>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 };
 
