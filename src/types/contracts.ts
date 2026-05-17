@@ -1,10 +1,8 @@
 // /types/contracts.ts
 //
-// Types for the contract domain. These map 1:1 to the contracts and
-// contract_versions tables created in Phase A. The ContractSnapshot type
-// describes the shape that will eventually be frozen onto gigs; it isn't
-// stored anywhere yet but is defined here so future code and Zod schemas
-// can reference a single source of truth.
+// Types for the contract domain. Maps 1:1 to the contracts and
+// contract_versions tables. Updated for Phase A-revised: classifications,
+// night premium, consecutive-day premium, meal penalty unit.
 
 export type ContractType =
   | 'union_collective_bargaining'
@@ -17,6 +15,7 @@ export type ContractType =
 export type RateType = 'hourly' | 'day_rate' | 'flat';
 export type RoundingMode = 'none' | 'hour_up';
 export type MealPenaltyRateType = 'straight_time';
+export type MealPenaltyUnit = 'hour' | 'half_hour' | 'quarter_hour';
 export type ForcedCallPremiumType = 'flat' | 'hours';
 export type PaySchedule =
   | 'weekly'
@@ -24,11 +23,12 @@ export type PaySchedule =
   | 'semimonthly'
   | 'monthly'
   | 'custom';
+export type ConsecutiveDayGrouping =
+  | 'employer'
+  | 'payroll_company'
+  | 'production_company'
+  | 'any';
 
-/**
- * Identity of a labor agreement. Stable across renegotiations —
- * rule changes create new versions rather than mutating this row.
- */
 export interface Contract {
   id: string;
   user_id: string;
@@ -42,11 +42,8 @@ export interface Contract {
 }
 
 /**
- * One overtime tier. Tiers are evaluated in order of after_hours ascending.
- * Example contract: [{after_hours: 8, multiplier: 1.5}, {after_hours: 12, multiplier: 2.0}]
- *   - Hours 0–8: regular rate
- *   - Hours 8–12: 1.5×
- *   - Hours 12+: 2.0×
+ * Overtime tier under a contract version's daily OT rules.
+ * Tiers evaluated in order of after_hours ascending.
  */
 export interface OvertimeTier {
   after_hours: number;
@@ -54,54 +51,65 @@ export interface OvertimeTier {
 }
 
 /**
- * A versioned snapshot of rules for a contract.
- * Once a gig snapshots from a version, the version should be treated as locked.
+ * One classification (position) under a contract version.
+ * Each classification has its own rate and minimum call.
+ * Example: V UTILITY at $55.72/hr with 4-hr minimum.
  */
+export interface Classification {
+  name: string;
+  hourly_rate: number;
+  minimum_hours: number;
+  notes: string | null;
+}
+
 export interface ContractVersion {
   id: string;
   contract_id: string;
   version_label: string;
-  effective_date: string;           // ISO date (YYYY-MM-DD)
+  effective_date: string;
   expires_date: string | null;
 
-  // Rate structure — exactly one of hourly_rate / day_rate / flat_amount
-  // should be set based on rate_type
   rate_type: RateType;
   hourly_rate: number | null;
   day_rate: number | null;
   flat_amount: number | null;
 
-  // Overtime
+  classifications: Classification[];
+
   overtime_tiers: OvertimeTier[];
 
-  // Rounding
   rounding: RoundingMode;
 
-  // Minimum call
   minimum_call_hours: number | null;
 
-  // Meal penalty
   meal_penalty_due_after_hours: number | null;
   meal_penalty_rate_type: MealPenaltyRateType | null;
+  meal_penalty_unit: MealPenaltyUnit;
 
-  // Turnaround
   turnaround_minimum_hours: number | null;
   turnaround_violation_multiplier: number | null;
 
-  // Fringe
   fringe_percent: number | null;
   fringe_in_check: boolean;
 
-  // Forced call
   forced_call_premium_amount: number | null;
   forced_call_premium_type: ForcedCallPremiumType | null;
 
-  // Pay schedule
+  night_premium_start_hour: number | null;
+  night_premium_end_hour: number | null;
+  night_premium_multiplier: number | null;
+
+  consecutive_day_window_days: number;
+  consecutive_day_ot_threshold: number | null;
+  consecutive_day_ot_multiplier: number;
+  consecutive_day_dt_threshold: number | null;
+  consecutive_day_dt_multiplier: number;
+  consecutive_day_grouping: ConsecutiveDayGrouping | null;
+
   pay_schedule: PaySchedule;
   pay_schedule_anchor_date: string | null;
   pay_delay_days: number;
 
-  // Metadata
   notes: string | null;
   is_locked: boolean;
 
@@ -110,25 +118,22 @@ export interface ContractVersion {
 }
 
 /**
- * The shape that will eventually be frozen onto gigs as JSONB.
- * Includes traceability fields (which version this came from) plus
- * all the rule values needed by the calculation engine.
- *
- * Not stored anywhere yet — defined here for future use.
- *
- * snapshot_schema_version allows future migration of stored snapshots
- * without changing this type or breaking historical data.
+ * Frozen onto gigs as JSONB. Includes traceability + all rule values
+ * needed by the calc engine. snapshot_schema_version allows future
+ * evolution without breaking historical reconciliations.
  */
 export interface ContractSnapshot {
-  snapshot_schema_version: 1;
+  snapshot_schema_version: 2;
 
-  // Traceability
   contract_version_id: string;
   contract_name: string;
   version_label: string;
   effective_date: string;
 
-  // Rules (copied from the contract version at snapshot time)
+  classification_name: string | null;
+  classification_hourly_rate: number | null;
+  classification_minimum_hours: number | null;
+
   rate_type: RateType;
   hourly_rate: number | null;
   day_rate: number | null;
@@ -140,6 +145,7 @@ export interface ContractSnapshot {
 
   meal_penalty_due_after_hours: number | null;
   meal_penalty_rate_type: MealPenaltyRateType | null;
+  meal_penalty_unit: MealPenaltyUnit;
 
   turnaround_minimum_hours: number | null;
   turnaround_violation_multiplier: number | null;
@@ -149,6 +155,17 @@ export interface ContractSnapshot {
 
   forced_call_premium_amount: number | null;
   forced_call_premium_type: ForcedCallPremiumType | null;
+
+  night_premium_start_hour: number | null;
+  night_premium_end_hour: number | null;
+  night_premium_multiplier: number | null;
+
+  consecutive_day_window_days: number;
+  consecutive_day_ot_threshold: number | null;
+  consecutive_day_ot_multiplier: number;
+  consecutive_day_dt_threshold: number | null;
+  consecutive_day_dt_multiplier: number;
+  consecutive_day_grouping: ConsecutiveDayGrouping | null;
 
   pay_schedule: PaySchedule;
   pay_schedule_anchor_date: string | null;
