@@ -1,10 +1,8 @@
-// src/pages/CalcTest.tsx
 import { useState } from 'react';
 import { calculatePayBreakdown } from '@/lib/payroll/pay-breakdown';
 import type { ContractSnapshot } from '@/types/contracts';
 import type { GigFacts, ConsecutiveDayContext, GigPayBreakdown } from '@/lib/payroll/types';
 
-// Hardcoded snapshot — Local 16 Basic Entertainment 2023-2028
 const TEST_SNAPSHOT: ContractSnapshot = {
   snapshot_schema_version: 2,
   contract_version_id: 'test',
@@ -45,6 +43,101 @@ const TEST_SNAPSHOT: ContractSnapshot = {
   pay_schedule: 'weekly',
   pay_schedule_anchor_date: '2026-05-08',
   pay_delay_days: 7,
+};
+
+// Explicit colors — dark text on light backgrounds for readable contrast
+const styles = {
+  page: {
+    maxWidth: '600px',
+    margin: '2rem auto',
+    padding: '1.5rem',
+    fontFamily: 'system-ui, sans-serif',
+    background: '#ffffff',
+    color: '#1a1a1a',
+    minHeight: '100vh',
+  },
+  heading: {
+    color: '#1a1a1a',
+    fontSize: '1.5rem',
+    marginBottom: '0.5rem',
+  },
+  subheading: {
+    color: '#1a1a1a',
+    fontSize: '1.1rem',
+    marginTop: '1rem',
+    marginBottom: '0.5rem',
+  },
+  description: {
+    color: '#555555',
+    marginBottom: '1rem',
+  },
+  formRow: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '0.25rem',
+    marginBottom: '0.75rem',
+    color: '#1a1a1a',
+  },
+  label: {
+    color: '#1a1a1a',
+    fontWeight: 500,
+  },
+  input: {
+    padding: '0.5rem',
+    fontSize: '1rem',
+    border: '1px solid #cccccc',
+    borderRadius: '4px',
+    background: '#ffffff',
+    color: '#1a1a1a',
+  },
+  checkboxRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    marginBottom: '0.5rem',
+    color: '#1a1a1a',
+  },
+  button: {
+    padding: '0.75rem 1.5rem',
+    background: '#1a1a1a',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '1rem',
+    fontWeight: 500,
+    marginTop: '0.5rem',
+  },
+  errorBox: {
+    marginTop: '1rem',
+    padding: '1rem',
+    background: '#ffe5e5',
+    border: '1px solid #cc0000',
+    borderRadius: '4px',
+    color: '#990000',
+  },
+  resultBox: {
+    marginTop: '1.5rem',
+    padding: '1rem',
+    background: '#f8f8f8',
+    border: '1px solid #dddddd',
+    borderRadius: '4px',
+    color: '#1a1a1a',
+  },
+  total: {
+    fontSize: '1.25rem',
+    fontWeight: 600,
+    color: '#1a1a1a',
+    marginTop: '0.5rem',
+  },
+  warningBox: {
+    marginTop: '1rem',
+    padding: '0.75rem',
+    background: '#fff4cc',
+    border: '1px solid #cc9900',
+    borderRadius: '4px',
+    color: '#664400',
+  },
 };
 
 export default function CalcTest() {
@@ -107,99 +200,109 @@ export default function CalcTest() {
   }
 
   return (
-    <main style={{ maxWidth: '600px', margin: '2rem auto', padding: '1rem', fontFamily: 'system-ui' }}>
-      <h1>Calc Engine Test</h1>
-      <p style={{ color: '#666' }}>
+    <main style={styles.page}>
+      <h1 style={styles.heading}>Calc Engine Test</h1>
+      <p style={styles.description}>
         Hardcoded Local 16 contract. Enter values, see the math.
       </p>
 
-      <div style={{ display: 'grid', gap: '0.75rem', marginTop: '1rem' }}>
-        <label>
-          Worked hours:{' '}
-          <input type="number" step="0.25" value={workedHours} onChange={(e) => setWorkedHours(e.target.value)} />
-        </label>
-        <label>
-          Start hour (0-23, e.g. 16 for 4pm):{' '}
-          <input type="number" min="0" max="23" value={startHour} onChange={(e) => setStartHour(e.target.value)} />
-        </label>
-        <label>
-          Offered hourly rate:{' '}
-          <input type="number" step="0.01" value={rate} onChange={(e) => setRate(e.target.value)} />
-        </label>
-        <label>
-          Meal penalty hours:{' '}
-          <input type="number" step="0.25" value={mealPenaltyHours} onChange={(e) => setMealPenaltyHours(e.target.value)} />
-        </label>
-        <label>
-          Prior consecutive days worked (in last 6 days):{' '}
-          <input type="number" min="0" max="6" value={priorDaysWorked} onChange={(e) => setPriorDaysWorked(e.target.value)} />
-        </label>
-        <label>
-          <input type="checkbox" checked={isHead} onChange={(e) => setIsHead(e.target.checked)} />
-          {' '}Is head/lead (8hr minimum)
-        </label>
-        <label>
-          <input type="checkbox" checked={isSplit} onChange={(e) => setIsSplit(e.target.checked)} />
-          {' '}Is split shift (4hr minimum)
-        </label>
+      <div>
+        <div style={styles.formRow}>
+          <label style={styles.label}>Worked hours:</label>
+          <input
+            type="number"
+            step="0.25"
+            value={workedHours}
+            onChange={(e) => setWorkedHours(e.target.value)}
+            style={styles.input}
+          />
+        </div>
 
-        <button
-          onClick={runCalc}
-          style={{ padding: '0.75rem', background: '#333', color: 'white', border: 'none', cursor: 'pointer', marginTop: '0.5rem' }}
-        >
+        <div style={styles.formRow}>
+          <label style={styles.label}>Start hour (0-23, e.g. 16 for 4pm):</label>
+          <input
+            type="number"
+            min="0"
+            max="23"
+            value={startHour}
+            onChange={(e) => setStartHour(e.target.value)}
+            style={styles.input}
+          />
+        </div>
+
+        <div style={styles.formRow}>
+          <label style={styles.label}>Offered hourly rate:</label>
+          <input
+            type="number"
+            step="0.01"
+            value={rate}
+            onChange={(e) => setRate(e.target.value)}
+            style={styles.input}
+          />
+        </div>
+
+        <div style={styles.formRow}>
+          <label style={styles.label}>Meal penalty hours:</label>
+          <input
+            type="number"
+            step="0.25"
+            value={mealPenaltyHours}
+            onChange={(e) => setMealPenaltyHours(e.target.value)}
+            style={styles.input}
+          />
+        </div>
+
+        <div style={styles.formRow}>
+          <label style={styles.label}>Prior consecutive days worked (in last 6 days):</label>
+          <input
+            type="number"
+            min="0"
+            max="6"
+            value={priorDaysWorked}
+            onChange={(e) => setPriorDaysWorked(e.target.value)}
+            style={styles.input}
+          />
+        </div>
+
+        <div style={styles.checkboxRow}>
+          <input
+            type="checkbox"
+            id="is-head"
+            checked={isHead}
+            onChange={(e) => setIsHead(e.target.checked)}
+          />
+          <label htmlFor="is-head" style={styles.label}>Is head/lead (8hr minimum)</label>
+        </div>
+
+        <div style={styles.checkboxRow}>
+          <input
+            type="checkbox"
+            id="is-split"
+            checked={isSplit}
+            onChange={(e) => setIsSplit(e.target.checked)}
+          />
+          <label htmlFor="is-split" style={styles.label}>Is split shift (4hr minimum)</label>
+        </div>
+
+        <button onClick={runCalc} style={styles.button}>
           Calculate
         </button>
       </div>
 
       {error && (
-        <div style={{ marginTop: '1rem', padding: '1rem', background: '#fee', border: '1px solid #c00' }}>
+        <div style={styles.errorBox}>
           <strong>Error:</strong> {error}
         </div>
       )}
 
       {result && (
-        <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f5f5f5', border: '1px solid #ddd' }}>
-          <h2 style={{ marginTop: 0 }}>Breakdown</h2>
+        <div style={styles.resultBox}>
+          <h2 style={styles.subheading}>Breakdown</h2>
           <p>Worked: {result.worked_hours} hrs</p>
           <p>Billed: {result.billed_hours} hrs (minimum: {result.minimum_applied})</p>
 
-          <h3>Worked pay slices</h3>
+          <h3 style={styles.subheading}>Worked pay slices</h3>
           <ul>
             {result.worked_slices.map((slice, i) => (
               <li key={i}>
-                {slice.hours} hr × ${slice.rate.toFixed(2)} × {slice.multiplier}× = $
-                {(slice.hours * slice.rate * slice.multiplier).toFixed(2)}
-                {' '}({slice.applied_rules.join(', ')})
-              </li>
-            ))}
-          </ul>
-
-          {result.padding_slice && (
-            <p>
-              Padding: {result.padding_slice.hours} hr × ${result.padding_slice.rate} × 1.0× = $
-              {(result.padding_slice.hours * result.padding_slice.rate).toFixed(2)} (minimum_padding)
-            </p>
-          )}
-
-          <p>Base pay: ${result.base_pay.toFixed(2)}</p>
-          <p>Meal penalty: ${result.meal_penalty_pay.toFixed(2)}</p>
-          <p>Forced call: ${result.forced_call_pay.toFixed(2)}</p>
-          <p><strong>Subtotal: ${result.subtotal.toFixed(2)}</strong></p>
-          <p>Fringe ({TEST_SNAPSHOT.fringe_percent}%, {result.fringe_in_check ? 'in check' : 'separate'}): ${result.fringe_amount.toFixed(2)}</p>
-          <p style={{ fontSize: '1.2rem' }}>
-            <strong>Total expected: ${result.total_expected.toFixed(2)}</strong>
-          </p>
-
-          {result.warnings.length > 0 && (
-            <div style={{ marginTop: '1rem', padding: '0.5rem', background: '#ffeaa7' }}>
-              <strong>Warnings:</strong>
-              <ul>
-                {result.warnings.map((w, i) => <li key={i}>{w}</li>)}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-    </main>
-  );
-}
+                {slice.hours} hr × ${slice.rate.toFixed(2)} × {slice.multiplie
