@@ -26,6 +26,7 @@ import SettingsPage from "@/pages/SettingsPage";
 import SchedulingPage from "@/pages/SchedulingPage";
 import PayOutsPage from "@/pages/PayOutsPage";
 import NotFound from "./pages/NotFound.tsx";
+import CalcTest from './pages/CalcTest';
 
 const queryClient = new QueryClient();
 
@@ -58,6 +59,7 @@ function AuthenticatedApp() {
                 <Route path="/scheduling" element={<SchedulingPage />} />
                 <Route path="/payouts" element={<PayOutsPage />} />
                 <Route path="*" element={<NotFound />} />
+                <Route path="/calc-test" element={<CalcTest />} />
               </Routes>
             </AppLayout>
           </BrowserRouter>
