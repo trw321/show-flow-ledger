@@ -30,8 +30,10 @@ export function evaluateWorkedHours(
   const start = facts.start_time;
   
   for (let h = 0; h < facts.worked_hours; h++) {
-    const hourPosition = h + 1; // 1-indexed: first hour is hour 1
-    const clockHour = (start.getHours() + h) % 24;
+  const current = new Date(start);
+  current.setHours(start.getHours() + h);
+
+  const clockHour = current.getHours();
     
     // Evaluate all applicable multipliers for this hour
     const candidates: { mult: number; rule: string }[] = [
