@@ -52,8 +52,8 @@ const styles = {
     margin: '2rem auto',
     padding: '1.5rem',
     fontFamily: 'system-ui, sans-serif',
-    background: 'lime',
-    color: 'black',
+    background: '#000080',
+    color: '#008000',
     minHeight: '100vh',
   },
   heading: {
