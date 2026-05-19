@@ -88,7 +88,7 @@ const styles = {
     border: '1px solid #cccccc',
     borderRadius: '4px',
     background: '#ffffff',
-    color: '#1a1a1a',
+    color: 'black',
   },
   checkboxRow: {
     display: 'flex',
