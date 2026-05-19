@@ -21,51 +21,68 @@ export function evaluateWorkedHours(
   if (facts.worked_hours <= 0 || facts.start_time == null) {
     return [];
   }
-  
+
   // Consecutive-day premium is constant across the whole gig
   const consecutiveMult = consecutiveDayMultiplier(snapshot, context);
-  
+
   // Walk each hour of work and assign rate
   const slices: PaySlice[] = [];
   const start = facts.start_time;
-  
-  for (let h = 0; h < facts.worked_hours; h++) {
-  const current = new Date(start);
-  current.setHours(start.getHours() + h);
 
-  const clockHour = current.getHours();
-    
+  for (let h = 0; h < facts.worked_hours; h++) {
+    // Worked-hour position (used for OT thresholds)
+    const hourPosition = h + 1;
+
+    // Actual wall-clock time for this worked hour
+    const current = new Date(start);
+    current.setHours(start.getHours() + h);
+
+    // Actual hour-of-day (0-23)
+    const clockHour = current.getHours();
+
     // Evaluate all applicable multipliers for this hour
     const candidates: { mult: number; rule: string }[] = [
       { mult: 1.0, rule: 'straight_time' },
-      { mult: dailyOTMultiplier(hourPosition, snapshot.overtime_tiers), rule: 'daily_ot' },
+      {
+        mult: dailyOTMultiplier(hourPosition, snapshot.overtime_tiers),
+        rule: 'daily_ot',
+      },
     ];
-    
+
+    // Night premium based on actual clock time
     if (isInNightWindow(clockHour, snapshot)) {
       candidates.push({
         mult: nightPremiumMultiplier(snapshot),
         rule: 'night_premium',
       });
     }
-    
+
+    // Consecutive-day premium
     if (consecutiveMult > 1.0) {
       candidates.push({
         mult: consecutiveMult,
         rule: 'consecutive_day',
       });
     }
-    
+
     // Highest multiplier wins
-    const winner = candidates.reduce((a, b) => (b.mult > a.mult ? b : a));
-    
-    // Collect all rules that tied at the winning multiplier
+    const winner = candidates.reduce((a, b) =>
+      b.mult > a.mult ? b : a
+    );
+
+    // Collect all rules tied at winning multiplier
     const appliedRules = candidates
       .filter(c => c.mult === winner.mult)
       .map(c => c.rule);
-    
-    // Append to existing slice if same multiplier, else start new slice
+
+    // Merge adjacent identical slices
     const last = slices[slices.length - 1];
-    if (last && last.multiplier === winner.mult) {
+
+    if (
+      last &&
+      last.multiplier === winner.mult &&
+      JSON.stringify(last.applied_rules) === JSON.stringify(appliedRules)
+    ) {
       last.hours += 1;
     } else {
       slices.push({
@@ -76,6 +93,6 @@ export function evaluateWorkedHours(
       });
     }
   }
-  
+
   return slices;
 }
