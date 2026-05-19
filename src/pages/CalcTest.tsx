@@ -307,6 +307,7 @@ export default function CalcTest() {
               <li key={i}>
                 {slice.hours} hr × ${slice.rate.toFixed(2)} × {slice.multiplie}
               </li>
-  ))}
+  )
 </ul>
 </div>
+                                      )}
