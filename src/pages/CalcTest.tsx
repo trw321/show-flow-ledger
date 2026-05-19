@@ -88,14 +88,14 @@ const styles = {
     border: '1px solid #cccccc',
     borderRadius: '4px',
     background: '#ffffff',
-    color: 'black',
+    color: '#FFC0CB',
   },
   checkboxRow: {
     display: 'flex',
     alignItems: 'center',
     gap: '0.5rem',
     marginBottom: '0.5rem',
-    color: '#1a1a1a',
+    color: '#FFC0CB',
   },
   button: {
     padding: '0.75rem 1.5rem',
@@ -122,7 +122,7 @@ const styles = {
     background: '#f8f8f8',
     border: '1px solid #dddddd',
     borderRadius: '4px',
-    color: '#1a1a1a',
+    color: '#FFC0CB',
   },
   total: {
     fontSize: '1.25rem',
