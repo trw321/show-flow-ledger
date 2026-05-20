@@ -87,9 +87,10 @@ export interface GigPayBreakdown {
   billed_hours: number;           // max(worked, minimum)
   minimum_applied: number;
 
-  // Pay slices (by rate)
+ // Pay slices (by rate)
   worked_slices: PaySlice[];      // hours actually worked at each rate
-  padding_slice: PaySlice | null; // minimum padding at ST
+  padding_slice: PaySlice | null; // minimum padding at ST (gig minimum-call)
+  post_meal_padding_slice: PaySlice | null; // 2hr post-off-clock-meal minimum padding at ST
 
   // Components
   base_pay: number;               // sum of worked slices + padding
