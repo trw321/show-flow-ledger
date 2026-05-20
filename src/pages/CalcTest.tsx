@@ -52,8 +52,8 @@ const styles = {
     margin: '2rem auto',
     padding: '1.5rem',
     fontFamily: 'system-ui, sans-serif',
-    background: '#000080',
-    color: '#008000',
+    background: '#ffffff',
+    color: '#1a1a1a',
     minHeight: '100vh',
   },
   heading: {
@@ -88,14 +88,14 @@ const styles = {
     border: '1px solid #cccccc',
     borderRadius: '4px',
     background: '#ffffff',
-    color: '#008000',
+    color: '#1a1a1a',
   },
   checkboxRow: {
     display: 'flex',
     alignItems: 'center',
     gap: '0.5rem',
     marginBottom: '0.5rem',
-    color: '#FFC0CB',
+    color: '#1a1a1a',
   },
   button: {
     padding: '0.75rem 1.5rem',
@@ -119,10 +119,10 @@ const styles = {
   resultBox: {
     marginTop: '1.5rem',
     padding: '1rem',
-    background: '#f8f8f8',
+    background: '#ffffff',
     border: '1px solid #dddddd',
     borderRadius: '4px',
-    color: '#FFC0CB',
+    color: '#1a1a1a',
   },
   total: {
     fontSize: '1.25rem',
