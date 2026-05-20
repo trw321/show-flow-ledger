@@ -443,7 +443,7 @@ export default function CalcTest() {
 
           {result.padding_slice && (
             <>
-              <h3 style={styles.subheading}>Padding slice (minimum)</h3>
+              <h3 style={styles.subheading}>Padding — gig minimum-call</h3>
               <p>
                 {result.padding_slice.hours.toFixed(2)} hr × $
                 {result.padding_slice.rate.toFixed(2)} × {result.padding_slice.multiplier} = $
@@ -451,6 +451,21 @@ export default function CalcTest() {
                   result.padding_slice.hours *
                   result.padding_slice.rate *
                   result.padding_slice.multiplier
+                ).toFixed(2)}
+              </p>
+            </>
+          )}
+
+          {result.post_meal_padding_slice && (
+            <>
+              <h3 style={styles.subheading}>Padding — 2hr post-meal minimum</h3>
+              <p>
+                {result.post_meal_padding_slice.hours.toFixed(2)} hr × $
+                {result.post_meal_padding_slice.rate.toFixed(2)} × {result.post_meal_padding_slice.multiplier} = $
+                {(
+                  result.post_meal_padding_slice.hours *
+                  result.post_meal_padding_slice.rate *
+                  result.post_meal_padding_slice.multiplier
                 ).toFixed(2)}
               </p>
             </>
