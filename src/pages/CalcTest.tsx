@@ -305,9 +305,12 @@ export default function CalcTest() {
           <ul>
             {result.worked_slices.map((slice, i) => (
               <li key={i}>
-                {slice.hours} hr × ${slice.rate.toFixed(2)} × {slice.multiplie}
+                {slice.hours} hr × ${slice.rate.toFixed(2)} × {slice.multiplier}
               </li>
-  )
-</ul>
-</div>
-                                      )}
+            ))}
+          </ul>
+        </div>
+      )}
+    </main>
+  );
+}
