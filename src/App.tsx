@@ -58,7 +58,7 @@ function AuthenticatedApp() {
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/scheduling" element={<SchedulingPage />} />
                 <Route path="/payouts" element={<PayOutsPage />} />
-                <Route path="/calc-test" element={<CalcTest />} />
+                <Route path="/dev/calc-test" element={<CalcTest />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </AppLayout>
