@@ -125,10 +125,15 @@ function emptyOffer(rawText: string): ParsedOffer {
 // portal) collapse into a single tab; genuine empty cells (\t\t) are kept so
 // column positions stay aligned.
 function cellsFromPaste(text: string): string[] {
-  const collapsed = text.replace(/\t*\n+\t*/g, '\t');
-  let cells = collapsed.split('\t').map((c) => c.trim());
-  while (cells.length && cells[0] === '') cells.shift();
-  while (cells.length && cells[cells.length - 1] === '') cells.pop();
+  const cells = text
+    .replace(/\r/g, '')
+    .replace(/\n+/g, '\t')
+    .split('\t')
+    .map((c) => c.trim());
+
+  while (cells[0] === '') cells.shift();
+  while (cells[cells.length - 1] === '') cells.pop();
+
   return cells;
 }
 
@@ -210,7 +215,7 @@ export function parseLocal16Offer(text: string): ParseResult {
       if (c) { p.contractRef = c; matched.push('contractRef'); }
     }
 
-    if (cells.length !== LOCAL16_COLUMNS.length) {
+    if (cells.length < 10) {
       warnings.push(
         `Read ${cells.length} columns (expected ${LOCAL16_COLUMNS.length}). ` +
         `A blank column may have shifted things — double-check venue, show, and job site.`
