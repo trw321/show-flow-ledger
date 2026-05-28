@@ -1,26 +1,19 @@
 // src/lib/parsers/local16.ts
+// Parser for Local 16 dispatch offers.
 //
-// Heuristic parser for pasted IATSE Local 16 dispatch offers.
-// Pure function — no React, no Supabase — so it's easy to test.
-//
-// HOW IT WORKS
-//   1. Line-by-line "Label: value" matching against LABEL_ALIASES.
-//   2. Whole-text regex fallbacks for distinctive fields (job #, local,
-//      date, rate) that have recognizable shapes even without a label.
-//
-// TUNING: This was written without a real offer sample in front of it.
-// The review form is fully editable, so imperfect parses are safe — the
-// user fixes fields before saving. To improve hit-rate, add real labels
-// you see in offers to the alias lists below. That's the main knob.
+// PRIMARY mode — tab-delimited rows copied from the web dispatch portal.
+//   The portal columns are always in the same order (14 of them). Blank cells
+//   copy across as empty columns; we preserve them so nothing shifts.
+// FALLBACK mode — labeled "Field: value" text (an offer pasted from email/SMS).
 
 export interface ParsedOffer {
   jobNumber: string | null;
   local: string | null;
-  workDate: string | null; // YYYY-MM-DD
-  startTime: string | null; // "HH:MM" 24h when normalizable, else raw
-  endTime: string | null;
-  employer: string | null; // signatory employer
-  payor: string | null; // payroll company
+  workDate: string | null;    // YYYY-MM-DD
+  startTime: string | null;   // HH:MM (24h)
+  endTime: string | null;     // HH:MM (24h)
+  employer: string | null;
+  payor: string | null;
   hiringParty: string | null;
   showName: string | null;
   venue: string | null;
@@ -30,86 +23,73 @@ export interface ParsedOffer {
   steward: string | null;
   reportTo: string | null;
   dressCode: string | null;
+  contractRef: string | null;
+  notes: string | null;
   rawText: string;
 }
 
 export interface ParseResult {
   parsed: ParsedOffer;
+  matched: string[];
   warnings: string[];
-  matched: (keyof ParsedOffer)[];
 }
 
-// Canonical field -> accepted labels (lowercased, exact-match after normalize).
-// Add new labels here as you encounter them in real offers.
-const LABEL_ALIASES: Record<string, string[]> = {
-  jobNumber: ['job number', 'job #', 'job#', 'gig number', 'gig #', 'call number', 'call #', 'dispatch', 'dispatch #', 'work order', 'wo #', 'order #', 'ref', 'reference'],
-  local: ['local', 'union', 'chapter'],
-  workDate: ['date', 'work date', 'call date', 'show date', 'day', 'dates'],
-  startTime: ['call', 'call time', 'start', 'start time', 'report time', 'time in', 'in'],
-  endTime: ['end', 'end time', 'time out', 'out', 'wrap', 'expected end'],
-  employer: ['employer', 'signatory', 'signatory employer', 'company', 'contractor'],
-  payor: ['payroll', 'payroll company', 'payroll co', 'payor', 'paymaster', 'paid by'],
-  hiringParty: ['hiring', 'hiring party', 'hired by', 'dispatcher', 'agent'],
-  showName: ['show', 'show name', 'event', 'event name', 'production'],
-  venue: ['venue', 'location'],
-  jobSite: ['job site', 'jobsite', 'address', 'work location', 'site'],
-  positionName: ['position', 'classification', 'class', 'role', 'title', 'craft', 'department', 'dept'],
-  hourlyRate: ['rate', 'hourly', 'hourly rate', 'rate/hr', 'rate/hour', 'pay rate', 'wage', 'scale'],
-  steward: ['steward', 'shop steward'],
-  reportTo: ['report to', 'reports to', 'report', 'contact', 'supervisor', 'foreman', 'lead'],
-  dressCode: ['dress', 'dress code', 'attire', 'wardrobe'],
-};
+// Fixed column order of a Local 16 portal row.
+const LOCAL16_COLUMNS = [
+  'jobNumber',     // 0
+  'dateTime',      // 1  -> workDate + startTime
+  'lineNotes',     // 2  -> notes
+  'positionName',  // 3
+  'employer',      // 4
+  'payor',         // 5
+  'venue',         // 6
+  'showName',      // 7
+  'jobSite',       // 8
+  'instructions',  // 9  -> notes
+  'contractRef',   // 10
+  'hourlyRate',    // 11
+  'dressCode',     // 12
+  'reportTo',      // 13
+] as const;
 
 const MONTHS: Record<string, number> = {
-  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12,
-  january: 1, february: 2, march: 3, april: 4, june: 6, july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
+  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+  jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12,
 };
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
-function normalizeDate(raw: string): string | null {
-  const s = raw.trim();
-  // MM/DD/YYYY, MM/DD/YY, M-D-YY, M.D.YYYY
+function normalizeDate(s: string): string | null {
   let m = s.match(/\b(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})\b/);
   if (m) {
-    let year = parseInt(m[3], 10);
-    if (year < 100) year += 2000;
-    const mon = parseInt(m[1], 10);
-    const day = parseInt(m[2], 10);
-    if (mon >= 1 && mon <= 12 && day >= 1 && day <= 31) return `${year}-${pad(mon)}-${pad(day)}`;
+    let y = +m[3];
+    if (y < 100) y += 2000;
+    const mo = +m[1], d = +m[2];
+    if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) return `${y}-${pad(mo)}-${pad(d)}`;
   }
-  // Month DD, YYYY
   m = s.match(/\b([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:,)?\s+(\d{4})\b/);
   if (m) {
-    const mon = MONTHS[m[1].toLowerCase()];
-    if (mon) return `${m[3]}-${pad(mon)}-${pad(parseInt(m[2], 10))}`;
+    const mo = MONTHS[m[1].slice(0, 3).toLowerCase()];
+    if (mo) return `${m[3]}-${pad(mo)}-${pad(+m[2])}`;
   }
-  // DD Month YYYY
-  m = s.match(/\b(\d{1,2})\s+([A-Za-z]{3,9})\.?\s+(\d{4})\b/);
-  if (m) {
-    const mon = MONTHS[m[2].toLowerCase()];
-    if (mon) return `${m[3]}-${pad(mon)}-${pad(parseInt(m[1], 10))}`;
-  }
-  // Already ISO
   m = s.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
   return null;
 }
 
 function normalizeTime(raw: string): string | null {
-  const m = raw.match(/\b(\d{1,2}):(\d{2})\s*(am|pm)?\b/i);
+  let m = raw.match(/\b(\d{1,2}):(\d{2})\s*(am|pm)?\b/i);
   if (m) {
-    let h = parseInt(m[1], 10);
+    let h = +m[1];
     const ap = m[3]?.toLowerCase();
     if (ap === 'pm' && h !== 12) h += 12;
     if (ap === 'am' && h === 12) h = 0;
     return `${pad(h)}:${m[2]}`;
   }
-  // bare hour with am/pm, e.g. "8 AM"
-  const m2 = raw.match(/\b(\d{1,2})\s*(am|pm)\b/i);
-  if (m2) {
-    let h = parseInt(m2[1], 10);
-    const ap = m2[2].toLowerCase();
+  m = raw.match(/\b(\d{1,2})\s*(am|pm)\b/i);
+  if (m) {
+    let h = +m[1];
+    const ap = m[2].toLowerCase();
     if (ap === 'pm' && h !== 12) h += 12;
     if (ap === 'am' && h === 12) h = 0;
     return `${pad(h)}:00`;
@@ -117,128 +97,159 @@ function normalizeTime(raw: string): string | null {
   return null;
 }
 
-function parseRate(raw: string): number | null {
-  const m = raw.match(/\$?\s*(\d{1,3}(?:\.\d{1,2})?)/);
+function parseRate(s: string): number | null {
+  const m = s.match(/\$?\s*(\d{1,3}(?:\.\d{1,2})?)/);
   if (m) {
     const n = parseFloat(m[1]);
-    if (!isNaN(n) && n > 0 && n < 1000) return n;
+    if (!isNaN(n) && n >= 10 && n < 1000) return n;
   }
   return null;
 }
 
-function assignField(p: ParsedOffer, field: keyof ParsedOffer, value: string): void {
-  switch (field) {
-    case 'workDate': {
-      const d = normalizeDate(value);
-      if (d) p.workDate = d;
-      break;
-    }
-    case 'startTime':
-      p.startTime = normalizeTime(value) ?? value;
-      break;
-    case 'endTime':
-      p.endTime = normalizeTime(value) ?? value;
-      break;
-    case 'hourlyRate': {
-      const r = parseRate(value);
-      if (r != null) p.hourlyRate = r;
-      break;
-    }
-    case 'local': {
-      const m = value.match(/(\d{1,3})/);
-      p.local = m ? `Local ${m[1]}` : value;
-      break;
-    }
-    default:
-      // string fields
-      (p as Record<string, unknown>)[field] = value;
-  }
+const isJobNum = (s: string) =>
+  /^20\d{2}-\d{2,5}$/.test(s.trim()) && !/^20\d{2}-20\d{2}$/.test(s.trim());
+
+const isContractRef = (s: string) =>
+  /20\d{2}-20\d{2}/.test(s) || /breakout|basic|agreement/i.test(s);
+
+function emptyOffer(rawText: string): ParsedOffer {
+  return {
+    jobNumber: null, local: 'Local 16', workDate: null, startTime: null, endTime: null,
+    employer: null, payor: null, hiringParty: null, showName: null, venue: null,
+    jobSite: null, positionName: null, hourlyRate: null, steward: null, reportTo: null,
+    dressCode: null, contractRef: null, notes: null, rawText,
+  };
 }
 
+// Split a paste into cells. Stray newlines (common when copying from the
+// portal) collapse into a single tab; genuine empty cells (\t\t) are kept so
+// column positions stay aligned.
+function cellsFromPaste(text: string): string[] {
+  const collapsed = text.replace(/\t*\n+\t*/g, '\t');
+  let cells = collapsed.split('\t').map((c) => c.trim());
+  while (cells.length && cells[0] === '') cells.shift();
+  while (cells.length && cells[cells.length - 1] === '') cells.pop();
+  return cells;
+}
+
+const LABEL_MAP: Array<[keyof ParsedOffer, RegExp]> = [
+  ['jobNumber', /\b(?:job|gig|dispatch|call)\s*(?:#|no\.?|number)?\s*[:#]\s*(.+)/i],
+  ['workDate', /\b(?:date|work\s*date|day)\s*[:]\s*(.+)/i],
+  ['startTime', /\b(?:call|call\s*time|start|report\s*time)\s*[:]\s*(.+)/i],
+  ['positionName', /\b(?:position|classification|craft|role)\s*[:]\s*(.+)/i],
+  ['employer', /\b(?:employer|company|hired\s*by)\s*[:]\s*(.+)/i],
+  ['payor', /\b(?:payroll|paid\s*by|payor|payer)\s*[:]\s*(.+)/i],
+  ['venue', /\b(?:venue|location)\s*[:]\s*(.+)/i],
+  ['showName', /\b(?:show|event|production)\s*[:]\s*(.+)/i],
+  ['jobSite', /\b(?:job\s*site|site|room)\s*[:]\s*(.+)/i],
+  ['hourlyRate', /\b(?:rate|pay|hourly|wage)\s*[:]\s*(.+)/i],
+  ['reportTo', /\b(?:report\s*to|contact|supervisor)\s*[:]\s*(.+)/i],
+  ['steward', /\b(?:steward)\s*[:]\s*(.+)/i],
+  ['dressCode', /\b(?:dress\s*code|dress|attire|wardrobe)\s*[:]\s*(.+)/i],
+];
+
 export function parseLocal16Offer(text: string): ParseResult {
-  const parsed: ParsedOffer = {
-    jobNumber: null, local: null, workDate: null, startTime: null, endTime: null,
-    employer: null, payor: null, hiringParty: null, showName: null, venue: null,
-    jobSite: null, positionName: null, hourlyRate: null, steward: null,
-    reportTo: null, dressCode: null, rawText: text,
-  };
-  const matched: (keyof ParsedOffer)[] = [];
+  const p = emptyOffer(text);
+  const matched: string[] = [];
   const warnings: string[] = [];
 
-  const aliasToField = new Map<string, keyof ParsedOffer>();
-  for (const [field, aliases] of Object.entries(LABEL_ALIASES)) {
-    for (const a of aliases) aliasToField.set(a, field as keyof ParsedOffer);
-  }
+  if (text.includes('\t')) {
+    // ---- PRIMARY: columnar ----
+    const cells = cellsFromPaste(text);
+    const noteBits: string[] = [];
 
-  const lines = text.split(/\r?\n/);
+    cells.forEach((cell, i) => {
+      if (i >= LOCAL16_COLUMNS.length || !cell) return;
+      const col = LOCAL16_COLUMNS[i];
+      switch (col) {
+        case 'dateTime': {
+          const d = normalizeDate(cell);
+          if (d) { p.workDate = d; matched.push('workDate'); }
+          const t = normalizeTime(cell);
+          if (t) { p.startTime = t; matched.push('startTime'); }
+          break;
+        }
+        case 'hourlyRate': {
+          const r = parseRate(cell);
+          if (r != null) { p.hourlyRate = r; matched.push('hourlyRate'); }
+          break;
+        }
+        case 'lineNotes':
+        case 'instructions':
+          noteBits.push(cell);
+          break;
+        case 'contractRef':
+          p.contractRef = cell; matched.push('contractRef');
+          break;
+        default:
+          (p as Record<string, unknown>)[col] = cell;
+          matched.push(col);
+      }
+    });
 
-  // Pass 1 — label: value lines
-  for (const line of lines) {
-    const idx = line.indexOf(':');
-    if (idx === -1) continue;
-    const value = line.slice(idx + 1).trim();
-    if (!value) continue;
-    const label = line
-      .slice(0, idx)
-      .toLowerCase()
-      .replace(/\(.*?\)/g, '') // strip parentheticals e.g. "(PT)"
-      .replace(/[^a-z0-9 #/]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    const field = aliasToField.get(label);
-    if (!field) continue;
-    if (parsed[field] != null) continue; // first occurrence wins
-    assignField(parsed, field, value);
-    if (parsed[field] != null && !matched.includes(field)) matched.push(field);
-  }
+    if (noteBits.length) { p.notes = noteBits.join(' • '); matched.push('notes'); }
 
-  // Pass 2 — whole-text fallbacks for distinctive fields
-  if (!parsed.jobNumber) {
-    const m =
-      text.match(/\b(20\d{2}-\d{3,5})\b/) || // 2026-1589 style
-      text.match(/\bjob\s*#?\s*(\d{3,6})\b/i) ||
-      text.match(/#\s*(\d{3,6})\b/);
-    if (m) {
-      parsed.jobNumber = m[1];
-      matched.push('jobNumber');
+    // Content rescues — recover the high-signal fields if a collapsed blank
+    // cell shifted things.
+    if (!p.jobNumber || !isJobNum(p.jobNumber)) {
+      const c = cells.find(isJobNum);
+      if (c) { p.jobNumber = c; if (!matched.includes('jobNumber')) matched.push('jobNumber'); }
     }
-  }
-  if (!parsed.local) {
-    const m = text.match(/\blocal\s+(\d{1,3})\b/i);
-    if (m) {
-      parsed.local = `Local ${m[1]}`;
-      matched.push('local');
+    if (!p.workDate) {
+      for (const c of cells) {
+        const d = normalizeDate(c);
+        if (d) { p.workDate = d; matched.push('workDate'); break; }
+      }
     }
-  }
-  if (!parsed.workDate) {
-    const d = normalizeDate(text);
-    if (d) {
-      parsed.workDate = d;
-      matched.push('workDate');
+    if (p.hourlyRate == null) {
+      const c = cells.find((x) => x.includes('$'));
+      if (c) { const r = parseRate(c); if (r != null) { p.hourlyRate = r; matched.push('hourlyRate'); } }
     }
-  }
-  if (!parsed.hourlyRate) {
-    for (const line of lines) {
-      if (/\b(rate|scale|wage|hourly|hr)\b/i.test(line)) {
-        const m = line.match(/\$?\s*(\d{2,3}(?:\.\d{1,2})?)/);
-        if (m) {
-          const n = parseFloat(m[1]);
-          if (n >= 10 && n < 1000) {
-            parsed.hourlyRate = n;
-            matched.push('hourlyRate');
-            break;
+    if (!p.contractRef) {
+      const c = cells.find(isContractRef);
+      if (c) { p.contractRef = c; matched.push('contractRef'); }
+    }
+
+    if (cells.length !== LOCAL16_COLUMNS.length) {
+      warnings.push(
+        `Read ${cells.length} columns (expected ${LOCAL16_COLUMNS.length}). ` +
+        `A blank column may have shifted things — double-check venue, show, and job site.`
+      );
+    }
+  } else {
+    // ---- FALLBACK: labeled text ----
+    for (const line of text.split(/\r?\n/)) {
+      const l = line.trim();
+      if (!l) continue;
+      for (const [field, re] of LABEL_MAP) {
+        if (p[field]) continue;
+        const m = l.match(re);
+        if (m && m[1].trim()) {
+          const val = m[1].trim();
+          if (field === 'hourlyRate') {
+            const r = parseRate(val);
+            if (r != null) { p.hourlyRate = r; matched.push('hourlyRate'); }
+          } else if (field === 'workDate') {
+            const d = normalizeDate(val);
+            p.workDate = d ?? val; matched.push('workDate');
+          } else if (field === 'startTime') {
+            const t = normalizeTime(val);
+            p.startTime = t ?? val; matched.push('startTime');
+          } else {
+            (p as Record<string, unknown>)[field] = val;
+            matched.push(field);
           }
+          break;
         }
       }
     }
   }
 
-  // Warnings — surfaced in the review UI, never block
-  if (!parsed.workDate) warnings.push('No work date found — this is required to save.');
-  if (!parsed.jobNumber) warnings.push('No job / gig number found.');
-  if (!parsed.positionName) warnings.push('No position / classification found.');
-  if (!parsed.hourlyRate) warnings.push('No hourly rate found.');
-  if (matched.length === 0) warnings.push('Nothing auto-detected. Check the format, or just fill in the fields manually.');
+  if (!p.workDate) warnings.push('No work date found — required to save.');
+  if (!p.jobNumber) warnings.push('No job / gig number found.');
+  if (!p.positionName) warnings.push('No position / classification found.');
+  if (p.hourlyRate == null) warnings.push('No hourly rate found.');
+  if (matched.length === 0) warnings.push('Nothing auto-detected — fill the fields in manually.');
 
-  return { parsed, warnings, matched };
+  return { parsed: p, matched: [...new Set(matched)], warnings };
 }
