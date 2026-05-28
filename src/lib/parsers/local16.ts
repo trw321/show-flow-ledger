@@ -99,11 +99,28 @@ function normalizeTime(raw: string): string | null {
 
 function parseRate(s: string): number | null {
   const m = s.match(/\$?\s*(\d{1,3}(?:\.\d{1,2})?)/);
-  if (m) {
-    const n = parseFloat(m[1]);
-    if (!isNaN(n) && n >= 10 && n < 1000) return n;
-  }
-  return null;
+  if (!m) return null;
+
+  const n = parseFloat(m[1]);
+
+  if (isNaN(n) || n >= 1000) return null;
+
+  // Preserve placeholder / invalid rates as null
+  if (n < 10) return null;
+
+  return n;
+}
+
+const noteBits: string[] = [];
+
+const hasZeroRate = cells.some((c) =>
+  /^\$?0(?:\.0+)?$/.test(c.trim())
+);
+
+if (hasZeroRate) {
+  warnings.push(
+    'Offer contained a $0 rate placeholder — wage may not be posted yet.'
+  );
 }
 
 const isJobNum = (s: string) =>
