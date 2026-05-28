@@ -13,7 +13,6 @@ import AppLayout from "@/components/AppLayout";
 import Dashboard from "@/pages/Dashboard";
 import LoadingScreen from "@/components/LoadingScreen";
 import PatternAuthPage from "@/pages/PatternAuthPage";
-
 import ExpensesPage from "@/pages/ExpensesPage";
 import IncomePage from "@/pages/IncomePage";
 import EquipmentPage from "@/pages/EquipmentPage";
@@ -25,18 +24,15 @@ import TaxesPage from "@/pages/TaxesPage";
 import SettingsPage from "@/pages/SettingsPage";
 import SchedulingPage from "@/pages/SchedulingPage";
 import PayOutsPage from "@/pages/PayOutsPage";
+import NewGigPage from "@/pages/NewGigPage";
 import NotFound from "./pages/NotFound.tsx";
 import CalcTest from './pages/CalcTest';
-
 const queryClient = new QueryClient();
-
 function AuthenticatedApp() {
   const [unlocked, setUnlocked] = useState(false);
   const [splashDone, setSplashDone] = useState(false);
   const handleComplete = useCallback(() => setSplashDone(true), []);
-
   if (!unlocked) return <PatternAuthPage onUnlocked={() => setUnlocked(true)} />;
-
   return (
     <>
       {!splashDone && <LoadingScreen onComplete={handleComplete} />}
@@ -47,6 +43,7 @@ function AuthenticatedApp() {
             <AppLayout>
               <Routes>
                 <Route path="/" element={<Dashboard />} />
+                <Route path="/new" element={<NewGigPage />} />
                 <Route path="/calendar" element={<CalendarPage />} />
                 <Route path="/log" element={<JobLogPage />} />
                 <Route path="/expenses" element={<ExpensesPage />} />
@@ -69,7 +66,6 @@ function AuthenticatedApp() {
     </>
   );
 }
-
 const App = () => {
   return (
     <ErrorBoundary>
@@ -85,5 +81,4 @@ const App = () => {
     </ErrorBoundary>
   );
 };
-
 export default App;
