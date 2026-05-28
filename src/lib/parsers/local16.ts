@@ -111,18 +111,6 @@ function parseRate(s: string): number | null {
   return n;
 }
 
-const noteBits: string[] = [];
-
-const hasZeroRate = cells.some((c) =>
-  /^\$?0(?:\.0+)?$/.test(c.trim())
-);
-
-if (hasZeroRate) {
-  warnings.push(
-    'Offer contained a $0 rate placeholder — wage may not be posted yet.'
-  );
-}
-
 const isJobNum = (s: string) =>
   /^20\d{2}-\d{2,5}$/.test(s.trim()) && !/^20\d{2}-20\d{2}$/.test(s.trim());
 
@@ -179,6 +167,16 @@ export function parseLocal16Offer(text: string): ParseResult {
     // ---- PRIMARY: columnar ----
     const cells = cellsFromPaste(text);
     const noteBits: string[] = [];
+
+    const hasZeroRate = cells.some((c) =>
+      /^\$?0(?:\.0+)?$/.test(c.trim())
+    );
+
+    if (hasZeroRate) {
+      warnings.push(
+        'Offer contained a $0 rate placeholder — wage may not be posted yet.'
+      );
+    }
 
     cells.forEach((cell, i) => {
       if (i >= LOCAL16_COLUMNS.length || !cell) return;
