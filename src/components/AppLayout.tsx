@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Receipt, DollarSign, Speaker, Scale, CalendarDays, Sparkles, Menu, X, ClipboardCheck, PartyPopper, PieChart, LogOut, Settings, Users, Wallet, Loader2 } from 'lucide-react';
+import { LayoutDashboard, Receipt, DollarSign, Speaker, Scale, CalendarDays, Sparkles, Menu, X, ClipboardCheck, PartyPopper, PieChart, LogOut, Settings, Users, Wallet, Loader2, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePartyMode } from '@/lib/PartyModeContext';
 import { useAuth } from '@/lib/AuthContext';
@@ -22,6 +22,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 const ALL_NAV_ITEMS = [
   { to: '/',               icon: LayoutDashboard, label: 'Dashboard',      tabKey: null },
+  { to: '/new',            icon: Plus,            label: 'New Gig',        tabKey: null },
   { to: '/calendar',       icon: CalendarDays,    label: 'Calendar',       tabKey: 'calendar' },
   { to: '/log',            icon: ClipboardCheck,  label: 'Job Log',        tabKey: 'log' },
   { to: '/expenses',       icon: Receipt,         label: 'Expenses',       tabKey: 'expenses' },
