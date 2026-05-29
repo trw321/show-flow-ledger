@@ -289,13 +289,19 @@ const originalJobSite = p.jobSite;
 p.notes = originalPosition;
 
 // Correct the shifted columns
-p.positionName = originalEmployer;
-p.employer = originalPayor;
+
+// Position was already correct in this format
+p.positionName = originalPosition;
+
+// Employer / payroll
+p.employer = originalEmployer;
 p.payor = originalPayor;
+
+// Venue / show / site
 p.venue = originalVenue;
 p.showName = originalShow;
 p.jobSite = originalJobSite;
-
+    
 // Recover hourly rate
 const rateCell = cells.find(c =>
   /^\$?\d+\.\d{2}$/.test(c)
