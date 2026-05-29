@@ -153,11 +153,34 @@ function emptyOffer(rawText: string): ParsedOffer {
 // portal) collapse into a single tab; genuine empty cells (\t\t) are kept so
 // column positions stay aligned.
 function cellsFromPaste(text: string): string[] {
-  const cells = text
-    .replace(/\r/g, '')
-    .replace(/\n+/g, '\t')
+  const cleaned = text.replace(/\r/g, '');
+
+  // First try: preserve real tab structure
+  let cells = cleaned
     .split('\t')
-    .map((c) => c.trim());
+    .map(c => c.trim());
+
+  // If copy/paste collapsed structure, rebuild from lines
+  if (cells.length < 10) {
+    const lines = cleaned
+      .split('\n')
+      .map(l => l.trim())
+      .filter(Boolean);
+
+    const rebuilt: string[] = [];
+
+    for (const line of lines) {
+      if (line.includes('\t')) {
+        rebuilt.push(
+          ...line.split('\t').map(c => c.trim())
+        );
+      } else {
+        rebuilt.push(line);
+      }
+    }
+
+    cells = rebuilt;
+  }
 
   while (cells[0] === '') cells.shift();
   while (cells[cells.length - 1] === '') cells.pop();
