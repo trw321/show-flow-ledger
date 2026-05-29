@@ -276,10 +276,8 @@ export function parseLocal16Offer(text: string): ParseResult {
       p.positionName
     )
   ) {
-    // Move shifted fields back into place
-    p.notes = p.positionName;
-
-   // Move shifted fields back into place
+    
+// Save originals before fixing shift
 const originalPosition = p.positionName;
 const originalEmployer = p.employer;
 const originalPayor = p.payor;
@@ -287,44 +285,33 @@ const originalVenue = p.venue;
 const originalShow = p.showName;
 const originalJobSite = p.jobSite;
 
-// Position was actually in employer
-p.positionName = originalEmployer;
-
-// Employer stays employer
-p.employer = originalPayor;
-
-// Payroll company stays payroll
-p.payor = originalPayor;
-
-// Venue was actually venue
-p.venue = originalVenue;
-
-// Show/event was actually show
-p.showName = originalShow;
-
-// Job site was actually job site
-p.jobSite = originalJobSite;
-
 // Notes came from shifted position
 p.notes = originalPosition;
 
-    // Recover hourly rate
-    const rateCell = cells.find(c =>
-      /^\$?\d+\.\d{2}$/.test(c)
-    );
+// Correct the shifted columns
+p.positionName = originalEmployer;
+p.employer = originalPayor;
+p.payor = originalPayor;
+p.venue = originalVenue;
+p.showName = originalShow;
+p.jobSite = originalJobSite;
 
-    if (rateCell) {
-      const r = parseRate(rateCell);
+// Recover hourly rate
+const rateCell = cells.find(c =>
+  /^\$?\d+\.\d{2}$/.test(c)
+);
 
-      if (r != null) {
-        p.hourlyRate = r;
+if (rateCell) {
+  const r = parseRate(rateCell);
 
-        if (!matched.includes('hourlyRate')) {
-          matched.push('hourlyRate');
-        }
-      }
+  if (r != null) {
+    p.hourlyRate = r;
+
+    if (!matched.includes('hourlyRate')) {
+      matched.push('hourlyRate');
     }
-
+  }
+}
     // Recover dress code
     const shortCode = cells.find(c =>
       /^[A-Z]{2,4}$/.test(c)
