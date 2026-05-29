@@ -123,7 +123,6 @@ function extractCallbackDates(
 function parseRate(s: string): number | null {
   const trimmed = s.trim();
 
-  // Require money-like formatting or isolated number
   const m = trimmed.match(
     /^(?:\$)?\s*(\d{1,3}(?:\.\d{1,2})?)$/
   );
