@@ -25,6 +25,7 @@ export interface ParsedOffer {
   dressCode: string | null;
   contractRef: string | null;
   notes: string | null;
+  callbackDates: string[];
   rawText: string;
 }
 
@@ -96,6 +97,28 @@ function normalizeTime(raw: string): string | null {
   }
   return null;
 }
+function extractCallbackDates(
+  text: string,
+  baseDate?: string | null
+): string[] {
+  const match = text.match(/\bCB\b\s+(.+?)(?:FOR|$)/i);
+
+  if (!match) return [];
+
+  const year =
+    baseDate
+      ? Number(baseDate.slice(0, 4))
+      : new Date().getFullYear();
+
+  const found =
+    match[1].match(/\d{1,2}\/\d{1,2}/g) ?? [];
+
+  return found.map((d) => {
+    const [month, day] = d.split('/').map(Number);
+
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  });
+}
 
 function parseRate(s: string): number | null {
   const m = s.match(/\$?\s*(\d{1,3}(?:\.\d{1,2})?)/);
@@ -122,7 +145,7 @@ function emptyOffer(rawText: string): ParsedOffer {
     jobNumber: null, local: 'Local 16', workDate: null, startTime: null, endTime: null,
     employer: null, payor: null, hiringParty: null, showName: null, venue: null,
     jobSite: null, positionName: null, hourlyRate: null, steward: null, reportTo: null,
-    dressCode: null, contractRef: null, notes: null, rawText,
+    dressCode: null, contractRef: null, notes: null, callbackDates: [], rawText,
   };
 }
 
@@ -207,7 +230,17 @@ export function parseLocal16Offer(text: string): ParseResult {
       }
     });
 
-    if (noteBits.length) { p.notes = noteBits.join(' • '); matched.push('notes'); }
+    if (noteBits.length) {
+  const noteText = noteBits.join(' • ');
+
+  p.notes = noteText;
+  matched.push('notes');
+
+  p.callbackDates = extractCallbackDates(
+    noteText,
+    p.workDate
+  );
+}
 
     // Content rescues — recover the high-signal fields if a collapsed blank
     // cell shifted things.
