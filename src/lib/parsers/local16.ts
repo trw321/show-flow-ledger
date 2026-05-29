@@ -263,6 +263,12 @@ export function parseLocal16Offer(text: string): ParseResult {
   p.notes = noteText;
   matched.push('notes');
 
+  // callback parsing
+  p.callbackDates = extractCallbackDates(
+    noteText,
+    p.workDate
+  );
+
   // Detect common Local 16 shift:
   // notes accidentally became position
   if (
@@ -286,7 +292,9 @@ export function parseLocal16Offer(text: string): ParseResult {
 
     if (rateCell) {
       const r = parseRate(rateCell);
-      if (r != null) p.hourlyRate = r;
+      if (r != null) {
+        p.hourlyRate = r;
+      }
     }
 
     // recover dress code
