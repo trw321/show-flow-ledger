@@ -263,18 +263,21 @@ export function parseLocal16Offer(text: string): ParseResult {
   p.notes = noteText;
   matched.push('notes');
 
-  // callback parsing
+  // Parse callback dates from notes
   p.callbackDates = extractCallbackDates(
     noteText,
     p.workDate
   );
 
-  // Detect common Local 16 shift:
-  // notes accidentally became position
+  // Detect common Local 16 portal shift:
+  // note text accidentally lands in position field
   if (
     p.positionName &&
-    /split call|one day|callback|cb\b/i.test(p.positionName)
+    /split call|one day|callback|cb\b/i.test(
+      p.positionName
+    )
   ) {
+    // Move shifted fields back into place
     p.notes = p.positionName;
 
     p.positionName = p.employer;
@@ -285,44 +288,61 @@ export function parseLocal16Offer(text: string): ParseResult {
     p.jobSite = p.contractRef;
     p.contractRef = null;
 
-    // recover rate
-    const rateCell = cells.find(
-      c => /^\$?\d+\.\d{2}$/.test(c)
+    // Recover hourly rate
+    const rateCell = cells.find(c =>
+      /^\$?\d+\.\d{2}$/.test(c)
     );
 
     if (rateCell) {
       const r = parseRate(rateCell);
+
       if (r != null) {
         p.hourlyRate = r;
+
+        if (!matched.includes('hourlyRate')) {
+          matched.push('hourlyRate');
+        }
       }
     }
 
-    // recover dress code
-    const shortCode = cells.find(
-      c => /^[A-Z]{2,4}$/.test(c)
+    // Recover dress code
+    const shortCode = cells.find(c =>
+      /^[A-Z]{2,4}$/.test(c)
     );
 
     if (shortCode) {
       p.dressCode = shortCode;
+
+      if (!matched.includes('dressCode')) {
+        matched.push('dressCode');
+      }
     }
 
-    // recover report-to person
+    // Recover report-to name
     const person = cells.find(c =>
       /^[A-Z]+(?:[- ][A-Z]+)+$/i.test(c)
     );
 
     if (person) {
       p.reportTo = person;
+
+      if (!matched.includes('reportTo')) {
+        matched.push('reportTo');
+      }
+    }
+
+    // Recover contract reference
+    const contractCell = cells.find(isContractRef);
+
+    if (contractCell) {
+      p.contractRef = contractCell;
+
+      if (!matched.includes('contractRef')) {
+        matched.push('contractRef');
+      }
     }
   }
 }
-
-  p.callbackDates = extractCallbackDates(
-    noteText,
-    p.workDate
-  );
-}
-
     // Content rescues — recover the high-signal fields if a collapsed blank
     // cell shifted things.
     if (!p.jobNumber || !isJobNum(p.jobNumber)) {
