@@ -270,12 +270,43 @@ export function parseLocal16Offer(text: string): ParseResult {
 
   // Detect common Local 16 portal shift:
   // note text accidentally lands in position field
-  if (
-    p.positionName &&
-    /split call|one day|callback|cb\b/i.test(
-      p.positionName
-    )
-  ) {
+  // Hard remap for Local 16 shifted portal copies
+// Format:
+// notes | position | employer | payor | venue | show | site | instructions | contract | rate | dress | report
+
+p.notes = cells[2] ?? null;
+p.positionName = cells[3] ?? null;
+p.employer = cells[4] ?? null;
+p.payor = cells[5] ?? null;
+p.venue = cells[6] ?? null;
+p.showName = cells[7] ?? null;
+p.jobSite = cells[8] ?? null;
+
+const instructions = cells[9];
+if (instructions) {
+  p.notes = p.notes
+    ? `${p.notes} • ${instructions}`
+    : instructions;
+}
+
+p.contractRef = cells.find(isContractRef) ?? null;
+
+const rateCell = cells.find(c =>
+  /^\$?\d+\.\d{2}$/.test(c)
+);
+
+p.hourlyRate =
+  rateCell ? parseRate(rateCell) : null;
+
+p.dressCode =
+  cells.find(c => /^[A-Z]{2,4}$/.test(c))
+  ?? null;
+
+p.reportTo =
+  cells.find(c =>
+    /^[A-Z]+(?:[- ][A-Z]+)+$/i.test(c)
+  )
+  ?? null; {
     
 // Save originals before fixing shift
 const originalPosition = p.positionName;
