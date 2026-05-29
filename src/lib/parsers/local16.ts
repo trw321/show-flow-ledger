@@ -121,15 +121,19 @@ function extractCallbackDates(
 }
 
 function parseRate(s: string): number | null {
-  const m = s.match(/\$?\s*(\d{1,3}(?:\.\d{1,2})?)/);
+  const trimmed = s.trim();
+
+  // Require money-like formatting or isolated number
+  const m = trimmed.match(
+    /^(?:\$)?\s*(\d{1,3}(?:\.\d{1,2})?)$/
+  );
+
   if (!m) return null;
 
   const n = parseFloat(m[1]);
 
-  if (isNaN(n) || n >= 1000) return null;
-
-  // Preserve placeholder / invalid rates as null
-  if (n < 10) return null;
+  if (isNaN(n)) return null;
+  if (n < 10 || n > 200) return null;
 
   return n;
 }
@@ -253,11 +257,57 @@ export function parseLocal16Offer(text: string): ParseResult {
       }
     });
 
-    if (noteBits.length) {
+   if (noteBits.length) {
   const noteText = noteBits.join(' • ');
 
   p.notes = noteText;
   matched.push('notes');
+
+  // Detect common Local 16 shift:
+  // notes accidentally became position
+  if (
+    p.positionName &&
+    /split call|one day|callback|cb\b/i.test(p.positionName)
+  ) {
+    p.notes = p.positionName;
+
+    p.positionName = p.employer;
+    p.employer = p.payor;
+    p.payor = p.venue;
+    p.venue = p.showName;
+    p.showName = p.jobSite;
+    p.jobSite = p.contractRef;
+    p.contractRef = null;
+
+    // recover rate
+    const rateCell = cells.find(
+      c => /^\$?\d+\.\d{2}$/.test(c)
+    );
+
+    if (rateCell) {
+      const r = parseRate(rateCell);
+      if (r != null) p.hourlyRate = r;
+    }
+
+    // recover dress code
+    const shortCode = cells.find(
+      c => /^[A-Z]{2,4}$/.test(c)
+    );
+
+    if (shortCode) {
+      p.dressCode = shortCode;
+    }
+
+    // recover report-to person
+    const person = cells.find(c =>
+      /^[A-Z]+(?:[- ][A-Z]+)+$/i.test(c)
+    );
+
+    if (person) {
+      p.reportTo = person;
+    }
+  }
+}
 
   p.callbackDates = extractCallbackDates(
     noteText,
