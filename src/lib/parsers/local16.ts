@@ -279,13 +279,34 @@ export function parseLocal16Offer(text: string): ParseResult {
     // Move shifted fields back into place
     p.notes = p.positionName;
 
-    p.positionName = p.employer;
-    p.employer = p.payor;
-    p.payor = p.venue;
-    p.venue = p.showName;
-    p.showName = p.jobSite;
-    p.jobSite = p.contractRef;
-    p.contractRef = null;
+   // Move shifted fields back into place
+const originalPosition = p.positionName;
+const originalEmployer = p.employer;
+const originalPayor = p.payor;
+const originalVenue = p.venue;
+const originalShow = p.showName;
+const originalJobSite = p.jobSite;
+
+// Position was actually in employer
+p.positionName = originalEmployer;
+
+// Employer stays employer
+p.employer = originalPayor;
+
+// Payroll company stays payroll
+p.payor = originalPayor;
+
+// Venue was actually venue
+p.venue = originalVenue;
+
+// Show/event was actually show
+p.showName = originalShow;
+
+// Job site was actually job site
+p.jobSite = originalJobSite;
+
+// Notes came from shifted position
+p.notes = originalPosition;
 
     // Recover hourly rate
     const rateCell = cells.find(c =>
