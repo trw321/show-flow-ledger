@@ -214,206 +214,105 @@ export function parseLocal16Offer(text: string): ParseResult {
 
   if (text.includes('\t')) {
     // ---- PRIMARY: columnar ----
-    const cells = cellsFromPaste(text);
-    const noteBits: string[] = [];
+   const cells = cellsFromPaste(text);
 
-    const hasZeroRate = cells.some((c) =>
-      /^\$?0(?:\.0+)?$/.test(c.trim())
-    );
+const remaining: string[] = [];
 
-    if (hasZeroRate) {
-      warnings.push(
-        'Offer contained a $0 rate placeholder — wage may not be posted yet.'
-      );
-    }
+for (const cell of cells) {
+  if (!cell) continue;
 
-    cells.forEach((cell, i) => {
-      if (i >= LOCAL16_COLUMNS.length || !cell) return;
-      const col = LOCAL16_COLUMNS[i];
-      switch (col) {
-        case 'dateTime': {
-          const d = normalizeDate(cell);
-          if (d) { p.workDate = d; matched.push('workDate'); }
-          const t = normalizeTime(cell);
-          if (t) { p.startTime = t; matched.push('startTime'); }
-          break;
-        }
-        case 'hourlyRate': {
-          const r = parseRate(cell);
-          if (r != null) { p.hourlyRate = r; matched.push('hourlyRate'); }
-          break;
-        }
-        case 'lineNotes':
-        case 'instructions':
-          noteBits.push(cell);
-          break;
-        case 'contractRef':
-          p.contractRef = cell; matched.push('contractRef');
-          break;
-        default:
-          (p as Record<string, unknown>)[col] = cell;
-          matched.push(col);
-      }
-    });
-
-   if (noteBits.length) {
-  const noteText = noteBits.join(' • ');
-
-  p.notes = noteText;
-  matched.push('notes');
-
-  // Parse callback dates from notes
-  p.callbackDates = extractCallbackDates(
-    noteText,
-    p.workDate
-  );
-
-  // Detect common Local 16 portal shift:
-  // note text accidentally lands in position field
-  // Hard remap for Local 16 shifted portal copies
-// Format:
-// notes | position | employer | payor | venue | show | site | instructions | contract | rate | dress | report
-
-p.notes = cells[2] ?? null;
-p.positionName = cells[3] ?? null;
-p.employer = cells[4] ?? null;
-p.payor = cells[5] ?? null;
-p.venue = cells[6] ?? null;
-p.showName = cells[7] ?? null;
-p.jobSite = cells[8] ?? null;
-
-const instructions = cells[9];
-if (instructions) {
-  p.notes = p.notes
-    ? `${p.notes} • ${instructions}`
-    : instructions;
-}
-
-p.contractRef = cells.find(isContractRef) ?? null;
-
-const rateCell = cells.find(c =>
-  /^\$?\d+\.\d{2}$/.test(c)
-);
-
-p.hourlyRate =
-  rateCell ? parseRate(rateCell) : null;
-
-p.dressCode =
-  cells.find(c => /^[A-Z]{2,4}$/.test(c))
-  ?? null;
-
-p.reportTo =
-  cells.find(c =>
-    /^[A-Z]+(?:[- ][A-Z]+)+$/i.test(c)
-  )
-  ?? null; {
-    
-// Save originals before fixing shift
-const originalPosition = p.positionName;
-const originalEmployer = p.employer;
-const originalPayor = p.payor;
-const originalVenue = p.venue;
-const originalShow = p.showName;
-const originalJobSite = p.jobSite;
-
-// Notes came from shifted position
-p.notes = originalPosition;
-
-// Correct the shifted columns
-
-// Position was already correct in this format
-p.positionName = originalPosition;
-
-// Employer / payroll
-p.employer = originalEmployer;
-p.payor = originalPayor;
-
-// Venue / show / site
-p.venue = originalVenue;
-p.showName = originalShow;
-p.jobSite = originalJobSite;
-    
-// Recover hourly rate
-const rateCell = cells.find(c =>
-  /^\$?\d+\.\d{2}$/.test(c)
-);
-
-if (rateCell) {
-  const r = parseRate(rateCell);
-
-  if (r != null) {
-    p.hourlyRate = r;
-
-    if (!matched.includes('hourlyRate')) {
-      matched.push('hourlyRate');
-    }
+  if (isJobNum(cell)) {
+    p.jobNumber = cell;
+    matched.push('jobNumber');
+    continue;
   }
-}
-    // Recover dress code
-    const shortCode = cells.find(c =>
-      /^[A-Z]{2,4}$/.test(c)
-    );
 
-    if (shortCode) {
-      p.dressCode = shortCode;
+  const d = normalizeDate(cell);
+  const t = normalizeTime(cell);
 
-      if (!matched.includes('dressCode')) {
-        matched.push('dressCode');
-      }
+  if (d || t) {
+    if (d) {
+      p.workDate = d;
+      matched.push('workDate');
     }
 
-    // Recover report-to name
-    const person = cells.find(c =>
-      /^[A-Z]+(?:[- ][A-Z]+)+$/i.test(c)
-    );
-
-    if (person) {
-      p.reportTo = person;
-
-      if (!matched.includes('reportTo')) {
-        matched.push('reportTo');
-      }
+    if (t) {
+      p.startTime = t;
+      matched.push('startTime');
     }
 
-    // Recover contract reference
-    const contractCell = cells.find(isContractRef);
-
-    if (contractCell) {
-      p.contractRef = contractCell;
-
-      if (!matched.includes('contractRef')) {
-        matched.push('contractRef');
-      }
-    }
+    continue;
   }
-}
-    // Content rescues — recover the high-signal fields if a collapsed blank
-    // cell shifted things.
-    if (!p.jobNumber || !isJobNum(p.jobNumber)) {
-      const c = cells.find(isJobNum);
-      if (c) { p.jobNumber = c; if (!matched.includes('jobNumber')) matched.push('jobNumber'); }
-    }
-    if (!p.workDate) {
-      for (const c of cells) {
-        const d = normalizeDate(c);
-        if (d) { p.workDate = d; matched.push('workDate'); break; }
-      }
-    }
-    if (p.hourlyRate == null) {
-      const c = cells.find((x) => x.includes('$'));
-      if (c) { const r = parseRate(c); if (r != null) { p.hourlyRate = r; matched.push('hourlyRate'); } }
-    }
-    if (!p.contractRef) {
-      const c = cells.find(isContractRef);
-      if (c) { p.contractRef = c; matched.push('contractRef'); }
-    }
 
-    if (cells.length < 10) {
-      warnings.push(
-        `Read ${cells.length} columns (expected ${LOCAL16_COLUMNS.length}). ` +
-        `A blank column may have shifted things — double-check venue, show, and job site.`
-      );
-    }
+  const rate = parseRate(cell);
+
+  if (rate != null) {
+    p.hourlyRate = rate;
+    matched.push('hourlyRate');
+    continue;
+  }
+
+  if (isContractRef(cell)) {
+    p.contractRef = cell;
+    matched.push('contractRef');
+    continue;
+  }
+
+  if (/^CB\b/i.test(cell)) {
+    p.notes = cell;
+
+    p.callbackDates = extractCallbackDates(
+      cell,
+      p.workDate
+    );
+
+    matched.push('notes');
+    continue;
+  }
+
+  if (
+    /passport|forms of id|bring two forms/i.test(cell)
+  ) {
+    p.notes = p.notes
+      ? `${p.notes} • ${cell}`
+      : cell;
+
+    continue;
+  }
+
+  if (/^[A-Z]{2,4}$/.test(cell)) {
+    p.dressCode = cell;
+    matched.push('dressCode');
+    continue;
+  }
+
+  if (
+    /^[A-Z]+(?:[- ][A-Z]+)+$/i.test(cell)
+  ) {
+    p.reportTo = cell;
+    matched.push('reportTo');
+    continue;
+  }
+
+  remaining.push(cell);
+}
+
+// Remaining Local 16 columns
+p.positionName = remaining[0] ?? null;
+p.employer     = remaining[1] ?? null;
+p.payor        = remaining[2] ?? null;
+p.venue        = remaining[3] ?? null;
+p.showName     = remaining[4] ?? null;
+p.jobSite      = remaining[5] ?? null;
+
+matched.push(
+  'positionName',
+  'employer',
+  'payor',
+  'venue',
+  'showName',
+  'jobSite'
+);
   } else {
     // ---- FALLBACK: labeled text ----
     for (const line of text.split(/\r?\n/)) {
