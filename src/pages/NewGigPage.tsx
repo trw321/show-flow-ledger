@@ -1,318 +1,662 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
-import { FileText, ImagePlus, Sparkles, Save, RotateCcw, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import PageHeader from '@/components/PageHeader';
+import { useState, useRef, useCallback, useMemo } from 'react';
+import { useData } from '@/lib/DataContext';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Upload, Loader2, Check, X, ChevronRight, Clock, ChevronDown, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
+import { format, isToday, isPast, isFuture } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/lib/AuthContext';
-import { parseLocal16Offer, type ParsedOffer } from '@/lib/parsers/local16';
+import { getJobDedupKey } from '@/lib/jobDedup';
+import type { Job } from '@/lib/store';
+import VortexCanvas from '@/components/VortexCanvas';
 
-interface FormState {
-  jobNumber: string;
-  local: string;
-  workDate: string;
-  startTime: string;
-  endTime: string;
-  employer: string;
-  payor: string;
-  hiringParty: string;
-  showName: string;
+interface ParsedJob {
+  jobNumber?: string;
+  name: string;
+  client: string;
   venue: string;
-  jobSite: string;
-  positionName: string;
-  hourlyRate: string;
-  steward: string;
-  reportTo: string;
-  dressCode: string;
+  date: string;
+  startTime?: string;
+  endTime?: string;
+  status: Job['status'];
+  payrollCompany?: string;
+  hourlyRate?: number;
+  steward?: string;
+  parkingCost?: number;
+  notes?: string;
 }
 
-const EMPTY_FORM: FormState = {
-  jobNumber: '', local: '', workDate: '', startTime: '', endTime: '',
-  employer: '', payor: '', hiringParty: '', showName: '', venue: '',
-  jobSite: '', positionName: '', hourlyRate: '', steward: '', reportTo: '', dressCode: '',
-};
+type VortexPhase = 'idle' | 'pulling' | 'vortex' | 'flash' | 'settling';
 
-function fromParsed(p: ParsedOffer): FormState {
-  return {
-    jobNumber: p.jobNumber ?? '',
-    local: p.local ?? '',
-    workDate: p.workDate ?? '',
-    startTime: p.startTime ?? '',
-    endTime: p.endTime ?? '',
-    employer: p.employer ?? '',
-    payor: p.payor ?? '',
-    hiringParty: p.hiringParty ?? '',
-    showName: p.showName ?? '',
-    venue: p.venue ?? '',
-    jobSite: p.jobSite ?? '',
-    positionName: p.positionName ?? '',
-    hourlyRate: p.hourlyRate != null ? String(p.hourlyRate) : '',
-    steward: p.steward ?? '',
-    reportTo: p.reportTo ?? '',
-    dressCode: p.dressCode ?? '',
-  };
+function toAmPm(s: string): string {
+  const u = s.toUpperCase();
+  return u === 'A' ? 'AM' : u === 'P' ? 'PM' : u;
 }
 
-// Build a timestamptz from a date + "HH:MM" in the BROWSER's local time zone.
-// Good for the common (Philly / Local 8) case; flagged in the UI for Pacific offers.
-function toISO(workDate: string, time: string): string | null {
-  if (!workDate || !/^\d{1,2}:\d{2}$/.test(time)) return null;
-  const dt = new Date(`${workDate}T${time}:00`);
-  return isNaN(dt.getTime()) ? null : dt.toISOString();
+function normTime(t: string): string {
+  t = t.replace(/[Oo]/g, '0').trim();
+  let m: RegExpMatchArray | null;
+  m = t.match(/^@?(\d{1,2}):(\d{2})\s*(A(?:M)?|P(?:M)?)$/i);
+  if (m) return `${m[1].padStart(2, '0')}:${m[2]} ${toAmPm(m[3])}`;
+  m = t.match(/^@?(\d{1,2})(\d{2})\s*(A(?:M)?|P(?:M)?)$/i);
+  if (m) return `${m[1].padStart(2, '0')}:${m[2]} ${toAmPm(m[3])}`;
+  m = t.match(/^@?(\d{1,2})\s*(A(?:M)?|P(?:M)?)$/i);
+  if (m) return `${m[1].padStart(2, '0')}:00 ${toAmPm(m[2])}`;
+  m = t.match(/^(\d{2})(\d{2})$/);
+  if (m) {
+    const h = parseInt(m[1]);
+    if (h < 24) {
+      const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      return `${String(h12).padStart(2, '0')}:${m[2]} ${h >= 12 ? 'PM' : 'AM'}`;
+    }
+  }
+  return t;
 }
 
-const inputCls =
-  'w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-colors';
-const labelCls = 'text-xs text-mono uppercase tracking-wider text-muted-foreground mb-1 block';
-
-function Field({
-  label, value, onChange, type = 'text', placeholder, mono, required, step,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
-  placeholder?: string;
-  mono?: boolean;
-  required?: boolean;
-  step?: string;
-}) {
+function isTimeToken(tok: string): boolean {
+  const c = tok.replace(/[Oo]/g, '0');
   return (
-    <div>
-      <label className={labelCls}>
-        {label}
-        {required && <span className="text-amber-500"> *</span>}
-      </label>
-      <input
-        type={type}
-        value={value}
-        placeholder={placeholder}
-        step={step}
-        onChange={(e) => onChange(e.target.value)}
-        className={cn(inputCls, mono && 'text-mono')}
-      />
+    /^@?\d{1,2}(?::\d{2})?\s*(?:A(?:M)?|P(?:M)?)$/i.test(c) ||
+    /^@?\d{1,2}\d{2}\s*(?:A(?:M)?|P(?:M)?)$/i.test(c) ||
+    /^\d{4}$/.test(c)
+  );
+}
+
+function splitJobRecords(raw: string): string[] {
+  const parts = raw.split(/(?=^\d{4}-\d{4}[\t ]*\r?$)/m);
+  return parts.map(p => p.trim()).filter(p => p.length > 0);
+}
+
+function expandCBRecord(record: string): string[] {
+  const lines = record.split('\n');
+  let dateLineIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (/\d+\/\d+\/\d{2}/.test(lines[i])) { dateLineIdx = i; break; }
+  }
+  if (dateLineIdx === -1) return [record];
+
+  const dateLine = lines[dateLineIdx];
+  const dateHasTabs = dateLine.includes('\t');
+  let dataLineIdx: number;
+  let lineNotes: string;
+  let rest: string;
+
+  if (dateHasTabs) {
+    dataLineIdx = dateLineIdx;
+    const fields = dateLine.split('\t');
+    lineNotes = (fields[1] ?? '').trim();
+    rest = '\t' + fields.slice(2).join('\t');
+  } else {
+    dataLineIdx = -1;
+    for (let i = dateLineIdx + 1; i < lines.length; i++) {
+      if (lines[i].includes('\t')) { dataLineIdx = i; break; }
+    }
+    if (dataLineIdx === -1) {
+      lineNotes = lines.slice(dateLineIdx + 1).map(l => l.trim()).filter(Boolean).join(' ');
+      rest = '';
+      dataLineIdx = lines.length;
+    } else {
+      const dataLine = lines[dataLineIdx];
+      const firstTab = dataLine.indexOf('\t');
+      const wrapped = lines.slice(dateLineIdx + 1, dataLineIdx).map(l => l.trim()).filter(Boolean);
+      lineNotes = [...wrapped, dataLine.slice(0, firstTab).trim()].join(' ');
+      rest = dataLine.slice(firstTab);
+    }
+  }
+
+  lineNotes = lineNotes.replace(/\r/g, '').replace(/\s+/g, ' ').trim();
+  if (!/\bC\/?B\b/i.test(lineNotes)) return [record];
+  if (/\bNO\s+C\/?B\b/i.test(lineNotes)) return [record];
+
+  const dtMatch = dateLine.match(/(\d{1,2})\/(\d{1,2})\/(\d{2})(?:\s+([^\t\n]*))/);
+  if (!dtMatch) return [record];
+  const parentM = parseInt(dtMatch[1]);
+  const parentD = parseInt(dtMatch[2]);
+  const yr = dtMatch[3];
+  const fullYr = 2000 + parseInt(yr);
+  const parentTime = (dtMatch[4] ?? '').trim();
+  const parentDate = new Date(fullYr, parentM - 1, parentD);
+  const parentDateOnly = `${parentM}/${parentD}/${yr}`;
+
+  const cbKeyMatch = lineNotes.match(/^(.*?)\s*\bC\/?B(?:'?[Ss])?\b[,\s]*/i);
+  if (!cbKeyMatch) return [record];
+  const prefix = cbKeyMatch[1].trim();
+  let cbContent = lineNotes.slice(cbKeyMatch[0].length).trim();
+  cbContent = cbContent.replace(/^SAME\s*DAY\s*,?\s*/i, '').replace(/^@\s*/, '').replace(/^,\s*/, '').trim();
+
+  const parseMD = (md: string): Date => {
+    const [m, d] = md.split('/').map(Number);
+    return new Date(fullYr, m - 1, d);
+  };
+  const fmtDate = (d: Date): string => `${d.getMonth() + 1}/${d.getDate()}/${yr}`;
+
+  const makeRecord = (dateOnly: string, notePfx: string, timeOverride?: string): string => {
+    const tPart = timeOverride !== undefined ? timeOverride : parentTime;
+    const dateTime = tPart ? `${dateOnly} ${tPart}` : dateOnly;
+    const out: string[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      if (!dateHasTabs && i > dateLineIdx && i < dataLineIdx) continue;
+      if (i === dateLineIdx && dateHasTabs) {
+        out.push(`${dateTime}\t${notePfx}${rest}`);
+      } else if (i === dateLineIdx) {
+        out.push(dateTime);
+      } else if (!dateHasTabs && i === dataLineIdx) {
+        out.push(notePfx + rest);
+      } else {
+        out.push(lines[i]);
+      }
+    }
+    if (!dateHasTabs && dataLineIdx >= lines.length && notePfx) out.push(notePfx);
+    return out.join('\n');
+  };
+
+  type CBEntry = { date: Date; time?: string; note?: string };
+  const cbEntries: CBEntry[] = [];
+  const hasLeadingDate = /^\d{1,2}\/\d{1,2}/.test(cbContent);
+  const hasThru = /^THRU\b/i.test(cbContent);
+
+  if (hasThru) {
+    const thruM = cbContent.match(/^THRU\s+(\d{1,2}\/\d{1,2})(.*)/i)!;
+    const thruEnd = parseMD(thruM[1]);
+    let rem = thruM[2].trim();
+    const dark = new Set<string>();
+    rem = rem.replace(/,?\s*\bDARK\s+(\d{1,2}\/\d{1,2})/gi, (_: string, d: string) => { dark.add(d.trim()); return ''; }).trim();
+    const cur = new Date(parentDate);
+    cur.setDate(cur.getDate() + 1);
+    while (cur <= thruEnd) {
+      const md = `${cur.getMonth() + 1}/${cur.getDate()}`;
+      if (!dark.has(md)) cbEntries.push({ date: new Date(cur) });
+      cur.setDate(cur.getDate() + 1);
+    }
+    const thenMatch = rem.match(/\b(THEN|AND)\b(.*)/i);
+    if (thenMatch) {
+      const thenPart = thenMatch[2].trim().replace(/\bAT\s+/gi, '@');
+      const parts = thenPart.split(/\s*,\s*/);
+      let trailingTime: string | undefined;
+      let trailingNote: string | undefined;
+      const thenEntries: CBEntry[] = [];
+      for (const part of parts) {
+        const dm = part.match(/^(\d{1,2}\/\d{1,2})(.*)/);
+        if (!dm) continue;
+        let rem2 = dm[2].trim();
+        let timeOverride: string | undefined;
+        const atM = rem2.match(/^(@\S+)\s*(.*)/);
+        if (atM && isTimeToken(atM[1])) { timeOverride = normTime(atM[1]); trailingTime = timeOverride; rem2 = atM[2].trim(); }
+        if (rem2) trailingNote = rem2;
+        thenEntries.push({ date: parseMD(dm[1]), time: timeOverride, note: rem2 || undefined });
+      }
+      for (const e of thenEntries) {
+        if (!e.time && trailingTime) e.time = trailingTime;
+        if (!e.note && trailingNote) e.note = trailingNote;
+      }
+      cbEntries.push(...thenEntries);
+    } else {
+      const noteM = rem.match(/\b(FOR|WITH)\b\s*(.+)/i);
+      if (noteM) for (const e of cbEntries) e.note = noteM[0].trim();
+    }
+  } else if (hasLeadingDate) {
+    const parts = cbContent.split(/\s*,\s*/);
+    let trailingNote = '';
+    for (const part of parts) {
+      const dm = part.match(/^(\d{1,2}\/\d{1,2})(.*)/);
+      if (!dm) { if (part.trim()) trailingNote = part.trim(); continue; }
+      let rem2 = dm[2].trim();
+      let timeOverride: string | undefined;
+      const atM = rem2.match(/^(@\S+)\s*(.*)/);
+      if (atM && isTimeToken(atM[1])) { timeOverride = normTime(atM[1]); rem2 = atM[2].trim(); }
+      if (rem2) trailingNote = rem2;
+      cbEntries.push({ date: parseMD(dm[1]), time: timeOverride, note: rem2 || undefined });
+    }
+    if (trailingNote) for (const e of cbEntries) if (!e.note) e.note = trailingNote;
+  } else {
+    let timeOverride: string | undefined;
+    let note: string | undefined;
+    const trailingDateM = cbContent.match(/^(.+)\s+(\d{1,2}\/\d{1,2})\s*$/);
+    if (trailingDateM) {
+      cbEntries.push({ date: parseMD(trailingDateM[2]), time: '', note: trailingDateM[1].trim() || undefined });
+    } else {
+      const tokM = cbContent.match(/^(@?\S+)\s*(.*)/);
+      if (tokM && isTimeToken(tokM[1])) { timeOverride = normTime(tokM[1]); note = tokM[2].trim() || undefined; }
+      else { note = cbContent || undefined; }
+      cbEntries.push({ date: new Date(parentDate), time: timeOverride, note });
+    }
+  }
+
+  if (cbEntries.length === 0) return [record];
+  const parentRecord = makeRecord(parentDateOnly, prefix);
+  const cbRecords = cbEntries.map(e => makeRecord(fmtDate(e.date), e.note ?? '', e.time));
+  return [parentRecord, ...cbRecords];
+}
+
+async function callAPI(url: string, key: string, body: object): Promise<Response> {
+  return fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    body: JSON.stringify(body),
+  });
+}
+
+function ShiftCard({
+  job, index, selected, conflict, onToggle, onChange,
+}: {
+  job: ParsedJob;
+  index: number;
+  selected: boolean;
+  conflict: boolean;
+  onToggle: () => void;
+  onChange: (field: keyof ParsedJob, value: string | number | undefined) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className={cn(
+      'rounded-xl border transition-colors overflow-hidden',
+      selected
+        ? conflict ? 'border-amber-500/50 bg-amber-500/5' : 'border-primary/30 bg-primary/5'
+        : 'border-border bg-card opacity-50',
+    )}>
+      <div className="flex items-center gap-2 p-3">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggle}
+          className="rounded border-border shrink-0"
+          aria-label={`Select shift on ${job.date}`}
+        />
+        <button
+          className="flex-1 flex items-center justify-between gap-2 text-left min-w-0"
+          onClick={() => setExpanded(e => !e)}
+          aria-expanded={expanded}
+        >
+          <div className="min-w-0">
+            <p className="text-sm font-medium truncate">
+              {job.date ? format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d') : '—'}
+              {conflict && (
+                <span className="ml-1.5 text-[10px] text-amber-500 font-normal">
+                  <AlertTriangle size={10} className="inline mr-0.5" />same date
+                </span>
+              )}
+            </p>
+            <p className="text-xs text-muted-foreground truncate">
+              {[job.name, job.client, job.venue].filter(Boolean).join(' · ')}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {job.hourlyRate && (
+              <span className="text-xs text-mono text-muted-foreground">${job.hourlyRate}/hr</span>
+            )}
+            {expanded
+              ? <ChevronDown size={14} className="text-muted-foreground" />
+              : <ChevronRight size={14} className="text-muted-foreground" />}
+          </div>
+        </button>
+      </div>
+
+      {expanded && (
+        <div className="border-t border-border px-3 pb-3 pt-3 grid gap-2 sm:grid-cols-2">
+          {[
+            { label: 'Job #', field: 'jobNumber' as const, value: job.jobNumber ?? '', type: 'text' },
+            { label: 'Date', field: 'date' as const, value: job.date, type: 'date' },
+            { label: 'Call time', field: 'startTime' as const, value: job.startTime ?? '', type: 'text', placeholder: '08:00 AM' },
+            { label: 'End time', field: 'endTime' as const, value: job.endTime ?? '', type: 'text', placeholder: '05:00 PM' },
+            { label: 'Event', field: 'name' as const, value: job.name, type: 'text' },
+            { label: 'Client', field: 'client' as const, value: job.client, type: 'text' },
+            { label: 'Venue', field: 'venue' as const, value: job.venue, type: 'text' },
+            { label: 'Payroll co.', field: 'payrollCompany' as const, value: job.payrollCompany ?? '', type: 'text' },
+            { label: 'Rate ($/hr)', field: 'hourlyRate' as const, value: job.hourlyRate?.toString() ?? '', type: 'number' },
+            { label: 'Steward', field: 'steward' as const, value: job.steward ?? '', type: 'text' },
+            { label: 'Parking ($)', field: 'parkingCost' as const, value: job.parkingCost?.toString() ?? '', type: 'number' },
+          ].map(({ label, field, value, type, placeholder }) => (
+            <div key={field} className="flex flex-col gap-1">
+              <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">
+                {label}
+              </label>
+              <Input
+                type={type}
+                value={value}
+                placeholder={placeholder}
+                step={type === 'number' ? '0.01' : undefined}
+                onChange={e => {
+                  const raw = e.target.value;
+                  if (field === 'hourlyRate' || field === 'parkingCost') {
+                    onChange(field, raw === '' ? undefined : parseFloat(raw));
+                  } else {
+                    onChange(field, raw);
+                  }
+                }}
+                className="h-8 text-xs font-mono"
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function JobRow({ job, variant }: { job: Job; variant: 'today' | 'upcoming' | 'logged' }) {
+  if (variant === 'today') {
+    return (
+      <div className="rounded-2xl border border-primary/30 bg-primary/5 p-3 flex items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-sm truncate">{job.name}</p>
+          <p className="text-xs text-muted-foreground">
+            {job.client} · {format(new Date(job.date + 'T12:00:00'), 'MMM d')}
+          </p>
+          {job.startTime && (
+            <p className="text-xs text-mono text-muted-foreground mt-0.5">Call: {job.startTime}</p>
+          )}
+        </div>
+        <Clock size={14} className="text-primary shrink-0" />
+      </div>
+    );
+  }
+
+  if (variant === 'upcoming') {
+    return (
+      <div className="rounded-xl border border-border bg-card p-2.5 flex items-center gap-2">
+        <div className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm truncate">
+            {job.name} <span className="text-muted-foreground">· {job.client}</span>
+          </p>
+          <p className="text-[11px] text-mono text-muted-foreground">
+            {format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}
+            {job.startTime && ` · ${job.startTime}`}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const hours = job.hoursWorked ?? 0;
+  const earned = hours * (job.hourlyRate ?? 0);
+  return (
+    <div className="rounded-xl border border-border bg-card p-2.5 flex items-center gap-2 opacity-70">
+      <div className="w-1.5 h-1.5 rounded-full bg-success shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm truncate">
+          {job.name} <span className="text-muted-foreground">· {job.client}</span>
+        </p>
+        <p className="text-[11px] text-mono text-muted-foreground">
+          {format(new Date(job.date + 'T12:00:00'), 'MMM d')}
+          {hours > 0 && ` · ${hours}h`}
+          {earned > 0 && ` · $${earned.toLocaleString()}`}
+        </p>
+      </div>
     </div>
   );
 }
 
 export default function NewGigPage() {
-  const navigate = useNavigate();
-  const { user } = useAuth();
+  const { data, addJob } = useData();
+  const [text, setText] = useState('');
+  const [isParsing, setIsParsing] = useState(false);
+  const [parseProgress, setParseProgress] = useState('');
+  const [jobs, setJobs] = useState<ParsedJob[]>([]);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [isImporting, setIsImporting] = useState(false);
+  const [step, setStep] = useState<'input' | 'review'>('input');
+  const [vortexPhase, setVortexPhase] = useState<VortexPhase>('idle');
 
-  const [rawText, setRawText] = useState('');
-  const [parsed, setParsed] = useState(false);
-  const [warnings, setWarnings] = useState<string[]>([]);
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
-  const [savedInfo, setSavedInfo] = useState<{ id: string; jobNumber: string | null; workDate: string } | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-  const set = (k: keyof FormState) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
-
-  const handleParse = () => {
-    if (!rawText.trim()) {
-      toast.error('Paste an offer first.');
-      return;
+  const { todayJobs, upcoming, logged } = useMemo(() => {
+    const todayJobs: Job[] = [];
+    const upcoming: Job[] = [];
+    const logged: Job[] = [];
+    const sorted = [...data.jobs].sort((a, b) => a.date.localeCompare(b.date));
+    for (const job of sorted) {
+      const jobDate = new Date(job.date + 'T12:00:00');
+      const hasHours = (job.hoursWorked ?? 0) > 0;
+      if (isToday(jobDate) && !hasHours) todayJobs.push(job);
+      else if (isFuture(jobDate) && !hasHours) upcoming.push(job);
+      else if (hasHours) logged.push(job);
+      else if (isPast(jobDate) && !hasHours) todayJobs.push(job);
     }
-    const res = parseLocal16Offer(rawText);
-    setForm(fromParsed(res.parsed));
-    setWarnings(res.warnings);
-    setParsed(true);
-    setSavedInfo(null);
-    if (res.matched.length) {
-      toast.success(`Parsed ${res.matched.length} field${res.matched.length === 1 ? '' : 's'}.`);
-    } else {
-      toast('Nothing auto-detected — fill in the fields below.');
+    return { todayJobs, upcoming, logged: logged.slice(-10).reverse() };
+  }, [data.jobs]);
+
+  const handleTextChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setText(e.target.value);
+    if (e.target.value.trim() && vortexPhase === 'idle') setVortexPhase('pulling');
+    else if (!e.target.value.trim()) setVortexPhase('idle');
+  }, [vortexPhase]);
+
+  const handleParse = async () => {
+    if (!text.trim()) { toast.error('Paste dispatch text first'); return; }
+    setIsParsing(true);
+    setVortexPhase('vortex');
+    setParseProgress('');
+
+    try {
+      const allJobs: ParsedJob[] = [];
+
+      if (/^\d{4}-\d{4}/m.test(text)) {
+        const records = splitJobRecords(text);
+        const expanded: string[] = [];
+        for (const rec of records) expanded.push(...expandCBRecord(rec));
+        const BATCH = 5;
+        const batches: string[][] = [];
+        for (let i = 0; i < expanded.length; i += BATCH) batches.push(expanded.slice(i, i + BATCH));
+        for (let b = 0; b < batches.length; b++) {
+          setParseProgress(`Parsing ${b + 1} of ${batches.length}…`);
+          const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-jobs`, supabaseKey, {
+            text: batches[b].join('\n\n'),
+          });
+          if (!resp.ok) { console.error(`batch ${b + 1} failed`); continue; }
+          const d = await resp.json();
+          allJobs.push(...(d.jobs || []));
+        }
+      } else {
+        setParseProgress('Classifying…');
+        const resp = await callAPI(`${supabaseUrl}/functions/v1/smart-import`, supabaseKey, { text });
+        if (!resp.ok) throw new Error((await resp.json()).error || 'Failed to parse');
+        const result = await resp.json();
+        allJobs.push(...(result.jobs || []));
+      }
+
+      if (allJobs.length === 0) {
+        toast.error('No jobs found — check the pasted text');
+        setVortexPhase('pulling');
+        return;
+      }
+
+      allJobs.sort((a, b) => a.date.localeCompare(b.date));
+
+      const dateCounts = new Map<string, number>();
+      for (const j of allJobs) dateCounts.set(j.date, (dateCounts.get(j.date) ?? 0) + 1);
+      const conflicts = [...dateCounts.entries()].filter(([, n]) => n > 1).map(([d]) => d);
+      if (conflicts.length) toast.warning(`Multiple jobs on ${conflicts.join(', ')} — review highlighted cards`);
+
+      setJobs(allJobs);
+      setSelected(new Set(allJobs.map((_, i) => i)));
+
+      setVortexPhase('flash');
+      setTimeout(() => {
+        setVortexPhase('settling');
+        setStep('review');
+        setTimeout(() => setVortexPhase('idle'), 1200);
+      }, 400);
+
+      toast.success(`Found ${allJobs.length} shift${allJobs.length === 1 ? '' : 's'}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to parse');
+      setVortexPhase('pulling');
+    } finally {
+      setIsParsing(false);
+      setParseProgress('');
     }
+  };
+
+  const handleImport = async () => {
+    const toImport = jobs.filter((_, i) => selected.has(i));
+    if (toImport.length === 0) { toast.error('Select at least one shift'); return; }
+    setIsImporting(true);
+    const existingKeys = new Set(data.jobs.map(j => getJobDedupKey(j)));
+    let imported = 0, skipped = 0, failed = 0;
+
+    for (const j of toImport) {
+      const draft = {
+        jobNumber: j.jobNumber, name: j.name, client: j.client, venue: j.venue,
+        date: j.date, startTime: j.startTime, endTime: j.endTime, status: j.status,
+        payrollCompany: j.payrollCompany, hourlyRate: j.hourlyRate, steward: j.steward,
+        parkingCost: j.parkingCost, notes: j.notes || '',
+        has6th7thDayRule: false, hasVacationPay: false,
+      };
+      const key = getJobDedupKey(draft);
+      if (existingKeys.has(key)) { skipped++; continue; }
+      try { await addJob(draft); existingKeys.add(key); imported++; }
+      catch { failed++; }
+    }
+
+    setIsImporting(false);
+    if (imported === 0 && failed > 0) { toast.error('Save failed — check your connection'); return; }
+    toast.success(
+      `Saved ${imported} shift${imported !== 1 ? 's' : ''}` +
+      (skipped ? ` · skipped ${skipped} duplicate${skipped !== 1 ? 's' : ''}` : '') +
+      (failed ? ` · ${failed} failed` : '')
+    );
+    setText(''); setJobs([]); setSelected(new Set()); setStep('input'); setVortexPhase('idle');
   };
 
   const handleClear = () => {
-    setRawText('');
-    setParsed(false);
-    setWarnings([]);
-    setForm(EMPTY_FORM);
-    setSavedInfo(null);
+    setText(''); setJobs([]); setSelected(new Set()); setStep('input'); setVortexPhase('idle');
   };
 
-  const handleSave = async () => {
-    if (!user) {
-      toast.error('You must be signed in to save.');
-      return;
-    }
-    if (!form.workDate) {
-      toast.error('Work date is required.');
-      return;
-    }
-    setSaving(true);
-    try {
-      const noteParts: string[] = [];
-      if (form.employer) noteParts.push(`Employer: ${form.employer}`);
-      if (form.payor) noteParts.push(`Payroll: ${form.payor}`);
-      if (form.hiringParty) noteParts.push(`Hiring: ${form.hiringParty}`);
-      noteParts.push('— Pasted offer —', rawText.trim());
+  const updateJob = (idx: number, field: keyof ParsedJob, value: string | number | undefined) =>
+    setJobs(prev => prev.map((j, i) => i === idx ? { ...j, [field]: value } : j));
 
-      const rateNum = form.hourlyRate ? parseFloat(form.hourlyRate) : null;
+  const conflictDates = useMemo(() => {
+    const counts = new Map<string, number>();
+    jobs.forEach(j => counts.set(j.date, (counts.get(j.date) ?? 0) + 1));
+    return new Set([...counts.entries()].filter(([, n]) => n > 1).map(([d]) => d));
+  }, [jobs]);
 
-      const payload = {
-        user_id: user.id,
-        work_date: form.workDate,
-        job_number: form.jobNumber || null,
-        local: form.local || null,
-        position_name: form.positionName || null,
-        show_name: form.showName || null,
-        venue: form.venue || null,
-        job_site: form.jobSite || null,
-        steward_name: form.steward || null,
-        report_to: form.reportTo || null,
-        dress_code: form.dressCode || null,
-        start_time: toISO(form.workDate, form.startTime),
-        end_time: toISO(form.workDate, form.endTime),
-        offered_hourly_rate: rateNum != null && !isNaN(rateNum) ? rateNum : null,
-        status: 'offered',
-        notes: noteParts.join('\n'),
-      };
-
-      // Cast: the generated Supabase types can lag the live schema (e.g. the
-      // `local` / `report_to` columns). If your types are regenerated and
-      // current, you can safely remove `as never`.
-      const { data, error } = await supabase
-        .from('gigs')
-        .insert(payload as never)
-        .select('id, job_number, work_date')
-        .single();
-
-      if (error) throw error;
-
-      toast.success('Saved as an offer.');
-      setSavedInfo({
-        id: (data as { id: string }).id,
-        jobNumber: (data as { job_number: string | null }).job_number,
-        workDate: (data as { work_date: string }).work_date,
-      });
-      setForm(EMPTY_FORM);
-      setRawText('');
-      setParsed(false);
-      setWarnings([]);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Save failed.');
-    } finally {
-      setSaving(false);
-    }
-  };
+  const hasContent = text.trim().length > 0 || step === 'review';
 
   return (
-    <>
-      <PageHeader title="New Gig" description="Paste an offer to auto-fill, then review and save." />
+    <div className="flex flex-col gap-6 pb-8">
 
-      {savedInfo && (
-        <div className="mb-4 rounded-xl border border-success/40 bg-success/10 p-3 flex items-center gap-3">
-          <CheckCircle2 size={18} className="text-success shrink-0" />
-          <div className="flex-1 min-w-0 text-sm">
-            Saved {savedInfo.jobNumber ? `#${savedInfo.jobNumber}` : 'gig'}
-            {savedInfo.workDate ? ` for ${savedInfo.workDate}` : ''} as an offer.
-          </div>
-          <Button variant="ghost" size="sm" onClick={() => navigate('/log')} className="text-primary">
-            View Job Log
-          </Button>
+      <div className="relative rounded-2xl overflow-hidden" style={{ minHeight: 220 }}>
+        <div className="absolute inset-0 rounded-2xl overflow-hidden">
+          <VortexCanvas phase={vortexPhase} className="w-full h-full" />
         </div>
-      )}
-
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Paste text */}
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <h3 className="text-xs text-mono uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-            <FileText size={12} /> Paste offer text
-          </h3>
+        <div className="relative z-10 p-4 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <h1 className="text-xs text-mono uppercase tracking-widest text-white/60 font-medium">
+              Job Log
+            </h1>
+            {hasContent && (
+              <button onClick={handleClear} className="text-white/40 hover:text-white/70 transition-colors p-1" aria-label="Clear">
+                <X size={14} />
+              </button>
+            )}
+          </div>
           <textarea
-            value={rawText}
-            onChange={(e) => setRawText(e.target.value)}
-            rows={10}
-            placeholder="Paste your Local 16 dispatch offer here…"
-            className={cn(inputCls, 'resize-y text-mono leading-relaxed min-h-[180px]')}
+            ref={textareaRef}
+            value={text}
+            onChange={handleTextChange}
+            disabled={isParsing}
+            rows={6}
+            placeholder={step === 'review' ? 'Paste more shifts to add them…' : 'Paste dispatch text here…'}
+            className={cn(
+              'w-full bg-black/40 backdrop-blur-sm border border-white/10 rounded-xl',
+              'px-3 py-2.5 text-xs text-mono text-white/80 placeholder:text-white/25',
+              'focus:outline-none focus:border-amber-500/40 focus:bg-black/50',
+              'resize-none transition-colors leading-relaxed',
+              isParsing && 'opacity-50 cursor-not-allowed',
+            )}
+            aria-label="Paste dispatch text"
           />
-          <div className="flex gap-2 mt-3">
-            <Button onClick={handleParse} className="gap-1.5">
-              <Sparkles size={15} /> Parse offer
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={handleParse}
+              disabled={isParsing || !text.trim()}
+              size="sm"
+              className="gap-1.5 bg-amber-500/90 hover:bg-amber-500 text-black border-0 font-medium"
+            >
+              {isParsing
+                ? <><Loader2 size={13} className="animate-spin" />{parseProgress || 'Parsing…'}</>
+                : <><Upload size={13} />Parse</>}
             </Button>
-            {(rawText || parsed) && (
-              <Button variant="ghost" onClick={handleClear} className="gap-1.5 text-muted-foreground">
-                <RotateCcw size={14} /> Clear
-              </Button>
+            {step === 'review' && (
+              <span className="text-[11px] text-white/40 text-mono">
+                {jobs.length} shift{jobs.length !== 1 ? 's' : ''} ready
+              </span>
             )}
           </div>
         </div>
-
-        {/* Photo upload — disabled (Phase 2) */}
-        <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-4 flex flex-col">
-          <h3 className="text-xs text-mono uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-            <ImagePlus size={12} /> Upload a photo
-          </h3>
-          <div className="flex-1 flex flex-col items-center justify-center text-center py-8 gap-2">
-            <ImagePlus size={28} className="text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">Snap a photo of a printed call sheet</p>
-            <span className="text-[10px] text-mono uppercase tracking-wider rounded-full border border-border px-2 py-0.5 text-muted-foreground">
-              Coming soon
-            </span>
-          </div>
-          <Button disabled variant="secondary" className="gap-1.5 opacity-60 cursor-not-allowed">
-            <ImagePlus size={15} /> Choose photo
-          </Button>
-        </div>
       </div>
 
-      {/* Review & edit */}
-      {parsed && (
-        <div className="mt-5 rounded-2xl border border-border bg-card p-4">
-          <h3 className="text-xs text-mono uppercase tracking-wider text-muted-foreground mb-3">Review &amp; edit</h3>
-
-          {warnings.length > 0 && (
-            <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3">
-              <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 text-xs font-medium mb-1">
-                <AlertTriangle size={13} /> Check these
-              </div>
-              <ul className="text-xs text-muted-foreground space-y-0.5 list-disc list-inside">
-                {warnings.map((w, i) => (
-                  <li key={i}>{w}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Job / Gig #" value={form.jobNumber} onChange={set('jobNumber')} mono placeholder="2026-1589" />
-            <Field label="Local" value={form.local} onChange={set('local')} placeholder="Local 16" />
-            <Field label="Work date" value={form.workDate} onChange={set('workDate')} type="date" required />
-            <Field label="Position / Classification" value={form.positionName} onChange={set('positionName')} placeholder="V UTILITY" />
-            <Field label="Call time" value={form.startTime} onChange={set('startTime')} type="time" />
-            <Field label="End time" value={form.endTime} onChange={set('endTime')} type="time" />
-            <Field label="Hourly rate" value={form.hourlyRate} onChange={set('hourlyRate')} type="number" step="0.01" placeholder="55.72" />
-            <Field label="Show / Event" value={form.showName} onChange={set('showName')} />
-            <Field label="Venue" value={form.venue} onChange={set('venue')} />
-            <Field label="Job site / Address" value={form.jobSite} onChange={set('jobSite')} />
-            <Field label="Employer (signatory)" value={form.employer} onChange={set('employer')} />
-            <Field label="Payroll company" value={form.payor} onChange={set('payor')} />
-            <Field label="Hiring party" value={form.hiringParty} onChange={set('hiringParty')} />
-            <Field label="Report to" value={form.reportTo} onChange={set('reportTo')} />
-            <Field label="Steward" value={form.steward} onChange={set('steward')} />
-            <Field label="Dress code" value={form.dressCode} onChange={set('dressCode')} />
+      {step === 'review' && jobs.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs text-mono uppercase tracking-wider text-muted-foreground">Review shifts</h2>
+            <button
+              onClick={() => setSelected(selected.size === jobs.length ? new Set() : new Set(jobs.map((_, i) => i)))}
+              className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {selected.size === jobs.length ? 'Deselect all' : 'Select all'}
+            </button>
           </div>
+          <div className="flex flex-col gap-2">
+            {jobs.map((job, i) => (
+              <ShiftCard
+                key={i}
+                job={job}
+                index={i}
+                selected={selected.has(i)}
+                conflict={conflictDates.has(job.date)}
+                onToggle={() => setSelected(prev => { const next = new Set(prev); next.has(i) ? next.delete(i) : next.add(i); return next; })}
+                onChange={(field, value) => updateJob(i, field, value)}
+              />
+            ))}
+          </div>
+          <Button onClick={handleImport} disabled={isImporting || selected.size === 0} className="w-full gap-1.5">
+            {isImporting
+              ? <><Loader2 size={14} className="animate-spin" />Saving…</>
+              : <><Check size={14} />Save {selected.size} shift{selected.size !== 1 ? 's' : ''}</>}
+          </Button>
+        </div>
+      )}
 
-          <p className="text-[11px] text-muted-foreground mt-3">
-            Call / end times save in your device's time zone. Employer, payroll, and hiring names are stored in notes
-            until party-linking is built.
-          </p>
-
-          <div className="flex gap-2 mt-4">
-            <Button onClick={handleSave} disabled={saving || !form.workDate} className="gap-1.5">
-              <Save size={15} /> {saving ? 'Saving…' : 'Save as offer'}
-            </Button>
-            <Button variant="ghost" onClick={handleClear} className="text-muted-foreground">
-              Cancel
-            </Button>
+      {todayJobs.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <h2 className="text-xs text-mono uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <Clock size={12} />Ready to log
+          </h2>
+          <div className="flex flex-col gap-2">
+            {todayJobs.map(job => <JobRow key={job.id} job={job} variant="today" />)}
           </div>
         </div>
       )}
-    </>
+
+      {upcoming.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <h2 className="text-xs text-mono uppercase tracking-wider text-muted-foreground">Upcoming</h2>
+          <div className="flex flex-col gap-1.5">
+            {upcoming.map(job => <JobRow key={job.id} job={job} variant="upcoming" />)}
+          </div>
+        </div>
+      )}
+
+      {logged.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <h2 className="text-xs text-mono uppercase tracking-wider text-muted-foreground">Recently logged</h2>
+          <div className="flex flex-col gap-1.5">
+            {logged.map(job => <JobRow key={job.id} job={job} variant="logged" />)}
+          </div>
+        </div>
+      )}
+
+      {data.jobs.length === 0 && step === 'input' && (
+        <p className="text-center text-sm text-muted-foreground py-8">
+          Paste a dispatch offer above to add your first shift.
+        </p>
+      )}
+    </div>
   );
 }
