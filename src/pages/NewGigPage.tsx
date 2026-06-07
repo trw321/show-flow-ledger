@@ -407,22 +407,6 @@ export default function NewGigPage() {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-  const { todayJobs, upcoming, logged } = useMemo(() => {
-    const todayJobs: Job[] = [];
-    const upcoming: Job[] = [];
-    const logged: Job[] = [];
-    const sorted = [...data.jobs].sort((a, b) => a.date.localeCompare(b.date));
-    for (const job of sorted) {
-      const jobDate = new Date(job.date + 'T12:00:00');
-      const hasHours = (job.hoursWorked ?? 0) > 0;
-      if (isToday(jobDate) && !hasHours) todayJobs.push(job);
-      else if (isFuture(jobDate) && !hasHours) upcoming.push(job);
-      else if (hasHours) logged.push(job);
-      else if (isPast(jobDate) && !hasHours) todayJobs.push(job);
-    }
-    return { todayJobs, upcoming, logged: logged.slice(-10).reverse() };
-  }, [data.jobs]);
-
   const handleTextChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setText(e.target.value);
     if (e.target.value.trim() && vortexPhase === 'idle') setVortexPhase('pulling');
