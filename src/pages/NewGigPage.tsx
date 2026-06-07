@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useMemo } from 'react';
 import { useData } from '@/lib/DataContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Upload, Loader2, Check, X, ChevronRight, Clock, ChevronDown, AlertTriangle } from 'lucide-react';
+import { Upload, Loader2, Check, X, ChevronRight, ChevronDown, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -338,24 +338,6 @@ function ShiftCard({
   );
 }
 
-function JobRow({ job, variant }: { job: Job; variant: 'today' | 'upcoming' | 'logged' }) {
-  if (variant === 'today') {
-    return (
-      <div className="rounded-2xl border border-primary/30 bg-primary/5 p-3 flex items-center gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="font-medium text-sm truncate">{job.name}</p>
-          <p className="text-xs text-muted-foreground">
-            {job.client} · {format(new Date(job.date + 'T12:00:00'), 'MMM d')}
-          </p>
-          {job.startTime && (
-            <p className="text-xs text-mono text-muted-foreground mt-0.5">Call: {job.startTime}</p>
-          )}
-        </div>
-        <Clock size={14} className="text-primary shrink-0" />
-      </div>
-    );
-  }
-
   if (variant === 'upcoming') {
     return (
       <div className="rounded-xl border border-border bg-card p-2.5 flex items-center gap-2">
@@ -608,35 +590,6 @@ export default function NewGigPage() {
               ? <><Loader2 size={14} className="animate-spin" />Saving…</>
               : <><Check size={14} />Save {selected.size} shift{selected.size !== 1 ? 's' : ''}</>}
           </Button>
-        </div>
-      )}
-
-      {todayJobs.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <h2 className="text-xs text-mono uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <Clock size={12} />Ready to log
-          </h2>
-          <div className="flex flex-col gap-2">
-            {todayJobs.map(job => <JobRow key={job.id} job={job} variant="today" />)}
-          </div>
-        </div>
-      )}
-
-      {upcoming.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <h2 className="text-xs text-mono uppercase tracking-wider text-muted-foreground">Upcoming</h2>
-          <div className="flex flex-col gap-1.5">
-            {upcoming.map(job => <JobRow key={job.id} job={job} variant="upcoming" />)}
-          </div>
-        </div>
-      )}
-
-      {logged.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <h2 className="text-xs text-mono uppercase tracking-wider text-muted-foreground">Recently logged</h2>
-          <div className="flex flex-col gap-1.5">
-            {logged.map(job => <JobRow key={job.id} job={job} variant="logged" />)}
-          </div>
         </div>
       )}
 
