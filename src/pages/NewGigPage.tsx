@@ -338,42 +338,6 @@ function ShiftCard({
   );
 }
 
-  if (variant === 'upcoming') {
-    return (
-      <div className="rounded-xl border border-border bg-card p-2.5 flex items-center gap-2">
-        <div className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm truncate">
-            {job.name} <span className="text-muted-foreground">· {job.client}</span>
-          </p>
-          <p className="text-[11px] text-mono text-muted-foreground">
-            {format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}
-            {job.startTime && ` · ${job.startTime}`}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  const hours = job.hoursWorked ?? 0;
-  const earned = hours * (job.hourlyRate ?? 0);
-  return (
-    <div className="rounded-xl border border-border bg-card p-2.5 flex items-center gap-2 opacity-70">
-      <div className="w-1.5 h-1.5 rounded-full bg-success shrink-0" />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm truncate">
-          {job.name} <span className="text-muted-foreground">· {job.client}</span>
-        </p>
-        <p className="text-[11px] text-mono text-muted-foreground">
-          {format(new Date(job.date + 'T12:00:00'), 'MMM d')}
-          {hours > 0 && ` · ${hours}h`}
-          {earned > 0 && ` · $${earned.toLocaleString()}`}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 export default function NewGigPage() {
   const { data, addJob } = useData();
   const [text, setText] = useState('');
