@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Upload, Loader2, Check, X, ChevronRight, Clock, ChevronDown, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-import { format, isToday, isPast, isFuture } from 'date-fns';
+import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { getJobDedupKey } from '@/lib/jobDedup';
 import type { Job } from '@/lib/store';
