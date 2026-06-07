@@ -305,7 +305,6 @@ function ShiftCard({
             { label: 'Payroll co.', field: 'payrollCompany' as const, value: job.payrollCompany ?? '', type: 'text' },
             { label: 'Rate ($/hr)', field: 'hourlyRate' as const, value: job.hourlyRate?.toString() ?? '', type: 'number' },
             { label: 'Steward', field: 'steward' as const, value: job.steward ?? '', type: 'text' },
-            { label: 'Parking ($)', field: 'parkingCost' as const, value: job.parkingCost?.toString() ?? '', type: 'number' },
           ].map(({ label, field, value, type, placeholder }) => (
             <div key={field} className="flex flex-col gap-1">
               <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">
