@@ -224,7 +224,7 @@ function expandCBRecord(record: string): string[] {
 
   if (cbEntries.length === 0) return [record];
   const parentRecord = makeRecord(parentDateOnly, prefix);
-  const cbRecords = cbEntries.map(e => makeRecord(fmtDate(e.date), e.note ?? '', e.time));
+  const cbRecords = cbEntries.map(e => makeRecord(fmtDate(e.date), e.note ?? '', e.time ?? ''));
   return [parentRecord, ...cbRecords];
 }
 
