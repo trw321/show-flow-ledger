@@ -278,8 +278,13 @@ function ShiftCard({
               )}
             </p>
             <p className="text-xs text-muted-foreground truncate">
-              {[job.name, job.client, job.venue].filter(Boolean).join(' · ')}
-            </p>
+  {[
+    job.notes?.match(/\bC\/?B\b/i) ? '📞 Callback' : null,
+    job.name,
+    job.client,
+    job.venue,
+  ].filter(Boolean).join(' · ')}
+</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {job.hourlyRate && (
