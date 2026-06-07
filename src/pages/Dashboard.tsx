@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useData } from '@/lib/DataContext';
 import StatCard from '@/components/StatCard';
 import PageHeader from '@/components/PageHeader';
-import { Briefcase, Receipt, DollarSign, TrendingUp, TrendingDown, AlertCircle, Clock, Download, Upload, Loader2 } from 'lucide-react';
+import { Briefcase, DollarSign, TrendingUp, TrendingDown, AlertCircle, Clock, Download, Upload, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Sector } from 'recharts';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import { hasLegacyData, getLegacyData, clearLegacyData } from '@/lib/store';
@@ -43,13 +44,10 @@ function GlitterActiveShape(props: any) {
   const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
   return (
     <g style={{ filter: `drop-shadow(0 0 12px ${fill}) drop-shadow(0 0 4px #fff4)` }}>
-      {/* soft outer pulse ring */}
       <Sector cx={cx} cy={cy} innerRadius={outerRadius + 3} outerRadius={outerRadius + 10}
         startAngle={startAngle} endAngle={endAngle} fill={fill} opacity={0.25} />
-      {/* main segment, popped out */}
       <Sector cx={cx} cy={cy} innerRadius={innerRadius - 2} outerRadius={outerRadius + 5}
         startAngle={startAngle} endAngle={endAngle} fill={fill} />
-      {/* glitter shimmer — bright half-lens highlight */}
       <Sector cx={cx} cy={cy}
         innerRadius={innerRadius - 2}
         outerRadius={innerRadius + (outerRadius - innerRadius) * 0.52}
@@ -59,9 +57,12 @@ function GlitterActiveShape(props: any) {
   );
 }
 
+const FALLING_ITEMS = ['💰','💴','💰','🪙','💵','💰','🪙','💴','💰','💵','🪙','💰','💵','💴','💰','🪙'];
+
 export default function Dashboard() {
   const { data, migrateLocalData } = useData();
   const { prefs } = useUserPrefs();
+  const navigate = useNavigate();
   const [taxRate, setTaxRate] = useState(25);
   const [showMigrate, setShowMigrate] = useState(hasLegacyData);
   const showIncome = prefs.tabs.income;
@@ -129,9 +130,8 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Hero area with funky animated background */}
+      {/* Hero area */}
       <div className="relative overflow-hidden rounded-2xl border border-border mb-6 p-5 bg-card">
-        {/* Animated gradient background */}
         <div className="absolute inset-0 opacity-20">
           <motion.div
             className="absolute inset-0"
@@ -148,29 +148,18 @@ export default function Dashboard() {
             transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
           />
         </div>
-
-        {/* Starbursts */}
         <Starburst className="absolute top-2 right-4 w-8 h-8" delay={0} />
         <Starburst className="absolute bottom-3 left-6 w-6 h-6" delay={1.2} />
         <Starburst className="absolute top-1/2 right-1/4 w-5 h-5" delay={2.5} />
-
-        {/* Floating orbs */}
         <FloatingOrb className="absolute top-4 left-1/3 w-16 h-16 rounded-full bg-primary/10 blur-xl" delay={0.5} />
         <FloatingOrb className="absolute bottom-2 right-1/3 w-20 h-20 rounded-full bg-accent/10 blur-xl" delay={1.5} />
-
-        {/* Content */}
         <div className="relative z-10">
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-          >
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
             <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground font-medium mb-1">Welcome back</p>
             <h1 className="text-2xl md:text-3xl font-bold text-mono tracking-widest funky-gradient-text">
               AV LEDGER
             </h1>
           </motion.div>
-
           <motion.div
             className="mt-4 flex items-baseline gap-3"
             initial={{ opacity: 0, y: 10 }}
@@ -184,7 +173,6 @@ export default function Dashboard() {
               {showExpenses ? 'net' : 'income'} {displayTotal >= 0 ? '↑' : '↓'}
             </span>
           </motion.div>
-
           <motion.div
             className="mt-2 flex gap-4 text-xs text-muted-foreground"
             initial={{ opacity: 0 }}
@@ -196,6 +184,45 @@ export default function Dashboard() {
             <span>{totalHours.toFixed(1)}h logged</span>
           </motion.div>
         </div>
+      </div>
+
+      {/* Falling money — tap to reconcile */}
+      <div
+        className="relative h-28 overflow-hidden rounded-2xl mb-6 cursor-pointer border border-border bg-card/50"
+        onClick={() => navigate('/pay')}
+      >
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <p className="text-[10px] text-mono uppercase tracking-widest text-muted-foreground/40">
+            tap to reconcile pay
+          </p>
+        </div>
+        {FALLING_ITEMS.map((emoji, i) => (
+          <motion.div
+            key={i}
+            className="absolute select-none"
+            style={{
+              left: `${(i * 6.5) % 96}%`,
+              fontSize: emoji === '🪙' ? '1.1rem' : '1.5rem',
+              filter: emoji === '🪙'
+                ? 'sepia(1) saturate(4) hue-rotate(5deg) brightness(1.3)'
+                : 'none',
+            }}
+            initial={{ y: -40, opacity: 0, rotate: 0 }}
+            animate={{
+              y: 130,
+              opacity: [0, 1, 1, 0],
+              rotate: emoji === '🪙' ? [0, 360] : [0, -8, 8, -4],
+            }}
+            transition={{
+              duration: emoji === '🪙' ? 1.4 + (i % 3) * 0.2 : 2.4 + (i % 5) * 0.3,
+              delay: (i * 0.22) % 3.2,
+              repeat: Infinity,
+              ease: emoji === '🪙' ? 'linear' : 'easeIn',
+            }}
+          >
+            {emoji}
+          </motion.div>
+        ))}
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
@@ -227,88 +254,84 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* Tax Breakdown Pie Chart */}
-      {showTaxes && <div className="rounded-2xl border border-border bg-card p-4 mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-[10px] font-semibold text-mono text-muted-foreground uppercase tracking-[0.2em]">Tax Breakdown</h2>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-muted-foreground">Tax Rate</span>
-            <select
-              value={taxRate}
-              onChange={e => setTaxRate(Number(e.target.value))}
-              className="text-xs bg-secondary border border-border rounded-md px-2 py-1 text-foreground"
-            >
-              {[15, 20, 25, 30, 35, 40].map(r => (
-                <option key={r} value={r}>{r}%</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {totalIncome === 0 && totalExpenses === 0 ? (
-          <p className="text-xs text-muted-foreground py-8 text-center">Add income & expenses to see your tax breakdown</p>
-        ) : (
-          <div className="flex items-center gap-4">
-            <div className="w-40 h-40 shrink-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={35}
-                    outerRadius={65}
-                    paddingAngle={3}
-                    dataKey="value"
-                    strokeWidth={0}
-                    activeShape={GlitterActiveShape}
-                  >
-                    {pieData.map((entry, i) => (
-                      <Cell
-                        key={i}
-                        fill={entry.color}
-                        stroke="rgba(255,255,255,0.15)"
-                        strokeWidth={1.5}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name]}
-                    contentStyle={{
-                      background: '#ffffff',
-                      border: 'none',
-                      borderRadius: '12px',
-                      fontSize: '12px',
-                      fontFamily: 'Space Mono, monospace',
-                      boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-                      padding: '10px 14px',
-                      color: '#111111',
-                    }}
-                    labelStyle={{ color: '#111111', fontWeight: 700, marginBottom: 2 }}
-                    itemStyle={{ color: '#333333' }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+      {/* Tax Breakdown */}
+      {showTaxes && (
+        <div className="rounded-2xl border border-border bg-card p-4 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-[10px] font-semibold text-mono text-muted-foreground uppercase tracking-[0.2em]">Tax Breakdown</h2>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-muted-foreground">Tax Rate</span>
+              <select
+                value={taxRate}
+                onChange={e => setTaxRate(Number(e.target.value))}
+                className="text-xs bg-secondary border border-border rounded-md px-2 py-1 text-foreground"
+              >
+                {[15, 20, 25, 30, 35, 40].map(r => (
+                  <option key={r} value={r}>{r}%</option>
+                ))}
+              </select>
             </div>
-            <div className="space-y-2 flex-1 min-w-0">
-              {pieData.map(d => (
-                <div key={d.name} className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
-                  <span className="text-xs text-muted-foreground flex-1">{d.name}</span>
-                  <span className="text-xs font-bold text-mono">${d.value.toLocaleString()}</span>
-                </div>
-              ))}
-              <div className="border-t border-border pt-1.5 mt-1.5">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 shrink-0" />
-                  <span className="text-xs text-muted-foreground flex-1">Total Income</span>
-                  <span className="text-xs font-bold text-mono">${totalIncome.toLocaleString()}</span>
+          </div>
+          {totalIncome === 0 && totalExpenses === 0 ? (
+            <p className="text-xs text-muted-foreground py-8 text-center">Add income & expenses to see your tax breakdown</p>
+          ) : (
+            <div className="flex items-center gap-4">
+              <div className="w-40 h-40 shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={35}
+                      outerRadius={65}
+                      paddingAngle={3}
+                      dataKey="value"
+                      strokeWidth={0}
+                      activeShape={GlitterActiveShape}
+                    >
+                      {pieData.map((entry, i) => (
+                        <Cell key={i} fill={entry.color} stroke="rgba(255,255,255,0.15)" strokeWidth={1.5} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name]}
+                      contentStyle={{
+                        background: '#ffffff',
+                        border: 'none',
+                        borderRadius: '12px',
+                        fontSize: '12px',
+                        fontFamily: 'Space Mono, monospace',
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                        padding: '10px 14px',
+                        color: '#111111',
+                      }}
+                      labelStyle={{ color: '#111111', fontWeight: 700, marginBottom: 2 }}
+                      itemStyle={{ color: '#333333' }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="space-y-2 flex-1 min-w-0">
+                {pieData.map(d => (
+                  <div key={d.name} className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                    <span className="text-xs text-muted-foreground flex-1">{d.name}</span>
+                    <span className="text-xs font-bold text-mono">${d.value.toLocaleString()}</span>
+                  </div>
+                ))}
+                <div className="border-t border-border pt-1.5 mt-1.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 shrink-0" />
+                    <span className="text-xs text-muted-foreground flex-1">Total Income</span>
+                    <span className="text-xs font-bold text-mono">${totalIncome.toLocaleString()}</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
-      </div>}
+          )}
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-2 gap-4">
         <div className="rounded-2xl border border-border bg-card p-4">
@@ -343,27 +366,29 @@ export default function Dashboard() {
           )}
         </div>
 
-        {showExpenses && <div className="rounded-2xl border border-border bg-card p-4">
-          <h2 className="text-[10px] font-semibold text-mono mb-3 text-muted-foreground uppercase tracking-[0.2em]">Recent Expenses</h2>
-          {recentExpenses.length === 0 ? (
-            <p className="text-xs text-muted-foreground py-4 text-center">No expenses yet</p>
-          ) : (
-            <div className="space-y-2">
-              {recentExpenses.map(exp => (
-                <div key={exp.id} className="flex items-center justify-between rounded-xl bg-secondary/50 px-3 py-2">
-                  <div>
-                    <p className="text-sm font-medium">{exp.description}</p>
-                    <p className="text-xs text-muted-foreground">{exp.category}</p>
+        {showExpenses && (
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <h2 className="text-[10px] font-semibold text-mono mb-3 text-muted-foreground uppercase tracking-[0.2em]">Recent Expenses</h2>
+            {recentExpenses.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-4 text-center">No expenses yet</p>
+            ) : (
+              <div className="space-y-2">
+                {recentExpenses.map(exp => (
+                  <div key={exp.id} className="flex items-center justify-between rounded-xl bg-secondary/50 px-3 py-2">
+                    <div>
+                      <p className="text-sm font-medium">{exp.description}</p>
+                      <p className="text-xs text-muted-foreground">{exp.category}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-mono text-destructive">-${exp.amount.toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground">{format(new Date(exp.date), 'MMM d')}</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-mono text-destructive">-${exp.amount.toLocaleString()}</p>
-                    <p className="text-xs text-muted-foreground">{format(new Date(exp.date), 'MMM d')}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>}
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </>
   );
