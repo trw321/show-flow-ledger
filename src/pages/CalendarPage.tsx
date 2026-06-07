@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ChevronLeft, ChevronRight, Star, ArrowLeft } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay } from 'date-fns';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast } from 'date-fns';
 import type { Job } from '@/lib/store';
 import { calculateDayPay, getDayMultiplier } from '@/lib/payCalc';
 import { cn } from '@/lib/utils';
@@ -758,6 +758,85 @@ export default function CalendarPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ── Ready to log ─────────────────────────────────────────────── */}
+      {(() => {
+        const needsLog = data.jobs.filter(job => {
+          const jobDate = new Date(job.date + 'T12:00:00');
+          return (isToday(jobDate) || isPast(jobDate)) && (job.hoursWorked ?? 0) === 0 && job.status !== 'cancelled';
+        }).sort((a, b) => a.date.localeCompare(b.date));
+        if (needsLog.length === 0) return null;
+        return (
+          <div className="mt-6 flex flex-col gap-2">
+            <h2 className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground/50 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent inline-block" />
+              Ready to log
+            </h2>
+            <div className="flex flex-col gap-2">
+              {needsLog.map(job => (
+                <div
+                  key={job.id}
+                  onClick={() => { setSelectedDate(job.date); }}
+                  className="rounded-xl border border-accent/20 bg-accent/5 p-3 flex items-center gap-3 cursor-pointer active:opacity-70 transition-opacity"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{job.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {job.client} · {format(new Date(job.date + 'T12:00:00'), 'MMM d')}
+                    </p>
+                    {job.startTime && (
+                      <p className="text-xs text-mono text-muted-foreground mt-0.5">Call: {job.startTime}</p>
+                    )}
+                  </div>
+                  <ChevronRight size={14} className="text-muted-foreground shrink-0" />
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Recently logged ──────────────────────────────────────────── */}
+      {(() => {
+        const recentlyLogged = data.jobs
+          .filter(job => (job.hoursWorked ?? 0) > 0)
+          .sort((a, b) => b.date.localeCompare(a.date))
+          .slice(0, 10);
+        if (recentlyLogged.length === 0) return null;
+        return (
+          <div className="mt-4 flex flex-col gap-2">
+            <h2 className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground/50 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-success inline-block" />
+              Recently logged
+            </h2>
+            <div className="flex flex-col gap-1.5">
+              {recentlyLogged.map(job => {
+                const hours = job.hoursWorked ?? 0;
+                const earned = hours * (job.hourlyRate ?? 0);
+                return (
+                  <div
+                    key={job.id}
+                    onClick={() => setSelectedDate(job.date)}
+                    className="rounded-xl border border-border bg-card p-2.5 flex items-center gap-2 opacity-70 cursor-pointer active:opacity-50 transition-opacity"
+                  >
+                    <div className="w-1.5 h-1.5 rounded-full bg-success shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm truncate">
+                        {job.name} <span className="text-muted-foreground">· {job.client}</span>
+                      </p>
+                      <p className="text-[11px] text-mono text-muted-foreground">
+                        {format(new Date(job.date + 'T12:00:00'), 'MMM d')}
+                        {hours > 0 && ` · ${hours}h`}
+                        {earned > 0 && ` · $${earned.toLocaleString()}`}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
     </>
   );
 }
