@@ -823,7 +823,7 @@ export default function CalendarPage() {
      if (recentlyLogged.length === 0) return null;
 
         // Group by job number, fall back to name+client
-        const loggedGroups = new Map<string, typeof recentlyLogged>();
+       const loggedGroups = new Map<string, Job[]>();
         for (const job of recentlyLogged) {
           const key = job.jobNumber?.trim() || `${job.name}__${job.client}`;
           if (!loggedGroups.has(key)) loggedGroups.set(key, []);
