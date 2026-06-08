@@ -768,7 +768,7 @@ export default function CalendarPage() {
         if (needsLog.length === 0) return null;
 
         // Group by job number, fall back to name+client as key
-        const groups = new Map<string, typeof needsLog>();
+       const groups = new Map<string, typeof needsLog>();
         for (const job of needsLog) {
           const key = job.jobNumber?.trim() || `${job.name}__${job.client}`;
           if (!groups.has(key)) groups.set(key, []);
@@ -823,7 +823,7 @@ export default function CalendarPage() {
      if (recentlyLogged.length === 0) return null;
 
         // Group by job number, fall back to name+client
-       const loggedGroups = new Map<string, Job[]>();
+      const loggedGroups = new Map() as Map<string, Job[]>;
         for (const job of recentlyLogged) {
           const key = job.jobNumber?.trim() || `${job.name}__${job.client}`;
           if (!loggedGroups.has(key)) loggedGroups.set(key, []);
