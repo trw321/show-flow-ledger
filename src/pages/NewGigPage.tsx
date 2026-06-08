@@ -530,6 +530,16 @@ export default function NewGigPage() {
   return (
     <div className="flex flex-col gap-6 pb-8">
 
+      {/* hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handlePhotoSelect}
+      />
+
       <div className="relative rounded-2xl overflow-hidden" style={{ minHeight: 220 }}>
         <div className="absolute inset-0 rounded-2xl overflow-hidden">
           <VortexCanvas phase={vortexPhase} className="w-full h-full" />
@@ -539,45 +549,93 @@ export default function NewGigPage() {
             <h1 className="text-xs text-mono uppercase tracking-widest text-white/60 font-medium">
               Job Log
             </h1>
-            {hasContent && (
+            {(hasContent || inputMode !== 'choose') && (
               <button onClick={handleClear} className="text-white/40 hover:text-white/70 transition-colors p-1" aria-label="Clear">
                 <X size={14} />
               </button>
             )}
           </div>
-          <textarea
-            ref={textareaRef}
-            value={text}
-            onChange={handleTextChange}
-            disabled={isParsing}
-            rows={6}
-            placeholder={step === 'review' ? 'Paste more shifts to add them…' : 'Paste dispatch text here…'}
-            className={cn(
-              'w-full bg-black/40 backdrop-blur-sm border border-white/10 rounded-xl',
-              'px-3 py-2.5 text-xs text-mono text-white/80 placeholder:text-white/25',
-              'focus:outline-none focus:border-amber-500/40 focus:bg-black/50',
-              'resize-none transition-colors leading-relaxed',
-              isParsing && 'opacity-50 cursor-not-allowed',
-            )}
-            aria-label="Paste dispatch text"
-          />
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={handleParse}
-              disabled={isParsing || !text.trim()}
-              size="sm"
-              className="gap-1.5 bg-amber-500/90 hover:bg-amber-500 text-black border-0 font-medium"
-            >
-              {isParsing
-                ? <><Loader2 size={13} className="animate-spin" />{parseProgress || 'Parsing…'}</>
-                : <><Upload size={13} />Parse</>}
-            </Button>
-            {step === 'review' && (
-              <span className="text-[11px] text-white/40 text-mono">
-                {jobs.length} shift{jobs.length !== 1 ? 's' : ''} ready
-              </span>
-            )}
-          </div>
+
+          {/* Mode chooser */}
+          {inputMode === 'choose' && step === 'input' && (
+            <div className="flex flex-col gap-2 py-4">
+              <button
+                onClick={() => setInputMode('text')}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl bg-black/40 border border-white/10 hover:border-amber-500/40 transition-colors text-left"
+              >
+                <span className="text-xl">📋</span>
+                <div>
+                  <p className="text-sm text-white/80 font-medium">Paste text</p>
+                  <p className="text-[11px] text-white/40">Dispatch portal copy-paste</p>
+                </div>
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isParsing}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl bg-black/40 border border-white/10 hover:border-amber-500/40 transition-colors text-left disabled:opacity-50"
+              >
+                <span className="text-xl">📸</span>
+                <div>
+                  <p className="text-sm text-white/80 font-medium">Photo</p>
+                  <p className="text-[11px] text-white/40">Screenshot or camera shot</p>
+                </div>
+              </button>
+              {isParsing && (
+                <div className="flex items-center gap-2 justify-center py-2">
+                  <Loader2 size={14} className="animate-spin text-amber-500" />
+                  <span className="text-xs text-white/60 text-mono">{parseProgress}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Text input mode */}
+          {(inputMode === 'text' || step === 'review') && (
+            <>
+              <textarea
+                ref={textareaRef}
+                value={text}
+                onChange={handleTextChange}
+                disabled={isParsing}
+                rows={6}
+                placeholder={step === 'review' ? 'Paste more shifts to add them…' : 'Paste dispatch text here…'}
+                className={cn(
+                  'w-full bg-black/40 backdrop-blur-sm border border-white/10 rounded-xl',
+                  'px-3 py-2.5 text-xs text-mono text-white/80 placeholder:text-white/25',
+                  'focus:outline-none focus:border-amber-500/40 focus:bg-black/50',
+                  'resize-none transition-colors leading-relaxed',
+                  isParsing && 'opacity-50 cursor-not-allowed',
+                )}
+                aria-label="Paste dispatch text"
+              />
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={handleParse}
+                  disabled={isParsing || !text.trim()}
+                  size="sm"
+                  className="gap-1.5 bg-amber-500/90 hover:bg-amber-500 text-black border-0 font-medium"
+                >
+                  {isParsing
+                    ? <><Loader2 size={13} className="animate-spin" />{parseProgress || 'Parsing…'}</>
+                    : <><Upload size={13} />Parse</>}
+                </Button>
+                {step === 'review' && (
+                  <span className="text-[11px] text-white/40 text-mono">
+                    {jobs.length} shift{jobs.length !== 1 ? 's' : ''} ready
+                  </span>
+                )}
+                {inputMode === 'text' && step === 'input' && (
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-white/40 hover:text-amber-500/80 transition-colors p-1"
+                    title="Switch to photo"
+                  >
+                    <span className="text-base">📸</span>
+                  </button>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
