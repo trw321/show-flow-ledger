@@ -340,7 +340,6 @@ function ShiftCard({
 }
 
 export default function NewGigPage() {
-  const { data, addJob } = useData();
   const [text, setText] = useState('');
   const [isParsing, setIsParsing] = useState(false);
   const [parseProgress, setParseProgress] = useState('');
@@ -349,6 +348,8 @@ export default function NewGigPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [step, setStep] = useState<'input' | 'review'>('input');
   const [vortexPhase, setVortexPhase] = useState<VortexPhase>('idle');
+  const [inputMode, setInputMode] = useState<InputMode>('choose');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
