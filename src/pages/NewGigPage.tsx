@@ -459,7 +459,61 @@ export default function NewGigPage() {
   };
 
   const handleClear = () => {
-    setText(''); setJobs([]); setSelected(new Set()); setStep('input'); setVortexPhase('idle');
+    setText(''); setJobs([]); setSelected(new Set()); setStep('input'); setVortexPhase('idle'); setInputMode('choose');
+  };
+
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsParsing(true);
+    setVortexPhase('vortex');
+    setParseProgress('Reading image…');
+
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result.split(',')[1]);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      setParseProgress('Parsing with AI…');
+      const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-job-image`, supabaseKey, {
+        base64,
+        mimeType: file.type || 'image/jpeg',
+      });
+
+      if (!resp.ok) throw new Error((await resp.json()).error || 'Failed to parse image');
+      const result = await resp.json();
+      const allJobs: ParsedJob[] = result.jobs || [];
+
+      if (allJobs.length === 0) {
+        toast.error('No jobs found in image');
+        setVortexPhase('idle');
+        return;
+      }
+
+      allJobs.sort((a, b) => a.date.localeCompare(b.date));
+      setJobs(allJobs);
+      setSelected(new Set(allJobs.map((_, i) => i)));
+      setVortexPhase('flash');
+      setTimeout(() => {
+        setVortexPhase('settling');
+        setStep('review');
+        setTimeout(() => setVortexPhase('idle'), 1200);
+      }, 400);
+      toast.success(`Found ${allJobs.length} shift${allJobs.length === 1 ? '' : 's'}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to parse image');
+      setVortexPhase('idle');
+    } finally {
+      setIsParsing(false);
+      setParseProgress('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const updateJob = (idx: number, field: keyof ParsedJob, value: string | number | undefined) =>
