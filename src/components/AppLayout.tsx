@@ -33,7 +33,6 @@ const ALL_TAB_ITEMS: NavItem[] = [
   { label: 'Dashboard', to: '/', icon: <LayoutDashboard size={20} /> },
   { label: 'Job Log', to: '/new', icon: <ClipboardCheck size={20} /> },
   { label: 'Calendar', to: '/calendar', icon: <CalendarDays size={20} /> },
-  { label: 'Expenses', to: '/expenses', icon: <Receipt size={20} /> },
   { label: 'Pay', to: '/pay', icon: <DollarSign size={20} /> },
 ];
 
