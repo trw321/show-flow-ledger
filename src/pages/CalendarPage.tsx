@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+]import { useState, useMemo, useEffect } from 'react';
 import { useData } from '@/lib/DataContext';
 import PageHeader from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -47,7 +47,7 @@ function calcHours(start: string, end: string): number {
   let s = parseTimeToMins(start);
   let e = parseTimeToMins(end);
   if (isNaN(s) || isNaN(e)) return 0;
-  if (e <= s) e += 24 * 60; // overnight
+  if (e <= s) e += 24 * 60;
   return Math.max(0, (e - s) / 60);
 }
 
@@ -274,7 +274,6 @@ function JobDetailView({ job, onBack, onSave }: {
             </div>
           </div>
 
-          {/* Meal break */}
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">Meal Break</label>
             <div className="grid grid-cols-3 gap-1.5">
@@ -309,12 +308,7 @@ function JobDetailView({ job, onBack, onSave }: {
           <Button variant="outline" size="sm" className="flex-1" onClick={onBack}>
             Cancel
           </Button>
-          <Button
-            size="sm"
-            className="flex-1"
-            disabled={!hasChanges}
-            onClick={handleSave}
-          >
+          <Button size="sm" className="flex-1" disabled={!hasChanges} onClick={handleSave}>
             Save
           </Button>
         </div>
@@ -412,14 +406,12 @@ export default function CalendarPage() {
   const today = new Date();
   const selectedJobs = selectedDate ? (jobsByDate[selectedDate] || []) : [];
   const selectedJob = selectedJobId ? data.jobs.find(j => j.id === selectedJobId) ?? null : null;
-
   const closeDialog = () => { setSelectedDate(null); setSelectedJobId(null); };
 
   return (
     <>
       <PageHeader title="Calendar" description="Your month at a glance" />
 
-      {/* View toggle */}
       <div className="flex bg-secondary/30 rounded-lg p-0.5 mb-3">
         <button
           onClick={() => setViewMode('month')}
@@ -441,7 +433,6 @@ export default function CalendarPage() {
         </button>
       </div>
 
-      {/* Nav bar */}
       <div className="flex items-center justify-between mb-3">
         <Button variant="ghost" size="icon" className="h-8 w-8"
           onClick={() => viewMode === 'month'
@@ -468,22 +459,19 @@ export default function CalendarPage() {
         </Button>
       </div>
 
-      {/* ── MONTH VIEW ─────────────────────────────────────────────────────── */}
       {viewMode === 'month' && (
         <>
-          {/* Day headers */}
           <div className="grid grid-cols-7 mb-0.5">
             {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
               <div key={i} className="text-center text-[10px] text-muted-foreground text-mono py-1 font-medium">{d}</div>
             ))}
           </div>
 
-          {/* Calendar grid */}
           <div className="grid grid-cols-7">
             {monthDays.map((day, i) => {
               const dateKey = format(day, 'yyyy-MM-dd');
               const dayJobs = jobsByDate[dateKey] || [];
-              const isToday = isSameDay(day, today);
+              const todayFlag = isSameDay(day, today);
               const isCurrentMonth = isSameMonth(day, currentDate);
               const hasJobs = dayJobs.length > 0;
               const hasPay = !!payByDate[dateKey];
@@ -495,11 +483,11 @@ export default function CalendarPage() {
                   className={cn(
                     "flex flex-col items-center py-1.5 transition-colors rounded-lg mx-0.5 mb-0.5",
                     !isCurrentMonth && 'opacity-30',
-                    isToday && 'bg-primary/10',
+                    todayFlag && 'bg-primary/10',
                     hasJobs && 'cursor-pointer active:bg-secondary/60'
                   )}
                 >
-                  {isToday ? (
+                  {todayFlag ? (
                     <span className="relative w-6 h-6 flex items-center justify-center">
                       <Star size={24} className="absolute text-primary fill-primary" />
                       <span className="relative text-[11px] text-mono leading-none text-primary-foreground font-bold">
@@ -511,7 +499,6 @@ export default function CalendarPage() {
                       {format(day, 'd')}
                     </span>
                   )}
-
                   {dayJobs.length > 0 && (
                     <span className="text-[7px] text-muted-foreground leading-tight text-center truncate max-w-[3rem] mt-0.5">
                       {dayJobs[0].venue || dayJobs[0].client}
@@ -525,7 +512,6 @@ export default function CalendarPage() {
                       <span className="text-[7px] text-muted-foreground text-mono">+{dayJobs.length - 3}</span>
                     )}
                   </div>
-
                   {hasPay && (
                     <span className="text-[8px] text-mono text-success font-semibold leading-none mt-0.5">
                       ${payByDate[dateKey] >= 1000 ? `${(payByDate[dateKey] / 1000).toFixed(1)}k` : payByDate[dateKey].toFixed(0)}
@@ -536,7 +522,6 @@ export default function CalendarPage() {
             })}
           </div>
 
-          {/* Month totals */}
           <div className="mt-4 space-y-1">
             <div className="flex items-center justify-between px-1 pb-1 border-b border-border/30">
               <span className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground/50">
@@ -544,9 +529,7 @@ export default function CalendarPage() {
               </span>
               <div className="flex items-center gap-3">
                 {monthStats.totalHours > 0 ? (
-                  <span className="text-[11px] text-mono font-semibold text-primary">
-                    {monthStats.totalHours.toFixed(1)}h
-                  </span>
+                  <span className="text-[11px] text-mono font-semibold text-primary">{monthStats.totalHours.toFixed(1)}h</span>
                 ) : (
                   <span className="text-[11px] text-mono text-muted-foreground/25">—</span>
                 )}
@@ -559,9 +542,7 @@ export default function CalendarPage() {
             </div>
             {weekStats.map((ws, i) => (
               <div key={i} className="flex items-center justify-between px-1">
-                <span className="text-[9px] text-mono text-muted-foreground/40">
-                  {format(ws.weekStart, 'MMM d')}
-                </span>
+                <span className="text-[9px] text-mono text-muted-foreground/40">{format(ws.weekStart, 'MMM d')}</span>
                 <div className="flex items-center gap-3">
                   {ws.hours > 0 ? (
                     <span className="text-[10px] text-mono text-muted-foreground">{ws.hours.toFixed(1)}h</span>
@@ -580,7 +561,6 @@ export default function CalendarPage() {
         </>
       )}
 
-      {/* ── YEAR VIEW ──────────────────────────────────────────────────────── */}
       {viewMode === 'year' && (
         <>
           <div className="grid grid-cols-2 gap-x-4 gap-y-5">
@@ -591,7 +571,6 @@ export default function CalendarPage() {
               const days: Date[] = [];
               let d = start;
               while (d <= end) { days.push(d); d = addDays(d, 1); }
-
               const monthPrefix = format(monthStart, 'yyyy-MM');
               let monthPay = 0, monthJobs = 0;
               for (const [date, jobs] of Object.entries(jobsByDate)) {
@@ -599,7 +578,6 @@ export default function CalendarPage() {
                 monthJobs += jobs.length;
                 monthPay += payByDate[date] || 0;
               }
-
               return (
                 <div key={mi}>
                   <div className="flex items-center justify-between mb-1">
@@ -625,16 +603,12 @@ export default function CalendarPage() {
                       const dateKey = format(day, 'yyyy-MM-dd');
                       const dayJobs = jobsByDate[dateKey] || [];
                       const isCurrentMonth = isSameMonth(day, monthStart);
-                      const isToday = isSameDay(day, today);
+                      const todayFlag = isSameDay(day, today);
                       const hasPay = !!payByDate[dateKey];
                       const hasCompleted = dayJobs.some(j => j.status === 'completed');
                       const hasInProgress = dayJobs.some(j => j.status === 'in-progress');
                       const hasUpcoming = dayJobs.some(j => j.status === 'upcoming');
-
-                      if (!isCurrentMonth) {
-                        return <div key={di} className="h-5" />;
-                      }
-
+                      if (!isCurrentMonth) return <div key={di} className="h-5" />;
                       return (
                         <div
                           key={di}
@@ -647,7 +621,7 @@ export default function CalendarPage() {
                             !hasPay && !hasCompleted && hasInProgress && 'bg-primary/25 text-primary font-semibold',
                             !hasPay && !hasCompleted && !hasInProgress && hasUpcoming && 'bg-accent/20 text-accent',
                             !dayJobs.length && 'text-muted-foreground/40',
-                            isToday && 'ring-1 ring-inset ring-primary/70',
+                            todayFlag && 'ring-1 ring-inset ring-primary/70',
                           )}
                         >
                           {format(day, 'd')}
@@ -660,7 +634,6 @@ export default function CalendarPage() {
             })}
           </div>
 
-          {/* Year totals */}
           <div className="mt-5 rounded-xl border border-border/40 bg-secondary/10 p-3">
             <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground/50 mb-2">{currentYear} Total</p>
             <div className="flex items-center justify-between">
@@ -680,7 +653,6 @@ export default function CalendarPage() {
             </div>
           </div>
 
-          {/* Color legend */}
           <div className="mt-2 flex items-center gap-3 px-1">
             <span className="text-[8px] text-muted-foreground/40 text-mono uppercase tracking-wider">Legend</span>
             {[
@@ -697,7 +669,6 @@ export default function CalendarPage() {
         </>
       )}
 
-      {/* Day / Job detail dialog */}
       <Dialog open={!!selectedDate} onOpenChange={(o) => !o && closeDialog()}>
         <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto rounded-2xl">
           {!selectedJob ? (
@@ -767,12 +738,11 @@ export default function CalendarPage() {
         }).sort((a, b) => a.date.localeCompare(b.date));
         if (needsLog.length === 0) return null;
 
-        // Group by job number, fall back to name+client as key
-       const groups = new Map<string, typeof needsLog>();
+        const groups: Record<string, Job[]> = {};
         for (const job of needsLog) {
           const key = job.jobNumber?.trim() || `${job.name}__${job.client}`;
-          if (!groups.has(key)) groups.set(key, []);
-          groups.get(key)!.push(job);
+          if (!groups[key]) groups[key] = [];
+          groups[key].push(job);
         }
 
         return (
@@ -782,7 +752,7 @@ export default function CalendarPage() {
               Ready to log
             </h2>
             <div className="flex flex-col gap-2">
-              {[...groups.entries()].map(([key, jobs]) => {
+              {Object.entries(groups).map(([key, jobs]) => {
                 const first = jobs[0];
                 const last = jobs[jobs.length - 1];
                 const dateRange = jobs.length > 1
@@ -818,16 +788,20 @@ export default function CalendarPage() {
           </div>
         );
       })()}
-      
-      {/* ── Recently logged ──────────────────────────────────────────── */}
-     if (recentlyLogged.length === 0) return null;
 
-        // Group by job number, fall back to name+client
-      const loggedGroups = new Map() as Map<string, Job[]>;
+      {/* ── Recently logged ──────────────────────────────────────────── */}
+      {(() => {
+        const recentlyLogged = data.jobs
+          .filter(job => (job.hoursWorked ?? 0) > 0)
+          .sort((a, b) => b.date.localeCompare(a.date))
+          .slice(0, 10);
+        if (recentlyLogged.length === 0) return null;
+
+        const loggedGroups: Record<string, Job[]> = {};
         for (const job of recentlyLogged) {
           const key = job.jobNumber?.trim() || `${job.name}__${job.client}`;
-          if (!loggedGroups.has(key)) loggedGroups.set(key, []);
-          loggedGroups.get(key)!.push(job);
+          if (!loggedGroups[key]) loggedGroups[key] = [];
+          loggedGroups[key].push(job);
         }
 
         return (
@@ -837,7 +811,7 @@ export default function CalendarPage() {
               Recently logged
             </h2>
             <div className="flex flex-col gap-1.5">
-              {[...loggedGroups.entries()].map(([key, jobs]) => {
+              {Object.entries(loggedGroups).map(([key, jobs]) => {
                 const first = jobs[0];
                 const totalHours = jobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
                 const totalEarned = jobs.reduce((s, j) => s + (j.hoursWorked ?? 0) * (j.hourlyRate ?? 0), 0);
