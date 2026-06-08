@@ -60,7 +60,8 @@ function GlitterActiveShape(props: any) {
 const FALLING_ITEMS = ['💰','💴','💰','🪙','💵','💰','🪙','💴','💰','💵','🪙','💰','💵','💴','💰','🪙'];
 
 export default function Dashboard() {
-  const { data, migrateLocalData } = useData();
+ const { data, migrateLocalData } = useData();
+  if (!data) return null;
   const { prefs } = useUserPrefs();
   const navigate = useNavigate();
   const [taxRate, setTaxRate] = useState(25);
