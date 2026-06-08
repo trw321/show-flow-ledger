@@ -27,6 +27,7 @@ interface ParsedJob {
 }
 
 type VortexPhase = 'idle' | 'pulling' | 'vortex' | 'flash' | 'settling';
+type InputMode = 'choose' | 'text' | 'photo';
 
 function toAmPm(s: string): string {
   const u = s.toUpperCase();
