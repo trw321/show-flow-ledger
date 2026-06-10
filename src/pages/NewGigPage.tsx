@@ -340,6 +340,7 @@ function ShiftCard({
 }
 
 export default function NewGigPage() {
+  const { data, addJob } = useData();
   const [text, setText] = useState('');
   const [isParsing, setIsParsing] = useState(false);
   const [parseProgress, setParseProgress] = useState('');
