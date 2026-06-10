@@ -521,9 +521,9 @@ export default function NewGigPage() {
     setJobs(prev => prev.map((j, i) => i === idx ? { ...j, [field]: value } : j));
 
   const conflictDates = useMemo(() => {
-    const counts = new Map<string, number>();
-    jobs.forEach(j => counts.set(j.date, (counts.get(j.date) ?? 0) + 1));
-    return new Set([...counts.entries()].filter(([, n]) => n > 1).map(([d]) => d));
+    const counts: Record<string, number> = {};
+    jobs.forEach(j => { counts[j.date] = (counts[j.date] ?? 0) + 1; });
+    return new Set(Object.entries(counts).filter(([, n]) => n > 1).map(([d]) => d));
   }, [jobs]);
 
   const hasContent = text.trim().length > 0 || step === 'review';
