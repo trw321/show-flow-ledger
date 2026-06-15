@@ -26,8 +26,19 @@ interface ParsedJob {
   notes?: string;
 }
 
+interface ManualEntry {
+  client: string;
+  name: string;
+  date: string;
+  startTime: string;
+  position: string;
+  hourlyRate: string;
+  payrollCompany: string;
+  venue: string;
+}
+
 type VortexPhase = 'idle' | 'pulling' | 'vortex' | 'flash' | 'settling';
-type InputMode = 'choose' | 'text' | 'photo';
+type InputMode = 'choose' | 'text' | 'photo' | 'manual';
 
 function toAmPm(s: string): string {
   const u = s.toUpperCase();
@@ -279,13 +290,13 @@ function ShiftCard({
               )}
             </p>
             <p className="text-xs text-muted-foreground truncate">
-  {[
-    job.notes?.match(/\bC\/?B\b/i) ? '📞 Callback' : null,
-    job.name,
-    job.client,
-    job.venue,
-  ].filter(Boolean).join(' · ')}
-</p>
+              {[
+                job.notes?.match(/\bC\/?B\b/i) ? '📞 Callback' : null,
+                job.name,
+                job.client,
+                job.venue,
+              ].filter(Boolean).join(' · ')}
+            </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {job.hourlyRate && (
@@ -339,6 +350,17 @@ function ShiftCard({
   );
 }
 
+const EMPTY_MANUAL: ManualEntry = {
+  client: '',
+  name: '',
+  date: '',
+  startTime: '',
+  position: '',
+  hourlyRate: '',
+  payrollCompany: '',
+  venue: '',
+};
+
 export default function NewGigPage() {
   const { data, addJob } = useData();
   const [text, setText] = useState('');
@@ -350,6 +372,7 @@ export default function NewGigPage() {
   const [step, setStep] = useState<'input' | 'review'>('input');
   const [vortexPhase, setVortexPhase] = useState<VortexPhase>('idle');
   const [inputMode, setInputMode] = useState<InputMode>('choose');
+  const [manual, setManual] = useState<ManualEntry>(EMPTY_MANUAL);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -361,6 +384,35 @@ export default function NewGigPage() {
     if (e.target.value.trim() && vortexPhase === 'idle') setVortexPhase('pulling');
     else if (!e.target.value.trim()) setVortexPhase('idle');
   }, [vortexPhase]);
+
+  const handleManualChange = (field: keyof ManualEntry, value: string) =>
+    setManual(prev => ({ ...prev, [field]: value }));
+
+  const handleManualSubmit = () => {
+    if (!manual.client.trim()) { toast.error('Employer is required'); return; }
+    if (!manual.date) { toast.error('Date is required'); return; }
+
+    const job: ParsedJob = {
+      name: manual.name.trim() || manual.client.trim(),
+      client: manual.client.trim(),
+      venue: manual.venue.trim(),
+      date: manual.date,
+      startTime: manual.startTime.trim() || undefined,
+      status: 'confirmed',
+      payrollCompany: manual.payrollCompany.trim() || undefined,
+      hourlyRate: manual.hourlyRate ? parseFloat(manual.hourlyRate) : undefined,
+      notes: manual.position.trim() ? `Position: ${manual.position.trim()}` : undefined,
+    };
+
+    setJobs([job]);
+    setSelected(new Set([0]));
+    setVortexPhase('flash');
+    setTimeout(() => {
+      setVortexPhase('settling');
+      setStep('review');
+      setTimeout(() => setVortexPhase('idle'), 1200);
+    }, 400);
+  };
 
   const handleParse = async () => {
     if (!text.trim()) { toast.error('Paste dispatch text first'); return; }
@@ -457,10 +509,12 @@ export default function NewGigPage() {
       (failed ? ` · ${failed} failed` : '')
     );
     setText(''); setJobs([]); setSelected(new Set()); setStep('input'); setVortexPhase('idle');
+    setManual(EMPTY_MANUAL); setInputMode('choose');
   };
 
   const handleClear = () => {
-    setText(''); setJobs([]); setSelected(new Set()); setStep('input'); setVortexPhase('idle'); setInputMode('choose');
+    setText(''); setJobs([]); setSelected(new Set()); setStep('input');
+    setVortexPhase('idle'); setInputMode('choose'); setManual(EMPTY_MANUAL);
   };
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -527,6 +581,7 @@ export default function NewGigPage() {
   }, [jobs]);
 
   const hasContent = text.trim().length > 0 || step === 'review';
+  const manualHasContent = Object.values(manual).some(v => v.trim() !== '');
 
   return (
     <div className="flex flex-col gap-6 pb-8">
@@ -549,7 +604,7 @@ export default function NewGigPage() {
             <h1 className="text-xs text-mono uppercase tracking-widest text-white/60 font-medium">
               Job Log
             </h1>
-            {(hasContent || inputMode !== 'choose') && (
+            {(hasContent || manualHasContent || inputMode !== 'choose') && (
               <button onClick={handleClear} className="text-white/40 hover:text-white/70 transition-colors p-1" aria-label="Clear">
                 <X size={14} />
               </button>
@@ -566,7 +621,7 @@ export default function NewGigPage() {
                 <span className="text-xl">📋</span>
                 <div>
                   <p className="text-sm text-white/80 font-medium">Paste text</p>
-                  <p className="text-[11px] text-white/40">Dispatch portal copy-paste</p>
+                  <p className="text-[11px] text-white/40">Dispatch portal, email, or any offer text</p>
                 </div>
               </button>
               <button
@@ -577,7 +632,17 @@ export default function NewGigPage() {
                 <span className="text-xl">📸</span>
                 <div>
                   <p className="text-sm text-white/80 font-medium">Photo</p>
-                  <p className="text-[11px] text-white/40">Screenshot or camera shot</p>
+                  <p className="text-[11px] text-white/40">Screenshot, text message, calendar, Nowsta</p>
+                </div>
+              </button>
+              <button
+                onClick={() => setInputMode('manual')}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl bg-black/40 border border-white/10 hover:border-amber-500/40 transition-colors text-left"
+              >
+                <span className="text-xl">✏️</span>
+                <div>
+                  <p className="text-sm text-white/80 font-medium">Manual entry</p>
+                  <p className="text-[11px] text-white/40">Phone call, text, or verbal offer</p>
                 </div>
               </button>
               {isParsing && (
@@ -586,6 +651,108 @@ export default function NewGigPage() {
                   <span className="text-xs text-white/60 text-mono">{parseProgress}</span>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Manual entry mode */}
+          {inputMode === 'manual' && step === 'input' && (
+            <div className="flex flex-col gap-3 py-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="col-span-2 flex flex-col gap-1">
+                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">
+                    Employer <span className="text-amber-500">*</span>
+                  </label>
+                  <Input
+                    value={manual.client}
+                    onChange={e => handleManualChange('client', e.target.value)}
+                    placeholder="e.g. Fillmore Philadelphia"
+                    className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">
+                    Date <span className="text-amber-500">*</span>
+                  </label>
+                  <Input
+                    type="date"
+                    value={manual.date}
+                    onChange={e => handleManualChange('date', e.target.value)}
+                    className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 focus:border-amber-500/40"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Call time</label>
+                  <Input
+                    value={manual.startTime}
+                    onChange={e => handleManualChange('startTime', e.target.value)}
+                    placeholder="4:00 PM"
+                    className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Position</label>
+                  <Input
+                    value={manual.position}
+                    onChange={e => handleManualChange('position', e.target.value)}
+                    placeholder="e.g. A1, Followspot"
+                    className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Rate ($/hr)</label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={manual.hourlyRate}
+                    onChange={e => handleManualChange('hourlyRate', e.target.value)}
+                    placeholder="0.00"
+                    className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                  />
+                </div>
+
+                <div className="col-span-2 flex flex-col gap-1">
+                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Event name</label>
+                  <Input
+                    value={manual.name}
+                    onChange={e => handleManualChange('name', e.target.value)}
+                    placeholder="e.g. Olivia Rodrigo"
+                    className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Venue</label>
+                  <Input
+                    value={manual.venue}
+                    onChange={e => handleManualChange('venue', e.target.value)}
+                    placeholder="e.g. The Met"
+                    className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Payroll co.</label>
+                  <Input
+                    value={manual.payrollCompany}
+                    onChange={e => handleManualChange('payrollCompany', e.target.value)}
+                    placeholder="e.g. AVTS"
+                    className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                  />
+                </div>
+              </div>
+
+              <Button
+                onClick={handleManualSubmit}
+                disabled={!manual.client.trim() || !manual.date}
+                size="sm"
+                className="w-full gap-1.5 bg-amber-500/90 hover:bg-amber-500 text-black border-0 font-medium mt-1"
+              >
+                <Check size={13} /> Add shift
+              </Button>
             </div>
           )}
 
