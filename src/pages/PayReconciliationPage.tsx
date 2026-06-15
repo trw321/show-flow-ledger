@@ -265,18 +265,18 @@ export default function PayReconciliationPage() {
         </DialogContent>
       </Dialog>
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-xs text-muted-foreground text-mono uppercase">Expected (Hours × Rate)</p>
-          <p className="text-xl font-bold text-mono mt-1">${totalExpected.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+      <div className="grid grid-cols-3 gap-2 mb-6">
+        <div className="rounded-lg border border-border bg-card p-3">
+          <p className="text-[10px] text-muted-foreground text-mono uppercase leading-tight">Expected</p>
+          <p className="text-sm font-bold text-mono mt-1 break-all">${totalExpected.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
         </div>
-        <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-xs text-muted-foreground text-mono uppercase">Actually Paid</p>
-          <p className="text-xl font-bold text-mono text-success mt-1">${totalActual.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+        <div className="rounded-lg border border-border bg-card p-3">
+          <p className="text-[10px] text-muted-foreground text-mono uppercase leading-tight">Paid</p>
+          <p className="text-sm font-bold text-mono text-success mt-1 break-all">${totalActual.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
         </div>
-        <div className={`rounded-lg border p-4 ${totalDiff >= 0 ? 'border-success/30 bg-success/5' : 'border-destructive/30 bg-destructive/5'}`}>
-          <p className="text-xs text-muted-foreground text-mono uppercase">Difference</p>
-          <p className={`text-xl font-bold text-mono mt-1 ${totalDiff >= 0 ? 'text-success' : 'text-destructive'}`}>
+        <div className={`rounded-lg border p-3 ${totalDiff >= 0 ? 'border-success/30 bg-success/5' : 'border-destructive/30 bg-destructive/5'}`}>
+          <p className="text-[10px] text-muted-foreground text-mono uppercase leading-tight">Diff</p>
+          <p className={`text-sm font-bold text-mono mt-1 break-all ${totalDiff >= 0 ? 'text-success' : 'text-destructive'}`}>
             {totalDiff >= 0 ? '+' : ''}${totalDiff.toLocaleString(undefined, { minimumFractionDigits: 2 })}
           </p>
         </div>
