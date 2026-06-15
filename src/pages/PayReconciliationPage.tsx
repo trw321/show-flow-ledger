@@ -215,20 +215,20 @@ export default function PayReconciliationPage() {
     <>
       <PageHeader title="Pay Reconciliation" description="Cross-check hours worked vs income received" />
 
-      <div className="flex flex-wrap gap-3 mb-6 items-end justify-between">
-        <div className="flex flex-wrap gap-3 items-end">
+      <div className="flex flex-col gap-3 mb-6 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3 sm:items-end">
           <div>
             <label className="text-xs text-muted-foreground text-mono uppercase mb-1 block">From</label>
-            <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-40" />
+            <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full sm:w-40" />
           </div>
           <div>
             <label className="text-xs text-muted-foreground text-mono uppercase mb-1 block">To</label>
-            <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-40" />
+            <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full sm:w-40" />
           </div>
-          <div>
+          <div className="col-span-2 sm:col-span-1">
             <label className="text-xs text-muted-foreground text-mono uppercase mb-1 block">Client</label>
             <Select value={filterJobClient} onValueChange={setFilterJobClient}>
-              <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All clients</SelectItem>
                 {uniqueClients.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
