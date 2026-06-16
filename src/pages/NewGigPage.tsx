@@ -732,11 +732,11 @@ className="text-white/80 [&_button]:text-white/70 [&_button:hover]:bg-white/10 [
                 </div>
               </div>
 
-              {/* Bottom row — optional fields */}
-              <div className="grid grid-cols-2 gap-2">
+             {/* Bottom row — optional fields, mobile only; desktop these are in the right column */}
+              <div className="grid grid-cols-2 gap-2 sm:hidden">
                 <div className="flex flex-col gap-1">
                   <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Event name</label>
-                  <Input
+              <Input
                     value={manual.name}
                     onChange={e => handleManualChange('name', e.target.value)}
                     placeholder="e.g. Olivia Rodrigo"
