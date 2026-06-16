@@ -702,7 +702,7 @@ export default function NewGigPage() {
                 </div>
                 <div className="flex flex-col gap-2 flex-1 sm:pt-6">
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Call time</label>
+                    <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Call time <span className="inline-block w-1.5 h-1.5 rounded-full bg-lime-400 mb-0.5 ml-0.5" /></label>
                     <Input
                       value={manual.startTime}
                       onChange={e => handleManualChange('startTime', e.target.value)}
