@@ -659,38 +659,42 @@ export default function NewGigPage() {
             <div className="flex flex-col gap-3 py-2">
               <div className="grid grid-cols-2 gap-2">
 
-                <div className="col-span-2 flex flex-col gap-1">
-                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Employer</label>
-                  <Input
-                    value={manual.client}
-                    onChange={e => handleManualChange('client', e.target.value)}
-                    placeholder="e.g. Fillmore Philadelphia"
-                    className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
-                  />
-                </div>
-
-                <div className="col-span-2 flex flex-col gap-1">
-                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">
-                    Date <span className="text-amber-500">*</span>
-                  </label>
-                  <div className="rounded-xl overflow-hidden border border-white/10 bg-black/40">
-                    <Calendar
-                      mode="single"
-                      selected={manual.date ? new Date(manual.date + 'T12:00:00') : undefined}
-                      onSelect={d => handleManualChange('date', d ? format(d, 'yyyy-MM-dd') : '')}
-                      className="text-white/80 [&_button]:text-white/70 [&_button:hover]:bg-white/10 [&_button[aria-selected]]:bg-amber-500 [&_button[aria-selected]]:text-black [&_button[aria-selected]:hover]:bg-amber-500"
-                    />
+                <div className="col-span-2 flex flex-col sm:flex-row gap-3">
+                  <div className="flex flex-col gap-1 flex-shrink-0">
+                    <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">
+                      Date <span className="text-pink-500">*</span>
+                    </label>
+                    <div className="rounded-xl overflow-hidden border border-white/10 bg-black/40">
+                      <Calendar
+                        mode="single"
+                        selected={manual.date ? new Date(manual.date + 'T12:00:00') : undefined}
+                        onSelect={d => handleManualChange('date', d ? format(d, 'yyyy-MM-dd') : '')}
+                        className="text-white/80 [&_button]:text-white/70 [&_button:hover]:bg-white/10 [&_button[aria-selected]]:bg-pink-500 [&_button[aria-selected]]:text-white [&_button[aria-selected]:hover]:bg-pink-500 [&_button[aria-selected]]:rounded-full"
+                      />
+                    </div>
                   </div>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Call time</label>
-                  <Input
-                    value={manual.startTime}
-                    onChange={e => handleManualChange('startTime', e.target.value)}
-                    placeholder="4:00 PM"
-                    className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
-                  />
+                  <div className="flex flex-col gap-2 flex-1 sm:pt-6">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Call time</label>
+                      <Input
+                        value={manual.startTime}
+                        onChange={e => handleManualChange('startTime', e.target.value)}
+                        placeholder="4:00 PM"
+                        className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Rate ($/hr)</label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={manual.hourlyRate}
+                        onChange={e => handleManualChange('hourlyRate', e.target.value)}
+                        placeholder="0.00"
+                        className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-1">
