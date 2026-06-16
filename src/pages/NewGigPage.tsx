@@ -364,6 +364,15 @@ const EMPTY_MANUAL: ManualEntry = {
 
 export default function NewGigPage() {
   const { data, addJob } = useData();
+  const savedEmployers = useMemo(() => {
+    const seen = new Set<string>();
+    const list: string[] = [];
+    for (const job of data.jobs) {
+      const c = job.client?.trim();
+      if (c && !seen.has(c)) { seen.add(c); list.push(c); }
+    }
+    return list.sort();
+  }, [data.jobs]);
   const [text, setText] = useState('');
   const [isParsing, setIsParsing] = useState(false);
   const [parseProgress, setParseProgress] = useState('');
