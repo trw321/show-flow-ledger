@@ -720,12 +720,39 @@ className="text-white/80 [&_button]:text-white/70 [&_button:hover]:bg-white/10 [
                       className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
                     />
                   </div>
-                  <div className="flex flex-col gap-1">
+                 <div className="flex flex-col gap-1">
                     <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Position</label>
                     <Input
                       value={manual.position}
                       onChange={e => handleManualChange('position', e.target.value)}
                       placeholder="e.g. A1, Followspot"
+                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                    />
+                  </div>
+                  <div className="hidden sm:flex flex-col gap-1">
+                    <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Event name</label>
+                    <Input
+                      value={manual.name}
+                      onChange={e => handleManualChange('name', e.target.value)}
+                      placeholder="e.g. Olivia Rodrigo"
+                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                    />
+                  </div>
+                  <div className="hidden sm:flex flex-col gap-1">
+                    <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Venue</label>
+                    <Input
+                      value={manual.venue}
+                      onChange={e => handleManualChange('venue', e.target.value)}
+                      placeholder="e.g. The Met"
+                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                    />
+                  </div>
+                  <div className="hidden sm:flex flex-col gap-1">
+                    <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Payroll co.</label>
+                    <Input
+                      value={manual.payrollCompany}
+                      onChange={e => handleManualChange('payrollCompany', e.target.value)}
+                      placeholder="e.g. AVTS"
                       className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
                     />
                   </div>
