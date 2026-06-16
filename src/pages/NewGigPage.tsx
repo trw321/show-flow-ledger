@@ -364,6 +364,7 @@ const EMPTY_MANUAL: ManualEntry = {
 
 export default function NewGigPage() {
   const { data, addJob } = useData();
+
   const savedEmployers = useMemo(() => {
     const seen = new Set<string>();
     const list: string[] = [];
@@ -373,6 +374,7 @@ export default function NewGigPage() {
     }
     return list.sort();
   }, [data.jobs]);
+
   const [text, setText] = useState('');
   const [isParsing, setIsParsing] = useState(false);
   const [parseProgress, setParseProgress] = useState('');
@@ -384,8 +386,8 @@ export default function NewGigPage() {
   const [inputMode, setInputMode] = useState<InputMode>('choose');
   const [manual, setManual] = useState<ManualEntry>(EMPTY_MANUAL);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
@@ -595,7 +597,6 @@ export default function NewGigPage() {
   return (
     <div className="flex flex-col gap-6 pb-8">
 
-      {/* hidden file input */}
       <input
         ref={fileInputRef}
         type="file"
@@ -663,71 +664,77 @@ export default function NewGigPage() {
             </div>
           )}
 
-         {/* Manual entry mode */}
+          {/* Manual entry mode */}
           {inputMode === 'manual' && step === 'input' && (
             <div className="flex flex-col gap-3 py-2">
+
+              {/* Employer — full width, up top */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Employer</label>
+                <Input
+                  value={manual.client}
+                  onChange={e => handleManualChange('client', e.target.value)}
+                  placeholder="e.g. Fillmore Philadelphia"
+                  className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                  list="employer-suggestions"
+                />
+                <datalist id="employer-suggestions">
+                  {savedEmployers
+                    .filter(e => e.toLowerCase().includes(manual.client.toLowerCase()))
+                    .map(e => <option key={e} value={e} />)}
+                </datalist>
+              </div>
+
+              {/* Calendar + right-column fields side by side on desktop */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="flex flex-col gap-1 flex-shrink-0">
+                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">
+                    Date <span className="text-lime-400">*</span>
+                  </label>
+                  <div className="rounded-xl overflow-hidden border border-white/10 bg-black/40">
+                    <Calendar
+                      mode="single"
+                      selected={manual.date ? new Date(manual.date + 'T12:00:00') : undefined}
+                      onSelect={d => handleManualChange('date', d ? format(d, 'yyyy-MM-dd') : '')}
+                      className="text-white/80 [&_button]:text-white/70 [&_button:hover]:bg-white/10 [&_button[aria-selected]]:bg-transparent [&_button[aria-selected]]:text-lime-400 [&_button[aria-selected]]:ring-2 [&_button[aria-selected]]:ring-lime-400 [&_button[aria-selected]]:rounded-lg [&_button[aria-selected]:hover]:bg-white/10"
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 flex-1 sm:pt-6">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Call time</label>
+                    <Input
+                      value={manual.startTime}
+                      onChange={e => handleManualChange('startTime', e.target.value)}
+                      placeholder="4:00 PM"
+                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Rate ($/hr)</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={manual.hourlyRate}
+                      onChange={e => handleManualChange('hourlyRate', e.target.value)}
+                      placeholder="0.00"
+                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Position</label>
+                    <Input
+                      value={manual.position}
+                      onChange={e => handleManualChange('position', e.target.value)}
+                      placeholder="e.g. A1, Followspot"
+                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom row — optional fields */}
               <div className="grid grid-cols-2 gap-2">
-
-                <div className="col-span-2 flex flex-col sm:flex-row gap-3">
-                  <div className="flex flex-col gap-1 flex-shrink-0">
-                    <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">
-                      Date <span className="text-pink-500">*</span>
-                    </label>
-                    <div className="rounded-xl overflow-hidden border border-white/10 bg-black/40">
-                      <Calendar
-                        mode="single"
-                        selected={manual.date ? new Date(manual.date + 'T12:00:00') : undefined}
-                        onSelect={d => handleManualChange('date', d ? format(d, 'yyyy-MM-dd') : '')}
-                        className="text-white/80 [&_button]:text-white/70 [&_button:hover]:bg-white/10 [&_button[aria-selected]]:bg-transparent [&_button[aria-selected]]:text-lime-400 [&_button[aria-selected]]:ring-2 [&_button[aria-selected]]:ring-lime-400 [&_button[aria-selected]]:rounded-lg [&_button[aria-selected]:hover]:bg-white/10"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-2 flex-1 sm:pt-6">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Call time</label>
-                      <Input
-                        value={manual.startTime}
-                        onChange={e => handleManualChange('startTime', e.target.value)}
-                        placeholder="4:00 PM"
-                        className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Rate ($/hr)</label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={manual.hourlyRate}
-                        onChange={e => handleManualChange('hourlyRate', e.target.value)}
-                        placeholder="0.00"
-                        className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Rate ($/hr)</label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={manual.hourlyRate}
-                    onChange={e => handleManualChange('hourlyRate', e.target.value)}
-                    placeholder="0.00"
-                    className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Position</label>
-                  <Input
-                    value={manual.position}
-                    onChange={e => handleManualChange('position', e.target.value)}
-                    placeholder="e.g. A1, Followspot"
-                    className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
-                  />
-                </div>
-
                 <div className="flex flex-col gap-1">
                   <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Event name</label>
                   <Input
@@ -737,7 +744,6 @@ export default function NewGigPage() {
                     className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
                   />
                 </div>
-
                 <div className="flex flex-col gap-1">
                   <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Venue</label>
                   <Input
@@ -747,22 +753,16 @@ export default function NewGigPage() {
                     className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
                   />
                 </div>
-
-               <div className="col-span-2 flex flex-col gap-1">
-                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Employer</label>
+                <div className="col-span-2 flex flex-col gap-1">
+                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Payroll co.</label>
                   <Input
-                    value={manual.client}
-                    onChange={e => handleManualChange('client', e.target.value)}
-                    placeholder="e.g. Fillmore Philadelphia"
+                    value={manual.payrollCompany}
+                    onChange={e => handleManualChange('payrollCompany', e.target.value)}
+                    placeholder="e.g. AVTS"
                     className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
-                    list="employer-suggestions"
                   />
-                  <datalist id="employer-suggestions">
-                    {savedEmployers
-                      .filter(e => e.toLowerCase().includes(manual.client.toLowerCase()))
-                      .map(e => <option key={e} value={e} />)}
-                  </datalist>
                 </div>
+              </div>
 
               <Button
                 onClick={handleManualSubmit}
