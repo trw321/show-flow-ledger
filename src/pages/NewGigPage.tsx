@@ -655,14 +655,13 @@ export default function NewGigPage() {
             </div>
           )}
 
-          {/* Manual entry mode */}
+         {/* Manual entry mode */}
           {inputMode === 'manual' && step === 'input' && (
             <div className="flex flex-col gap-3 py-2">
               <div className="grid grid-cols-2 gap-2">
+
                 <div className="col-span-2 flex flex-col gap-1">
-                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">
-                    Employer <span className="text-amber-500">*</span>
-                  </label>
+                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Employer</label>
                   <Input
                     value={manual.client}
                     onChange={e => handleManualChange('client', e.target.value)}
@@ -671,16 +670,18 @@ export default function NewGigPage() {
                   />
                 </div>
 
-                <div className="flex flex-col gap-1">
+                <div className="col-span-2 flex flex-col gap-1">
                   <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">
                     Date <span className="text-amber-500">*</span>
                   </label>
-                  <Input
-                    type="date"
-                    value={manual.date}
-                    onChange={e => handleManualChange('date', e.target.value)}
-                    className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 focus:border-amber-500/40"
-                  />
+                  <div className="rounded-xl overflow-hidden border border-white/10 bg-black/40">
+                    <Calendar
+                      mode="single"
+                      selected={manual.date ? new Date(manual.date + 'T12:00:00') : undefined}
+                      onSelect={d => handleManualChange('date', d ? format(d, 'yyyy-MM-dd') : '')}
+                      className="text-white/80 [&_button]:text-white/70 [&_button:hover]:bg-white/10 [&_button[aria-selected]]:bg-amber-500 [&_button[aria-selected]]:text-black [&_button[aria-selected]:hover]:bg-amber-500"
+                    />
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-1">
@@ -689,16 +690,6 @@ export default function NewGigPage() {
                     value={manual.startTime}
                     onChange={e => handleManualChange('startTime', e.target.value)}
                     placeholder="4:00 PM"
-                    className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Position</label>
-                  <Input
-                    value={manual.position}
-                    onChange={e => handleManualChange('position', e.target.value)}
-                    placeholder="e.g. A1, Followspot"
                     className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
                   />
                 </div>
@@ -715,7 +706,17 @@ export default function NewGigPage() {
                   />
                 </div>
 
-                <div className="col-span-2 flex flex-col gap-1">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Position</label>
+                  <Input
+                    value={manual.position}
+                    onChange={e => handleManualChange('position', e.target.value)}
+                    placeholder="e.g. A1, Followspot"
+                    className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
                   <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Event name</label>
                   <Input
                     value={manual.name}
@@ -735,7 +736,7 @@ export default function NewGigPage() {
                   />
                 </div>
 
-                <div className="flex flex-col gap-1">
+                <div className="col-span-2 flex flex-col gap-1">
                   <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Payroll co.</label>
                   <Input
                     value={manual.payrollCompany}
@@ -748,7 +749,7 @@ export default function NewGigPage() {
 
               <Button
                 onClick={handleManualSubmit}
-                disabled={!manual.client.trim() || !manual.date}
+                disabled={!manual.date}
                 size="sm"
                 className="w-full gap-1.5 bg-amber-500/90 hover:bg-amber-500 text-black border-0 font-medium mt-1"
               >
