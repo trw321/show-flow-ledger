@@ -748,16 +748,21 @@ export default function NewGigPage() {
                   />
                 </div>
 
-                <div className="col-span-2 flex flex-col gap-1">
-                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Payroll co.</label>
+               <div className="col-span-2 flex flex-col gap-1">
+                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Employer</label>
                   <Input
-                    value={manual.payrollCompany}
-                    onChange={e => handleManualChange('payrollCompany', e.target.value)}
-                    placeholder="e.g. AVTS"
+                    value={manual.client}
+                    onChange={e => handleManualChange('client', e.target.value)}
+                    placeholder="e.g. Fillmore Philadelphia"
                     className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                    list="employer-suggestions"
                   />
+                  <datalist id="employer-suggestions">
+                    {savedEmployers
+                      .filter(e => e.toLowerCase().includes(manual.client.toLowerCase()))
+                      .map(e => <option key={e} value={e} />)}
+                  </datalist>
                 </div>
-              </div>
 
               <Button
                 onClick={handleManualSubmit}
