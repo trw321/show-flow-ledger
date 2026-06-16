@@ -669,7 +669,7 @@ export default function NewGigPage() {
                         mode="single"
                         selected={manual.date ? new Date(manual.date + 'T12:00:00') : undefined}
                         onSelect={d => handleManualChange('date', d ? format(d, 'yyyy-MM-dd') : '')}
-                        className="text-white/80 [&_button]:text-white/70 [&_button:hover]:bg-white/10 [&_button[aria-selected]]:bg-pink-500 [&_button[aria-selected]]:text-white [&_button[aria-selected]:hover]:bg-pink-500 [&_button[aria-selected]]:rounded-full"
+                        className="text-white/80 [&_button]:text-white/70 [&_button:hover]:bg-white/10 [&_button[aria-selected]]:bg-transparent [&_button[aria-selected]]:text-lime-400 [&_button[aria-selected]]:ring-2 [&_button[aria-selected]]:ring-lime-400 [&_button[aria-selected]]:rounded-lg [&_button[aria-selected]:hover]:bg-white/10"
                       />
                     </div>
                   </div>
