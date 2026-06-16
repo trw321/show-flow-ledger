@@ -390,12 +390,11 @@ export default function NewGigPage() {
     setManual(prev => ({ ...prev, [field]: value }));
 
   const handleManualSubmit = () => {
-    if (!manual.client.trim()) { toast.error('Employer is required'); return; }
-    if (!manual.date) { toast.error('Date is required'); return; }
+    if (!manual.date) { toast.error('Pick a date first'); return; }
 
     const job: ParsedJob = {
-      name: manual.name.trim() || manual.client.trim(),
-      client: manual.client.trim(),
+      name: manual.name.trim() || manual.client.trim() || 'Untitled shift',
+      client: manual.client.trim() || 'Unknown',
       venue: manual.venue.trim(),
       date: manual.date,
       startTime: manual.startTime.trim() || undefined,
