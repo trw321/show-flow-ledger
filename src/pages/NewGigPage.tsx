@@ -696,8 +696,7 @@ export default function NewGigPage() {
                       mode="single"
                       selected={manual.date ? new Date(manual.date + 'T12:00:00') : undefined}
                       onSelect={d => handleManualChange('date', d ? format(d, 'yyyy-MM-dd') : '')}
-className="text-white/80 [&_button]:text-white/70 [&_button:hover]:bg-white/10 [&_button[aria-selected]]:!bg-transparent [&_button[aria-selected]]:text-white/80 [&_button[aria-selected]]:outline [&_button[aria-selected]]:outline-4 [&_button[aria-selected]]:outline-purple-400 [&_button[aria-selected]]:-outline-offset-2 [&_button[aria-selected]]:!rounded-full [&_button[aria-selected]:hover]:!bg-transparent [&_button[data-today]]:!bg-blue-500 [&_button[data-today]]:!text-white [&_button[data-today][aria-selected]]:!bg-blue-500 [&_button[data-today][aria-selected]]:outline-none"                </div>
-                <div className="flex flex-col gap-2 flex-1 sm:pt-6">
+className="text-white/80 [&_button]:text-white/70 [&_button:hover]:bg-white/10 [&_button[aria-selected]]:!bg-purple-500 [&_button[aria-selected]]:text-white [&_button[aria-selected]]:[clip-path:polygon(50%_0%,61%_35%,98%_35%,68%_57%,79%_91%,50%_70%,21%_91%,32%_57%,2%_35%,39%_35%)] [&_button[aria-selected]]:!rounded-none [&_button[aria-selected]:hover]:!bg-purple-400 [&_button[data-today]]:!bg-blue-500 [&_button[data-today]]:!text-white [&_button[data-today][aria-selected]]:!bg-blue-500 [&_button[data-today][aria-selected]]:[clip-path:none] [&_button[data-today][aria-selected]]:!rounded-full"                <div className="flex flex-col gap-2 flex-1 sm:pt-6">
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Call time <span className="inline-block w-1.5 h-1.5 rounded-full bg-lime-400 mb-0.5 ml-0.5" /></label>
                     <Input
