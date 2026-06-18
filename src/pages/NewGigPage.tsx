@@ -696,8 +696,7 @@ export default function NewGigPage() {
                       mode="single"
                       selected={manual.date ? new Date(manual.date + 'T12:00:00') : undefined}
                       onSelect={d => handleManualChange('date', d ? format(d, 'yyyy-MM-dd') : '')}
-className="text-white/80 [&_button]:text-white/70 [&_button:hover]:bg-white/10 [&_button[aria-selected]]:bg-transparent [&_button[aria-selected]]:text-white/80 [&_button[aria-selected]]:ring-2 [&_button[aria-selected]]:ring-purple-500 [&_button[aria-selected]]:rounded-lg [&_button[aria-selected]:hover]:bg-white/10 [&_button[data-today][aria-selected]]:bg-blue-500 [&_button[data-today][aria-selected]]:ring-0 [&_button[data-today][aria-selected]]:text-white [&_button[data-today]]:bg-blue-500 [&_button[data-today]]:text-white"                    />
-                  </div>
+className="text-white/80 [&_button]:text-white/70 [&_button:hover]:bg-white/10 [&_button[aria-selected]]:!bg-transparent [&_button[aria-selected]]:text-white/80 [&_button[aria-selected]]:outline [&_button[aria-selected]]:outline-2 [&_button[aria-selected]]:outline-purple-500 [&_button[aria-selected]]:-outline-offset-2 [&_button[aria-selected]]:!rounded-full [&_button[aria-selected]:hover]:!bg-transparent [&_button[data-today]]:!bg-blue-500 [&_button[data-today]]:!text-white [&_button[data-today][aria-selected]]:!bg-blue-500 [&_button[data-today][aria-selected]]:outline-none"                  </div>
                 </div>
                 <div className="flex flex-col gap-2 flex-1 sm:pt-6">
                   <div className="flex flex-col gap-1">
