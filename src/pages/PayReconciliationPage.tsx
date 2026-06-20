@@ -275,7 +275,7 @@ export default function PayReconciliationPage() {
           description: `Payment — ${row.periodLabel}`,
           amount: row.expectedPay,
           date: format(new Date(), 'yyyy-MM-dd'),
-          status: 'paid',
+          status: 'paid' as const,
         });
         setRainActive(true);
         setTimeout(() => setRainActive(false), 2100);
