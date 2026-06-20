@@ -384,9 +384,13 @@ export default function PayReconciliationPage() {
                   <button
                     onClick={() => handlePaidToggle(row)}
                     disabled={isToggling}
-                    className={`shrink-0 text-xl transition-all duration-200 ${
+                    className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-lg transition-all duration-200 ${
                       isToggling ? 'opacity-50' : ''
-                    } ${row.isPaid ? 'grayscale-0' : 'grayscale opacity-30 hover:opacity-60'}`}
+                    } ${
+                      row.isPaid
+                        ? 'bg-success/20 ring-2 ring-success shadow-lg shadow-success/20'
+                        : 'bg-secondary ring-1 ring-border opacity-40 hover:opacity-70 hover:ring-border/80'
+                    }`}
                     title={row.isPaid ? 'Mark unpaid' : 'Mark paid'}
                   >
                     💰
