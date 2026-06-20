@@ -1,15 +1,77 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useData } from '@/lib/DataContext';
 import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
 import BankStatementImport, { type ReconciliationRowInfo } from '@/components/BankStatementImport';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Scale, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, Upload } from 'lucide-react';
-import { format, addDays, endOfMonth, isWithinInterval, parseISO, differenceInDays } from 'date-fns';
+import { Scale, ChevronDown, ChevronUp, AlertTriangle, Upload, Pencil, Check, X } from 'lucide-react';
+import { format, addDays, endOfMonth, parseISO, differenceInDays } from 'date-fns';
 import { calculateExpectedPay } from '@/lib/payCalc';
 import type { Job, Income } from '@/lib/store';
+
+// ── Money rain ───────────────────────────────────────────────────────────────
+
+interface MoneyDrop {
+  id: number;
+  emoji: string;
+  left: number;
+  delay: number;
+  duration: number;
+  size: number;
+}
+
+function MoneyRain({ active }: { active: boolean }) {
+  const [drops, setDrops] = useState<MoneyDrop[]>([]);
+  const counterRef = useRef(0);
+
+  useEffect(() => {
+    if (!active) return;
+    const emojis = ['💰', '💵', '💴'];
+    const newDrops: MoneyDrop[] = Array.from({ length: 18 }, (_, i) => ({
+      id: counterRef.current++,
+      emoji: emojis[i % emojis.length],
+      left: Math.random() * 100,
+      delay: Math.random() * 0.6,
+      duration: 0.8 + Math.random() * 0.6,
+      size: 16 + Math.random() * 14,
+    }));
+    setDrops(newDrops);
+    const t = setTimeout(() => setDrops([]), 2000);
+    return () => clearTimeout(t);
+  }, [active]);
+
+  if (drops.length === 0) return null;
+
+  return (
+    <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
+      {drops.map(d => (
+        <span
+          key={d.id}
+          style={{
+            position: 'absolute',
+            left: `${d.left}%`,
+            top: '-40px',
+            fontSize: `${d.size}px`,
+            animation: `moneyFall ${d.duration}s ease-in ${d.delay}s forwards`,
+          }}
+        >
+          {d.emoji}
+        </span>
+      ))}
+      <style>{`
+        @keyframes moneyFall {
+          0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
+          100% { transform: translateY(110vh) rotate(${Math.random() > 0.5 ? '' : '-'}${Math.floor(Math.random() * 360)}deg); opacity: 0.3; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function getPayPeriods(job: Job) {
   const jobDate = parseISO(job.date);
@@ -17,7 +79,7 @@ function getPayPeriods(job: Job) {
     return [{ start: jobDate, end: jobDate, label: 'Full project' }];
   }
   const anchor = job.payPeriodStart ? parseISO(job.payPeriodStart) : jobDate;
-  let periodStart = new Date(anchor);
+  const periodStart = new Date(anchor);
   let periodEnd: Date;
   if (job.paySchedule === 'weekly') periodEnd = addDays(periodStart, 6);
   else if (job.paySchedule === 'bi-weekly') periodEnd = addDays(periodStart, 13);
@@ -66,6 +128,7 @@ interface ReconciliationRow {
   difference: number;
   isPaid: boolean;
   relatedIncomeIds: string[];
+  hourlyRate?: number;
   timeEntryDetails: { date: string; hours: number; pay: number; breakdown: string[] }[];
   incomeDetails: {
     date: string;
@@ -79,13 +142,25 @@ interface ReconciliationRow {
   }[];
 }
 
+interface EditState {
+  client: string;
+  payrollCompany: string;
+  hourlyRate: string;
+  paySchedule: string;
+}
+
+// ── Main component ───────────────────────────────────────────────────────────
+
 export default function PayReconciliationPage() {
-  const { data, addIncome, updateIncome } = useData();
+  const { data, addIncome, updateIncome, updateJob } = useData();
 
   const [filterJobClient, setFilterJobClient] = useState<string>('all');
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [togglingKey, setTogglingKey] = useState<string | null>(null);
+  const [rainActive, setRainActive] = useState(false);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editState, setEditState] = useState<EditState>({ client: '', payrollCompany: '', hourlyRate: '', paySchedule: '' });
 
   const uniqueClients = useMemo(() => {
     const clients = new Set(data.jobs.map(j => j.client).filter(Boolean));
@@ -140,6 +215,7 @@ export default function PayReconciliationPage() {
             difference: actualPaid - expectedPay,
             isPaid,
             relatedIncomeIds: periodIncome.map(i => i.id),
+            hourlyRate: referenceJob.hourlyRate,
             timeEntryDetails: payResult.details,
             payrollCompany: referenceJob.payrollCompany,
             incomeDetails: paidIncome.map(i => {
@@ -188,12 +264,10 @@ export default function PayReconciliationPage() {
     setTogglingKey(key);
     try {
       if (row.isPaid && row.relatedIncomeIds.length > 0) {
-        // Mark all related income as pending
         for (const id of row.relatedIncomeIds) {
           await updateIncome(id, { status: 'pending' });
         }
       } else if (!row.isPaid) {
-        // Create a stub income entry marked as paid
         await addIncome({
           jobId: row.jobId,
           client: row.client,
@@ -202,14 +276,38 @@ export default function PayReconciliationPage() {
           date: format(new Date(), 'yyyy-MM-dd'),
           status: 'paid',
         });
+        setRainActive(true);
+        setTimeout(() => setRainActive(false), 2100);
       }
     } finally {
       setTogglingKey(null);
     }
   };
 
+  const startEdit = (row: ReconciliationRow, key: string) => {
+    setEditingKey(key);
+    setEditState({
+      client: row.client,
+      payrollCompany: row.payrollCompany ?? '',
+      hourlyRate: row.hourlyRate?.toString() ?? '',
+      paySchedule: row.paySchedule,
+    });
+    setExpandedRow(key);
+  };
+
+  const saveEdit = async (row: ReconciliationRow) => {
+    await updateJob(row.jobId, {
+      client: editState.client.trim() || row.client,
+      payrollCompany: editState.payrollCompany.trim() || undefined,
+      hourlyRate: editState.hourlyRate ? parseFloat(editState.hourlyRate) : undefined,
+      paySchedule: editState.paySchedule as Job['paySchedule'],
+    });
+    setEditingKey(null);
+  };
+
   return (
     <>
+      <MoneyRain active={rainActive} />
       <PageHeader title="Pay" description="Hours worked vs income received" />
 
       {/* Filters + import */}
@@ -274,6 +372,7 @@ export default function PayReconciliationPage() {
             const isMatch = Math.abs(row.difference) < 0.01;
             const isOver = row.difference > 0;
             const isToggling = togglingKey === key;
+            const isEditing = editingKey === key;
 
             return (
               <div key={key} className="rounded-xl border border-border bg-card overflow-hidden">
@@ -281,21 +380,19 @@ export default function PayReconciliationPage() {
                 {/* Snapshot row */}
                 <div className="flex items-center gap-3 px-4 py-3">
 
-                  {/* Paid toggle */}
+                  {/* Money bag paid toggle */}
                   <button
                     onClick={() => handlePaidToggle(row)}
                     disabled={isToggling}
-                    className={`shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors ${
-                      row.isPaid
-                        ? 'border-success bg-success/20 text-success'
-                        : 'border-border bg-transparent text-transparent hover:border-success/50'
-                    }`}
+                    className={`shrink-0 text-xl transition-all duration-200 ${
+                      isToggling ? 'opacity-50' : ''
+                    } ${row.isPaid ? 'grayscale-0' : 'grayscale opacity-30 hover:opacity-60'}`}
                     title={row.isPaid ? 'Mark unpaid' : 'Mark paid'}
                   >
-                    <CheckCircle size={14} />
+                    💰
                   </button>
 
-                  {/* Main info — tappable to expand */}
+                  {/* Main info */}
                   <button
                     className="flex-1 flex items-center justify-between gap-2 text-left min-w-0"
                     onClick={() => setExpandedRow(isExpanded ? null : key)}
@@ -317,6 +414,15 @@ export default function PayReconciliationPage() {
                       {isExpanded ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
                     </div>
                   </button>
+
+                  {/* Edit pencil */}
+                  <button
+                    onClick={() => isEditing ? setEditingKey(null) : startEdit(row, key)}
+                    className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                    title="Edit"
+                  >
+                    <Pencil size={13} />
+                  </button>
                 </div>
 
                 {/* Quick stats bar */}
@@ -331,6 +437,50 @@ export default function PayReconciliationPage() {
                     {row.isPaid ? 'paid' : 'unpaid'}
                   </span>
                 </div>
+
+                {/* Inline edit form */}
+                {isEditing && (
+                  <div className="border-t border-border bg-muted/30 px-4 py-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-[10px] text-mono uppercase text-muted-foreground font-semibold tracking-wider">Edit details</h4>
+                      <div className="flex gap-2">
+                        <button onClick={() => setEditingKey(null)} className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1">
+                          <X size={11} /> Cancel
+                        </button>
+                        <button onClick={() => saveEdit(row)} className="text-[11px] text-success hover:text-success/80 flex items-center gap-1 font-medium">
+                          <Check size={11} /> Save
+                        </button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] text-mono uppercase text-muted-foreground">Client</label>
+                        <Input value={editState.client} onChange={e => setEditState(p => ({ ...p, client: e.target.value }))} className="h-8 text-xs font-mono" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] text-mono uppercase text-muted-foreground">Payroll co.</label>
+                        <Input value={editState.payrollCompany} onChange={e => setEditState(p => ({ ...p, payrollCompany: e.target.value }))} className="h-8 text-xs font-mono" placeholder="optional" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] text-mono uppercase text-muted-foreground">Rate ($/hr)</label>
+                        <Input type="number" step="0.01" value={editState.hourlyRate} onChange={e => setEditState(p => ({ ...p, hourlyRate: e.target.value }))} className="h-8 text-xs font-mono" placeholder="0.00" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] text-mono uppercase text-muted-foreground">Pay schedule</label>
+                        <Select value={editState.paySchedule} onValueChange={v => setEditState(p => ({ ...p, paySchedule: v }))}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="weekly">Weekly</SelectItem>
+                            <SelectItem value="bi-weekly">Bi-weekly</SelectItem>
+                            <SelectItem value="semi-monthly">Semi-monthly</SelectItem>
+                            <SelectItem value="monthly">Monthly</SelectItem>
+                            <SelectItem value="per-project">Per project</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Expanded detail */}
                 {isExpanded && (
@@ -363,10 +513,7 @@ export default function PayReconciliationPage() {
                         {row.incomeDetails.length === 0 ? (
                           <div className="space-y-1.5">
                             <p className="text-xs text-muted-foreground">No payments recorded</p>
-                            <button
-                              onClick={() => setShowImport(true)}
-                              className="text-xs text-primary hover:underline"
-                            >
+                            <button onClick={() => setShowImport(true)} className="text-xs text-primary hover:underline">
                               + Import bank statement / pay stub
                             </button>
                           </div>
