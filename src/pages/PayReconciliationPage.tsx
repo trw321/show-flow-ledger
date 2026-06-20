@@ -189,7 +189,8 @@ export default function PayReconciliationPage() {
         const periodIncome = data.income.filter(i => {
           const d = parseISO(i.date);
           if (d > paymentWindow) return false;
-          return namesMatch(i.client, referenceJob.client) ||
+          return i.jobId === referenceJob.id ||
+                 namesMatch(i.client, referenceJob.client) ||
                  namesMatch(i.client, referenceJob.payrollCompany);
         });
 
