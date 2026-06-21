@@ -389,7 +389,7 @@ export default function PayReconciliationPage() {
                       isToggling ? 'opacity-50' : ''
                     } ${
                       row.isPaid
-                        ? 'bg-success/20 ring-2 ring-success shadow-lg shadow-success/20 shadow-[0_0_12px_4px_rgba(255,255,255,0.25)]'
+                        ? 'bg-success/20 ring-2 ring-success shadow-[0_0_0_4px_rgba(74,222,128,0.3),0_0_16px_6px_rgba(255,255,255,0.2)]'
                         : 'bg-secondary ring-1 ring-border opacity-40 hover:opacity-70 hover:ring-border/80'
                     }`}
                     title={row.isPaid ? 'Mark unpaid' : 'Mark paid'}
