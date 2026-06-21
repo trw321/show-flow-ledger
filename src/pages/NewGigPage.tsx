@@ -699,7 +699,7 @@ export default function NewGigPage() {
                       captionLayout="dropdown-buttons"
                       fromYear={2020}
                       toYear={2030}
-className="text-white/80 [&_button]:text-white/70 [&_button:hover]:bg-white/10 [&_button[aria-selected]]:!bg-transparent [&_button[aria-selected]]:text-white/80 [&_button[aria-selected]]:outline [&_button[aria-selected]]:outline-2 [&_button[aria-selected]]:outline-purple-500 [&_button[aria-selected]]:-outline-offset-2 [&_button[aria-selected]]:!rounded-full [&_button[aria-selected]:hover]:!bg-transparent [&_button[data-today]]:!bg-blue-500 [&_button[data-today]]:!text-white [&_button[data-today][aria-selected]]:!bg-blue-500 [&_button[data-today][aria-selected]]:outline-none"
+                      className="text-white/80 [&_button]:text-white/70 [&_button:hover]:bg-white/10 [&_button[aria-selected]]:!bg-transparent [&_button[aria-selected]]:text-white/80 [&_button[aria-selected]]:outline [&_button[aria-selected]]:outline-2 [&_button[aria-selected]]:outline-purple-500 [&_button[aria-selected]]:-outline-offset-2 [&_button[aria-selected]]:!rounded-full [&_button[aria-selected]:hover]:!bg-transparent [&_button[data-today]]:!bg-blue-500 [&_button[data-today]]:!text-white [&_button[data-today][aria-selected]]:!bg-blue-500 [&_button[data-today][aria-selected]]:outline-none"
                       />        
                   </div>
                     <div className="flex flex-col gap-1">
