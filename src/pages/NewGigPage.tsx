@@ -397,6 +397,11 @@ export default function NewGigPage() {
   const [vortexPhase, setVortexPhase] = useState<VortexPhase>('idle');
   const [inputMode, setInputMode] = useState<InputMode>('choose');
   const [manual, setManual] = useState<ManualEntry>(EMPTY_MANUAL);
+  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
+  const swipe = useSwipeMonth(
+    () => setCalendarMonth(m => new Date(m.getFullYear(), m.getMonth() - 1)),
+    () => setCalendarMonth(m => new Date(m.getFullYear(), m.getMonth() + 1)),
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
