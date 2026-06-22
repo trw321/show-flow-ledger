@@ -110,7 +110,7 @@ export default function AppLayout() {
 
       {/* Mobile header */}
       <div className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-3 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
-        <span className="text-sm font-semibold tracking-tight">Show Flow</span>
+        <span className="text-xl font-display">Show Flow</span>
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
           <SheetTrigger asChild>
             <Button variant="ghost" size="icon" className="h-8 w-8">
