@@ -705,9 +705,9 @@ export default function NewGigPage() {
               {/* Calendar + right-column fields side by side on desktop */}
               <div className="flex flex-col sm:flex-row gap-3">
                 <div className="flex flex-col gap-1 flex-shrink-0">
-                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">
-                    Date <span className="text-lime-400">*</span>
-                  </label>
+                  <label className="text-[10px] font-body uppercase tracking-wider text-white/50">
+                      Date <span className="text-lime-400">*</span>
+                    </label>
                   <div
                     className="rounded-xl overflow-hidden border border-white/10 bg-black/40"
                     {...swipe}
