@@ -708,16 +708,18 @@ export default function NewGigPage() {
                   <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">
                     Date <span className="text-lime-400">*</span>
                   </label>
-                  <div className="rounded-xl overflow-hidden border border-white/10 bg-black/40">
-                   <Calendar
+                  <div
+                    className="rounded-xl overflow-hidden border border-white/10 bg-black/40"
+                    {...swipe}
+                  >
+                    <Calendar
                       mode="single"
+                      month={calendarMonth}
+                      onMonthChange={setCalendarMonth}
                       selected={manual.date ? new Date(manual.date + 'T12:00:00') : undefined}
                       onSelect={d => handleManualChange('date', d ? format(d, 'yyyy-MM-dd') : '')}
-                      captionLayout="dropdown-buttons"
-                      fromYear={2020}
-                      toYear={2030}
                       className="text-white/80 [&_button]:text-white/70 [&_button:hover]:bg-white/10 [&_button[aria-selected]]:!bg-transparent [&_button[aria-selected]]:text-white/80 [&_button[aria-selected]]:outline [&_button[aria-selected]]:outline-2 [&_button[aria-selected]]:outline-purple-500 [&_button[aria-selected]]:-outline-offset-2 [&_button[aria-selected]]:!rounded-full [&_button[aria-selected]:hover]:!bg-transparent [&_button[data-today]]:!bg-blue-500 [&_button[data-today]]:!text-white [&_button[data-today][aria-selected]]:!bg-blue-500 [&_button[data-today][aria-selected]]:outline-none"
-                      />        
+                    />
                   </div>
                     <div className="flex flex-col gap-1">
                     <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Call time <span className="inline-block w-1.5 h-1.5 rounded-full bg-lime-400 mb-0.5 ml-0.5" /></label>
