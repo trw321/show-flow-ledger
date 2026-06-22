@@ -82,7 +82,7 @@ function BottomTabBar() {
             key={item.to}
             to={item.to}
             className={cn(
-              'flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors',
+              'flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-body transition-colors',
               active ? 'text-primary' : 'text-muted-foreground',
             )}
           >
