@@ -119,7 +119,7 @@ export default function AppLayout() {
           </SheetTrigger>
           <SheetContent side="left" className="w-64 p-0">
             <div className="px-4 py-5 border-b border-border">
-              <span className="text-sm font-semibold tracking-tight">Show Flow</span>
+              <span className="text-2xl font-display">Show Flow</span>
             </div>
             <SidebarNav onNavigate={() => setMobileOpen(false)} />
           </SheetContent>
