@@ -103,7 +103,7 @@ export default function AppLayout() {
       {/* Desktop sidebar */}
       <aside className="hidden md:flex flex-col w-56 shrink-0 border-r border-border bg-card">
         <div className="px-4 py-5 border-b border-border">
-          <span className="text-sm font-semibold tracking-tight text-foreground">Show Flow</span>
+          <span className="text-2xl font-display text-foreground">Show Flow</span>
         </div>
         <SidebarNav />
       </aside>
