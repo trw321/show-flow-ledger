@@ -742,7 +742,7 @@ export default function NewGigPage() {
                     />
                   </div>
                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Position</label>
+                    <label className="text-[10px] font-body uppercase tracking-wider text-white/50">Position</label>
                     <Input
                       value={manual.position}
                       onChange={e => handleManualChange('position', e.target.value)}
