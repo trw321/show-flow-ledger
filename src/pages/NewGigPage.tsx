@@ -704,10 +704,12 @@ export default function NewGigPage() {
 
               {/* Calendar + right-column fields side by side on desktop */}
               <div className="flex flex-col sm:flex-row gap-3">
+
+                {/* Left — calendar */}
                 <div className="flex flex-col gap-1 flex-shrink-0">
                   <label className="text-[10px] font-body uppercase tracking-wider text-white/50">
-                      Date <span className="text-lime-400">*</span>
-                    </label>
+                    Date <span className="text-lime-400">*</span>
+                  </label>
                   <div
                     className="rounded-xl overflow-hidden border border-white/10 bg-black/40"
                     {...swipe}
@@ -721,7 +723,11 @@ export default function NewGigPage() {
                       className="text-white/80 [&_button]:text-white/70 [&_button:hover]:bg-white/10 [&_button[aria-selected]]:!bg-transparent [&_button[aria-selected]]:text-white/80 [&_button[aria-selected]]:outline [&_button[aria-selected]]:outline-2 [&_button[aria-selected]]:outline-purple-500 [&_button[aria-selected]]:-outline-offset-2 [&_button[aria-selected]]:!rounded-full [&_button[aria-selected]:hover]:!bg-transparent [&_button[data-today]]:!bg-blue-500 [&_button[data-today]]:!text-white [&_button[data-today][aria-selected]]:!bg-blue-500 [&_button[data-today][aria-selected]]:outline-none"
                     />
                   </div>
-                    <div className="flex flex-col gap-1">
+                </div>
+
+                {/* Right — fields stacked */}
+                <div className="flex flex-col gap-2 flex-1 sm:pt-6">
+                  <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-body uppercase tracking-wider text-white/50">Call time <span className="inline-block w-1.5 h-1.5 rounded-full bg-lime-400 mb-0.5 ml-0.5" /></label>
                     <Input
                       value={manual.startTime}
@@ -731,7 +737,7 @@ export default function NewGigPage() {
                     />
                   </div>
                   <div className="flex flex-col gap-1">
-                   <label className="text-[10px] font-body uppercase tracking-wider text-white/50">Rate ($/hr) <span className="inline-block w-1.5 h-1.5 rounded-full bg-lime-400 mb-0.5 ml-0.5" /></label>
+                    <label className="text-[10px] font-body uppercase tracking-wider text-white/50">Rate ($/hr) <span className="inline-block w-1.5 h-1.5 rounded-full bg-lime-400 mb-0.5 ml-0.5" /></label>
                     <Input
                       type="number"
                       step="0.01"
@@ -741,7 +747,7 @@ export default function NewGigPage() {
                       className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
                     />
                   </div>
-                 <div className="flex flex-col gap-1">
+                  <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-body uppercase tracking-wider text-white/50">Position</label>
                     <Input
                       value={manual.position}
@@ -750,8 +756,8 @@ export default function NewGigPage() {
                       className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
                     />
                   </div>
-                  <div className="hidden sm:flex flex-col gap-1">
-                    <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Event name</label>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-body uppercase tracking-wider text-white/50">Event name</label>
                     <Input
                       value={manual.name}
                       onChange={e => handleManualChange('name', e.target.value)}
@@ -759,8 +765,8 @@ export default function NewGigPage() {
                       className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
                     />
                   </div>
-                  <div className="hidden sm:flex flex-col gap-1">
-                    <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Venue</label>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-body uppercase tracking-wider text-white/50">Venue</label>
                     <Input
                       value={manual.venue}
                       onChange={e => handleManualChange('venue', e.target.value)}
@@ -768,7 +774,7 @@ export default function NewGigPage() {
                       className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
                     />
                   </div>
-                  <div className="hidden sm:flex flex-col gap-1">
+                  <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-body uppercase tracking-wider text-white/50">Payroll co.</label>
                     <Input
                       value={manual.payrollCompany}
