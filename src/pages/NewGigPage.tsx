@@ -351,6 +351,18 @@ function ShiftCard({
   );
 }
 
+function useSwipeMonth(onPrev: () => void, onNext: () => void) {
+  const touchStartX = useRef<number | null>(null);
+  const onTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 40) diff > 0 ? onNext() : onPrev();
+    touchStartX.current = null;
+  };
+  return { onTouchStart, onTouchEnd };
+}
+
 const EMPTY_MANUAL: ManualEntry = {
   client: '',
   name: '',
