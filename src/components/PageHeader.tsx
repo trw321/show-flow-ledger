@@ -13,7 +13,7 @@ export default function PageHeader({ title, description, action }: PageHeaderPro
             <div className="w-3 h-3 rounded-full funky-gradient animate-pulse-glow" />
             <h1 className="text-xl md:text-2xl font-display tracking-wide">{title}</h1>
           </div>
-          {description && <p className="mt-0.5 text-xs md:text-sm text-muted-foreground ml-5">{description}</p>}
+          {description && <p className="mt-0.5 text-xs md:text-sm text-muted-foreground font-body ml-5">{description}</p>}
         </div>
       </div>
       {action && <div className="flex flex-wrap gap-2">{action}</div>}
