@@ -15,7 +15,7 @@ export default {
     extend: {
       fontFamily: {
         display: ['Lancelot', 'serif'],
-        body: ['Gogoia', 'sans-serif'],
+        body: ['Cormorant Garamond', 'serif'],
         mono: ['Space Mono', 'monospace'],
       },
       colors: {
