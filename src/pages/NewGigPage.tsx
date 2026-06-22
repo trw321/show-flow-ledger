@@ -769,7 +769,7 @@ export default function NewGigPage() {
                     />
                   </div>
                   <div className="hidden sm:flex flex-col gap-1">
-                    <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Payroll co.</label>
+                    <label className="text-[10px] font-body uppercase tracking-wider text-white/50">Payroll co.</label>
                     <Input
                       value={manual.payrollCompany}
                       onChange={e => handleManualChange('payrollCompany', e.target.value)}
