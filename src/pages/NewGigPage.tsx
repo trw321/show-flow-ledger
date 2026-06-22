@@ -687,7 +687,7 @@ export default function NewGigPage() {
 
               {/* Employer — full width, up top */}
               <div className="flex flex-col gap-1">
-               <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Employer <span className="inline-block w-1.5 h-1.5 rounded-full bg-lime-400 mb-0.5 ml-0.5" /></label>
+               <label className="text-[10px] font-body uppercase tracking-wider text-white/50">Employer</label>
                 <Input
                   value={manual.client}
                   onChange={e => handleManualChange('client', e.target.value)}
