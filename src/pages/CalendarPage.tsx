@@ -539,14 +539,9 @@ export default function CalendarPage() {
 
       {viewMode === 'year' && (
         <>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-5">
+          <div className="grid grid-cols-3 gap-x-2 gap-y-3">
             {Array.from({ length: 12 }, (_, mi) => {
               const monthStart = new Date(currentYear, mi, 1);
-              const start = startOfWeek(startOfMonth(monthStart), { weekStartsOn: 0 });
-              const end = endOfWeek(endOfMonth(monthStart), { weekStartsOn: 0 });
-              const days: Date[] = [];
-              let d = start;
-              while (d <= end) { days.push(d); d = addDays(d, 1); }
               const monthPrefix = format(monthStart, 'yyyy-MM');
               let monthPay = 0, monthJobs = 0;
               for (const [date, jobs] of Object.entries(jobsByDate)) {
@@ -554,53 +549,52 @@ export default function CalendarPage() {
                 monthJobs += jobs.length;
                 monthPay += payByDate[date] || 0;
               }
+              const daysInMonth = new Date(currentYear, mi + 1, 0).getDate();
+              const firstDow = new Date(currentYear, mi, 1).getDay();
+              const cells: (number | null)[] = [
+                ...Array(firstDow).fill(null),
+                ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+              ];
+              while (cells.length % 7 !== 0) cells.push(null);
+
               return (
                 <div key={mi}>
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="text-[10px] text-mono font-bold uppercase tracking-wider text-foreground/70">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <p className="text-[9px] font-body font-medium uppercase tracking-wider text-foreground/60">
                       {format(monthStart, 'MMM')}
                     </p>
-                    <div className="flex items-center gap-1.5">
-                      {monthJobs > 0 && (
-                        <span className="text-[8px] text-mono text-muted-foreground/50">{monthJobs}j</span>
-                      )}
-                      {monthPay > 0 && (
-                        <span className="text-[8px] text-mono text-success font-semibold">
-                          ${monthPay >= 1000 ? `${(monthPay / 1000).toFixed(1)}k` : monthPay.toFixed(0)}
-                        </span>
-                      )}
-                    </div>
+                    {monthPay > 0 && (
+                      <span className="text-[7px] text-mono text-success font-semibold">
+                        ${monthPay >= 1000 ? `${(monthPay / 1000).toFixed(1)}k` : monthPay.toFixed(0)}
+                      </span>
+                    )}
                   </div>
                   <div className="grid grid-cols-7 gap-px">
-                    {['S','M','T','W','T','F','S'].map((lbl, i) => (
-                      <div key={i} className="h-3 flex items-center justify-center text-[6px] text-muted-foreground/30 font-medium">{lbl}</div>
-                    ))}
-                    {days.map((day, di) => {
-                      const dateKey = format(day, 'yyyy-MM-dd');
+                    {cells.map((day, ci) => {
+                      if (!day) return <div key={ci} className="h-3" />;
+                      const dateKey = `${monthPrefix}-${String(day).padStart(2, '0')}`;
                       const dayJobs = jobsByDate[dateKey] || [];
-                      const isCurrentMonth = isSameMonth(day, monthStart);
-                      const todayFlag = isSameDay(day, today);
+                      const todayFlag = isSameDay(new Date(currentYear, mi, day), today);
                       const hasPay = !!payByDate[dateKey];
                       const hasCompleted = dayJobs.some(j => j.status === 'completed');
                       const hasInProgress = dayJobs.some(j => j.status === 'in-progress');
                       const hasUpcoming = dayJobs.some(j => j.status === 'upcoming');
-                      if (!isCurrentMonth) return <div key={di} className="h-5" />;
                       return (
                         <div
-                          key={di}
+                          key={ci}
                           onClick={() => dayJobs.length > 0 && setSelectedDate(dateKey)}
                           className={cn(
-                            "h-5 flex items-center justify-center text-[8px] text-mono rounded-[3px] transition-colors select-none",
+                            'h-3 flex items-center justify-center text-[6px] text-mono rounded-[2px] transition-colors select-none',
                             dayJobs.length > 0 && 'cursor-pointer',
                             hasPay && 'bg-success/30 text-success font-semibold',
                             !hasPay && hasCompleted && 'bg-success/15 text-success',
-                            !hasPay && !hasCompleted && hasInProgress && 'bg-primary/25 text-primary font-semibold',
+                            !hasPay && !hasCompleted && hasInProgress && 'bg-primary/25 text-primary',
                             !hasPay && !hasCompleted && !hasInProgress && hasUpcoming && 'bg-accent/20 text-accent',
-                            !dayJobs.length && 'text-muted-foreground/40',
+                            !dayJobs.length && 'text-muted-foreground/25',
                             todayFlag && 'ring-1 ring-inset ring-primary/70',
                           )}
                         >
-                          {format(day, 'd')}
+                          {day}
                         </div>
                       );
                     })}
@@ -610,8 +604,8 @@ export default function CalendarPage() {
             })}
           </div>
 
-          <div className="mt-5 rounded-xl border border-border/40 bg-secondary/10 p-3">
-            <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground/50 mb-2">{currentYear} Total</p>
+          <div className="mt-4 rounded-xl border border-border/40 bg-secondary/10 p-3">
+            <p className="text-[9px] font-body uppercase tracking-widest text-muted-foreground/50 mb-2">{currentYear} Total</p>
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">
                 {yearStats.totalJobs > 0 ? `${yearStats.totalJobs} job${yearStats.totalJobs !== 1 ? 's' : ''}` : 'No jobs yet'}
@@ -630,21 +624,20 @@ export default function CalendarPage() {
           </div>
 
           <div className="mt-2 flex items-center gap-3 px-1">
-            <span className="text-[8px] text-muted-foreground/40 text-mono uppercase tracking-wider">Legend</span>
+            <span className="text-[8px] text-muted-foreground/40 font-body uppercase tracking-wider">Legend</span>
             {[
               { color: 'bg-accent/20', label: 'Upcoming' },
               { color: 'bg-success/15', label: 'Completed' },
               { color: 'bg-success/30', label: 'Paid' },
             ].map(({ color, label }) => (
               <div key={label} className="flex items-center gap-1">
-                <div className={cn("w-3 h-3 rounded-[2px]", color)} />
-                <span className="text-[8px] text-muted-foreground/50 text-mono">{label}</span>
+                <div className={cn('w-3 h-3 rounded-[2px]', color)} />
+                <span className="text-[8px] text-muted-foreground/50 font-body">{label}</span>
               </div>
             ))}
           </div>
         </>
       )}
-
       <Dialog open={!!selectedDate} onOpenChange={(o) => !o && closeDialog()}>
         <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto rounded-2xl">
           {!selectedJob ? (
