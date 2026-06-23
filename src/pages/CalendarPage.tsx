@@ -708,9 +708,13 @@ export default function CalendarPage() {
 
       {/* ── Ready to log ─────────────────────────────────────────────── */}
       {(() => {
+       const monthPrefix = format(currentDate, 'yyyy-MM');
         const needsLog = data.jobs.filter(job => {
           const jobDate = new Date(job.date + 'T12:00:00');
-          return (isToday(jobDate) || isPast(jobDate)) && (job.hoursWorked ?? 0) === 0 && job.status !== 'cancelled';
+          return (isToday(jobDate) || isPast(jobDate))
+            && (job.hoursWorked ?? 0) === 0
+            && job.status !== 'cancelled'
+            && job.date.startsWith(monthPrefix);
         }).sort((a, b) => a.date.localeCompare(b.date));
         if (needsLog.length === 0) return null;
 
