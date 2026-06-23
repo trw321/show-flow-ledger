@@ -771,8 +771,9 @@ export default function CalendarPage() {
 
       {/* ── Recently logged ──────────────────────────────────────────── */}
       {(() => {
+        const monthPrefix = format(currentDate, 'yyyy-MM');
         const recentlyLogged = data.jobs
-          .filter(job => (job.hoursWorked ?? 0) > 0)
+          .filter(job => (job.hoursWorked ?? 0) > 0 && job.date.startsWith(monthPrefix))
           .sort((a, b) => b.date.localeCompare(a.date))
           .slice(0, 10);
         if (recentlyLogged.length === 0) return null;
