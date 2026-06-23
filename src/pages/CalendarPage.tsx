@@ -433,31 +433,7 @@ export default function CalendarPage() {
         </button>
       </div>
 
-      <div className="flex items-center justify-between mb-3">
-        <Button variant="ghost" size="icon" className="h-8 w-8"
-          onClick={() => viewMode === 'month'
-            ? setCurrentDate(prev => subMonths(prev, 1))
-            : setCurrentYear(prev => prev - 1)
-          }>
-          <ChevronLeft size={16} />
-        </Button>
-        <div className="flex items-center gap-2">
-          <h2 className="text-mono text-sm font-semibold">
-            {viewMode === 'month' ? format(currentDate, 'MMMM yyyy') : currentYear}
-          </h2>
-          <Button variant="outline" size="sm" className="h-6 text-[10px] px-2 rounded-full"
-            onClick={() => { setCurrentDate(new Date()); setCurrentYear(new Date().getFullYear()); }}>
-            Today
-          </Button>
-        </div>
-        <Button variant="ghost" size="icon" className="h-8 w-8"
-          onClick={() => viewMode === 'month'
-            ? setCurrentDate(prev => addMonths(prev, 1))
-            : setCurrentYear(prev => prev + 1)
-          }>
-          <ChevronRight size={16} />
-        </Button>
-      </div>
+      V
 
       {viewMode === 'month' && (
         <>
