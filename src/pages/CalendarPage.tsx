@@ -787,7 +787,7 @@ export default function CalendarPage() {
 
         return (
           <div className="mt-4 flex flex-col gap-2">
-            <h2 className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground/50 flex items-center gap-1.5">
+            <h2 className="text-[9px] font-body uppercase tracking-widest text-muted-foreground/50 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-success inline-block" />
               Recently logged
             </h2>
