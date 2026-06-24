@@ -433,7 +433,35 @@ export default function CalendarPage() {
         </button>
       </div>
 
-      V
+     <div className="flex items-stretch justify-between mb-3 gap-2">
+        <button
+          onClick={() => viewMode === 'month'
+            ? setCurrentDate(prev => subMonths(prev, 1))
+            : setCurrentYear(prev => prev - 1)
+          }
+          className="flex items-center justify-center w-12 min-h-[44px] rounded-xl bg-fuchsia-500/30 active:bg-fuchsia-500/50 text-fuchsia-400 transition-colors border border-fuchsia-500/40"
+        >
+          <ChevronLeft size={22} />
+        </button>
+        <div className="flex-1 flex items-center justify-center gap-2">
+          <h2 className="font-body text-base font-semibold tracking-wide">
+            {viewMode === 'month' ? format(currentDate, 'MMMM yyyy') : currentYear}
+          </h2>
+          <Button variant="outline" size="sm" className="h-6 text-[10px] px-2 rounded-full"
+            onClick={() => { setCurrentDate(new Date()); setCurrentYear(new Date().getFullYear()); }}>
+            Today
+          </Button>
+        </div>
+        <button
+          onClick={() => viewMode === 'month'
+            ? setCurrentDate(prev => addMonths(prev, 1))
+            : setCurrentYear(prev => prev + 1)
+          }
+          className="flex items-center justify-center w-12 min-h-[44px] rounded-xl bg-fuchsia-500/30 active:bg-fuchsia-500/50 text-fuchsia-400 transition-colors border border-fuchsia-500/40"
+        >
+          <ChevronRight size={22} />
+        </button>
+      </div>
 
       {viewMode === 'month' && (
         <>
