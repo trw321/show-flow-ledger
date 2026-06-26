@@ -256,6 +256,8 @@ export default function Dashboard() {
         </div>
       )}
 
+      <DiscoBallExport onClick={() => exportWeeklyToExcel(data.jobs, showExpenses ? data.expenses : [], showIncome ? data.income : [])} />
+      
       {/* Hero */}
       <div className="relative overflow-hidden rounded-2xl border border-border mb-6 p-5 bg-card">
         <div className="absolute inset-0 opacity-20">
