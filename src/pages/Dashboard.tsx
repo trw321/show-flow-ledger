@@ -136,6 +136,11 @@ export default function Dashboard() {
 
   const recentJobs = [...data.jobs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
   const recentExpenses = [...data.expenses].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
+  const recentExpenses = [...data.expenses].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
+  const nextJob = [...data.jobs]
+    .filter(j => j.status !== 'cancelled')
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .find(j => j.date >= format(new Date(), 'yyyy-MM-dd'));
 
   const handleMigrate = async () => {
     setMigrating(true);
