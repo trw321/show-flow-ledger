@@ -67,6 +67,7 @@ export default function Dashboard() {
   const [taxRate, setTaxRate] = useState(25);
   const [showMigrate, setShowMigrate] = useState(hasLegacyData);
   const [migrating, setMigrating] = useState(false);
+  const [employerExpanded, setEmployerExpanded] = useState(false);
 
   if (!data) return null;
 
