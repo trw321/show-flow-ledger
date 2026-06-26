@@ -495,13 +495,4 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Full width export */}
-      <button
-        onClick={() => exportWeeklyToExcel(data.jobs, showExpenses ? data.expenses : [], showIncome ? data.income : [])}
-        className="mt-6 w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-primary/10 border border-primary/30 text-primary font-body text-sm tracking-wide hover:bg-primary/20 transition-colors"
-      >
-        <Download size={15} /> Export all data to CSV
-      </button>
-    </>
-  );
-}
+      <DiscoBallExport onClick={() => exportWeeklyToExcel(data.jobs, showExpenses ? data.expenses : [], showIncome ? data.income : [])} />
