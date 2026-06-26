@@ -361,30 +361,29 @@ export default function Dashboard() {
       )}
 
       {/* Recent jobs + expenses */}
-      <div className="grid lg:grid-cols-2 gap-4">
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <h2 className="text-[10px] font-body mb-3 text-muted-foreground uppercase tracking-widest">Recent Jobs</h2>
-          {recentJobs.length === 0 ? (
-            <p className="text-xs text-muted-foreground py-4 text-center font-body">No jobs yet</p>
+     <div className="rounded-2xl border border-border bg-card p-4">
+          <h2 className="text-[10px] font-body mb-3 text-muted-foreground uppercase tracking-widest">Next on the calendar</h2>
+          {!nextJob ? (
+            <div className="py-6 flex flex-col items-center gap-1">
+              <p className="text-2xl">🌅</p>
+              <p className="text-xs text-muted-foreground font-body text-center">No jobs on the horizon</p>
+            </div>
           ) : (
-            <div className="space-y-2">
-              {recentJobs.map(job => (
-                <div key={job.id} className="flex items-center justify-between rounded-xl bg-secondary/50 px-3 py-2">
-                  <div>
-                    <p className="text-sm font-medium">{job.name}</p>
-                    <p className="text-xs text-muted-foreground font-body">{job.client} • {job.venue}</p>
-                  </div>
-                  <div className="text-right">
-                    {(job.hoursWorked ?? 0) > 0 && (
-                      <p className="text-xs text-mono font-medium">{job.hoursWorked}h • ${((job.hoursWorked ?? 0) * (job.hourlyRate ?? 0)).toLocaleString()}</p>
-                    )}
-                    <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] text-mono font-medium ${job.status === 'completed' ? 'bg-success/20 text-success' : job.status === 'in-progress' ? 'bg-primary/20 text-primary' : job.status === 'cancelled' ? 'bg-destructive/20 text-destructive' : 'bg-accent/20 text-accent'}`}>
-                      {job.status}
-                    </span>
-                    <p className="text-xs text-muted-foreground mt-0.5 font-body">{format(new Date(job.date), 'MMM d')}</p>
-                  </div>
+            <div className="rounded-xl bg-secondary/50 px-3 py-3 space-y-1.5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{nextJob.name}</p>
+                  <p className="text-xs text-muted-foreground font-body truncate">{nextJob.client}{nextJob.venue ? ` · ${nextJob.venue}` : ''}</p>
                 </div>
-              ))}
+                <span className={`shrink-0 inline-block rounded-full px-2 py-0.5 text-[10px] text-mono font-medium ${nextJob.status === 'completed' ? 'bg-success/20 text-success' : nextJob.status === 'in-progress' ? 'bg-primary/20 text-primary' : 'bg-accent/20 text-accent'}`}>
+                  {nextJob.status}
+                </span>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-mono text-muted-foreground">
+                <span>{format(new Date(nextJob.date + 'T12:00:00'), 'EEE, MMM d')}</span>
+                {nextJob.startTime && <span>· {nextJob.startTime}</span>}
+                {nextJob.hourlyRate && <span>· ${nextJob.hourlyRate}/hr</span>}
+              </div>
             </div>
           )}
         </div>
