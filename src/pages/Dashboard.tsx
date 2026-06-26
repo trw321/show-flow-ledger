@@ -69,7 +69,7 @@ function DiscoBallExport({ onClick }: { onClick: () => void }) {
   return (
     <div
       className="relative mb-8 overflow-hidden cursor-pointer"
-      style={{ height: 420, marginLeft: '-1rem', marginRight: '-1rem' }}
+      style={{ height: 160, marginLeft: '-1rem', marginRight: '-1rem' }}
       onClick={handleClick}
     >
       <div className="absolute inset-0 pointer-events-none">
