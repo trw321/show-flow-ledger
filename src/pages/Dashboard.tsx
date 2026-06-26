@@ -102,27 +102,57 @@ function DiscoBallExport({ onClick }: { onClick: () => void }) {
           animation: 'ball-drift 12s ease-in-out infinite',
         }}
       >
-        <svg viewBox="0 0 120 120" width="840" height="840">
+        <svg viewBox="0 0 120 120" width="280" height="280">
           <defs>
-            <radialGradient id="bg2" cx="35%" cy="30%" r="65%">
-              <stop offset="0%" stopColor="#fff" stopOpacity="0.9"/>
-              <stop offset="40%" stopColor="#aaa" stopOpacity="0.5"/>
-              <stop offset="100%" stopColor="#444" stopOpacity="0.9"/>
+            <radialGradient id="ballBase" cx="38%" cy="32%" r="68%">
+              <stop offset="0%" stopColor="#ffffff" stopOpacity="1"/>
+              <stop offset="25%" stopColor="#d0d0d8" stopOpacity="0.9"/>
+              <stop offset="60%" stopColor="#707080" stopOpacity="0.85"/>
+              <stop offset="100%" stopColor="#1a1a2e" stopOpacity="1"/>
+            </radialGradient>
+            <radialGradient id="tileShine" cx="30%" cy="25%" r="70%">
+              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.9"/>
+              <stop offset="50%" stopColor="#aaaacc" stopOpacity="0.4"/>
+              <stop offset="100%" stopColor="#000011" stopOpacity="0.7"/>
             </radialGradient>
             <clipPath id="bc2"><circle cx="60" cy="60" r="54"/></clipPath>
           </defs>
-          <circle cx="60" cy="60" r="54" fill="#666"/>
-          <circle cx="60" cy="60" r="54" fill="url(#bg2)"/>
+          <circle cx="60" cy="60" r="54" fill="#0a0a1a"/>
+          <circle cx="60" cy="60" r="54" fill="url(#ballBase)"/>
           <g clipPath="url(#bc2)">
-            {[16,30,44,58,72,86,100].map((y, ri) =>
-              [6,24,42,60,78,96].map((x, ci) => {
-                const cs = ['#ff0080','#00ccff','#ff6600','#00ff44','#9900ff','#ffcc00'];
-                return <rect key={`${ri}-${ci}`} x={x} y={y} width="14" height="10" rx="1" fill={cs[(ri+ci)%6]} opacity="0.9"/>;
+            {[8,20,32,44,56,68,80,92,104].map((y, ri) =>
+              [4,18,32,46,60,74,88,102].map((x, ci) => {
+                const mirrorColors = [
+                  '#c0c0c8','#e8e8f0','#9090a8','#d0d0e0',
+                  '#7878a0','#b0b0cc','#f0f0ff','#606080',
+                ];
+                const accentColors = [
+                  '#ff0080','#00ccff','#9900ff','#00ff88',
+                  '#ffcc00','#ff6600','#0044ff','#ff0044',
+                ];
+                const isMirror = (ri + ci) % 5 !== 0;
+                const col = isMirror
+                  ? mirrorColors[(ri * 3 + ci) % mirrorColors.length]
+                  : accentColors[(ri + ci) % accentColors.length];
+                const bright = isMirror ? 0.75 + Math.sin(ri * 1.3 + ci * 0.9) * 0.25 : 0.95;
+                return (
+                  <g key={`${ri}-${ci}`}>
+                    <rect x={x} y={y} width="12" height="9" rx="1" fill={col} opacity={bright}/>
+                    <rect x={x} y={y} width="5" height="4" rx="0.5" fill="white" opacity={isMirror ? 0.55 : 0.2}/>
+                  </g>
+                );
               })
             )}
           </g>
-          <circle cx="60" cy="60" r="54" fill="url(#bg2)" opacity="0.25"/>
-          <ellipse cx="44" cy="36" rx="12" ry="7" fill="white" opacity="0.4" transform="rotate(-20 44 36)"/>
+          <circle cx="60" cy="60" r="54" fill="url(#tileShine)" opacity="0.35"/>
+          <ellipse cx="42" cy="34" rx="14" ry="8" fill="white" opacity="0.55" transform="rotate(-25 42 34)"/>
+          <ellipse cx="52" cy="30" rx="5" ry="3" fill="white" opacity="0.8" transform="rotate(-25 52 30)"/>
+          <circle cx="38" cy="38" r="2.5" fill="white" opacity="0.7"/>
+          <circle cx="75" cy="45" r="1.5" fill="#00ccff" opacity="0.9"/>
+          <circle cx="45" cy="70" r="1.5" fill="#ff0080" opacity="0.9"/>
+          <circle cx="80" cy="65" r="1.5" fill="#9900ff" opacity="0.9"/>
+          <circle cx="30" cy="55" r="1" fill="#ffcc00" opacity="0.9"/>
+          <circle cx="85" cy="35" r="1" fill="#00ff88" opacity="0.9"/>
         </svg>
       </div>
 
