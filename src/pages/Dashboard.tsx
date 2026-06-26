@@ -360,8 +360,9 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Recent jobs + expenses */}
-     <div className="rounded-2xl border border-border bg-card p-4">
+   {/* Recent jobs + expenses */}
+      <div className="grid lg:grid-cols-2 gap-4">
+        <div className="rounded-2xl border border-border bg-card p-4">
           <h2 className="text-[10px] font-body mb-3 text-muted-foreground uppercase tracking-widest">Next on the calendar</h2>
           {!nextJob ? (
             <div className="py-6 flex flex-col items-center gap-1">
@@ -412,6 +413,14 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* Full width export */}
+      <button
+        onClick={() => exportWeeklyToExcel(data.jobs, showExpenses ? data.expenses : [], showIncome ? data.income : [])}
+        className="mt-6 w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-primary/10 border border-primary/30 text-primary font-body text-sm tracking-wide hover:bg-primary/20 transition-colors"
+      >
+        <Download size={15} /> Export all data to CSV
+      </button>
     </>
   );
 }
