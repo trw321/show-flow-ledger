@@ -13,4 +13,10 @@ posthog.init("phc_udVxe34hMTHqcfzkfPno3idfPZGS7NeFwVGG9PgNT4t6", {
   },
 });
 
-createRoot(document.getElementById("root")!).render(<App />);
+import { UserPrefsProvider } from "./lib/UserPrefsContext";
+
+createRoot(document.getElementById("root")!).render(
+  <UserPrefsProvider>
+    <App />
+  </UserPrefsProvider>
+);
