@@ -4,7 +4,6 @@ import PageHeader from '@/components/PageHeader';
 import { Upload, Loader2, ChevronDown } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, isToday } from 'date-fns';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import { hasLegacyData, getLegacyData, clearLegacyData } from '@/lib/store';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
