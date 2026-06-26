@@ -95,10 +95,10 @@ function DiscoBallExport({ onClick }: { onClick: () => void }) {
       <div
         className="absolute left-1/2"
         style={{
-          top: -420,
+          top: -140,
           transform: 'translateX(-50%)',
-          width: 840,
-          height: 840,
+          width: 280,
+          height: 280,
           animation: 'ball-drift 12s ease-in-out infinite',
         }}
       >
