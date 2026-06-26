@@ -59,6 +59,87 @@ function GlitterActiveShape(props: any) {
 }
 
 const FALLING_ITEMS = ['💰','💴','💰','🪙','💵','💰','🪙','💴','💰','💵','🪙','💰','💵','💴','💰','🪙'];
+function DiscoBallExport({ onClick }: { onClick: () => void }) {
+  const [sparkles, setSparkles] = useState<{ id: number; tx: number; ty: number; color: string; char: string }[]>([]);
+  const counter = useRef(0);
+
+  const handleClick = () => {
+    const chars = ['✦','★','✧','◆','✶'];
+    const colors = ['#ff6ec7','#00eeff','#ffe566','#7bff6e','#ff9966','#cc88ff'];
+    const newSparkles = Array.from({ length: 14 }, (_, i) => {
+      const angle = (i / 14) * Math.PI * 2;
+      const dist = 60 + Math.random() * 50;
+      return {
+        id: counter.current++,
+        tx: Math.cos(angle) * dist,
+        ty: Math.sin(angle) * dist - 20,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        char: chars[Math.floor(Math.random() * chars.length)],
+      };
+    });
+    setSparkles(newSparkles);
+    setTimeout(() => setSparkles([]), 900);
+    onClick();
+  };
+
+  return (
+    <div className="flex flex-col items-center mb-6 mt-2">
+      <div className="w-0.5 h-8 bg-border mx-auto" />
+      <div className="relative" style={{ width: 120, height: 120 }}>
+        <button
+          onClick={handleClick}
+          className="w-full h-full rounded-full border-0 bg-transparent p-0 cursor-pointer"
+          style={{ animation: 'spin 4s linear infinite' }}
+          aria-label="Export data to CSV"
+          title="Tap to export CSV"
+        >
+          <svg viewBox="0 0 120 120" width="120" height="120">
+            <defs>
+              <radialGradient id="bg" cx="35%" cy="30%" r="65%">
+                <stop offset="0%" stopColor="#fff" stopOpacity="0.9"/>
+                <stop offset="40%" stopColor="#ccc" stopOpacity="0.5"/>
+                <stop offset="100%" stopColor="#666" stopOpacity="0.8"/>
+              </radialGradient>
+              <clipPath id="bc"><circle cx="60" cy="60" r="54"/></clipPath>
+            </defs>
+            <circle cx="60" cy="60" r="54" fill="#888"/>
+            <circle cx="60" cy="60" r="54" fill="url(#bg)"/>
+            <g clipPath="url(#bc)">
+              {[16,30,44,58,72,86,100].map((y, ri) =>
+                [6,24,42,60,78,96].map((x, ci) => {
+                  const cs = ['#ff6ec7','#00eeff','#ffe566','#7bff6e'];
+                  return <rect key={`${ri}-${ci}`} x={x} y={y} width="14" height="10" rx="1" fill={cs[(ri+ci)%4]} opacity="0.85"/>;
+                })
+              )}
+            </g>
+            <circle cx="60" cy="60" r="54" fill="url(#bg)" opacity="0.3"/>
+            <ellipse cx="44" cy="40" rx="10" ry="6" fill="white" opacity="0.35" transform="rotate(-20 44 40)"/>
+          </svg>
+        </button>
+        {sparkles.map(s => (
+          <span
+            key={s.id}
+            style={{
+              position: 'absolute', left: '50%', top: '50%',
+              transform: 'translate(-50%,-50%)',
+              color: s.color, fontSize: 18, pointerEvents: 'none',
+              animation: `sparkle-out 0.9s ease-out forwards`,
+              ['--tx' as string]: s.tx + 'px',
+              ['--ty' as string]: s.ty + 'px',
+            }}
+          >
+            {s.char}
+          </span>
+        ))}
+      </div>
+      <p className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60 mt-2">Export CSV</p>
+      <style>{`
+        @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        @keyframes sparkle-out { 0%{opacity:1;transform:translate(calc(-50% + 0px),calc(-50% + 0px)) scale(1)} 100%{opacity:0;transform:translate(calc(-50% + var(--tx)),calc(-50% + var(--ty))) scale(0)} }
+      `}</style>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { data, migrateLocalData } = useData();
