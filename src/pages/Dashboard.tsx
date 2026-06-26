@@ -267,28 +267,33 @@ export default function Dashboard() {
       </div>
 
       {/* ── By employer ────────────────────────────────────────────────────── */}
-      {byEmployer.length > 0 && (
+     {byEmployer.length > 0 && (
         <div className="mb-6 rounded-xl border border-border bg-card overflow-hidden">
-          <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between">
+          <button
+            onClick={() => setEmployerExpanded(e => !e)}
+            className="w-full px-4 py-3 flex items-center justify-between hover:bg-secondary/30 transition-colors"
+          >
             <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60">By employer</h2>
-          
-          </div>
-          <div className="divide-y divide-border/40">
-            {byEmployer.map(({ client, hours, earned, jobs }) => (
-              <div key={client} className="flex items-center justify-between px-4 py-2.5">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{client}</p>
-                  <p className="text-[10px] font-body text-muted-foreground">{jobs} job{jobs !== 1 ? 's' : ''} · {hours.toFixed(1)}h</p>
+            <ChevronDown size={14} className={`text-muted-foreground transition-transform ${employerExpanded ? 'rotate-180' : ''}`} />
+          </button>
+          {employerExpanded && (
+            <div className="divide-y divide-border/40 border-t border-border/50">
+              {byEmployer.map(({ client, hours, earned, jobs }) => (
+                <div key={client} className="flex items-center justify-between px-4 py-2.5">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{client}</p>
+                    <p className="text-[10px] font-body text-muted-foreground">{jobs} job{jobs !== 1 ? 's' : ''} · {hours.toFixed(1)}h</p>
+                  </div>
+                  <p className="text-sm font-bold text-mono text-success shrink-0 ml-3">
+                    ${earned.toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                  </p>
                 </div>
-                <p className="text-sm font-bold text-mono text-success shrink-0 ml-3">
-                  ${earned.toLocaleString(undefined, { minimumFractionDigits: 0 })}
-                </p>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
-
+      
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <StatCard label="Active Jobs" value={activeJobs} icon={Briefcase} variant="info" />
