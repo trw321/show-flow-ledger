@@ -128,7 +128,6 @@ function DiscoBallExport({ onClick }: { onClick: () => void }) {
 export default function Dashboard() {
   const { data, migrateLocalData } = useData();
   const { prefs } = useUserPrefs();
-  const navigate = useNavigate();
   const [showMigrate, setShowMigrate] = useState(hasLegacyData);
   const [migrating, setMigrating] = useState(false);
   const [employerExpanded, setEmployerExpanded] = useState(false);
