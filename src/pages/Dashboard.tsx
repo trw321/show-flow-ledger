@@ -50,76 +50,125 @@ function DiscoBallExport({ onClick }: { onClick: () => void }) {
   const handleClick = () => {
     const chars = ['✦','★','✧','◆','✶'];
     const colors = ['#ff0080','#00ccff','#ff6600','#00ff44','#9900ff','#ffcc00','#ff3300','#0044ff'];
-    const newSparkles = Array.from({ length: 14 }, (_, i) => {
-      const angle = (i / 14) * Math.PI * 2;
-      const dist = 60 + Math.random() * 50;
+    const newSparkles = Array.from({ length: 20 }, (_, i) => {
+      const angle = (i / 20) * Math.PI * 2;
+      const dist = 120 + Math.random() * 80;
       return {
         id: counter.current++,
         tx: Math.cos(angle) * dist,
-        ty: Math.sin(angle) * dist - 20,
+        ty: Math.sin(angle) * dist,
         color: colors[Math.floor(Math.random() * colors.length)],
         char: chars[Math.floor(Math.random() * chars.length)],
       };
     });
     setSparkles(newSparkles);
-    setTimeout(() => setSparkles([]), 900);
+    setTimeout(() => setSparkles([]), 1200);
     onClick();
   };
 
   return (
-    <div className="flex flex-col items-center mb-6 mt-2">
-      <div className="w-0.5 h-8 bg-border mx-auto" />
-      <div className="relative" style={{ width: 120, height: 120 }}>
-        <button
-          onClick={handleClick}
-          className="w-full h-full rounded-full border-0 bg-transparent p-0 cursor-pointer"
-          style={{ animation: 'spin 4s linear infinite' }}
-          aria-label="Export data to CSV"
-          title="Tap to export CSV"
-        >
-          <svg viewBox="0 0 120 120" width="120" height="120">
-            <defs>
-              <radialGradient id="bg" cx="35%" cy="30%" r="65%">
-                <stop offset="0%" stopColor="#fff" stopOpacity="0.9"/>
-                <stop offset="40%" stopColor="#ccc" stopOpacity="0.5"/>
-                <stop offset="100%" stopColor="#666" stopOpacity="0.8"/>
-              </radialGradient>
-              <clipPath id="bc"><circle cx="60" cy="60" r="54"/></clipPath>
-            </defs>
-            <circle cx="60" cy="60" r="54" fill="#888"/>
-            <circle cx="60" cy="60" r="54" fill="url(#bg)"/>
-            <g clipPath="url(#bc)">
-              {[16,30,44,58,72,86,100].map((y, ri) =>
-                [6,24,42,60,78,96].map((x, ci) => {
-                  const cs = ['#ff0080','#00ccff','#ff6600','#00ff44','#9900ff','#ffcc00'];
-                  return <rect key={`${ri}-${ci}`} x={x} y={y} width="14" height="10" rx="1" fill={cs[(ri+ci)%6]} opacity="0.85"/>;
-                })
-              )}
-            </g>
-            <circle cx="60" cy="60" r="54" fill="url(#bg)" opacity="0.3"/>
-            <ellipse cx="44" cy="40" rx="10" ry="6" fill="white" opacity="0.35" transform="rotate(-20 44 40)"/>
-          </svg>
-        </button>
-        {sparkles.map(s => (
-          <span
-            key={s.id}
+    <div
+      className="relative mb-8 overflow-hidden cursor-pointer"
+      style={{ height: 420, marginLeft: '-1rem', marginRight: '-1rem' }}
+      onClick={handleClick}
+    >
+      <div className="absolute inset-0 pointer-events-none">
+        {[...Array(12)].map((_, i) => (
+          <div
+            key={i}
             style={{
-              position: 'absolute', left: '50%', top: '50%',
-              transform: 'translate(-50%,-50%)',
-              color: s.color, fontSize: 18, pointerEvents: 'none',
-              animation: 'sparkle-out 0.9s ease-out forwards',
-              ['--tx' as string]: s.tx + 'px',
-              ['--ty' as string]: s.ty + 'px',
+              position: 'absolute',
+              top: 0,
+              left: '50%',
+              width: 3,
+              height: '100%',
+              background: `linear-gradient(to bottom, ${['#ff0080','#00ccff','#ff6600','#00ff44','#9900ff','#ffcc00'][i % 6]}44, transparent)`,
+              transform: `rotate(${i * 30}deg)`,
+              transformOrigin: 'top center',
+              animation: `beam-pulse 8s ease-in-out infinite`,
+              animationDelay: `${i * 0.15}s`,
             }}
-          >
-            {s.char}
-          </span>
+          />
         ))}
       </div>
-      <p className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60 mt-2">Export CSV</p>
+
+      <div
+        className="absolute left-1/2"
+        style={{
+          top: -420,
+          transform: 'translateX(-50%)',
+          width: 840,
+          height: 840,
+          animation: 'ball-drift 12s ease-in-out infinite',
+        }}
+      >
+        <svg viewBox="0 0 120 120" width="840" height="840">
+          <defs>
+            <radialGradient id="bg2" cx="35%" cy="30%" r="65%">
+              <stop offset="0%" stopColor="#fff" stopOpacity="0.9"/>
+              <stop offset="40%" stopColor="#aaa" stopOpacity="0.5"/>
+              <stop offset="100%" stopColor="#444" stopOpacity="0.9"/>
+            </radialGradient>
+            <clipPath id="bc2"><circle cx="60" cy="60" r="54"/></clipPath>
+          </defs>
+          <circle cx="60" cy="60" r="54" fill="#666"/>
+          <circle cx="60" cy="60" r="54" fill="url(#bg2)"/>
+          <g clipPath="url(#bc2)">
+            {[16,30,44,58,72,86,100].map((y, ri) =>
+              [6,24,42,60,78,96].map((x, ci) => {
+                const cs = ['#ff0080','#00ccff','#ff6600','#00ff44','#9900ff','#ffcc00'];
+                return <rect key={`${ri}-${ci}`} x={x} y={y} width="14" height="10" rx="1" fill={cs[(ri+ci)%6]} opacity="0.9"/>;
+              })
+            )}
+          </g>
+          <circle cx="60" cy="60" r="54" fill="url(#bg2)" opacity="0.25"/>
+          <ellipse cx="44" cy="36" rx="12" ry="7" fill="white" opacity="0.4" transform="rotate(-20 44 36)"/>
+        </svg>
+      </div>
+
+      <div
+        className="absolute top-0 bg-border"
+        style={{ left: '50%', width: 2, height: 40, transform: 'translateX(-50%)' }}
+      />
+
+      <div className="absolute bottom-4 left-0 right-0 flex flex-col items-center gap-1 pointer-events-none">
+        <p className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/50">tap to export csv</p>
+      </div>
+
+      {sparkles.map(s => (
+        <span
+          key={s.id}
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: '30%',
+            color: s.color,
+            fontSize: 22,
+            pointerEvents: 'none',
+            animation: 'sparkle-out2 1.2s ease-out forwards',
+            ['--tx' as string]: s.tx + 'px',
+            ['--ty' as string]: s.ty + 'px',
+          }}
+        >
+          {s.char}
+        </span>
+      ))}
+
       <style>{`
-        @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-        @keyframes sparkle-out { 0%{opacity:1;transform:translate(calc(-50% + 0px),calc(-50% + 0px)) scale(1)} 100%{opacity:0;transform:translate(calc(-50% + var(--tx)),calc(-50% + var(--ty))) scale(0)} }
+        @keyframes ball-drift {
+          0%   { transform: translateX(calc(-50% - 40px)); }
+          50%  { transform: translateX(calc(-50% + 40px)); }
+          100% { transform: translateX(calc(-50% - 40px)); }
+        }
+        @keyframes beam-pulse {
+          0%   { opacity: 0.1; }
+          50%  { opacity: 0.45; }
+          100% { opacity: 0.1; }
+        }
+        @keyframes sparkle-out2 {
+          0%   { opacity:1; transform:translate(calc(-50% + 0px), calc(-50% + 0px)) scale(1); }
+          100% { opacity:0; transform:translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(0); }
+        }
       `}</style>
     </div>
   );
