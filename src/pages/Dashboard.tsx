@@ -43,8 +43,6 @@ function FloatingOrb({ className, delay = 0 }: { className?: string; delay?: num
   );
 }
 
-const FALLING_ITEMS = ['💰','💴','💰','🪙','💵','💰','🪙','💴','💰','💵','🪙','💰','💵','💴','💰','🪙'];
-
 function DiscoBallExport({ onClick }: { onClick: () => void }) {
   const [sparkles, setSparkles] = useState<{ id: number; tx: number; ty: number; color: string; char: string }[]>([]);
   const counter = useRef(0);
