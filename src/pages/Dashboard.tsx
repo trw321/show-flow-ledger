@@ -270,12 +270,7 @@ export default function Dashboard() {
         <div className="mb-6 rounded-xl border border-border bg-card overflow-hidden">
           <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between">
             <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60">By employer</h2>
-            <button
-              onClick={() => exportWeeklyToExcel(data.jobs, showExpenses ? data.expenses : [], showIncome ? data.income : [])}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-primary text-[11px] font-body transition-colors hover:bg-primary/20"
-            >
-              <Download size={12} /> Export CSV
-            </button>
+          
           </div>
           <div className="divide-y divide-border/40">
             {byEmployer.map(({ client, hours, earned, jobs }) => (
