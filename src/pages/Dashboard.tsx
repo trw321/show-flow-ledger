@@ -269,23 +269,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Falling money */}
-      <div className="relative h-28 overflow-hidden rounded-2xl mb-6 cursor-pointer border border-border bg-card/50" onClick={() => navigate('/pay')}>
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <p className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/40">tap to reconcile pay</p>
-        </div>
-        {FALLING_ITEMS.map((emoji, i) => (
-          <motion.div key={i} className="absolute select-none"
-            style={{ left: `${(i * 6.5) % 96}%`, fontSize: emoji === '🪙' ? '1.1rem' : '1.5rem', filter: emoji === '🪙' ? 'sepia(1) saturate(4) hue-rotate(5deg) brightness(1.3)' : 'none' }}
-            initial={{ y: -40, opacity: 0, rotate: 0 }}
-            animate={{ y: 130, opacity: [0, 1, 1, 0], rotate: emoji === '🪙' ? [0, 360] : [0, -8, 8, -4] }}
-            transition={{ duration: emoji === '🪙' ? 1.4 + (i % 3) * 0.2 : 2.4 + (i % 5) * 0.3, delay: (i * 0.22) % 3.2, repeat: Infinity, ease: emoji === '🪙' ? 'linear' : 'easeIn' }}
-          >
-            {emoji}
-          </motion.div>
-        ))}
-      </div>
-
       {/* On Deck / On Stage */}
       <div className="mb-6">
         <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60 mb-3 flex items-center gap-2">
