@@ -1,12 +1,10 @@
 import { useState, useMemo, useRef } from 'react';
 import { useData } from '@/lib/DataContext';
-import StatCard from '@/components/StatCard';
 import PageHeader from '@/components/PageHeader';
-import { Briefcase, DollarSign, TrendingUp, TrendingDown, AlertCircle, Clock, Download, Upload, Loader2, ChevronDown } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
+import { Upload, Loader2, ChevronDown } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, isToday } from 'date-fns';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Sector } from 'recharts';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import { hasLegacyData, getLegacyData, clearLegacyData } from '@/lib/store';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
@@ -46,19 +44,8 @@ function FloatingOrb({ className, delay = 0 }: { className?: string; delay?: num
   );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function GlitterActiveShape(props: any) {
-  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
-  return (
-    <g style={{ filter: `drop-shadow(0 0 12px ${fill}) drop-shadow(0 0 4px #fff4)` }}>
-      <Sector cx={cx} cy={cy} innerRadius={outerRadius + 3} outerRadius={outerRadius + 10} startAngle={startAngle} endAngle={endAngle} fill={fill} opacity={0.25} />
-      <Sector cx={cx} cy={cy} innerRadius={innerRadius - 2} outerRadius={outerRadius + 5} startAngle={startAngle} endAngle={endAngle} fill={fill} />
-      <Sector cx={cx} cy={cy} innerRadius={innerRadius - 2} outerRadius={innerRadius + (outerRadius - innerRadius) * 0.52} startAngle={startAngle} endAngle={endAngle} fill="rgba(255,255,255,0.22)" />
-    </g>
-  );
-}
-
 const FALLING_ITEMS = ['💰','💴','💰','🪙','💵','💰','🪙','💴','💰','💵','🪙','💰','💵','💴','💰','🪙'];
+
 function DiscoBallExport({ onClick }: { onClick: () => void }) {
   const [sparkles, setSparkles] = useState<{ id: number; tx: number; ty: number; color: string; char: string }[]>([]);
   const counter = useRef(0);
@@ -108,7 +95,7 @@ function DiscoBallExport({ onClick }: { onClick: () => void }) {
               {[16,30,44,58,72,86,100].map((y, ri) =>
                 [6,24,42,60,78,96].map((x, ci) => {
                   const cs = ['#ff0080','#00ccff','#ff6600','#00ff44','#9900ff','#ffcc00'];
-                  return <rect key={`${ri}-${ci}`} x={x} y={y} width="14" height="10" rx="1" fill={cs[(ri+ci)%4]} opacity="0.85"/>;
+                  return <rect key={`${ri}-${ci}`} x={x} y={y} width="14" height="10" rx="1" fill={cs[(ri+ci)%6]} opacity="0.85"/>;
                 })
               )}
             </g>
@@ -123,7 +110,7 @@ function DiscoBallExport({ onClick }: { onClick: () => void }) {
               position: 'absolute', left: '50%', top: '50%',
               transform: 'translate(-50%,-50%)',
               color: s.color, fontSize: 18, pointerEvents: 'none',
-              animation: `sparkle-out 0.9s ease-out forwards`,
+              animation: 'sparkle-out 0.9s ease-out forwards',
               ['--tx' as string]: s.tx + 'px',
               ['--ty' as string]: s.ty + 'px',
             }}
@@ -145,7 +132,6 @@ export default function Dashboard() {
   const { data, migrateLocalData } = useData();
   const { prefs } = useUserPrefs();
   const navigate = useNavigate();
-  const [taxRate, setTaxRate] = useState(25);
   const [showMigrate, setShowMigrate] = useState(hasLegacyData);
   const [migrating, setMigrating] = useState(false);
   const [employerExpanded, setEmployerExpanded] = useState(false);
@@ -154,7 +140,6 @@ export default function Dashboard() {
 
   const showIncome = prefs.tabs.income;
   const showExpenses = prefs.tabs.expenses;
-  const showTaxes = prefs.tabs.taxes;
 
   // ── This month ────────────────────────────────────────────────────────────
   const monthStart = startOfMonth(new Date());
@@ -196,32 +181,25 @@ export default function Dashboard() {
       .sort((a, b) => b.earned - a.earned);
   }, [data.jobs]);
 
-  // ── Existing totals ───────────────────────────────────────────────────────
-  const totalExpenses = data.expenses.reduce((s, e) => s + e.amount, 0);
-  const totalIncome = data.income.reduce((s, i) => s + i.amount, 0);
-  const pendingIncome = data.income.filter(i => i.status === 'pending').reduce((s, i) => s + i.amount, 0);
-  const overdueIncome = data.income.filter(i => i.status === 'overdue').reduce((s, i) => s + i.amount, 0);
-  const activeJobs = data.jobs.filter(j => j.status === 'upcoming' || j.status === 'in-progress').length;
-  const totalHours = data.jobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
-  const totalEarnings = data.jobs.reduce((s, j) => s + (j.hoursWorked ?? 0) * (j.hourlyRate ?? 0), 0);
-  const netProfit = totalIncome - totalExpenses;
-  const displayTotal = showExpenses ? netProfit : totalIncome;
-  const estimatedTax = Math.max(0, displayTotal * (taxRate / 100));
-  const afterTax = displayTotal - estimatedTax;
-
-  const pieData = [
-    { name: 'Take Home', value: Math.max(0, afterTax), color: 'hsl(76, 92%, 48%)' },
-    { name: 'Estimated Tax', value: estimatedTax, color: 'hsl(50, 100%, 55%)' },
-    ...(showExpenses ? [{ name: 'Expenses', value: totalExpenses, color: 'hsl(0, 72%, 55%)' }] : []),
-  ].filter(d => d.value > 0);
-
-  const recentJobs = [...data.jobs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
-  const recentExpenses = [...data.expenses].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
-  const recentExpenses = [...data.expenses].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
+  // ── Next job ─────────────────────────────────────────────────────────────
+  const today = format(new Date(), 'yyyy-MM-dd');
   const nextJob = [...data.jobs]
     .filter(j => j.status !== 'cancelled')
     .sort((a, b) => a.date.localeCompare(b.date))
-    .find(j => j.date >= format(new Date(), 'yyyy-MM-dd'));
+    .find(j => j.date >= today);
+
+  const isOnStage = nextJob ? isToday(parseISO(nextJob.date)) : false;
+
+  // ── Expenses ─────────────────────────────────────────────────────────────
+  const recentExpenses = [...data.expenses]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 5);
+
+  const totalIncome = data.income.reduce((s, i) => s + i.amount, 0);
+  const totalExpenses = data.expenses.reduce((s, e) => s + e.amount, 0);
+  const totalHours = data.jobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
+  const netProfit = totalIncome - totalExpenses;
+  const displayTotal = showExpenses ? netProfit : totalIncome;
 
   const handleMigrate = async () => {
     setMigrating(true);
@@ -256,8 +234,9 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Disco ball export — top of page */}
       <DiscoBallExport onClick={() => exportWeeklyToExcel(data.jobs, showExpenses ? data.expenses : [], showIncome ? data.income : [])} />
-      
+
       {/* Hero */}
       <div className="relative overflow-hidden rounded-2xl border border-border mb-6 p-5 bg-card">
         <div className="absolute inset-0 opacity-20">
@@ -285,8 +264,6 @@ export default function Dashboard() {
             </span>
           </motion.div>
           <motion.div className="mt-2 flex gap-4 text-xs text-muted-foreground font-body" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 0.4 }}>
-            <span>{activeJobs} active job{activeJobs !== 1 ? 's' : ''}</span>
-            <span>•</span>
             <span>{totalHours.toFixed(1)}h logged</span>
           </motion.div>
         </div>
@@ -298,7 +275,8 @@ export default function Dashboard() {
           <p className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/40">tap to reconcile pay</p>
         </div>
         {FALLING_ITEMS.map((emoji, i) => (
-          <motion.div key={i} className="absolute select-none" style={{ left: `${(i * 6.5) % 96}%`, fontSize: emoji === '🪙' ? '1.1rem' : '1.5rem', filter: emoji === '🪙' ? 'sepia(1) saturate(4) hue-rotate(5deg) brightness(1.3)' : 'none' }}
+          <motion.div key={i} className="absolute select-none"
+            style={{ left: `${(i * 6.5) % 96}%`, fontSize: emoji === '🪙' ? '1.1rem' : '1.5rem', filter: emoji === '🪙' ? 'sepia(1) saturate(4) hue-rotate(5deg) brightness(1.3)' : 'none' }}
             initial={{ y: -40, opacity: 0, rotate: 0 }}
             animate={{ y: 130, opacity: [0, 1, 1, 0], rotate: emoji === '🪙' ? [0, 360] : [0, -8, 8, -4] }}
             transition={{ duration: emoji === '🪙' ? 1.4 + (i % 3) * 0.2 : 2.4 + (i % 5) * 0.3, delay: (i * 0.22) % 3.2, repeat: Infinity, ease: emoji === '🪙' ? 'linear' : 'easeIn' }}
@@ -308,26 +286,61 @@ export default function Dashboard() {
         ))}
       </div>
 
+      {/* On Deck / On Stage */}
+      <div className="mb-6">
+        <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60 mb-3 flex items-center gap-2">
+          <span className={`w-1.5 h-1.5 rounded-full inline-block ${isOnStage ? 'bg-fuchsia-500' : 'bg-amber-400'}`} />
+          {isOnStage ? '🎤 On Stage' : '🎭 On Deck'}
+        </h2>
+        {!nextJob ? (
+          <div className="rounded-xl border border-border bg-card p-4 flex flex-col items-center gap-1 py-6">
+            <p className="text-2xl">🌅</p>
+            <p className="text-xs text-muted-foreground font-body">No jobs on the horizon</p>
+          </div>
+        ) : (
+          <div className={`rounded-xl border p-4 ${isOnStage ? 'border-fuchsia-500/40 bg-fuchsia-500/5 shadow-[0_0_20px_2px_rgba(217,70,219,0.15)]' : 'border-amber-400/40 bg-amber-400/5 shadow-[0_0_20px_2px_rgba(251,191,36,0.12)]'}`}>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-base font-display truncate">{nextJob.name}</p>
+                <p className="text-xs text-muted-foreground font-body truncate mt-0.5">{nextJob.client}{nextJob.venue ? ` · ${nextJob.venue}` : ''}</p>
+              </div>
+              <span className={`shrink-0 inline-block rounded-full px-2 py-0.5 text-[10px] font-body font-medium ${isOnStage ? 'bg-fuchsia-500/20 text-fuchsia-300' : 'bg-amber-400/20 text-amber-300'}`}>
+                {isOnStage ? 'today' : format(parseISO(nextJob.date), 'MMM d')}
+              </span>
+            </div>
+            <div className="flex items-center gap-3 text-xs text-mono text-muted-foreground mt-2">
+              {nextJob.startTime && <span>{nextJob.startTime}</span>}
+              {nextJob.hourlyRate && <span>· ${nextJob.hourlyRate}/hr</span>}
+              {nextJob.minimumHours && <span>· {nextJob.minimumHours}h min</span>}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* ── This month ─────────────────────────────────────────────────────── */}
       <div className="mb-6">
         <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60 mb-3 flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />
           {format(new Date(), 'MMMM yyyy')}
         </h2>
-        <div className="grid grid-cols-3 gap-2 mb-2">
-          <div className="rounded-xl border border-border bg-card p-3">
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 shadow-[0_0_16px_2px_rgba(59,130,246,0.12)] p-3">
             <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Hours</p>
-            <p className="text-lg font-bold text-mono mt-1">{thisMonthHours.toFixed(1)}</p>
+            <p className="text-xl font-bold text-mono mt-1">{thisMonthHours.toFixed(1)}</p>
           </div>
-          <div className="rounded-xl border border-border bg-card p-3">
+          <div className="rounded-xl border border-purple-500/30 bg-purple-500/5 shadow-[0_0_16px_2px_rgba(168,85,247,0.12)] p-3">
             <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Expected</p>
-            <p className="text-lg font-bold text-mono mt-1 break-all">${thisMonthExpected.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
+            <p className="text-xl font-bold text-mono mt-1">${thisMonthExpected.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
           </div>
-          <div className={`rounded-xl border p-3 ${thisMonthUnpaid > 0 ? 'border-amber-500/30 bg-amber-500/5' : 'border-success/30 bg-success/5'}`}>
+          <div className={`rounded-xl border p-3 ${thisMonthUnpaid > 0 ? 'border-amber-500/30 bg-amber-500/5 shadow-[0_0_16px_2px_rgba(245,158,11,0.12)]' : 'border-green-500/30 bg-green-500/5 shadow-[0_0_16px_2px_rgba(34,197,94,0.12)]'}`}>
             <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">{thisMonthUnpaid > 0 ? 'Unpaid' : 'All paid'}</p>
-            <p className={`text-lg font-bold text-mono mt-1 break-all ${thisMonthUnpaid > 0 ? 'text-amber-400' : 'text-success'}`}>
+            <p className={`text-xl font-bold text-mono mt-1 ${thisMonthUnpaid > 0 ? 'text-amber-400' : 'text-green-400'}`}>
               {thisMonthUnpaid > 0 ? `$${thisMonthUnpaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}` : '✓'}
             </p>
+          </div>
+          <div className="rounded-xl border border-green-500/30 bg-green-500/5 shadow-[0_0_16px_2px_rgba(34,197,94,0.12)] p-3">
+            <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Paid</p>
+            <p className="text-xl font-bold text-mono text-green-400 mt-1">${thisMonthPaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
           </div>
         </div>
       </div>
@@ -335,28 +348,32 @@ export default function Dashboard() {
       {/* ── YTD ────────────────────────────────────────────────────────────── */}
       <div className="mb-6">
         <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60 mb-3 flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-success inline-block" />
+          <span className="w-1.5 h-1.5 rounded-full bg-purple-400 inline-block" />
           {yearPrefix} year to date
         </h2>
-        <div className="grid grid-cols-3 gap-2">
-          <div className="rounded-xl border border-border bg-card p-3">
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 shadow-[0_0_16px_2px_rgba(59,130,246,0.12)] p-3">
             <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Hours</p>
-            <p className="text-lg font-bold text-mono mt-1">{ytdHours.toFixed(1)}</p>
+            <p className="text-xl font-bold text-mono mt-1">{ytdHours.toFixed(1)}</p>
           </div>
-          <div className="rounded-xl border border-border bg-card p-3">
+          <div className="rounded-xl border border-purple-500/30 bg-purple-500/5 shadow-[0_0_16px_2px_rgba(168,85,247,0.12)] p-3">
             <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Earned</p>
-            <p className="text-lg font-bold text-mono mt-1 break-all text-success">${ytdExpected.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
+            <p className="text-xl font-bold text-mono mt-1 text-purple-300">${ytdExpected.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
           </div>
-          <div className="rounded-xl border border-success/30 bg-success/5 p-3">
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 shadow-[0_0_16px_2px_rgba(245,158,11,0.12)] p-3">
             <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Paid</p>
-            <p className="text-lg font-bold text-mono text-success mt-1 break-all">${ytdPaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
+            <p className="text-xl font-bold text-mono text-amber-300 mt-1">${ytdPaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
+          </div>
+          <div className="rounded-xl border border-blue-400/30 bg-blue-400/5 shadow-[0_0_16px_2px_rgba(96,165,250,0.12)] p-3">
+            <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Unpaid</p>
+            <p className="text-xl font-bold text-mono text-blue-300 mt-1">${Math.max(0, ytdExpected - ytdPaid).toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
           </div>
         </div>
       </div>
 
       {/* ── By employer ────────────────────────────────────────────────────── */}
-     {byEmployer.length > 0 && (
-        <div className="mb-6 rounded-xl border border-border bg-card overflow-hidden">
+      {byEmployer.length > 0 && (
+        <div className="mb-6 rounded-xl border border-purple-500/20 bg-card overflow-hidden shadow-[0_0_16px_2px_rgba(168,85,247,0.08)]">
           <button
             onClick={() => setEmployerExpanded(e => !e)}
             className="w-full px-4 py-3 flex items-center justify-between hover:bg-secondary/30 transition-colors"
@@ -372,7 +389,7 @@ export default function Dashboard() {
                     <p className="text-sm font-medium truncate">{client}</p>
                     <p className="text-[10px] font-body text-muted-foreground">{jobs} job{jobs !== 1 ? 's' : ''} · {hours.toFixed(1)}h</p>
                   </div>
-                  <p className="text-sm font-bold text-mono text-success shrink-0 ml-3">
+                  <p className="text-sm font-bold text-mono text-purple-300 shrink-0 ml-3">
                     ${earned.toLocaleString(undefined, { minimumFractionDigits: 0 })}
                   </p>
                 </div>
@@ -381,120 +398,27 @@ export default function Dashboard() {
           )}
         </div>
       )}
-      
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        <StatCard label="Active Jobs" value={activeJobs} icon={Briefcase} variant="info" />
-        <StatCard label="Hours Logged" value={totalHours.toFixed(1)} icon={Clock} variant="accent" />
-        {showIncome && <StatCard label="Total Income" value={`$${totalIncome.toLocaleString()}`} icon={TrendingUp} variant="success" />}
-        {showExpenses && <StatCard label="Total Expenses" value={`$${totalExpenses.toLocaleString()}`} icon={TrendingDown} variant="warning" />}
-      </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        <StatCard label={showExpenses ? 'Net Profit' : 'Job Earnings'} value={`$${(showExpenses ? netProfit : totalEarnings).toLocaleString()}`} icon={DollarSign} variant={showExpenses && netProfit < 0 ? 'destructive' : 'success'} />
-        {showIncome && <StatCard label="Pending" value={`$${pendingIncome.toLocaleString()}`} icon={AlertCircle} variant="warning" />}
-        {showIncome && <StatCard label="Overdue" value={`$${overdueIncome.toLocaleString()}`} icon={AlertCircle} variant="destructive" />}
-      </div>
-
-      {/* Tax breakdown */}
-      {showTaxes && (
-        <div className="rounded-2xl border border-border bg-card p-4 mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[10px] font-body text-muted-foreground uppercase tracking-widest">Tax Breakdown</h2>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-muted-foreground font-body">Tax Rate</span>
-              <select value={taxRate} onChange={e => setTaxRate(Number(e.target.value))} className="text-xs bg-secondary border border-border rounded-md px-2 py-1 text-foreground">
-                {[15, 20, 25, 30, 35, 40].map(r => <option key={r} value={r}>{r}%</option>)}
-              </select>
-            </div>
-          </div>
-          {totalIncome === 0 && totalExpenses === 0 ? (
-            <p className="text-xs text-muted-foreground py-8 text-center font-body">Add income & expenses to see your tax breakdown</p>
-          ) : (
-            <div className="flex items-center gap-4">
-              <div className="w-40 h-40 shrink-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={35} outerRadius={65} paddingAngle={3} dataKey="value" strokeWidth={0} activeShape={GlitterActiveShape}>
-                      {pieData.map((entry, i) => <Cell key={i} fill={entry.color} stroke="rgba(255,255,255,0.15)" strokeWidth={1.5} />)}
-                    </Pie>
-                    <Tooltip formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name]} contentStyle={{ background: '#ffffff', border: 'none', borderRadius: '12px', fontSize: '12px', fontFamily: 'Space Mono, monospace', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', padding: '10px 14px', color: '#111111' }} labelStyle={{ color: '#111111', fontWeight: 700, marginBottom: 2 }} itemStyle={{ color: '#333333' }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="space-y-2 flex-1 min-w-0">
-                {pieData.map(d => (
-                  <div key={d.name} className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
-                    <span className="text-xs text-muted-foreground font-body flex-1">{d.name}</span>
-                    <span className="text-xs font-bold text-mono">${d.value.toLocaleString()}</span>
-                  </div>
-                ))}
-                <div className="border-t border-border pt-1.5 mt-1.5">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 shrink-0" />
-                    <span className="text-xs text-muted-foreground font-body flex-1">Total Income</span>
-                    <span className="text-xs font-bold text-mono">${totalIncome.toLocaleString()}</span>
-                  </div>
+      {/* Recent expenses — only if there are any */}
+      {showExpenses && recentExpenses.length > 0 && (
+        <div className="mb-6 rounded-xl border border-amber-500/20 bg-card p-4 shadow-[0_0_16px_2px_rgba(245,158,11,0.08)]">
+          <h2 className="text-[10px] font-body mb-3 text-muted-foreground uppercase tracking-widest">Recent Expenses</h2>
+          <div className="space-y-2">
+            {recentExpenses.map(exp => (
+              <div key={exp.id} className="flex items-center justify-between rounded-xl bg-secondary/50 px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium">{exp.description}</p>
+                  <p className="text-xs text-muted-foreground font-body">{exp.category}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold text-mono text-destructive">-${exp.amount.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground font-body">{format(new Date(exp.date), 'MMM d')}</p>
                 </div>
               </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       )}
-
-   {/* Recent jobs + expenses */}
-      <div className="grid lg:grid-cols-2 gap-4">
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <h2 className="text-[10px] font-body mb-3 text-muted-foreground uppercase tracking-widest">Next on the calendar</h2>
-          {!nextJob ? (
-            <div className="py-6 flex flex-col items-center gap-1">
-              <p className="text-2xl">🌅</p>
-              <p className="text-xs text-muted-foreground font-body text-center">No jobs on the horizon</p>
-            </div>
-          ) : (
-            <div className="rounded-xl bg-secondary/50 px-3 py-3 space-y-1.5">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{nextJob.name}</p>
-                  <p className="text-xs text-muted-foreground font-body truncate">{nextJob.client}{nextJob.venue ? ` · ${nextJob.venue}` : ''}</p>
-                </div>
-                <span className={`shrink-0 inline-block rounded-full px-2 py-0.5 text-[10px] text-mono font-medium ${nextJob.status === 'completed' ? 'bg-success/20 text-success' : nextJob.status === 'in-progress' ? 'bg-primary/20 text-primary' : 'bg-accent/20 text-accent'}`}>
-                  {nextJob.status}
-                </span>
-              </div>
-              <div className="flex items-center gap-3 text-xs text-mono text-muted-foreground">
-                <span>{format(new Date(nextJob.date + 'T12:00:00'), 'EEE, MMM d')}</span>
-                {nextJob.startTime && <span>· {nextJob.startTime}</span>}
-                {nextJob.hourlyRate && <span>· ${nextJob.hourlyRate}/hr</span>}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {showExpenses && (
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <h2 className="text-[10px] font-body mb-3 text-muted-foreground uppercase tracking-widest">Recent Expenses</h2>
-            {recentExpenses.length === 0 ? (
-              <p className="text-xs text-muted-foreground py-4 text-center font-body">No expenses yet</p>
-            ) : (
-              <div className="space-y-2">
-                {recentExpenses.map(exp => (
-                  <div key={exp.id} className="flex items-center justify-between rounded-xl bg-secondary/50 px-3 py-2">
-                    <div>
-                      <p className="text-sm font-medium">{exp.description}</p>
-                      <p className="text-xs text-muted-foreground font-body">{exp.category}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-mono text-destructive">-${exp.amount.toLocaleString()}</p>
-                      <p className="text-xs text-muted-foreground font-body">{format(new Date(exp.date), 'MMM d')}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      <DiscoBallExport onClick={() => exportWeeklyToExcel(data.jobs, showExpenses ? data.expenses : [], showIncome ? data.income : [])} />
+    </>
+  );
+}
