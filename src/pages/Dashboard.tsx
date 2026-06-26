@@ -65,7 +65,7 @@ function DiscoBallExport({ onClick }: { onClick: () => void }) {
 
   const handleClick = () => {
     const chars = ['✦','★','✧','◆','✶'];
-    const colors = ['#ff6ec7','#00eeff','#ffe566','#7bff6e','#ff9966','#cc88ff'];
+    const colors = ['#ff0080','#00ccff','#ff6600','#00ff44','#9900ff','#ffcc00','#ff3300','#0044ff'];
     const newSparkles = Array.from({ length: 14 }, (_, i) => {
       const angle = (i / 14) * Math.PI * 2;
       const dist = 60 + Math.random() * 50;
