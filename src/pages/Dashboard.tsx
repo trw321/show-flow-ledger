@@ -296,60 +296,62 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* ── This month ─────────────────────────────────────────────────────── */}
+    {/* ── Month + YTD side by side ──────────────────────────────────────── */}
       <div className="mb-6">
-        <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60 mb-3 flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />
-          {format(new Date(), 'MMMM yyyy')}
-        </h2>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 shadow-[0_0_16px_2px_rgba(59,130,246,0.12)] p-3">
-            <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Hours</p>
-            <p className="text-xl font-bold text-mono mt-1">{thisMonthHours.toFixed(1)}</p>
+        <div className="grid grid-cols-2 gap-3">
+
+          {/* Left — This month */}
+          <div className="flex flex-col gap-2">
+            <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />
+              {format(new Date(), 'MMM')}
+            </h2>
+            <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 shadow-[0_0_16px_2px_rgba(59,130,246,0.12)] p-3">
+              <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Hours</p>
+              <p className="text-lg font-bold text-mono mt-1">{thisMonthHours.toFixed(1)}</p>
+            </div>
+            <div className="rounded-xl border border-purple-500/30 bg-purple-500/5 shadow-[0_0_16px_2px_rgba(168,85,247,0.12)] p-3">
+              <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Expected</p>
+              <p className="text-lg font-bold text-mono mt-1">${thisMonthExpected.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
+            </div>
+            <div className="rounded-xl border border-green-500/30 bg-green-500/5 shadow-[0_0_16px_2px_rgba(34,197,94,0.12)] p-3">
+              <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Paid</p>
+              <p className="text-lg font-bold text-mono text-green-400 mt-1">${thisMonthPaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
+            </div>
+            <div className={`rounded-xl border p-3 ${thisMonthUnpaid > 0 ? 'border-amber-500/30 bg-amber-500/5 shadow-[0_0_16px_2px_rgba(245,158,11,0.12)]' : 'border-green-500/30 bg-green-500/5 shadow-[0_0_16px_2px_rgba(34,197,94,0.12)]'}`}>
+              <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Unpaid</p>
+              <p className={`text-lg font-bold text-mono mt-1 ${thisMonthUnpaid > 0 ? 'text-amber-400' : 'text-green-400'}`}>
+                {thisMonthUnpaid > 0 ? `$${thisMonthUnpaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}` : '✓'}
+              </p>
+            </div>
           </div>
-          <div className="rounded-xl border border-purple-500/30 bg-purple-500/5 shadow-[0_0_16px_2px_rgba(168,85,247,0.12)] p-3">
-            <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Expected</p>
-            <p className="text-xl font-bold text-mono mt-1">${thisMonthExpected.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
+
+          {/* Right — YTD */}
+          <div className="flex flex-col gap-2">
+            <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-400 inline-block" />
+              {yearPrefix}
+            </h2>
+            <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 shadow-[0_0_16px_2px_rgba(59,130,246,0.12)] p-3">
+              <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Hours</p>
+              <p className="text-lg font-bold text-mono mt-1">{ytdHours.toFixed(1)}</p>
+            </div>
+            <div className="rounded-xl border border-purple-500/30 bg-purple-500/5 shadow-[0_0_16px_2px_rgba(168,85,247,0.12)] p-3">
+              <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Earned</p>
+              <p className="text-lg font-bold text-mono mt-1 text-purple-300">${ytdExpected.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
+            </div>
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 shadow-[0_0_16px_2px_rgba(245,158,11,0.12)] p-3">
+              <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Paid</p>
+              <p className="text-lg font-bold text-mono text-amber-300 mt-1">${ytdPaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
+            </div>
+            <div className="rounded-xl border border-blue-400/30 bg-blue-400/5 shadow-[0_0_16px_2px_rgba(96,165,250,0.12)] p-3">
+              <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Unpaid</p>
+              <p className="text-lg font-bold text-mono text-blue-300 mt-1">${Math.max(0, ytdExpected - ytdPaid).toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
+            </div>
           </div>
-          <div className={`rounded-xl border p-3 ${thisMonthUnpaid > 0 ? 'border-amber-500/30 bg-amber-500/5 shadow-[0_0_16px_2px_rgba(245,158,11,0.12)]' : 'border-green-500/30 bg-green-500/5 shadow-[0_0_16px_2px_rgba(34,197,94,0.12)]'}`}>
-            <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">{thisMonthUnpaid > 0 ? 'Unpaid' : 'All paid'}</p>
-            <p className={`text-xl font-bold text-mono mt-1 ${thisMonthUnpaid > 0 ? 'text-amber-400' : 'text-green-400'}`}>
-              {thisMonthUnpaid > 0 ? `$${thisMonthUnpaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}` : '✓'}
-            </p>
-          </div>
-          <div className="rounded-xl border border-green-500/30 bg-green-500/5 shadow-[0_0_16px_2px_rgba(34,197,94,0.12)] p-3">
-            <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Paid</p>
-            <p className="text-xl font-bold text-mono text-green-400 mt-1">${thisMonthPaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
-          </div>
+
         </div>
       </div>
-
-      {/* ── YTD ────────────────────────────────────────────────────────────── */}
-      <div className="mb-6">
-        <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60 mb-3 flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-purple-400 inline-block" />
-          {yearPrefix} year to date
-        </h2>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 shadow-[0_0_16px_2px_rgba(59,130,246,0.12)] p-3">
-            <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Hours</p>
-            <p className="text-xl font-bold text-mono mt-1">{ytdHours.toFixed(1)}</p>
-          </div>
-          <div className="rounded-xl border border-purple-500/30 bg-purple-500/5 shadow-[0_0_16px_2px_rgba(168,85,247,0.12)] p-3">
-            <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Earned</p>
-            <p className="text-xl font-bold text-mono mt-1 text-purple-300">${ytdExpected.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
-          </div>
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 shadow-[0_0_16px_2px_rgba(245,158,11,0.12)] p-3">
-            <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Paid</p>
-            <p className="text-xl font-bold text-mono text-amber-300 mt-1">${ytdPaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
-          </div>
-          <div className="rounded-xl border border-blue-400/30 bg-blue-400/5 shadow-[0_0_16px_2px_rgba(96,165,250,0.12)] p-3">
-            <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Unpaid</p>
-            <p className="text-xl font-bold text-mono text-blue-300 mt-1">${Math.max(0, ytdExpected - ytdPaid).toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
-          </div>
-        </div>
-      </div>
-
       {/* ── By employer ────────────────────────────────────────────────────── */}
       {byEmployer.length > 0 && (
         <div className="mb-6 rounded-xl border border-purple-500/20 bg-card overflow-hidden shadow-[0_0_16px_2px_rgba(168,85,247,0.08)]">
