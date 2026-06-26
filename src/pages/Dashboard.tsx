@@ -107,7 +107,7 @@ function DiscoBallExport({ onClick }: { onClick: () => void }) {
             <g clipPath="url(#bc)">
               {[16,30,44,58,72,86,100].map((y, ri) =>
                 [6,24,42,60,78,96].map((x, ci) => {
-                  const cs = ['#ff6ec7','#00eeff','#ffe566','#7bff6e'];
+                  const cs = ['#ff0080','#00ccff','#ff6600','#00ff44','#9900ff','#ffcc00'];
                   return <rect key={`${ri}-${ci}`} x={x} y={y} width="14" height="10" rx="1" fill={cs[(ri+ci)%4]} opacity="0.85"/>;
                 })
               )}
