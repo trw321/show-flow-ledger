@@ -1,16 +1,27 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useData } from '@/lib/DataContext';
 import StatCard from '@/components/StatCard';
 import PageHeader from '@/components/PageHeader';
 import { Briefcase, DollarSign, TrendingUp, TrendingDown, AlertCircle, Clock, Download, Upload, Loader2 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Sector } from 'recharts';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import { hasLegacyData, getLegacyData, clearLegacyData } from '@/lib/store';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
+import { calculateDayPay, getDayMultiplier } from '@/lib/payCalc';
 import { toast } from 'sonner';
+import type { Job } from '@/lib/store';
+
+function jobGross(job: Job, allJobs: Job[]): number {
+  const hours = job.hoursWorked ?? 0;
+  if (!hours) return 0;
+  const rate = job.hourlyRate ?? 0;
+  const dayMult = getDayMultiplier(job.date, job.client, allJobs, job.has6th7thDayRule ?? false);
+  const { totalPay } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, job.mealType);
+  return totalPay + (job.hasVacationPay ? totalPay * 0.08 : 0);
+}
 
 function Starburst({ className, delay = 0 }: { className?: string; delay?: number }) {
   return (
@@ -29,11 +40,7 @@ function FloatingOrb({ className, delay = 0 }: { className?: string; delay?: num
   return (
     <motion.div
       className={className}
-      animate={{
-        y: [0, -15, 0],
-        scale: [1, 1.15, 1],
-        opacity: [0.3, 0.6, 0.3],
-      }}
+      animate={{ y: [0, -15, 0], scale: [1, 1.15, 1], opacity: [0.3, 0.6, 0.3] }}
       transition={{ duration: 4, delay, repeat: Infinity, ease: 'easeInOut' }}
     />
   );
@@ -44,15 +51,9 @@ function GlitterActiveShape(props: any) {
   const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
   return (
     <g style={{ filter: `drop-shadow(0 0 12px ${fill}) drop-shadow(0 0 4px #fff4)` }}>
-      <Sector cx={cx} cy={cy} innerRadius={outerRadius + 3} outerRadius={outerRadius + 10}
-        startAngle={startAngle} endAngle={endAngle} fill={fill} opacity={0.25} />
-      <Sector cx={cx} cy={cy} innerRadius={innerRadius - 2} outerRadius={outerRadius + 5}
-        startAngle={startAngle} endAngle={endAngle} fill={fill} />
-      <Sector cx={cx} cy={cy}
-        innerRadius={innerRadius - 2}
-        outerRadius={innerRadius + (outerRadius - innerRadius) * 0.52}
-        startAngle={startAngle} endAngle={endAngle}
-        fill="rgba(255,255,255,0.22)" />
+      <Sector cx={cx} cy={cy} innerRadius={outerRadius + 3} outerRadius={outerRadius + 10} startAngle={startAngle} endAngle={endAngle} fill={fill} opacity={0.25} />
+      <Sector cx={cx} cy={cy} innerRadius={innerRadius - 2} outerRadius={outerRadius + 5} startAngle={startAngle} endAngle={endAngle} fill={fill} />
+      <Sector cx={cx} cy={cy} innerRadius={innerRadius - 2} outerRadius={innerRadius + (outerRadius - innerRadius) * 0.52} startAngle={startAngle} endAngle={endAngle} fill="rgba(255,255,255,0.22)" />
     </g>
   );
 }
@@ -73,6 +74,47 @@ export default function Dashboard() {
   const showExpenses = prefs.tabs.expenses;
   const showTaxes = prefs.tabs.taxes;
 
+  // ── This month ────────────────────────────────────────────────────────────
+  const monthStart = startOfMonth(new Date());
+  const monthEnd = endOfMonth(new Date());
+
+  const thisMonthJobs = data.jobs.filter(j => {
+    try { return isWithinInterval(parseISO(j.date), { start: monthStart, end: monthEnd }); }
+    catch { return false; }
+  });
+
+  const thisMonthHours = thisMonthJobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
+  const thisMonthExpected = thisMonthJobs.reduce((s, j) => s + jobGross(j, data.jobs), 0);
+  const thisMonthPaid = data.income
+    .filter(i => i.status === 'paid' && (() => { try { return isWithinInterval(parseISO(i.date), { start: monthStart, end: monthEnd }); } catch { return false; } })())
+    .reduce((s, i) => s + i.amount, 0);
+  const thisMonthUnpaid = Math.max(0, thisMonthExpected - thisMonthPaid);
+
+  // ── YTD ──────────────────────────────────────────────────────────────────
+  const yearPrefix = format(new Date(), 'yyyy');
+  const ytdJobs = data.jobs.filter(j => j.date.startsWith(yearPrefix));
+  const ytdHours = ytdJobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
+  const ytdExpected = ytdJobs.reduce((s, j) => s + jobGross(j, data.jobs), 0);
+  const ytdPaid = data.income
+    .filter(i => i.status === 'paid' && i.date.startsWith(yearPrefix))
+    .reduce((s, i) => s + i.amount, 0);
+
+  // ── By employer ───────────────────────────────────────────────────────────
+  const byEmployer = useMemo(() => {
+    const map: Record<string, { hours: number; earned: number; jobs: number }> = {};
+    for (const job of data.jobs) {
+      const key = job.client || 'Unknown';
+      if (!map[key]) map[key] = { hours: 0, earned: 0, jobs: 0 };
+      map[key].hours += job.hoursWorked ?? 0;
+      map[key].earned += jobGross(job, data.jobs);
+      map[key].jobs += 1;
+    }
+    return Object.entries(map)
+      .map(([client, stats]) => ({ client, ...stats }))
+      .sort((a, b) => b.earned - a.earned);
+  }, [data.jobs]);
+
+  // ── Existing totals ───────────────────────────────────────────────────────
   const totalExpenses = data.expenses.reduce((s, e) => s + e.amount, 0);
   const totalIncome = data.income.reduce((s, i) => s + i.amount, 0);
   const pendingIncome = data.income.filter(i => i.status === 'pending').reduce((s, i) => s + i.amount, 0);
@@ -81,7 +123,6 @@ export default function Dashboard() {
   const totalHours = data.jobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
   const totalEarnings = data.jobs.reduce((s, j) => s + (j.hoursWorked ?? 0) * (j.hourlyRate ?? 0), 0);
   const netProfit = totalIncome - totalExpenses;
-
   const displayTotal = showExpenses ? netProfit : totalIncome;
   const estimatedTax = Math.max(0, displayTotal * (taxRate / 100));
   const afterTax = displayTotal - estimatedTax;
@@ -113,7 +154,6 @@ export default function Dashboard() {
 
   return (
     <>
-      {/* Migration banner */}
       {showMigrate && (
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 mb-4 flex items-center gap-3 flex-wrap">
           <Upload size={18} className="text-primary shrink-0" />
@@ -121,11 +161,7 @@ export default function Dashboard() {
             <p className="text-sm font-medium">Local data found</p>
             <p className="text-xs text-muted-foreground">Import your existing jobs, expenses, and income into your account.</p>
           </div>
-          <button
-            onClick={handleMigrate}
-            disabled={migrating}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
-          >
+          <button onClick={handleMigrate} disabled={migrating} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
             {migrating ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
             {migrating ? 'Migrating...' : 'Import Data'}
           </button>
@@ -133,21 +169,13 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Hero area */}
+      {/* Hero */}
       <div className="relative overflow-hidden rounded-2xl border border-border mb-6 p-5 bg-card">
         <div className="absolute inset-0 opacity-20">
           <motion.div
             className="absolute inset-0"
-            style={{
-              background: 'radial-gradient(circle at 20% 50%, hsl(210 100% 55% / 0.4), transparent 50%), radial-gradient(circle at 80% 50%, hsl(265 90% 60% / 0.4), transparent 50%), radial-gradient(circle at 50% 80%, hsl(50 100% 55% / 0.3), transparent 40%)',
-            }}
-            animate={{
-              background: [
-                'radial-gradient(circle at 20% 50%, hsl(210 100% 55% / 0.4), transparent 50%), radial-gradient(circle at 80% 50%, hsl(265 90% 60% / 0.4), transparent 50%), radial-gradient(circle at 50% 80%, hsl(50 100% 55% / 0.3), transparent 40%)',
-                'radial-gradient(circle at 50% 20%, hsl(210 100% 55% / 0.4), transparent 50%), radial-gradient(circle at 50% 80%, hsl(265 90% 60% / 0.4), transparent 50%), radial-gradient(circle at 80% 50%, hsl(50 100% 55% / 0.3), transparent 40%)',
-                'radial-gradient(circle at 80% 50%, hsl(210 100% 55% / 0.4), transparent 50%), radial-gradient(circle at 20% 50%, hsl(265 90% 60% / 0.4), transparent 50%), radial-gradient(circle at 50% 20%, hsl(50 100% 55% / 0.3), transparent 40%)',
-              ],
-            }}
+            style={{ background: 'radial-gradient(circle at 20% 50%, hsl(210 100% 55% / 0.4), transparent 50%), radial-gradient(circle at 80% 50%, hsl(265 90% 60% / 0.4), transparent 50%), radial-gradient(circle at 50% 80%, hsl(50 100% 55% / 0.3), transparent 40%)' }}
+            animate={{ background: ['radial-gradient(circle at 20% 50%, hsl(210 100% 55% / 0.4), transparent 50%), radial-gradient(circle at 80% 50%, hsl(265 90% 60% / 0.4), transparent 50%), radial-gradient(circle at 50% 80%, hsl(50 100% 55% / 0.3), transparent 40%)', 'radial-gradient(circle at 50% 20%, hsl(210 100% 55% / 0.4), transparent 50%), radial-gradient(circle at 50% 80%, hsl(265 90% 60% / 0.4), transparent 50%), radial-gradient(circle at 80% 50%, hsl(50 100% 55% / 0.3), transparent 40%)', 'radial-gradient(circle at 80% 50%, hsl(210 100% 55% / 0.4), transparent 50%), radial-gradient(circle at 20% 50%, hsl(265 90% 60% / 0.4), transparent 50%), radial-gradient(circle at 50% 20%, hsl(50 100% 55% / 0.3), transparent 40%)'] }}
             transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
           />
         </div>
@@ -158,30 +186,16 @@ export default function Dashboard() {
         <FloatingOrb className="absolute bottom-2 right-1/3 w-20 h-20 rounded-full bg-accent/10 blur-xl" delay={1.5} />
         <div className="relative z-10">
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-            <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground font-medium mb-1">Welcome back</p>
-            <h1 className="text-2xl md:text-3xl font-bold text-mono tracking-widest funky-gradient-text">
-              AV LEDGER
-            </h1>
+            <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground font-body mb-1">Welcome back</p>
+            <h1 className="text-2xl md:text-3xl font-display funky-gradient-text">Show Flow</h1>
           </motion.div>
-          <motion.div
-            className="mt-4 flex items-baseline gap-3"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-          >
-            <span className="text-3xl md:text-4xl font-bold text-mono text-foreground">
-              ${displayTotal.toLocaleString()}
-            </span>
-            <span className={`text-xs font-medium text-mono uppercase tracking-wider ${displayTotal >= 0 ? 'text-success' : 'text-destructive'}`}>
+          <motion.div className="mt-4 flex items-baseline gap-3" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }}>
+            <span className="text-3xl md:text-4xl font-bold text-mono text-foreground">${displayTotal.toLocaleString()}</span>
+            <span className={`text-xs font-body uppercase tracking-wider ${displayTotal >= 0 ? 'text-success' : 'text-destructive'}`}>
               {showExpenses ? 'net' : 'income'} {displayTotal >= 0 ? '↑' : '↓'}
             </span>
           </motion.div>
-          <motion.div
-            className="mt-2 flex gap-4 text-xs text-muted-foreground"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.4 }}
-          >
+          <motion.div className="mt-2 flex gap-4 text-xs text-muted-foreground font-body" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 0.4 }}>
             <span>{activeJobs} active job{activeJobs !== 1 ? 's' : ''}</span>
             <span>•</span>
             <span>{totalHours.toFixed(1)}h logged</span>
@@ -189,45 +203,97 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Falling money — tap to reconcile */}
-      <div
-        className="relative h-28 overflow-hidden rounded-2xl mb-6 cursor-pointer border border-border bg-card/50"
-        onClick={() => navigate('/pay')}
-      >
+      {/* Falling money */}
+      <div className="relative h-28 overflow-hidden rounded-2xl mb-6 cursor-pointer border border-border bg-card/50" onClick={() => navigate('/pay')}>
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <p className="text-[10px] text-mono uppercase tracking-widest text-muted-foreground/40">
-            tap to reconcile pay
-          </p>
+          <p className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/40">tap to reconcile pay</p>
         </div>
         {FALLING_ITEMS.map((emoji, i) => (
-          <motion.div
-            key={i}
-            className="absolute select-none"
-            style={{
-              left: `${(i * 6.5) % 96}%`,
-              fontSize: emoji === '🪙' ? '1.1rem' : '1.5rem',
-              filter: emoji === '🪙'
-                ? 'sepia(1) saturate(4) hue-rotate(5deg) brightness(1.3)'
-                : 'none',
-            }}
+          <motion.div key={i} className="absolute select-none" style={{ left: `${(i * 6.5) % 96}%`, fontSize: emoji === '🪙' ? '1.1rem' : '1.5rem', filter: emoji === '🪙' ? 'sepia(1) saturate(4) hue-rotate(5deg) brightness(1.3)' : 'none' }}
             initial={{ y: -40, opacity: 0, rotate: 0 }}
-            animate={{
-              y: 130,
-              opacity: [0, 1, 1, 0],
-              rotate: emoji === '🪙' ? [0, 360] : [0, -8, 8, -4],
-            }}
-            transition={{
-              duration: emoji === '🪙' ? 1.4 + (i % 3) * 0.2 : 2.4 + (i % 5) * 0.3,
-              delay: (i * 0.22) % 3.2,
-              repeat: Infinity,
-              ease: emoji === '🪙' ? 'linear' : 'easeIn',
-            }}
+            animate={{ y: 130, opacity: [0, 1, 1, 0], rotate: emoji === '🪙' ? [0, 360] : [0, -8, 8, -4] }}
+            transition={{ duration: emoji === '🪙' ? 1.4 + (i % 3) * 0.2 : 2.4 + (i % 5) * 0.3, delay: (i * 0.22) % 3.2, repeat: Infinity, ease: emoji === '🪙' ? 'linear' : 'easeIn' }}
           >
             {emoji}
           </motion.div>
         ))}
       </div>
 
+      {/* ── This month ─────────────────────────────────────────────────────── */}
+      <div className="mb-6">
+        <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60 mb-3 flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
+          {format(new Date(), 'MMMM yyyy')}
+        </h2>
+        <div className="grid grid-cols-3 gap-2 mb-2">
+          <div className="rounded-xl border border-border bg-card p-3">
+            <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Hours</p>
+            <p className="text-lg font-bold text-mono mt-1">{thisMonthHours.toFixed(1)}</p>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-3">
+            <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Expected</p>
+            <p className="text-lg font-bold text-mono mt-1 break-all">${thisMonthExpected.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
+          </div>
+          <div className={`rounded-xl border p-3 ${thisMonthUnpaid > 0 ? 'border-amber-500/30 bg-amber-500/5' : 'border-success/30 bg-success/5'}`}>
+            <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">{thisMonthUnpaid > 0 ? 'Unpaid' : 'All paid'}</p>
+            <p className={`text-lg font-bold text-mono mt-1 break-all ${thisMonthUnpaid > 0 ? 'text-amber-400' : 'text-success'}`}>
+              {thisMonthUnpaid > 0 ? `$${thisMonthUnpaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}` : '✓'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── YTD ────────────────────────────────────────────────────────────── */}
+      <div className="mb-6">
+        <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60 mb-3 flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-success inline-block" />
+          {yearPrefix} year to date
+        </h2>
+        <div className="grid grid-cols-3 gap-2">
+          <div className="rounded-xl border border-border bg-card p-3">
+            <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Hours</p>
+            <p className="text-lg font-bold text-mono mt-1">{ytdHours.toFixed(1)}</p>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-3">
+            <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Earned</p>
+            <p className="text-lg font-bold text-mono mt-1 break-all text-success">${ytdExpected.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
+          </div>
+          <div className="rounded-xl border border-success/30 bg-success/5 p-3">
+            <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Paid</p>
+            <p className="text-lg font-bold text-mono text-success mt-1 break-all">${ytdPaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── By employer ────────────────────────────────────────────────────── */}
+      {byEmployer.length > 0 && (
+        <div className="mb-6 rounded-xl border border-border bg-card overflow-hidden">
+          <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between">
+            <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60">By employer</h2>
+            <button
+              onClick={() => exportWeeklyToExcel(data.jobs, showExpenses ? data.expenses : [], showIncome ? data.income : [])}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-primary text-[11px] font-body transition-colors hover:bg-primary/20"
+            >
+              <Download size={12} /> Export CSV
+            </button>
+          </div>
+          <div className="divide-y divide-border/40">
+            {byEmployer.map(({ client, hours, earned, jobs }) => (
+              <div key={client} className="flex items-center justify-between px-4 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{client}</p>
+                  <p className="text-[10px] font-body text-muted-foreground">{jobs} job{jobs !== 1 ? 's' : ''} · {hours.toFixed(1)}h</p>
+                </div>
+                <p className="text-sm font-bold text-mono text-success shrink-0 ml-3">
+                  ${earned.toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <StatCard label="Active Jobs" value={activeJobs} icon={Briefcase} variant="info" />
         <StatCard label="Hours Logged" value={totalHours.toFixed(1)} icon={Clock} variant="accent" />
@@ -236,82 +302,34 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        <StatCard
-          label={showExpenses ? 'Net Profit' : 'Job Earnings'}
-          value={`$${(showExpenses ? netProfit : totalEarnings).toLocaleString()}`}
-          icon={DollarSign}
-          variant={showExpenses && netProfit < 0 ? 'destructive' : 'success'}
-        />
+        <StatCard label={showExpenses ? 'Net Profit' : 'Job Earnings'} value={`$${(showExpenses ? netProfit : totalEarnings).toLocaleString()}`} icon={DollarSign} variant={showExpenses && netProfit < 0 ? 'destructive' : 'success'} />
         {showIncome && <StatCard label="Pending" value={`$${pendingIncome.toLocaleString()}`} icon={AlertCircle} variant="warning" />}
         {showIncome && <StatCard label="Overdue" value={`$${overdueIncome.toLocaleString()}`} icon={AlertCircle} variant="destructive" />}
       </div>
 
-      {/* Weekly Export */}
-      <div className="flex justify-end mb-4">
-        <button
-          onClick={() => exportWeeklyToExcel(data.jobs, showExpenses ? data.expenses : [], showIncome ? data.income : [])}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 border border-primary/30 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors"
-        >
-          <Download size={14} />
-          Export to CSV
-        </button>
-      </div>
-
-      {/* Tax Breakdown */}
+      {/* Tax breakdown */}
       {showTaxes && (
         <div className="rounded-2xl border border-border bg-card p-4 mb-6">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[10px] font-semibold text-mono text-muted-foreground uppercase tracking-[0.2em]">Tax Breakdown</h2>
+            <h2 className="text-[10px] font-body text-muted-foreground uppercase tracking-widest">Tax Breakdown</h2>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-muted-foreground">Tax Rate</span>
-              <select
-                value={taxRate}
-                onChange={e => setTaxRate(Number(e.target.value))}
-                className="text-xs bg-secondary border border-border rounded-md px-2 py-1 text-foreground"
-              >
-                {[15, 20, 25, 30, 35, 40].map(r => (
-                  <option key={r} value={r}>{r}%</option>
-                ))}
+              <span className="text-[10px] text-muted-foreground font-body">Tax Rate</span>
+              <select value={taxRate} onChange={e => setTaxRate(Number(e.target.value))} className="text-xs bg-secondary border border-border rounded-md px-2 py-1 text-foreground">
+                {[15, 20, 25, 30, 35, 40].map(r => <option key={r} value={r}>{r}%</option>)}
               </select>
             </div>
           </div>
           {totalIncome === 0 && totalExpenses === 0 ? (
-            <p className="text-xs text-muted-foreground py-8 text-center">Add income & expenses to see your tax breakdown</p>
+            <p className="text-xs text-muted-foreground py-8 text-center font-body">Add income & expenses to see your tax breakdown</p>
           ) : (
             <div className="flex items-center gap-4">
               <div className="w-40 h-40 shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={35}
-                      outerRadius={65}
-                      paddingAngle={3}
-                      dataKey="value"
-                      strokeWidth={0}
-                      activeShape={GlitterActiveShape}
-                    >
-                      {pieData.map((entry, i) => (
-                        <Cell key={i} fill={entry.color} stroke="rgba(255,255,255,0.15)" strokeWidth={1.5} />
-                      ))}
+                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={35} outerRadius={65} paddingAngle={3} dataKey="value" strokeWidth={0} activeShape={GlitterActiveShape}>
+                      {pieData.map((entry, i) => <Cell key={i} fill={entry.color} stroke="rgba(255,255,255,0.15)" strokeWidth={1.5} />)}
                     </Pie>
-                    <Tooltip
-                      formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name]}
-                      contentStyle={{
-                        background: '#ffffff',
-                        border: 'none',
-                        borderRadius: '12px',
-                        fontSize: '12px',
-                        fontFamily: 'Space Mono, monospace',
-                        boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-                        padding: '10px 14px',
-                        color: '#111111',
-                      }}
-                      labelStyle={{ color: '#111111', fontWeight: 700, marginBottom: 2 }}
-                      itemStyle={{ color: '#333333' }}
-                    />
+                    <Tooltip formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name]} contentStyle={{ background: '#ffffff', border: 'none', borderRadius: '12px', fontSize: '12px', fontFamily: 'Space Mono, monospace', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', padding: '10px 14px', color: '#111111' }} labelStyle={{ color: '#111111', fontWeight: 700, marginBottom: 2 }} itemStyle={{ color: '#333333' }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -319,14 +337,14 @@ export default function Dashboard() {
                 {pieData.map(d => (
                   <div key={d.name} className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
-                    <span className="text-xs text-muted-foreground flex-1">{d.name}</span>
+                    <span className="text-xs text-muted-foreground font-body flex-1">{d.name}</span>
                     <span className="text-xs font-bold text-mono">${d.value.toLocaleString()}</span>
                   </div>
                 ))}
                 <div className="border-t border-border pt-1.5 mt-1.5">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 shrink-0" />
-                    <span className="text-xs text-muted-foreground flex-1">Total Income</span>
+                    <span className="text-xs text-muted-foreground font-body flex-1">Total Income</span>
                     <span className="text-xs font-bold text-mono">${totalIncome.toLocaleString()}</span>
                   </div>
                 </div>
@@ -336,32 +354,28 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Recent jobs + expenses */}
       <div className="grid lg:grid-cols-2 gap-4">
         <div className="rounded-2xl border border-border bg-card p-4">
-          <h2 className="text-[10px] font-semibold text-mono mb-3 text-muted-foreground uppercase tracking-[0.2em]">Recent Jobs</h2>
+          <h2 className="text-[10px] font-body mb-3 text-muted-foreground uppercase tracking-widest">Recent Jobs</h2>
           {recentJobs.length === 0 ? (
-            <p className="text-xs text-muted-foreground py-4 text-center">No jobs yet</p>
+            <p className="text-xs text-muted-foreground py-4 text-center font-body">No jobs yet</p>
           ) : (
             <div className="space-y-2">
               {recentJobs.map(job => (
                 <div key={job.id} className="flex items-center justify-between rounded-xl bg-secondary/50 px-3 py-2">
                   <div>
                     <p className="text-sm font-medium">{job.name}</p>
-                    <p className="text-xs text-muted-foreground">{job.client} • {job.venue}</p>
+                    <p className="text-xs text-muted-foreground font-body">{job.client} • {job.venue}</p>
                   </div>
                   <div className="text-right">
                     {(job.hoursWorked ?? 0) > 0 && (
                       <p className="text-xs text-mono font-medium">{job.hoursWorked}h • ${((job.hoursWorked ?? 0) * (job.hourlyRate ?? 0)).toLocaleString()}</p>
                     )}
-                    <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] text-mono font-medium ${
-                      job.status === 'completed' ? 'bg-success/20 text-success' :
-                      job.status === 'in-progress' ? 'bg-primary/20 text-primary' :
-                      job.status === 'cancelled' ? 'bg-destructive/20 text-destructive' :
-                      'bg-accent/20 text-accent'
-                    }`}>
+                    <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] text-mono font-medium ${job.status === 'completed' ? 'bg-success/20 text-success' : job.status === 'in-progress' ? 'bg-primary/20 text-primary' : job.status === 'cancelled' ? 'bg-destructive/20 text-destructive' : 'bg-accent/20 text-accent'}`}>
                       {job.status}
                     </span>
-                    <p className="text-xs text-muted-foreground mt-0.5">{format(new Date(job.date), 'MMM d')}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5 font-body">{format(new Date(job.date), 'MMM d')}</p>
                   </div>
                 </div>
               ))}
@@ -371,20 +385,20 @@ export default function Dashboard() {
 
         {showExpenses && (
           <div className="rounded-2xl border border-border bg-card p-4">
-            <h2 className="text-[10px] font-semibold text-mono mb-3 text-muted-foreground uppercase tracking-[0.2em]">Recent Expenses</h2>
+            <h2 className="text-[10px] font-body mb-3 text-muted-foreground uppercase tracking-widest">Recent Expenses</h2>
             {recentExpenses.length === 0 ? (
-              <p className="text-xs text-muted-foreground py-4 text-center">No expenses yet</p>
+              <p className="text-xs text-muted-foreground py-4 text-center font-body">No expenses yet</p>
             ) : (
               <div className="space-y-2">
                 {recentExpenses.map(exp => (
                   <div key={exp.id} className="flex items-center justify-between rounded-xl bg-secondary/50 px-3 py-2">
                     <div>
                       <p className="text-sm font-medium">{exp.description}</p>
-                      <p className="text-xs text-muted-foreground">{exp.category}</p>
+                      <p className="text-xs text-muted-foreground font-body">{exp.category}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-bold text-mono text-destructive">-${exp.amount.toLocaleString()}</p>
-                      <p className="text-xs text-muted-foreground">{format(new Date(exp.date), 'MMM d')}</p>
+                      <p className="text-xs text-muted-foreground font-body">{format(new Date(exp.date), 'MMM d')}</p>
                     </div>
                   </div>
                 ))}
