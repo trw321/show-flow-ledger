@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useData } from '@/lib/DataContext';
 import StatCard from '@/components/StatCard';
 import PageHeader from '@/components/PageHeader';
-import { Briefcase, DollarSign, TrendingUp, TrendingDown, AlertCircle, Clock, Download, Upload, Loader2 } from 'lucide-react';
+import { Briefcase, DollarSign, TrendingUp, TrendingDown, AlertCircle, Clock, Download, Upload, Loader2, ChevronDown } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
