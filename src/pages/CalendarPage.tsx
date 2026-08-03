@@ -1,29 +1,37 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useData } from '@/lib/DataContext';
-import PageHeader from '@/components/PageHeader';
+import SpacePageWrapper from '@/components/SpacePageWrapper';
+import CryptexReel from '@/components/CryptexReel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ChevronLeft, ChevronRight, Star, ArrowLeft, NotebookPen, Check, Plus, AlertTriangle } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast } from 'date-fns';
+import { ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, isSameMonth, isSameDay, isToday, isPast } from 'date-fns';
 import type { Job } from '@/lib/store';
-import { calculateDayPay, getDayMultiplier } from '@/lib/payCalc';
+import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak } from '@/lib/payCalc';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 const statusDot: Record<Job['status'], string> = {
-  upcoming: 'bg-accent',
-  'in-progress': 'bg-primary',
-  completed: 'bg-success',
+  upcoming: 'bg-blue-500',
+  'in-progress': 'bg-blue-500',
+  completed: 'bg-purple-500',
   cancelled: 'bg-destructive',
 };
 
 const statusColors: Record<Job['status'], string> = {
-  upcoming: 'bg-accent/20 text-accent border-accent/30',
-  'in-progress': 'bg-primary/20 text-primary border-primary/30',
-  completed: 'bg-success/20 text-success border-success/30',
+  upcoming: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  'in-progress': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  completed: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
   cancelled: 'bg-destructive/20 text-destructive border-destructive/30',
 };
+
+// A job counts as "paid" once a linked income record is marked paid —
+// distinct from just "completed" (worked, pay estimated but not yet received).
+function jobDotClass(job: Job, paidJobIds: Set<string>): string {
+  if (paidJobIds.has(job.id)) return 'bg-success';
+  return statusDot[job.status];
+}
 
 const statusLabel: Record<Job['status'], string> = {
   upcoming: 'Upcoming',
@@ -51,197 +59,22 @@ function calcHours(start: string, end: string): number {
   return Math.max(0, (e - s) / 60);
 }
 
-// ── Cat scratch parser ────────────────────────────────────────────────────────
-
-interface CatScratchEntry {
-  date: string;
-  venue?: string;
-  startTime?: string;
-  endTime?: string;
-  mealType?: 'YWA' | 'NWA';
-  mealPenalties?: number;
-  paid: boolean;
-  grossPay?: number;
-  netPay?: number;
-  payrollCompany?: string;
-  position?: string;
-  minimumHours?: number;
-  notes?: string;
-  raw: string;
-}
-
-interface MatchResult {
-  entry: CatScratchEntry;
-  matchedJob: Job | null;
-  score: number;
-  confidence: 'high' | 'medium' | 'low' | 'none';
-  conflicts: string[];
-}
-
-function parseCatScratch(text: string, year: number): CatScratchEntry[] {
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-  const entries: CatScratchEntry[] = [];
-
-  for (const line of lines) {
-    // Skip header lines (no date pattern)
-    const dateMatch = line.match(/(\d{1,2})[.\-\/](\d{1,2})(?:[.\-\/](\d{2,4}))?/);
-    if (!dateMatch) continue;
-
-    const month = parseInt(dateMatch[1]);
-    const day = parseInt(dateMatch[2]);
-    const yr = dateMatch[3] ? (dateMatch[3].length === 2 ? 2000 + parseInt(dateMatch[3]) : parseInt(dateMatch[3])) : year;
-    if (month < 1 || month > 12 || day < 1 || day > 31) continue;
-
-    const date = `${yr}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const rest = line.slice(dateMatch[0].length).trim();
-
-    // Times
-    const timeMatch = rest.match(/(\d{1,2}(?::\d{2})?(?:am|pm|a|p)?)\s*[-–to]+\s*(\d{1,2}(?::\d{2})?(?:am|pm|a|p)?)/i);
-    let startTime: string | undefined;
-    let endTime: string | undefined;
-    if (timeMatch) {
-      const fmt = (t: string) => {
-        const m = t.match(/(\d{1,2}):?(\d{2})?\s*(am|pm|a|p)?/i);
-        if (!m) return t;
-        let h = parseInt(m[1]);
-        const min = m[2] || '00';
-        const ap = (m[3] || '').toLowerCase();
-        if (ap.startsWith('p') && h < 12) h += 12;
-        if (ap.startsWith('a') && h === 12) h = 0;
-        return `${String(h).padStart(2, '0')}:${min}`;
-      };
-      startTime = fmt(timeMatch[1]);
-      endTime = fmt(timeMatch[2]);
-    }
-
-    // Meal type
-    const mealType = /\bYWA\b/i.test(rest) ? 'YWA' : /\bNWA\b/i.test(rest) ? 'NWA' : undefined;
-
-    // Meal penalties
-    const mpMatch = rest.match(/(\d+)\s*MP/i);
-    const mealPenalties = mpMatch ? parseInt(mpMatch[1]) : undefined;
-
-    // Paid
-    const paid = /💵|PAID/i.test(rest);
-
-    // Pay amounts gross//net
-    const payMatch = rest.match(/\$?([\d,]+\.?\d*)\s*\/\/\s*\$?([\d,]+\.?\d*)/);
-    const singlePayMatch = rest.match(/\$\s*([\d,]+\.?\d*)/);
-    let grossPay: number | undefined;
-    let netPay: number | undefined;
-    if (payMatch) {
-      grossPay = parseFloat(payMatch[1].replace(',', ''));
-      netPay = parseFloat(payMatch[2].replace(',', ''));
-    } else if (singlePayMatch) {
-      grossPay = parseFloat(singlePayMatch[1].replace(',', ''));
-    }
-
-    // Minimum hours
-    const minMatch = rest.match(/\((\d+)h?\s*min(?:i|imum)?\)/i) || rest.match(/(\d+)hr?\s*min(?:i|imum)?/i);
-    const minimumHours = minMatch ? parseInt(minMatch[1]) : undefined;
-
-    // Position
-    const posMatch = rest.match(/head\s+(\w+)/i);
-    const position = posMatch ? `Head ${posMatch[1]}` : undefined;
-
-    // Payroll company — look for known names or ALL CAPS words after time
-    const companies = ['LIVE NATION', 'IATSE', 'HUGHSTON', 'AIRBNB', 'AIR BNB'];
-    let payrollCompany: string | undefined;
-    for (const co of companies) {
-      if (rest.toUpperCase().includes(co)) { payrollCompany = co; break; }
-    }
-
-    // Venue — first capitalized phrase before time or known keyword
-    const venueMatch = rest.match(/^([A-Za-z][A-Za-z\s]+?)(?:\s+\d|\s+💵|\s+PAID|$)/);
-    const venue = venueMatch ? venueMatch[1].trim() : undefined;
-
-    entries.push({
-      date, venue, startTime, endTime, mealType, mealPenalties,
-      paid, grossPay, netPay, payrollCompany, position, minimumHours,
-      notes: rest,
-      raw: line,
-    });
-  }
-
-  return entries;
-}
-
-function scoreMatch(entry: CatScratchEntry, job: Job): { score: number; conflicts: string[] } {
-  let score = 0;
-  const conflicts: string[] = [];
-
-  // Date match is prerequisite
-  if (job.date !== entry.date) return { score: 0, conflicts: [] };
-  score += 50;
-
-  // Venue fuzzy match
-  if (entry.venue && job.venue) {
-    const ev = entry.venue.toLowerCase();
-    const jv = job.venue.toLowerCase();
-    const evWords = ev.split(/\s+/);
-    const jvWords = jv.split(/\s+/);
-    const shared = evWords.filter(w => w.length > 2 && jvWords.some(jw => jw.includes(w) || w.includes(jw)));
-    if (shared.length > 0) score += Math.min(30, shared.length * 15);
-    else if (ev.length > 2 && jv.includes(ev.slice(0, 4))) score += 10;
-    else conflicts.push(`Venue: cat scratch says "${entry.venue}", job says "${job.venue}"`);
-  } else if (entry.venue && job.client) {
-    const ev = entry.venue.toLowerCase();
-    const jc = job.client.toLowerCase();
-    if (ev.includes(jc.slice(0, 4)) || jc.includes(ev.slice(0, 4))) score += 15;
-  }
-
-  // Start time match
-  if (entry.startTime && job.startTime) {
-    const em = parseTimeToMins(entry.startTime);
-    const jm = parseTimeToMins(job.startTime);
-    if (!isNaN(em) && !isNaN(jm)) {
-      const diff = Math.abs(em - jm);
-      if (diff === 0) score += 20;
-      else if (diff <= 30) score += 10;
-      else conflicts.push(`Start time: cat scratch says ${entry.startTime}, job says ${job.startTime}`);
-    }
-  }
-
-  return { score, conflicts };
-}
-
-function matchEntries(entries: CatScratchEntry[], jobs: Job[]): MatchResult[] {
-  return entries.map(entry => {
-    const candidates = jobs.filter(j => j.date === entry.date);
-    if (candidates.length === 0) {
-      return { entry, matchedJob: null, score: 0, confidence: 'none', conflicts: [] };
-    }
-
-    let best: Job | null = null;
-    let bestScore = 0;
-    let bestConflicts: string[] = [];
-
-    for (const job of candidates) {
-      const { score, conflicts } = scoreMatch(entry, job);
-      if (score > bestScore) { best = job; bestScore = score; bestConflicts = conflicts; }
-    }
-
-    const confidence: MatchResult['confidence'] =
-      bestScore >= 80 ? 'high' :
-      bestScore >= 50 ? 'medium' :
-      bestScore > 0 ? 'low' : 'none';
-
-    return { entry, matchedJob: best, score: bestScore, confidence, conflicts: bestConflicts };
-  });
-}
-
 // ── Job detail view ───────────────────────────────────────────────────────────
 
-function JobDetailView({ job, onBack, onSave }: {
+function JobDetailView({ job, onBack, onSave, onDuplicated }: {
   job: Job;
   onBack: () => void;
   onSave: (updates: Partial<Job>) => void;
+  onDuplicated: (count: number) => void;
 }) {
+  const { addJob } = useData();
   const [endTime, setEndTime] = useState(job.endTime ?? '');
   const [hoursWorked, setHoursWorked] = useState(job.hoursWorked?.toString() ?? '');
   const [minimumHours, setMinimumHours] = useState(job.minimumHours?.toString() ?? '');
   const [payrollCompany, setPayrollCompany] = useState(job.payrollCompany ?? '');
   const [mealType, setMealType] = useState<Job['mealType']>(job.mealType ?? undefined);
+  const [duplicating, setDuplicating] = useState(false);
+  const [dupDates, setDupDates] = useState<string[]>(['']);
 
   useEffect(() => {
     setEndTime(job.endTime ?? '');
@@ -249,7 +82,35 @@ function JobDetailView({ job, onBack, onSave }: {
     setMinimumHours(job.minimumHours?.toString() ?? '');
     setPayrollCompany(job.payrollCompany ?? '');
     setMealType(job.mealType ?? undefined);
+    setDuplicating(false);
+    setDupDates(['']);
   }, [job.id]);
+
+  const handleDuplicate = async () => {
+    const dates = [...new Set(dupDates.filter(Boolean))].filter(d => d !== job.date);
+    if (dates.length === 0) { toast.error('Pick at least one date'); return; }
+    for (const date of dates) {
+      await addJob({
+        name: job.name,
+        client: job.client,
+        venue: job.venue,
+        date,
+        startTime: job.startTime,
+        endTime: job.endTime,
+        status: 'upcoming',
+        paySchedule: job.paySchedule,
+        payrollCompany: job.payrollCompany,
+        hourlyRate: job.hourlyRate,
+        minimumHours: job.minimumHours,
+        has6th7thDayRule: job.has6th7thDayRule,
+        hasVacationPay: job.hasVacationPay,
+        steward: job.steward,
+        mealType: job.mealType,
+        notes: job.notes,
+      });
+    }
+    onDuplicated(dates.length);
+  };
 
   const handleEndTimeChange = (val: string) => {
     setEndTime(val);
@@ -318,6 +179,54 @@ function JobDetailView({ job, onBack, onSave }: {
             {minimumApplied && <p className="text-[10px] text-accent font-medium">{minHours}h minimum call — contract guarantees payment for {minHours}h</p>}
           </div>
         )}
+
+        <div className="rounded-xl border border-border overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setDuplicating(d => !d)}
+            className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-secondary/30 transition-colors"
+          >
+            <Copy size={14} className="text-muted-foreground shrink-0" />
+            <span className="text-xs font-medium flex-1">Duplicate this shift to other dates</span>
+            <ChevronDown size={14} className={cn("text-muted-foreground transition-transform", duplicating && "rotate-180")} />
+          </button>
+          {duplicating && (
+            <div className="border-t border-border p-3 space-y-2">
+              <p className="text-[10px] text-muted-foreground">
+                Same employer, venue, time & rate — creates a new shift per date.
+              </p>
+              {dupDates.map((d, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <input
+                    type="date"
+                    value={d}
+                    onChange={e => setDupDates(prev => prev.map((v, vi) => vi === i ? e.target.value : v))}
+                    className="flex-1 h-9 rounded-lg bg-secondary/30 border border-border text-foreground text-xs font-mono px-3 focus:outline-none focus:border-primary/40"
+                  />
+                  {dupDates.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setDupDates(prev => prev.filter((_, vi) => vi !== i))}
+                      className="text-muted-foreground hover:text-destructive transition-colors p-1.5"
+                      aria-label="Remove date"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <div className="flex gap-2 pt-1">
+                <Button variant="outline" size="sm" className="flex-1" onClick={() => setDupDates(prev => [...prev, ''])}>
+                  + Add date
+                </Button>
+                <Button size="sm" className="flex-1" onClick={handleDuplicate}>
+                  Create shift{dupDates.filter(Boolean).length !== 1 ? 's' : ''}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="space-y-3">
           <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/50 uppercase">Update Job</p>
           <div className="space-y-1">
@@ -376,23 +285,45 @@ function JobDetailView({ job, onBack, onSave }: {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function CalendarPage() {
-  const { data, updateJob, addJob, addIncome } = useData();
+  const { data, updateJob } = useData();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'month' | 'year'>('month');
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
-  const [showCatScratch, setShowCatScratch] = useState(false);
-  const [catScratchText, setCatScratchText] = useState('');
-  const [catScratchStep, setCatScratchStep] = useState<'input' | 'review'>('input');
-  const [matchResults, setMatchResults] = useState<MatchResult[]>([]);
-  const [acceptedKeys, setAcceptedKeys] = useState<Set<number>>(new Set());
+  const [expandedGroupKey, setExpandedGroupKey] = useState<string | null>(null);
+
+  // Stable 36-month / 13-year windows (computed once) feed the cryptex reel —
+  // basing them on a fixed reference rather than the drifting currentDate/Year
+  // keeps each reel's item list — and therefore its drag positions — steady.
+  const monthReelItems = useMemo(() => {
+    const base = startOfMonth(new Date());
+    return Array.from({ length: 36 }, (_, i) => {
+      const d = addMonths(base, i - 18);
+      return { key: format(d, 'yyyy-MM'), label: format(d, "MMM ''yy") };
+    });
+  }, []);
+  const yearReelItems = useMemo(() => {
+    const base = new Date().getFullYear();
+    return Array.from({ length: 13 }, (_, i) => {
+      const y = base - 6 + i;
+      return { key: String(y), label: String(y) };
+    });
+  }, []);
 
   const jobsByDate = useMemo(() => {
     const map: Record<string, Job[]> = {};
     data.jobs.forEach(job => { if (!map[job.date]) map[job.date] = []; map[job.date].push(job); });
     return map;
   }, [data.jobs]);
+
+  const paidJobIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const income of data.income) {
+      if (income.status === 'paid' && income.jobId) set.add(income.jobId);
+    }
+    return set;
+  }, [data.income]);
 
   const payByDate = useMemo(() => {
     const map: Record<string, number> = {};
@@ -402,11 +333,36 @@ export default function CalendarPage() {
         const hours = job.hoursWorked ?? 0;
         if (hours <= 0) continue;
         const rate = job.hourlyRate || 0;
+        const employer = data.employers.find(e => e.name.toLowerCase() === job.client.toLowerCase());
         const multiplier = getDayMultiplier(date, job.client, data.jobs, job.has6th7thDayRule || false);
-        const result = calculateDayPay(hours, rate, job.minimumHours || 0, job.mealPenalties || 0, multiplier, job.mealType);
+        const result = calculateDayPay(hours, rate, job.minimumHours || 0, job.mealPenalties || 0, multiplier, job.mealType, {
+          rule: employer?.overtimeRule ?? 'daily',
+          otThresholdHours: employer?.dailyOvertimeThresholdHours,
+          dtThresholdHours: employer?.dailyDoubletimeThresholdHours,
+          otMultiplier: employer?.overtimeMultiplier,
+          dtMultiplier: employer?.doubletimeMultiplier,
+        });
         dayPay += result.totalPay;
+        if (employer) dayPay += calculateWeeklyOvertimeBonus(job, data.jobs, employer);
       }
       if (dayPay > 0) map[date] = dayPay;
+    }
+    return map;
+  }, [jobsByDate, data.jobs, data.employers]);
+
+  // Dates that are the 6th+ consecutive day worked for the same employer —
+  // flagged regardless of whether "6th/7th day rule" is checked on the job,
+  // so it's a heads-up to go verify the contract, not just a confirmation.
+  const sixthSeventhDayDates = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const [date, jobs] of Object.entries(jobsByDate)) {
+      let maxStreak = 0;
+      for (const job of jobs) {
+        if ((job.hoursWorked ?? 0) <= 0) continue;
+        const streak = getConsecutiveDayStreak(date, job.client, data.jobs);
+        if (streak > maxStreak) maxStreak = streak;
+      }
+      if (maxStreak >= 6) map[date] = maxStreak;
     }
     return map;
   }, [jobsByDate, data.jobs]);
@@ -467,203 +423,34 @@ export default function CalendarPage() {
   const selectedJob = selectedJobId ? data.jobs.find(j => j.id === selectedJobId) ?? null : null;
   const closeDialog = () => { setSelectedDate(null); setSelectedJobId(null); };
 
-  const handleParseCatScratch = () => {
-    if (!catScratchText.trim()) return;
-    const year = currentDate.getFullYear();
-    const entries = parseCatScratch(catScratchText, year);
-    if (entries.length === 0) { toast.error('No dates found — check your cat scratch format'); return; }
-    const results = matchEntries(entries, data.jobs);
-    setMatchResults(results);
-    setAcceptedKeys(new Set());
-    setCatScratchStep('review');
-  };
-
-  const handleApplyMatch = async (result: MatchResult, idx: number) => {
-    const { entry, matchedJob } = result;
-    if (matchedJob) {
-      const updates: Partial<Job> = {};
-      if (entry.endTime && !matchedJob.endTime) updates.endTime = entry.endTime;
-      if (entry.mealType && !matchedJob.mealType) updates.mealType = entry.mealType;
-      if (entry.mealPenalties && !matchedJob.mealPenalties) updates.mealPenalties = entry.mealPenalties;
-      if (entry.minimumHours && !matchedJob.minimumHours) updates.minimumHours = entry.minimumHours;
-      if (entry.payrollCompany && !matchedJob.payrollCompany) updates.payrollCompany = entry.payrollCompany;
-      if (entry.startTime && !matchedJob.startTime) updates.startTime = entry.startTime;
-      if (entry.endTime && entry.startTime) {
-        const h = calcHours(entry.startTime, entry.endTime);
-        if (h > 0 && !matchedJob.hoursWorked) { updates.hoursWorked = h; updates.status = 'completed'; }
-      }
-      await updateJob(matchedJob.id, updates);
-      if (entry.paid && entry.grossPay) {
-        await addIncome({
-          jobId: matchedJob.id,
-          client: matchedJob.client,
-          description: `Cat scratch — ${format(new Date(entry.date + 'T12:00:00'), 'MMM d')}`,
-          amount: entry.grossPay,
-          date: entry.date,
-          status: 'paid',
-        });
-      }
-    } else {
-      await addJob({
-        name: entry.venue || 'New shift',
-        client: entry.payrollCompany || 'Unknown',
-        venue: entry.venue || '',
-        date: entry.date,
-        startTime: entry.startTime,
-        endTime: entry.endTime,
-        status: 'upcoming',
-        mealType: entry.mealType,
-        mealPenalties: entry.mealPenalties,
-        minimumHours: entry.minimumHours,
-        payrollCompany: entry.payrollCompany,
-        notes: entry.notes || '',
-        has6th7thDayRule: false,
-        hasVacationPay: false,
-      });
-    }
-    setAcceptedKeys(prev => new Set([...prev, idx]));
-    toast.success(matchedJob ? 'Job updated from cat scratch' : 'New job created');
-  };
-
-  const confidenceBadge = (c: MatchResult['confidence']) => {
-    if (c === 'high') return <span className="text-[10px] font-body px-1.5 py-0.5 rounded bg-success/20 text-success">🟢 High</span>;
-    if (c === 'medium') return <span className="text-[10px] font-body px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">🟡 Medium</span>;
-    if (c === 'low') return <span className="text-[10px] font-body px-1.5 py-0.5 rounded bg-destructive/20 text-destructive">🔴 Low</span>;
-    return <span className="text-[10px] font-body px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">No match</span>;
-  };
-
   return (
-    <>
-      <PageHeader title="Calendar" description="Your month at a glance" />
-
-      <div className="flex items-center gap-2 mb-3">
-        <div className="flex flex-1 bg-secondary/30 rounded-lg p-0.5">
-          <button onClick={() => setViewMode('month')} className={cn("flex-1 text-[10px] text-mono font-medium py-1 px-3 rounded-md transition-colors", viewMode === 'month' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>Month</button>
-          <button onClick={() => setViewMode('year')} className={cn("flex-1 text-[10px] text-mono font-medium py-1 px-3 rounded-md transition-colors", viewMode === 'year' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>Year</button>
-        </div>
-        <button
-          onClick={() => { setShowCatScratch(true); setCatScratchStep('input'); setCatScratchText(''); }}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/20 border border-violet-500/30 text-violet-400 text-[11px] font-body transition-colors hover:bg-violet-500/30"
-        >
-          <NotebookPen size={13} /> Cat scratch
-        </button>
+    <SpacePageWrapper title="Calendar" description="Your month at a glance">
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <CryptexReel
+          levels={[
+            {
+              items: [{ key: 'month', label: 'Month' }, { key: 'year', label: 'Year' }],
+              activeKey: viewMode,
+              onChange: (key) => setViewMode(key as 'month' | 'year'),
+            },
+            viewMode === 'month'
+              ? {
+                  items: monthReelItems,
+                  activeKey: format(currentDate, 'yyyy-MM'),
+                  onChange: (key) => setCurrentDate(new Date(key + '-01T12:00:00')),
+                }
+              : {
+                  items: yearReelItems,
+                  activeKey: String(currentYear),
+                  onChange: (key) => setCurrentYear(parseInt(key)),
+                },
+          ]}
+        />
+        <Button variant="outline" size="sm" className="h-7 text-[10px] px-3 rounded-full shrink-0"
+          onClick={() => { setCurrentDate(new Date()); setCurrentYear(new Date().getFullYear()); }}>
+          Today
+        </Button>
       </div>
-
-      <div className="flex items-stretch justify-between mb-3 gap-2">
-        <button
-          onClick={() => viewMode === 'month' ? setCurrentDate(prev => subMonths(prev, 1)) : setCurrentYear(prev => prev - 1)}
-          className="flex items-center justify-center w-12 min-h-[44px] rounded-xl bg-fuchsia-500/30 active:bg-fuchsia-500/50 text-fuchsia-400 transition-colors border border-fuchsia-500/40"
-        >
-          <ChevronLeft size={22} />
-        </button>
-        <div className="flex-1 flex items-center justify-center gap-2">
-          <h2 className="font-body text-base font-semibold tracking-wide">
-            {viewMode === 'month' ? format(currentDate, 'MMMM yyyy') : currentYear}
-          </h2>
-          <Button variant="outline" size="sm" className="h-6 text-[10px] px-2 rounded-full"
-            onClick={() => { setCurrentDate(new Date()); setCurrentYear(new Date().getFullYear()); }}>
-            Today
-          </Button>
-        </div>
-        <button
-          onClick={() => viewMode === 'month' ? setCurrentDate(prev => addMonths(prev, 1)) : setCurrentYear(prev => prev + 1)}
-          className="flex items-center justify-center w-12 min-h-[44px] rounded-xl bg-fuchsia-500/30 active:bg-fuchsia-500/50 text-fuchsia-400 transition-colors border border-fuchsia-500/40"
-        >
-          <ChevronRight size={22} />
-        </button>
-      </div>
-
-      {/* Cat scratch dialog */}
-      <Dialog open={showCatScratch} onOpenChange={o => { if (!o) { setShowCatScratch(false); setCatScratchStep('input'); } }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="font-display text-lg">Cat Scratch</DialogTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">Paste your notes and I'll match them to your logged jobs</p>
-          </DialogHeader>
-
-          {catScratchStep === 'input' && (
-            <div className="space-y-3">
-              <textarea
-                value={catScratchText}
-                onChange={e => setCatScratchText(e.target.value)}
-                rows={10}
-                placeholder={`5.7.26 moscone esplanade 5pm-11:30 PAID 💵\n5.9.26 civic center 8am-1p 💵\n5.15.26 chase center 10a-3p YWA LIVE NATION`}
-                className="w-full rounded-xl border border-border bg-secondary/20 px-3 py-2.5 text-xs font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/40 resize-none leading-relaxed"
-              />
-              <Button onClick={handleParseCatScratch} disabled={!catScratchText.trim()} className="w-full">
-                Parse & match
-              </Button>
-            </div>
-          )}
-
-          {catScratchStep === 'review' && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-muted-foreground">{matchResults.length} entries found</p>
-                <button onClick={() => setCatScratchStep('input')} className="text-xs text-primary hover:underline">← Back</button>
-              </div>
-              {matchResults.map((result, idx) => {
-                const accepted = acceptedKeys.has(idx);
-                return (
-                  <div key={idx} className={cn("rounded-xl border p-3 space-y-2 transition-colors", accepted ? "border-success/30 bg-success/5 opacity-60" : "border-border bg-card")}>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-xs font-mono text-muted-foreground shrink-0">
-                          {format(new Date(result.entry.date + 'T12:00:00'), 'MMM d')}
-                        </span>
-                        {result.entry.venue && <span className="text-xs font-medium truncate">{result.entry.venue}</span>}
-                        {result.entry.paid && <span className="text-sm">💵</span>}
-                      </div>
-                      {confidenceBadge(result.confidence)}
-                    </div>
-
-                    {result.entry.startTime && (
-                      <p className="text-[11px] text-mono text-muted-foreground">
-                        {result.entry.startTime}{result.entry.endTime ? ` – ${result.entry.endTime}` : ''}
-                        {result.entry.mealType ? ` · ${result.entry.mealType}` : ''}
-                        {result.entry.mealPenalties ? ` · ${result.entry.mealPenalties}MP` : ''}
-                        {result.entry.grossPay ? ` · $${result.entry.grossPay}` : ''}
-                      </p>
-                    )}
-
-                    {result.matchedJob && (
-                      <div className="rounded-lg bg-secondary/30 px-2.5 py-1.5 text-[11px]">
-                        <p className="font-medium">{result.matchedJob.name}</p>
-                        <p className="text-muted-foreground">{result.matchedJob.client}{result.matchedJob.venue ? ` · ${result.matchedJob.venue}` : ''}</p>
-                      </div>
-                    )}
-
-                    {result.conflicts.length > 0 && (
-                      <div className="space-y-0.5">
-                        {result.conflicts.map((c, ci) => (
-                          <p key={ci} className="text-[10px] text-amber-400 flex items-center gap-1">
-                            <AlertTriangle size={10} /> {c}
-                          </p>
-                        ))}
-                      </div>
-                    )}
-
-                    {!accepted && (
-                      <button
-                        onClick={() => handleApplyMatch(result, idx)}
-                        className={cn(
-                          "w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-body transition-colors",
-                          result.matchedJob
-                            ? "bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20"
-                            : "bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20"
-                        )}
-                      >
-                        {result.matchedJob ? <><Check size={12} /> Apply to job</> : <><Plus size={12} /> Create new job</>}
-                      </button>
-                    )}
-                    {accepted && <p className="text-[10px] text-success text-center font-body">✓ Applied</p>}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
 
       {viewMode === 'month' && (
         <>
@@ -680,8 +467,23 @@ export default function CalendarPage() {
               const isCurrentMonth = isSameMonth(day, currentDate);
               const hasJobs = dayJobs.length > 0;
               const hasPay = !!payByDate[dateKey];
+              const sixthSeventhStreak = sixthSeventhDayDates[dateKey];
               return (
-                <div key={i} onClick={() => hasJobs && setSelectedDate(dateKey)} className={cn("flex flex-col items-center py-1.5 transition-colors rounded-lg mx-0.5 mb-0.5", !isCurrentMonth && 'opacity-30', todayFlag && 'bg-primary/10', hasJobs && 'cursor-pointer active:bg-secondary/60')}>
+                <div
+                  key={i}
+                  onClick={() => hasJobs && setSelectedDate(dateKey)}
+                  title={sixthSeventhStreak ? `${sixthSeventhStreak}th consecutive day worked for this employer` : undefined}
+                  className={cn(
+                    "relative flex flex-col items-center py-1.5 transition-colors rounded-lg mx-0.5 mb-0.5",
+                    !isCurrentMonth && 'opacity-30',
+                    todayFlag && 'bg-primary/10',
+                    hasJobs && 'cursor-pointer active:bg-secondary/60',
+                    sixthSeventhStreak && 'bg-pink-500/20 ring-1 ring-pink-500/60'
+                  )}
+                >
+                  {sixthSeventhStreak > 0 && (
+                    <span className="absolute top-0 right-0.5 w-1.5 h-1.5 rounded-full bg-pink-500" />
+                  )}
                   {todayFlag ? (
                     <span className="relative w-6 h-6 flex items-center justify-center">
                       <Star size={24} className="absolute text-primary fill-primary" />
@@ -692,7 +494,7 @@ export default function CalendarPage() {
                   )}
                   {dayJobs.length > 0 && <span className="text-[7px] text-muted-foreground leading-tight text-center truncate max-w-[3rem] mt-0.5">{dayJobs[0].venue || dayJobs[0].client}</span>}
                   <div className="flex gap-0.5 mt-0.5 h-2 items-center">
-                    {dayJobs.slice(0, 3).map((job, j) => <span key={j} className={cn("w-1.5 h-1.5 rounded-full", statusDot[job.status])} />)}
+                    {dayJobs.slice(0, 3).map((job, j) => <span key={j} className={cn("w-1.5 h-1.5 rounded-full", jobDotClass(job, paidJobIds))} />)}
                     {dayJobs.length > 3 && <span className="text-[7px] text-muted-foreground text-mono">+{dayJobs.length - 3}</span>}
                   </div>
                   {hasPay && <span className="text-[8px] text-mono text-success font-semibold leading-none mt-0.5">${payByDate[dateKey] >= 1000 ? `${(payByDate[dateKey] / 1000).toFixed(1)}k` : payByDate[dateKey].toFixed(0)}</span>}
@@ -749,12 +551,11 @@ export default function CalendarPage() {
                       const dateKey = `${monthPrefix}-${String(day).padStart(2, '0')}`;
                       const dayJobs = jobsByDate[dateKey] || [];
                       const todayFlag = isSameDay(new Date(currentYear, mi, day), today);
-                      const hasPay = !!payByDate[dateKey];
+                      const hasPaid = dayJobs.some(j => paidJobIds.has(j.id));
                       const hasCompleted = dayJobs.some(j => j.status === 'completed');
-                      const hasInProgress = dayJobs.some(j => j.status === 'in-progress');
-                      const hasUpcoming = dayJobs.some(j => j.status === 'upcoming');
+                      const hasUpcoming = dayJobs.some(j => j.status === 'upcoming' || j.status === 'in-progress');
                       return (
-                        <div key={ci} onClick={() => dayJobs.length > 0 && setSelectedDate(dateKey)} className={cn('h-3 flex items-center justify-center text-[6px] text-mono rounded-[2px] transition-colors select-none', dayJobs.length > 0 && 'cursor-pointer', hasPay && 'bg-success/30 text-success font-semibold', !hasPay && hasCompleted && 'bg-success/15 text-success', !hasPay && !hasCompleted && hasInProgress && 'bg-primary/25 text-primary', !hasPay && !hasCompleted && !hasInProgress && hasUpcoming && 'bg-accent/20 text-accent', !dayJobs.length && 'text-muted-foreground/25', todayFlag && 'ring-1 ring-inset ring-primary/70')}>
+                        <div key={ci} onClick={() => dayJobs.length > 0 && setSelectedDate(dateKey)} className={cn('h-3 flex items-center justify-center text-[6px] text-mono rounded-[2px] transition-colors select-none', dayJobs.length > 0 && 'cursor-pointer', hasPaid && 'bg-success/30 text-success font-semibold', !hasPaid && hasCompleted && 'bg-purple-500/25 text-purple-400', !hasPaid && !hasCompleted && hasUpcoming && 'bg-blue-500/20 text-blue-400', !dayJobs.length && 'text-muted-foreground/25', todayFlag && 'ring-1 ring-inset ring-primary/70')}>
                           {day}
                         </div>
                       );
@@ -796,14 +597,25 @@ export default function CalendarPage() {
                 </DialogTitle>
               </DialogHeader>
               <div className="space-y-2">
+                {selectedDate && sixthSeventhDayDates[selectedDate] > 0 && (
+                  <div className="rounded-xl border border-pink-500/40 bg-pink-500/10 px-3 py-2 text-xs text-pink-400">
+                    ⚠ {sixthSeventhDayDates[selectedDate]}th consecutive day worked{' '}
+                    {selectedJobs
+                      .filter(job => getConsecutiveDayStreak(selectedDate, job.client, data.jobs) >= 6)
+                      .map(job => job.client)
+                      .filter((c, i, arr) => arr.indexOf(c) === i)
+                      .join(', ') || 'for this employer'} — check contract for premium pay.
+                  </div>
+                )}
                 {selectedJobs.map(job => {
                   const hours = job.hoursWorked ?? 0;
                   const earned = hours * (job.hourlyRate ?? 0);
+                  const paid = paidJobIds.has(job.id);
                   return (
-                    <div key={job.id} onClick={() => setSelectedJobId(job.id)} className={cn("rounded-xl border p-3 space-y-1 cursor-pointer hover:opacity-90 transition-opacity", statusColors[job.status])}>
+                    <div key={job.id} onClick={() => setSelectedJobId(job.id)} className={cn("rounded-xl border p-3 space-y-1 cursor-pointer hover:opacity-90 transition-opacity", paid ? "bg-success/20 text-success border-success/30" : statusColors[job.status])}>
                       <div className="flex items-start justify-between">
                         <div><p className="font-medium text-sm">{job.name}</p><p className="text-xs opacity-70">{job.client}</p></div>
-                        <span className="text-[10px] text-mono uppercase font-medium opacity-70">{job.status}</span>
+                        <span className="text-[10px] text-mono uppercase font-medium opacity-70">{paid ? 'Paid' : job.status}</span>
                       </div>
                       {job.venue && <p className="text-xs opacity-60">{job.venue}</p>}
                       <div className="flex gap-3 text-xs text-mono">
@@ -811,6 +623,9 @@ export default function CalendarPage() {
                         {hours > 0 && <span>{hours}h</span>}
                         {earned > 0 && <span className="font-semibold">${earned.toLocaleString()}</span>}
                       </div>
+                      {job.startTime && !job.endTime && (
+                        <p className="text-[10px] text-amber-400 font-medium">⚠ No end time set — tap to add it</p>
+                      )}
                       <p className="text-[10px] opacity-40 text-mono">Tap for details →</p>
                     </div>
                   );
@@ -824,7 +639,12 @@ export default function CalendarPage() {
               </div>
             </>
           ) : (
-            <JobDetailView job={selectedJob} onBack={() => setSelectedJobId(null)} onSave={(updates) => { updateJob(selectedJob.id, updates); setSelectedJobId(null); toast.success('Job updated'); }} />
+            <JobDetailView
+              job={selectedJob}
+              onBack={() => setSelectedJobId(null)}
+              onSave={(updates) => { updateJob(selectedJob.id, updates); setSelectedJobId(null); toast.success('Job updated'); }}
+              onDuplicated={(count) => { closeDialog(); toast.success(`Created ${count} shift${count !== 1 ? 's' : ''}`); }}
+            />
           )}
         </DialogContent>
       </Dialog>
@@ -874,10 +694,10 @@ export default function CalendarPage() {
 
       {(() => {
         const monthPrefix = format(currentDate, 'yyyy-MM');
-        const recentlyLogged = data.jobs.filter(job => (job.hoursWorked ?? 0) > 0 && job.date.startsWith(monthPrefix)).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
-        if (recentlyLogged.length === 0) return null;
+        const monthJobs = data.jobs.filter(job => job.date.startsWith(monthPrefix)).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
+        if (monthJobs.length === 0) return null;
         const loggedGroups: Record<string, Job[]> = {};
-        for (const job of recentlyLogged) {
+        for (const job of monthJobs) {
           const key = job.jobNumber?.trim() || `${job.name}__${job.client}`;
           if (!loggedGroups[key]) loggedGroups[key] = [];
           loggedGroups[key].push(job);
@@ -886,7 +706,7 @@ export default function CalendarPage() {
           <div className="mt-4 flex flex-col gap-2">
             <h2 className="text-[9px] font-body uppercase tracking-widest text-muted-foreground/50 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-success inline-block" />
-              Recently logged
+              This month's shifts
             </h2>
             <div className="flex flex-col gap-1.5">
               {Object.entries(loggedGroups).map(([key, jobs]) => {
@@ -895,17 +715,50 @@ export default function CalendarPage() {
                 const totalEarned = jobs.reduce((s, j) => s + (j.hoursWorked ?? 0) * (j.hourlyRate ?? 0), 0);
                 const last = jobs[jobs.length - 1];
                 const dateRange = jobs.length > 1 ? `${format(new Date(last.date + 'T12:00:00'), 'MMM d')} – ${format(new Date(first.date + 'T12:00:00'), 'MMM d')}` : format(new Date(first.date + 'T12:00:00'), 'MMM d');
+                const isGroup = jobs.length > 1;
+                const expanded = expandedGroupKey === key;
+                const openJob = (job: Job) => { setSelectedDate(job.date); setSelectedJobId(job.id); };
+                const subtitle = totalHours > 0
+                  ? `${dateRange} · ${totalHours}h${totalEarned > 0 ? ` · $${totalEarned.toLocaleString()}` : ''}`
+                  : `${dateRange} · ${statusLabel[first.status]}${first.startTime ? ` · ${first.startTime}` : ''}`;
                 return (
-                  <div key={key} onClick={() => setSelectedDate(first.date)} className="rounded-xl border border-border bg-card p-2.5 flex items-center gap-2 opacity-70 cursor-pointer active:opacity-50 transition-opacity">
-                    <div className="w-1.5 h-1.5 rounded-full bg-success shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm truncate">{first.name} <span className="text-muted-foreground">· {first.client}</span></p>
-                        {jobs.length > 1 && <span className="text-[10px] text-mono bg-success/20 text-success px-1.5 py-0.5 rounded-full shrink-0">{jobs.length}d</span>}
+                  <div key={key} className="rounded-xl border border-border bg-card overflow-hidden">
+                    <div
+                      onClick={() => isGroup ? setExpandedGroupKey(expanded ? null : key) : openJob(first)}
+                      className="p-2.5 flex items-center gap-2 opacity-70 cursor-pointer active:opacity-50 transition-opacity"
+                    >
+                      <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", jobDotClass(first, paidJobIds))} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm truncate">{first.name} <span className="text-muted-foreground">· {first.client}</span></p>
+                          {isGroup && <span className="text-[10px] text-mono bg-success/20 text-success px-1.5 py-0.5 rounded-full shrink-0">{jobs.length}d</span>}
+                        </div>
+                        <p className="text-[11px] text-mono text-muted-foreground">{subtitle}</p>
+                        {first.jobNumber && <p className="text-[10px] text-mono text-muted-foreground/50">#{first.jobNumber}</p>}
                       </div>
-                      <p className="text-[11px] text-mono text-muted-foreground">{dateRange}{totalHours > 0 && ` · ${totalHours}h`}{totalEarned > 0 && ` · $${totalEarned.toLocaleString()}`}</p>
-                      {first.jobNumber && <p className="text-[10px] text-mono text-muted-foreground/50">#{first.jobNumber}</p>}
+                      {isGroup && (
+                        expanded
+                          ? <ChevronDown size={14} className="text-muted-foreground shrink-0" />
+                          : <ChevronRight size={14} className="text-muted-foreground shrink-0" />
+                      )}
                     </div>
+                    {isGroup && expanded && (
+                      <div className="border-t border-border divide-y divide-border/50">
+                        {jobs.map(job => (
+                          <div
+                            key={job.id}
+                            onClick={() => openJob(job)}
+                            className="px-3 py-2 pl-6 flex items-center justify-between gap-2 cursor-pointer hover:bg-secondary/40 active:bg-secondary/60 transition-colors"
+                          >
+                            <span className="text-xs text-mono">{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}</span>
+                            <span className="text-[11px] text-mono text-muted-foreground">
+                              {(job.hoursWorked ?? 0) > 0 ? `${job.hoursWorked}h` : statusLabel[job.status]}
+                              {job.startTime && !job.endTime && <span className="text-amber-400"> · no end time</span>}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -913,6 +766,6 @@ export default function CalendarPage() {
           </div>
         );
       })()}
-    </>
+    </SpacePageWrapper>
   );
 }

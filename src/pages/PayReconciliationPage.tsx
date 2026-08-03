@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useData } from '@/lib/DataContext';
-import PageHeader from '@/components/PageHeader';
+import SpacePageWrapper from '@/components/SpacePageWrapper';
 import EmptyState from '@/components/EmptyState';
 import BankStatementImport, { type ReconciliationRowInfo } from '@/components/BankStatementImport';
 import { Button } from '@/components/ui/button';
@@ -196,7 +196,8 @@ export default function PayReconciliationPage() {
 
         const paidIncome = periodIncome.filter(i => i.status === 'paid');
         const totalHours = periodJobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
-        const payResult = calculateExpectedPay(periodJobs, referenceJob, data.jobs);
+        const employer = data.employers.find(e => e.name.toLowerCase() === referenceJob.client.toLowerCase());
+        const payResult = calculateExpectedPay(periodJobs, referenceJob, data.jobs, employer);
         const expectedPay = payResult.total;
         const actualPaid = paidIncome.reduce((s, i) => s + i.amount, 0);
         const isPaid = paidIncome.length > 0;
@@ -309,8 +310,7 @@ export default function PayReconciliationPage() {
   return (
     <>
       <MoneyRain active={rainActive} />
-      <PageHeader title="Pay" description="Hours worked vs income received" />
-
+      <SpacePageWrapper title="Pay" description="Hours worked vs income received">
       {/* Filters + import */}
       <div className="flex items-center justify-between gap-3 mb-6">
         <div>
@@ -572,6 +572,7 @@ export default function PayReconciliationPage() {
           })}
         </div>
       )}
+      </SpacePageWrapper>
     </>
   );
 }

@@ -67,17 +67,34 @@ export interface Equipment {
   createdAt: string;
 }
 
+export interface Employer {
+  id: string;
+  name: string;
+  defaultHourlyRate?: number;
+  payrollCompany?: string;
+  paySchedule?: Job['paySchedule'];
+  overtimeRule: 'daily' | 'weekly' | 'none';
+  dailyOvertimeThresholdHours?: number;
+  dailyDoubletimeThresholdHours?: number;
+  weeklyOvertimeThresholdHours?: number;
+  overtimeMultiplier?: number;
+  doubletimeMultiplier?: number;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface AppData {
   jobs: Job[];
   expenses: Expense[];
   income: Income[];
   equipment: Equipment[];
+  employers: Employer[];
 }
 
 // ── localStorage persistence ────────────────────────────────────────────────
 
 const CACHE_KEY = 'av-bookkeeper-data';
-const defaultData: AppData = { jobs: [], expenses: [], income: [], equipment: [] };
+const defaultData: AppData = { jobs: [], expenses: [], income: [], equipment: [], employers: [] };
 
 function loadCache(): AppData {
   try {
@@ -98,20 +115,6 @@ function uid(): string {
     ? crypto.randomUUID()
     : Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2, '0')).join('');
 }
-
-// ── Legacy helpers (kept for compatibility) ─────────────────────────────────
-
-export function hasLegacyData(): boolean {
-  try {
-    const raw = localStorage.getItem(CACHE_KEY);
-    if (!raw) return false;
-    const d = JSON.parse(raw);
-    return d.jobs?.length > 0 || d.expenses?.length > 0 || d.income?.length > 0 || d.equipment?.length > 0;
-  } catch { return false; }
-}
-
-export function getLegacyData(): AppData { return loadCache(); }
-export function clearLegacyData() { localStorage.removeItem(CACHE_KEY); }
 
 export async function clearAllData() {
   localStorage.removeItem(CACHE_KEY);
@@ -196,7 +199,21 @@ export function useAppData(_userId: string | null) {
     update(prev => ({ ...prev, equipment: prev.equipment.filter(e => e.id !== id) }));
   }, []);
 
-  const migrateLocalData = useCallback(async (_localData: AppData) => { return 0; }, []);
+  // ── Employers ─────────────────────────────────────────────────────────────
+
+  const addEmployer = useCallback(async (employer: Omit<Employer, 'id' | 'createdAt'>) => {
+    const newEmployer: Employer = { ...employer, id: uid(), createdAt: new Date().toISOString() };
+    update(prev => ({ ...prev, employers: [newEmployer, ...prev.employers] }));
+    return newEmployer;
+  }, []);
+
+  const updateEmployer = useCallback(async (id: string, updates: Partial<Employer>) => {
+    update(prev => ({ ...prev, employers: prev.employers.map(e => e.id === id ? { ...e, ...updates } : e) }));
+  }, []);
+
+  const deleteEmployer = useCallback(async (id: string) => {
+    update(prev => ({ ...prev, employers: prev.employers.filter(e => e.id !== id) }));
+  }, []);
 
   return {
     data,
@@ -205,6 +222,6 @@ export function useAppData(_userId: string | null) {
     addExpense, updateExpense, deleteExpense,
     addIncome, updateIncome, deleteIncome,
     addEquipment, updateEquipment, deleteEquipment,
-    migrateLocalData,
+    addEmployer, updateEmployer, deleteEmployer,
   };
 }

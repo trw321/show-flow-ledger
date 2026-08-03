@@ -1,8 +1,14 @@
+import { useState } from 'react';
 import { useUserPrefs, TAB_LABELS, WORKER_PRESETS, type TabKey, type WorkerType } from '@/lib/UserPrefsContext';
+import { useData } from '@/lib/DataContext';
 import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { Briefcase, FileText, Crown, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { Briefcase, FileText, Crown, SlidersHorizontal, Trash2, Plus, Pencil, X } from 'lucide-react';
 import { clearAllData } from '@/lib/store';
+import type { Employer } from '@/lib/store';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,8 +48,103 @@ const TAB_ORDER: TabKey[] = [
   'scheduling', 'payouts',
 ];
 
+interface EmployerFormState {
+  name: string;
+  defaultHourlyRate: string;
+  overtimeRule: Employer['overtimeRule'];
+  threshold: string;
+}
+
+const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', overtimeRule: 'daily', threshold: '' };
+
+function employerToForm(e: Employer): EmployerFormState {
+  return {
+    name: e.name,
+    defaultHourlyRate: e.defaultHourlyRate?.toString() ?? '',
+    overtimeRule: e.overtimeRule,
+    threshold: (e.overtimeRule === 'weekly' ? e.weeklyOvertimeThresholdHours : e.dailyOvertimeThresholdHours)?.toString() ?? '',
+  };
+}
+
+function EmployerForm({ initial, onSave, onCancel }: {
+  initial: EmployerFormState;
+  onSave: (form: EmployerFormState) => void;
+  onCancel: () => void;
+}) {
+  const [form, setForm] = useState(initial);
+  return (
+    <div className="flex flex-col gap-2 p-3 rounded-xl border border-primary/30 bg-primary/5">
+      <Input
+        placeholder="Employer name"
+        value={form.name}
+        onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+        className="h-8 text-sm"
+        autoFocus
+      />
+      <div className="grid grid-cols-2 gap-2">
+        <Input
+          type="number"
+          step="0.01"
+          placeholder="Rate ($/hr)"
+          value={form.defaultHourlyRate}
+          onChange={e => setForm(f => ({ ...f, defaultHourlyRate: e.target.value }))}
+          className="h-8 text-xs"
+        />
+        <Select value={form.overtimeRule} onValueChange={v => setForm(f => ({ ...f, overtimeRule: v as Employer['overtimeRule'], threshold: '' }))}>
+          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="daily">Daily OT</SelectItem>
+            <SelectItem value="weekly">Weekly OT</SelectItem>
+            <SelectItem value="none">No OT</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {form.overtimeRule !== 'none' && (
+        <Input
+          type="number"
+          placeholder={form.overtimeRule === 'weekly' ? 'OT after N hrs/week (default 40)' : 'OT after N hrs/day (default 8)'}
+          value={form.threshold}
+          onChange={e => setForm(f => ({ ...f, threshold: e.target.value }))}
+          className="h-8 text-xs"
+        />
+      )}
+      <div className="flex gap-2 justify-end pt-1">
+        <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" disabled={!form.name.trim()} onClick={() => onSave(form)}>Save</Button>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { prefs, setWorkerType, setTabEnabled } = useUserPrefs();
+  const { data, addEmployer, updateEmployer, deleteEmployer } = useData();
+  const [addingEmployer, setAddingEmployer] = useState(false);
+  const [editingEmployerId, setEditingEmployerId] = useState<string | null>(null);
+
+  const saveNewEmployer = async (form: EmployerFormState) => {
+    await addEmployer({
+      name: form.name.trim(),
+      defaultHourlyRate: form.defaultHourlyRate ? parseFloat(form.defaultHourlyRate) : undefined,
+      overtimeRule: form.overtimeRule,
+      weeklyOvertimeThresholdHours: form.overtimeRule === 'weekly' ? parseFloat(form.threshold || '40') : undefined,
+      dailyOvertimeThresholdHours: form.overtimeRule === 'daily' ? parseFloat(form.threshold || '8') : undefined,
+      overtimeMultiplier: 1.5,
+      doubletimeMultiplier: 2.0,
+    });
+    setAddingEmployer(false);
+  };
+
+  const saveEditedEmployer = async (id: string, form: EmployerFormState) => {
+    await updateEmployer(id, {
+      name: form.name.trim(),
+      defaultHourlyRate: form.defaultHourlyRate ? parseFloat(form.defaultHourlyRate) : undefined,
+      overtimeRule: form.overtimeRule,
+      weeklyOvertimeThresholdHours: form.overtimeRule === 'weekly' ? parseFloat(form.threshold || '40') : undefined,
+      dailyOvertimeThresholdHours: form.overtimeRule === 'daily' ? parseFloat(form.threshold || '8') : undefined,
+    });
+    setEditingEmployerId(null);
+  };
 
   return (
     <div className="max-w-lg space-y-8">
@@ -151,6 +252,95 @@ export default function SettingsPage() {
         <p className="text-[9px] text-mono text-accent/70 pt-1 border-t border-border/30">
           Note: Reconciliation requires Income — toggling one will sync the other.
         </p>
+      </section>
+
+      {/* Employers */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/60 uppercase">
+            Employers
+          </p>
+          {!addingEmployer && (
+            <button
+              onClick={() => setAddingEmployer(true)}
+              className="flex items-center gap-1 text-[11px] text-primary hover:underline"
+            >
+              <Plus size={12} /> Add employer
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {addingEmployer && (
+            <EmployerForm
+              initial={EMPTY_EMPLOYER_FORM}
+              onSave={saveNewEmployer}
+              onCancel={() => setAddingEmployer(false)}
+            />
+          )}
+
+          {data.employers.length === 0 && !addingEmployer && (
+            <p className="text-xs text-muted-foreground rounded-xl border border-border/40 bg-secondary/10 p-4 text-center">
+              No saved employers yet — add one here, or quick-add from the employer field when logging a job.
+            </p>
+          )}
+
+          {data.employers.map(emp => (
+            editingEmployerId === emp.id ? (
+              <EmployerForm
+                key={emp.id}
+                initial={employerToForm(emp)}
+                onSave={form => saveEditedEmployer(emp.id, form)}
+                onCancel={() => setEditingEmployerId(null)}
+              />
+            ) : (
+              <div key={emp.id} className="flex items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{emp.name}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {emp.defaultHourlyRate ? `$${emp.defaultHourlyRate}/hr` : 'no default rate'}
+                    {emp.overtimeRule === 'weekly' && ` · OT after ${emp.weeklyOvertimeThresholdHours ?? 40}h/wk`}
+                    {emp.overtimeRule === 'daily' && ` · OT after ${emp.dailyOvertimeThresholdHours ?? 8}h/day`}
+                    {emp.overtimeRule === 'none' && ` · no overtime`}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => setEditingEmployerId(emp.id)}
+                    className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                    aria-label={`Edit ${emp.name}`}
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <button
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        aria-label={`Delete ${emp.name}`}
+                      >
+                        <X size={14} />
+                      </button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete {emp.name}?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This removes the saved rate/overtime profile. Jobs already logged for this client keep their own data — only future quick-adds lose the shortcut.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => deleteEmployer(emp.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </div>
+            )
+          ))}
+        </div>
       </section>
 
       {/* Danger zone */}

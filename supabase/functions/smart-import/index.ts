@@ -133,6 +133,8 @@ IF "hours":
 ═══════════════════════════════
 Entries may be separated by blank lines OR each line may be its own entry (one line per date/shift). Each entry does NOT need to start with a date — fields can appear in any order.
 
+WEEKLY SUMMARY FORMAT — a header line may set shared context ("employer X", "project Y", "rate $N/hr") that applies to every entry below it, and each entry may be a date RANGE with a single total instead of a single date + time range: "june 1-6: 56 hrs" or "june 28-july 4: 35 hrs + x hrs PTO" (month names, not just MM/DD). For each such line, output one hourUpdates entry: date = the FIRST day of the range (YYYY-MM-DD), hoursWorked = the stated hours total, hourlyRate = the shared rate, venue = the shared project name, notes = "Week of <start date>" plus " + PTO (amount unspecified — verify)" if "x hrs PTO" is present, or " + N hrs PTO" if a number is given. Do not invent startTime/endTime for these — leave them empty.
+
 For each entry, extract:
 - date: any date pattern (MM-DD, MM-DD-YY, M/D/YY, etc.) → YYYY-MM-DD. For bare month-day like "3-14" without year, use the year implied by context or the current year. "10-6-25"=2025-10-06
 - startTime / endTime: parse a time range like "10a-14:00", "8am-7p", "22:00-2:00am", "6:30-14:30" → "HH:MM AM/PM". Times after midnight (e.g. 2:00am after 22:00) are the end time on the same date entry.

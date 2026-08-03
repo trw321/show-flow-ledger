@@ -1,4 +1,5 @@
 import { format } from 'date-fns';
+import * as XLSX from 'xlsx';
 import type { Job, Expense, Income } from './store';
 import { calculateDayPay, getDayMultiplier } from './payCalc';
 
@@ -11,33 +12,16 @@ function jobGross(job: Job, allJobs: Job[]): number {
   return totalPay + (job.hasVacationPay ? totalPay * 0.08 : 0);
 }
 
-function escapeCell(val: string | number | undefined | null): string {
-  const s = val == null ? '' : String(val);
-  // Wrap in quotes if it contains a comma, quote, or newline
-  if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-    return `"${s.replace(/"/g, '""')}"`;
-  }
-  return s;
-}
-
-function toCSV(rows: Record<string, string | number | undefined | null>[]): string {
-  if (!rows.length) return '';
-  const headers = Object.keys(rows[0]);
-  const lines = [
-    headers.map(escapeCell).join(','),
-    ...rows.map(row => headers.map(h => escapeCell(row[h])).join(',')),
-  ];
-  return lines.join('\r\n');
-}
-
-function downloadCSV(csv: string, fileName: string) {
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  a.click();
-  URL.revokeObjectURL(url);
+function downloadXLSX(rows: Record<string, string | number | undefined | null>[], fileName: string) {
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+  worksheet['!cols'] = rows.length
+    ? Object.keys(rows[0]).map(key => ({
+        wch: Math.max(key.length, ...rows.map(r => String(r[key] ?? '').length)) + 2,
+      }))
+    : [];
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Ledger');
+  XLSX.writeFile(workbook, fileName);
 }
 
 export function exportWeeklyToExcel(jobs: Job[], expenses: Expense[], income: Income[]) {
@@ -126,7 +110,6 @@ export function exportWeeklyToExcel(jobs: Job[], expenses: Expense[], income: In
     a.Date.localeCompare(b.Date)
   );
 
-  const csv = toCSV(allRows);
-  const fileName = `AV-Ledger-${format(new Date(), 'yyyy-MM-dd')}.csv`;
-  downloadCSV(csv, fileName);
+  const fileName = `AV-Ledger-${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+  downloadXLSX(allRows, fileName);
 }

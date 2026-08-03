@@ -1,214 +1,51 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import { useData } from '@/lib/DataContext';
 import PageHeader from '@/components/PageHeader';
-import { Upload, Loader2, ChevronDown } from 'lucide-react';
+import { ChevronDown, Ghost } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, isToday } from 'date-fns';
 import { motion } from 'framer-motion';
+import { FogDrift, BatSilhouette, MoonGlow, TombstoneRow } from '@/components/CemeteryDecor';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
-import { hasLegacyData, getLegacyData, clearLegacyData } from '@/lib/store';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
-import { calculateDayPay, getDayMultiplier } from '@/lib/payCalc';
-import { toast } from 'sonner';
-import type { Job } from '@/lib/store';
+import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus } from '@/lib/payCalc';
+import type { Job, Employer } from '@/lib/store';
 
-function jobGross(job: Job, allJobs: Job[]): number {
+function jobGross(job: Job, allJobs: Job[], employers: Employer[] = []): number {
   const hours = job.hoursWorked ?? 0;
   if (!hours) return 0;
   const rate = job.hourlyRate ?? 0;
+  const employer = employers.find(e => e.name.toLowerCase() === job.client.toLowerCase());
   const dayMult = getDayMultiplier(job.date, job.client, allJobs, job.has6th7thDayRule ?? false);
-  const { totalPay } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, job.mealType);
-  return totalPay + (job.hasVacationPay ? totalPay * 0.08 : 0);
+  const { totalPay } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, job.mealType, {
+    rule: employer?.overtimeRule ?? 'daily',
+    otThresholdHours: employer?.dailyOvertimeThresholdHours,
+    dtThresholdHours: employer?.dailyDoubletimeThresholdHours,
+    otMultiplier: employer?.overtimeMultiplier,
+    dtMultiplier: employer?.doubletimeMultiplier,
+  });
+  const weeklyBonus = employer ? calculateWeeklyOvertimeBonus(job, allJobs, employer) : 0;
+  const gross = totalPay + weeklyBonus;
+  return gross + (job.hasVacationPay ? gross * 0.08 : 0);
 }
 
-function Starburst({ className, delay = 0 }: { className?: string; delay?: number }) {
+function ExportCsvButton({ onClick }: { onClick: () => void }) {
   return (
-    <motion.div
-      className={className}
-      initial={{ scale: 0, rotate: 0, opacity: 0 }}
-      animate={{ scale: [0, 1.2, 1], rotate: [0, 180], opacity: [0, 0.8, 0.4] }}
-      transition={{ duration: 2, delay, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }}
+    <button
+      onClick={onClick}
+      className="btn-bounce group relative w-full mb-8 overflow-hidden rounded-t-[2.5rem] rounded-b-xl border-2 border-[#a3e635]/50 bg-gradient-to-b from-[#1c1a24] to-[#0e0d13] py-6 px-6 shadow-[0_0_28px_-4px_rgba(163,230,53,0.35)] hover:shadow-[0_0_36px_-2px_rgba(163,230,53,0.55)]"
     >
-      <div className="starburst w-full h-full funky-gradient" />
-    </motion.div>
-  );
-}
-
-function FloatingOrb({ className, delay = 0 }: { className?: string; delay?: number }) {
-  return (
-    <motion.div
-      className={className}
-      animate={{ y: [0, -15, 0], scale: [1, 1.15, 1], opacity: [0.3, 0.6, 0.3] }}
-      transition={{ duration: 4, delay, repeat: Infinity, ease: 'easeInOut' }}
-    />
-  );
-}
-
-function DiscoBallExport({ onClick }: { onClick: () => void }) {
-  const [sparkles, setSparkles] = useState<{ id: number; tx: number; ty: number; color: string; char: string }[]>([]);
-  const counter = useRef(0);
-
-  const handleClick = () => {
-    const chars = ['✦','★','✧','◆','✶'];
-    const colors = ['#ff0080','#00ccff','#ff6600','#00ff44','#9900ff','#ffcc00','#ff3300','#0044ff'];
-    const newSparkles = Array.from({ length: 20 }, (_, i) => {
-      const angle = (i / 20) * Math.PI * 2;
-      const dist = 120 + Math.random() * 80;
-      return {
-        id: counter.current++,
-        tx: Math.cos(angle) * dist,
-        ty: Math.sin(angle) * dist,
-        color: colors[Math.floor(Math.random() * colors.length)],
-        char: chars[Math.floor(Math.random() * chars.length)],
-      };
-    });
-    setSparkles(newSparkles);
-    setTimeout(() => setSparkles([]), 1200);
-    onClick();
-  };
-
-  return (
-    <div
-      className="relative mb-8 overflow-hidden cursor-pointer"
-      style={{ height: 160, marginLeft: '-1rem', marginRight: '-1rem' }}
-      onClick={handleClick}
-    >
-      <div className="absolute inset-0 pointer-events-none">
-        {[...Array(12)].map((_, i) => (
-          <div
-            key={i}
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: '50%',
-              width: 3,
-              height: '100%',
-              background: `linear-gradient(to bottom, ${['#ff0080','#00ccff','#ff6600','#00ff44','#9900ff','#ffcc00'][i % 6]}44, transparent)`,
-              transform: `rotate(${i * 30}deg)`,
-              transformOrigin: 'top center',
-              animation: `beam-pulse 8s ease-in-out infinite`,
-              animationDelay: `${i * 0.15}s`,
-            }}
-          />
-        ))}
-      </div>
-
-      <div
-        className="absolute left-1/2"
-        style={{
-          top: -140,
-          transform: 'translateX(-50%)',
-          width: 280,
-          height: 280,
-          animation: 'ball-drift 12s ease-in-out infinite',
-        }}
-      >
-        <svg viewBox="0 0 120 120" width="280" height="280">
-          <defs>
-            <radialGradient id="ballBase" cx="38%" cy="32%" r="68%">
-              <stop offset="0%" stopColor="#ffffff" stopOpacity="1"/>
-              <stop offset="25%" stopColor="#d0d0d8" stopOpacity="0.9"/>
-              <stop offset="60%" stopColor="#707080" stopOpacity="0.85"/>
-              <stop offset="100%" stopColor="#1a1a2e" stopOpacity="1"/>
-            </radialGradient>
-            <radialGradient id="tileShine" cx="30%" cy="25%" r="70%">
-              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.9"/>
-              <stop offset="50%" stopColor="#aaaacc" stopOpacity="0.4"/>
-              <stop offset="100%" stopColor="#000011" stopOpacity="0.7"/>
-            </radialGradient>
-            <clipPath id="bc2"><circle cx="60" cy="60" r="54"/></clipPath>
-          </defs>
-          <circle cx="60" cy="60" r="54" fill="#0a0a1a"/>
-          <circle cx="60" cy="60" r="54" fill="url(#ballBase)"/>
-          <g clipPath="url(#bc2)">
-            {[8,20,32,44,56,68,80,92,104].map((y, ri) =>
-              [4,18,32,46,60,74,88,102].map((x, ci) => {
-                const mirrorColors = [
-                  '#c0c0c8','#e8e8f0','#9090a8','#d0d0e0',
-                  '#7878a0','#b0b0cc','#f0f0ff','#606080',
-                ];
-                const accentColors = [
-                  '#ff0080','#00ccff','#9900ff','#00ff88',
-                  '#ffcc00','#ff6600','#0044ff','#ff0044',
-                ];
-                const isMirror = (ri + ci) % 5 !== 0;
-                const col = isMirror
-                  ? mirrorColors[(ri * 3 + ci) % mirrorColors.length]
-                  : accentColors[(ri + ci) % accentColors.length];
-                const bright = isMirror ? 0.75 + Math.sin(ri * 1.3 + ci * 0.9) * 0.25 : 0.95;
-                return (
-                  <g key={`${ri}-${ci}`}>
-                    <rect x={x} y={y} width="12" height="9" rx="1" fill={col} opacity={bright}/>
-                    <rect x={x} y={y} width="5" height="4" rx="0.5" fill="white" opacity={isMirror ? 0.55 : 0.2}/>
-                  </g>
-                );
-              })
-            )}
-          </g>
-          <circle cx="60" cy="60" r="54" fill="url(#tileShine)" opacity="0.35"/>
-          <ellipse cx="42" cy="34" rx="14" ry="8" fill="white" opacity="0.55" transform="rotate(-25 42 34)"/>
-          <ellipse cx="52" cy="30" rx="5" ry="3" fill="white" opacity="0.8" transform="rotate(-25 52 30)"/>
-          <circle cx="38" cy="38" r="2.5" fill="white" opacity="0.7"/>
-          <circle cx="75" cy="45" r="1.5" fill="#00ccff" opacity="0.9"/>
-          <circle cx="45" cy="70" r="1.5" fill="#ff0080" opacity="0.9"/>
-          <circle cx="80" cy="65" r="1.5" fill="#9900ff" opacity="0.9"/>
-          <circle cx="30" cy="55" r="1" fill="#ffcc00" opacity="0.9"/>
-          <circle cx="85" cy="35" r="1" fill="#00ff88" opacity="0.9"/>
-        </svg>
-      </div>
-
-      <div
-        className="absolute top-0 bg-border"
-        style={{ left: '50%', width: 2, height: 40, transform: 'translateX(-50%)' }}
-      />
-
-      <div className="absolute bottom-4 left-0 right-0 flex flex-col items-center gap-1 pointer-events-none">
-        <p className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/50">tap to export csv</p>
-      </div>
-
-      {sparkles.map(s => (
-        <span
-          key={s.id}
-          style={{
-            position: 'absolute',
-            left: '50%',
-            top: '30%',
-            color: s.color,
-            fontSize: 22,
-            pointerEvents: 'none',
-            animation: 'sparkle-out2 1.2s ease-out forwards',
-            ['--tx' as string]: s.tx + 'px',
-            ['--ty' as string]: s.ty + 'px',
-          }}
-        >
-          {s.char}
-        </span>
-      ))}
-
-      <style>{`
-        @keyframes ball-drift {
-          0%   { transform: translateX(calc(-50% - 40px)); }
-          50%  { transform: translateX(calc(-50% + 40px)); }
-          100% { transform: translateX(calc(-50% - 40px)); }
-        }
-        @keyframes beam-pulse {
-          0%   { opacity: 0.1; }
-          50%  { opacity: 0.45; }
-          100% { opacity: 0.1; }
-        }
-        @keyframes sparkle-out2 {
-          0%   { opacity:1; transform:translate(calc(-50% + 0px), calc(-50% + 0px)) scale(1); }
-          100% { opacity:0; transform:translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(0); }
-        }
-      `}</style>
-    </div>
+      <span className="absolute top-0 left-0 right-0 h-2 bj-stripes opacity-80" />
+      <span className="relative z-10 flex items-center justify-center gap-3 text-lg font-bold font-spooky tracking-wide text-[#d9f99d]">
+        <Ghost size={26} strokeWidth={2} className="text-[#d9f99d] group-hover:animate-bounce" />
+        Export to Excel
+      </span>
+    </button>
   );
 }
 
 export default function Dashboard() {
-  const { data, migrateLocalData } = useData();
+  const { data } = useData();
   const { prefs } = useUserPrefs();
-  const [showMigrate, setShowMigrate] = useState(hasLegacyData);
-  const [migrating, setMigrating] = useState(false);
   const [employerExpanded, setEmployerExpanded] = useState(false);
 
   if (!data) return null;
@@ -226,7 +63,7 @@ export default function Dashboard() {
   });
 
   const thisMonthHours = thisMonthJobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
-  const thisMonthExpected = thisMonthJobs.reduce((s, j) => s + jobGross(j, data.jobs), 0);
+  const thisMonthExpected = thisMonthJobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers), 0);
   const thisMonthPaid = data.income
     .filter(i => i.status === 'paid' && (() => { try { return isWithinInterval(parseISO(i.date), { start: monthStart, end: monthEnd }); } catch { return false; } })())
     .reduce((s, i) => s + i.amount, 0);
@@ -236,7 +73,7 @@ export default function Dashboard() {
   const yearPrefix = format(new Date(), 'yyyy');
   const ytdJobs = data.jobs.filter(j => j.date.startsWith(yearPrefix));
   const ytdHours = ytdJobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
-  const ytdExpected = ytdJobs.reduce((s, j) => s + jobGross(j, data.jobs), 0);
+  const ytdExpected = ytdJobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers), 0);
   const ytdPaid = data.income
     .filter(i => i.status === 'paid' && i.date.startsWith(yearPrefix))
     .reduce((s, i) => s + i.amount, 0);
@@ -248,13 +85,13 @@ export default function Dashboard() {
       const key = job.client || 'Unknown';
       if (!map[key]) map[key] = { hours: 0, earned: 0, jobs: 0 };
       map[key].hours += job.hoursWorked ?? 0;
-      map[key].earned += jobGross(job, data.jobs);
+      map[key].earned += jobGross(job, data.jobs, data.employers);
       map[key].jobs += 1;
     }
     return Object.entries(map)
       .map(([client, stats]) => ({ client, ...stats }))
       .sort((a, b) => b.earned - a.earned);
-  }, [data.jobs]);
+  }, [data.jobs, data.employers]);
 
   // ── Next job ─────────────────────────────────────────────────────────────
   const today = format(new Date(), 'yyyy-MM-dd');
@@ -276,61 +113,31 @@ export default function Dashboard() {
   const netProfit = totalIncome - totalExpenses;
   const displayTotal = showExpenses ? netProfit : totalIncome;
 
-  const handleMigrate = async () => {
-    setMigrating(true);
-    try {
-      const legacy = getLegacyData();
-      const count = await migrateLocalData(legacy);
-      clearLegacyData();
-      setShowMigrate(false);
-      toast.success(`Migrated ${count} records to your account`);
-    } catch (err) {
-      console.error(err);
-      toast.error('Migration failed — your local data is still safe');
-    } finally {
-      setMigrating(false);
-    }
-  };
-
   return (
     <>
-      {showMigrate && (
-        <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 mb-4 flex items-center gap-3 flex-wrap">
-          <Upload size={18} className="text-primary shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium">Local data found</p>
-            <p className="text-xs text-muted-foreground">Import your existing jobs, expenses, and income into your account.</p>
-          </div>
-          <button onClick={handleMigrate} disabled={migrating} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
-            {migrating ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-            {migrating ? 'Migrating...' : 'Import Data'}
-          </button>
-          <button onClick={() => setShowMigrate(false)} className="text-xs text-muted-foreground hover:text-foreground">Dismiss</button>
-        </div>
-      )}
+      <ExportCsvButton onClick={() => exportWeeklyToExcel(data.jobs, showExpenses ? data.expenses : [], showIncome ? data.income : [])} />
 
-      {/* Disco ball export — top of page */}
-      <DiscoBallExport onClick={() => exportWeeklyToExcel(data.jobs, showExpenses ? data.expenses : [], showIncome ? data.income : [])} />
-
-      {/* Hero */}
-      <div className="relative overflow-hidden rounded-2xl border border-border mb-6 p-5 bg-card">
-        <div className="absolute inset-0 opacity-20">
+      {/* Hero — cemetery scene */}
+      <div className="relative overflow-hidden rounded-2xl border border-[#3a3648]/60 mb-6 p-5 bg-gradient-to-b from-[#141220] via-[#0e0d16] to-[#0a0a12]">
+        <span className="absolute top-0 left-0 right-0 h-1.5 bj-stripes opacity-70 z-20" />
+        <div className="absolute inset-0 opacity-30">
           <motion.div
             className="absolute inset-0"
-            style={{ background: 'radial-gradient(circle at 20% 50%, hsl(210 100% 55% / 0.4), transparent 50%), radial-gradient(circle at 80% 50%, hsl(265 90% 60% / 0.4), transparent 50%), radial-gradient(circle at 50% 80%, hsl(50 100% 55% / 0.3), transparent 40%)' }}
-            animate={{ background: ['radial-gradient(circle at 20% 50%, hsl(210 100% 55% / 0.4), transparent 50%), radial-gradient(circle at 80% 50%, hsl(265 90% 60% / 0.4), transparent 50%), radial-gradient(circle at 50% 80%, hsl(50 100% 55% / 0.3), transparent 40%)', 'radial-gradient(circle at 50% 20%, hsl(210 100% 55% / 0.4), transparent 50%), radial-gradient(circle at 50% 80%, hsl(265 90% 60% / 0.4), transparent 50%), radial-gradient(circle at 80% 50%, hsl(50 100% 55% / 0.3), transparent 40%)', 'radial-gradient(circle at 80% 50%, hsl(210 100% 55% / 0.4), transparent 50%), radial-gradient(circle at 20% 50%, hsl(265 90% 60% / 0.4), transparent 50%), radial-gradient(circle at 50% 20%, hsl(50 100% 55% / 0.3), transparent 40%)'] }}
+            style={{ background: 'radial-gradient(circle at 20% 30%, hsl(88 60% 50% / 0.25), transparent 50%), radial-gradient(circle at 80% 20%, hsl(280 60% 45% / 0.35), transparent 55%), radial-gradient(circle at 50% 90%, hsl(240 30% 20% / 0.6), transparent 50%)' }}
+            animate={{ background: ['radial-gradient(circle at 20% 30%, hsl(88 60% 50% / 0.25), transparent 50%), radial-gradient(circle at 80% 20%, hsl(280 60% 45% / 0.35), transparent 55%), radial-gradient(circle at 50% 90%, hsl(240 30% 20% / 0.6), transparent 50%)', 'radial-gradient(circle at 50% 20%, hsl(88 60% 50% / 0.25), transparent 50%), radial-gradient(circle at 50% 60%, hsl(280 60% 45% / 0.35), transparent 55%), radial-gradient(circle at 80% 90%, hsl(240 30% 20% / 0.6), transparent 50%)', 'radial-gradient(circle at 80% 30%, hsl(88 60% 50% / 0.25), transparent 50%), radial-gradient(circle at 20% 20%, hsl(280 60% 45% / 0.35), transparent 55%), radial-gradient(circle at 50% 90%, hsl(240 30% 20% / 0.6), transparent 50%)'] }}
             transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
           />
         </div>
-        <Starburst className="absolute top-2 right-4 w-8 h-8" delay={0} />
-        <Starburst className="absolute bottom-3 left-6 w-6 h-6" delay={1.2} />
-        <Starburst className="absolute top-1/2 right-1/4 w-5 h-5" delay={2.5} />
-        <FloatingOrb className="absolute top-4 left-1/3 w-16 h-16 rounded-full bg-primary/10 blur-xl" delay={0.5} />
-        <FloatingOrb className="absolute bottom-2 right-1/3 w-20 h-20 rounded-full bg-accent/10 blur-xl" delay={1.5} />
+        <MoonGlow className="absolute top-3 right-4 w-12 h-12 z-0" />
+        <BatSilhouette className="absolute top-6 left-8 w-9 h-5 z-0" delay={0} />
+        <BatSilhouette className="absolute top-12 right-16 w-6 h-3.5 z-0" delay={2} />
+        <FogDrift className="absolute bottom-0 left-1/4 w-24 h-10 rounded-full bg-[#a3e635]/10 blur-xl" delay={0.5} />
+        <FogDrift className="absolute bottom-0 right-1/4 w-28 h-10 rounded-full bg-[#c4b5fd]/10 blur-xl" delay={1.5} />
+        <TombstoneRow className="absolute bottom-0 left-0 right-0 flex items-end justify-center gap-3 opacity-70 z-[1]" />
         <div className="relative z-10">
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
             <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground font-body mb-1">Welcome back</p>
-            <h1 className="text-2xl md:text-3xl font-display funky-gradient-text">Show Flow</h1>
+            <h1 className="text-3xl md:text-4xl font-spooky tracking-wide text-[#d9f99d]" style={{ textShadow: '0 0 12px rgba(163,230,53,0.55), 0 0 28px rgba(147,51,234,0.35)' }}>Show Flow</h1>
           </motion.div>
           <motion.div className="mt-4 flex items-baseline gap-3" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }}>
             <span className="text-3xl md:text-4xl font-bold text-mono text-foreground">${displayTotal.toLocaleString()}</span>
@@ -382,10 +189,10 @@ export default function Dashboard() {
           {/* Left — This month */}
           <div className="flex flex-col gap-2">
             <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block" />
               {format(new Date(), 'MMM')}
             </h2>
-            <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 shadow-[0_0_16px_2px_rgba(59,130,246,0.12)] p-3">
+            <div className="rounded-xl border border-slate-400/30 bg-slate-400/5 shadow-[0_0_16px_2px_rgba(148,163,184,0.12)] p-3">
               <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Hours</p>
               <p className="text-lg font-bold text-mono mt-1">{thisMonthHours.toFixed(1)}</p>
             </div>
@@ -411,7 +218,7 @@ export default function Dashboard() {
               <span className="w-1.5 h-1.5 rounded-full bg-purple-400 inline-block" />
               {yearPrefix}
             </h2>
-            <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 shadow-[0_0_16px_2px_rgba(59,130,246,0.12)] p-3">
+            <div className="rounded-xl border border-slate-400/30 bg-slate-400/5 shadow-[0_0_16px_2px_rgba(148,163,184,0.12)] p-3">
               <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Hours</p>
               <p className="text-lg font-bold text-mono mt-1">{ytdHours.toFixed(1)}</p>
             </div>
@@ -423,9 +230,9 @@ export default function Dashboard() {
               <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Paid</p>
               <p className="text-lg font-bold text-mono text-amber-300 mt-1">${ytdPaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
             </div>
-            <div className="rounded-xl border border-blue-400/30 bg-blue-400/5 shadow-[0_0_16px_2px_rgba(96,165,250,0.12)] p-3">
+            <div className="rounded-xl border border-slate-300/30 bg-slate-300/5 shadow-[0_0_16px_2px_rgba(203,213,225,0.12)] p-3">
               <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Unpaid</p>
-              <p className="text-lg font-bold text-mono text-blue-300 mt-1">${Math.max(0, ytdExpected - ytdPaid).toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
+              <p className="text-lg font-bold text-mono text-slate-300 mt-1">${Math.max(0, ytdExpected - ytdPaid).toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
             </div>
           </div>
 

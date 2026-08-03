@@ -3,13 +3,16 @@ import { useState, useRef, useCallback, useMemo } from 'react';
 import { useData } from '@/lib/DataContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Upload, Loader2, Check, X, ChevronRight, ChevronDown, AlertTriangle } from 'lucide-react';
+import { Upload, Loader2, Check, X, ChevronRight, ChevronDown, AlertTriangle, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { getJobDedupKey } from '@/lib/jobDedup';
 import type { Job } from '@/lib/store';
 import VortexCanvas from '@/components/VortexCanvas';
+import CatScratchButton from '@/components/CatScratchButton';
+import EmployerCombobox from '@/components/EmployerCombobox';
+import { useCelebration } from '@/components/Celebration';
 
 interface ParsedJob {
   jobNumber?: string;
@@ -311,40 +314,53 @@ function ShiftCard({
       </div>
 
       {expanded && (
-        <div className="border-t border-border px-3 pb-3 pt-3 grid gap-2 sm:grid-cols-2">
-          {[
-            { label: 'Job #', field: 'jobNumber' as const, value: job.jobNumber ?? '', type: 'text' },
-            { label: 'Date', field: 'date' as const, value: job.date, type: 'date' },
-            { label: 'Call time', field: 'startTime' as const, value: job.startTime ?? '', type: 'text', placeholder: '08:00 AM' },
-            { label: 'End time', field: 'endTime' as const, value: job.endTime ?? '', type: 'text', placeholder: '05:00 PM' },
-            { label: 'Event', field: 'name' as const, value: job.name, type: 'text' },
-            { label: 'Client', field: 'client' as const, value: job.client, type: 'text' },
-            { label: 'Venue', field: 'venue' as const, value: job.venue, type: 'text' },
-            { label: 'Payroll co.', field: 'payrollCompany' as const, value: job.payrollCompany ?? '', type: 'text' },
-            { label: 'Rate ($/hr)', field: 'hourlyRate' as const, value: job.hourlyRate?.toString() ?? '', type: 'number' },
-            { label: 'Steward', field: 'steward' as const, value: job.steward ?? '', type: 'text' },
-          ].map(({ label, field, value, type, placeholder }) => (
-            <div key={field} className="flex flex-col gap-1">
-              <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">
-                {label}
-              </label>
-              <Input
-                type={type}
-                value={value}
-                placeholder={placeholder}
-                step={type === 'number' ? '0.01' : undefined}
-                onChange={e => {
-                  const raw = e.target.value;
-                  if (field === 'hourlyRate' || field === 'parkingCost') {
-                    onChange(field, raw === '' ? undefined : parseFloat(raw));
-                  } else {
-                    onChange(field, raw);
-                  }
-                }}
-                className="h-8 text-xs font-mono"
-              />
-            </div>
-          ))}
+        <div className="border-t border-border px-3 pb-3 pt-3 flex flex-col gap-2">
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Client</label>
+            <EmployerCombobox
+              value={job.client}
+              onChange={v => onChange('client', v)}
+              onSelectEmployer={emp => {
+                if (!job.hourlyRate && emp.defaultHourlyRate) onChange('hourlyRate', emp.defaultHourlyRate);
+                if (!job.payrollCompany && emp.payrollCompany) onChange('payrollCompany', emp.payrollCompany);
+              }}
+              className="[&>input]:h-8 [&>input]:text-xs [&>input]:font-mono"
+            />
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {[
+              { label: 'Job #', field: 'jobNumber' as const, value: job.jobNumber ?? '', type: 'text' },
+              { label: 'Date', field: 'date' as const, value: job.date, type: 'date' },
+              { label: 'Call time', field: 'startTime' as const, value: job.startTime ?? '', type: 'text', placeholder: '08:00 AM' },
+              { label: 'End time', field: 'endTime' as const, value: job.endTime ?? '', type: 'text', placeholder: '05:00 PM' },
+              { label: 'Event', field: 'name' as const, value: job.name, type: 'text' },
+              { label: 'Venue', field: 'venue' as const, value: job.venue, type: 'text' },
+              { label: 'Payroll co.', field: 'payrollCompany' as const, value: job.payrollCompany ?? '', type: 'text' },
+              { label: 'Rate ($/hr)', field: 'hourlyRate' as const, value: job.hourlyRate?.toString() ?? '', type: 'number' },
+              { label: 'Steward', field: 'steward' as const, value: job.steward ?? '', type: 'text' },
+            ].map(({ label, field, value, type, placeholder }) => (
+              <div key={field} className="flex flex-col gap-1">
+                <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">
+                  {label}
+                </label>
+                <Input
+                  type={type}
+                  value={value}
+                  placeholder={placeholder}
+                  step={type === 'number' ? '0.01' : undefined}
+                  onChange={e => {
+                    const raw = e.target.value;
+                    if (field === 'hourlyRate' || field === 'parkingCost') {
+                      onChange(field, raw === '' ? undefined : parseFloat(raw));
+                    } else {
+                      onChange(field, raw);
+                    }
+                  }}
+                  className="h-8 text-xs font-mono"
+                />
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -376,27 +392,20 @@ const EMPTY_MANUAL: ManualEntry = {
 
 export default function NewGigPage() {
   const { data, addJob } = useData();
-
-  const savedEmployers = useMemo(() => {
-    const seen = new Set<string>();
-    const list: string[] = [];
-    for (const job of data.jobs) {
-      const c = job.client?.trim();
-      if (c && !seen.has(c)) { seen.add(c); list.push(c); }
-    }
-    return list.sort();
-  }, [data.jobs]);
+  const { fire: fireCelebration, Burst } = useCelebration();
 
   const [text, setText] = useState('');
   const [isParsing, setIsParsing] = useState(false);
   const [parseProgress, setParseProgress] = useState('');
   const [jobs, setJobs] = useState<ParsedJob[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [batchEdit, setBatchEdit] = useState({ client: '', payrollCompany: '', venue: '', hourlyRate: '' });
   const [isImporting, setIsImporting] = useState(false);
   const [step, setStep] = useState<'input' | 'review'>('input');
   const [vortexPhase, setVortexPhase] = useState<VortexPhase>('idle');
   const [inputMode, setInputMode] = useState<InputMode>('choose');
   const [manual, setManual] = useState<ManualEntry>(EMPTY_MANUAL);
+  const [extraDates, setExtraDates] = useState<string[]>([]);
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
   const swipe = useSwipeMonth(
     () => setCalendarMonth(m => new Date(m.getFullYear(), m.getMonth() - 1)),
@@ -418,22 +427,27 @@ export default function NewGigPage() {
     setManual(prev => ({ ...prev, [field]: value }));
 
   const handleManualSubmit = () => {
-    if (!manual.date) { toast.error('Pick a date first'); return; }
+    const dates = [manual.date, ...extraDates].filter(Boolean);
+    const uniqueDates = [...new Set(dates)];
+    if (uniqueDates.length === 0) { toast.error('Pick at least one date'); return; }
 
-    const job: ParsedJob = {
+    const makeJob = (date: string): ParsedJob => ({
       name: manual.name.trim() || manual.client.trim() || 'Untitled shift',
       client: manual.client.trim() || 'Unknown',
       venue: manual.venue.trim(),
-      date: manual.date,
+      date,
       startTime: manual.startTime.trim() || undefined,
       status: 'confirmed',
       payrollCompany: manual.payrollCompany.trim() || undefined,
       hourlyRate: manual.hourlyRate ? parseFloat(manual.hourlyRate) : undefined,
       notes: manual.position.trim() ? `Position: ${manual.position.trim()}` : undefined,
-    };
+    });
 
-    setJobs([job]);
-    setSelected(new Set([0]));
+    const newJobs = uniqueDates.map(makeJob);
+
+    setJobs(newJobs);
+    setSelected(new Set(newJobs.map((_, i) => i)));
+    setExtraDates([]);
     setVortexPhase('flash');
     setTimeout(() => {
       setVortexPhase('settling');
@@ -531,6 +545,7 @@ export default function NewGigPage() {
 
     setIsImporting(false);
     if (imported === 0 && failed > 0) { toast.error('Save failed — check your connection'); return; }
+    if (imported > 0) fireCelebration();
     toast.success(
       `Saved ${imported} shift${imported !== 1 ? 's' : ''}` +
       (skipped ? ` · skipped ${skipped} duplicate${skipped !== 1 ? 's' : ''}` : '') +
@@ -542,7 +557,7 @@ export default function NewGigPage() {
 
   const handleClear = () => {
     setText(''); setJobs([]); setSelected(new Set()); setStep('input');
-    setVortexPhase('idle'); setInputMode('choose'); setManual(EMPTY_MANUAL);
+    setVortexPhase('idle'); setInputMode('choose'); setManual(EMPTY_MANUAL); setExtraDates([]);
   };
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -602,6 +617,23 @@ export default function NewGigPage() {
   const updateJob = (idx: number, field: keyof ParsedJob, value: string | number | undefined) =>
     setJobs(prev => prev.map((j, i) => i === idx ? { ...j, [field]: value } : j));
 
+  const batchUpdateJobs = (field: keyof ParsedJob, value: string | number | undefined) =>
+    setJobs(prev => prev.map((j, i) => selected.has(i) ? { ...j, [field]: value } : j));
+
+  const removeSelectedJobs = () => {
+    setJobs(prev => prev.filter((_, i) => !selected.has(i)));
+    setSelected(new Set());
+  };
+
+  const applyBatchEdit = () => {
+    if (batchEdit.client.trim()) batchUpdateJobs('client', batchEdit.client.trim());
+    if (batchEdit.payrollCompany.trim()) batchUpdateJobs('payrollCompany', batchEdit.payrollCompany.trim());
+    if (batchEdit.venue.trim()) batchUpdateJobs('venue', batchEdit.venue.trim());
+    if (batchEdit.hourlyRate.trim()) batchUpdateJobs('hourlyRate', parseFloat(batchEdit.hourlyRate));
+    toast.success(`Updated ${selected.size} shift${selected.size !== 1 ? 's' : ''}`);
+    setBatchEdit({ client: '', payrollCompany: '', venue: '', hourlyRate: '' });
+  };
+
   const conflictDates = useMemo(() => {
     const counts: Record<string, number> = {};
     jobs.forEach(j => { counts[j.date] = (counts[j.date] ?? 0) + 1; });
@@ -613,6 +645,7 @@ export default function NewGigPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-8">
+      <Burst />
 
       <input
         ref={fileInputRef}
@@ -643,35 +676,45 @@ export default function NewGigPage() {
             <div className="flex flex-col gap-2 py-4">
               <button
                 onClick={() => setInputMode('text')}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl bg-black/40 border border-white/10 hover:border-amber-500/40 transition-colors text-left"
+                className="btn-bounce flex items-center gap-3 px-4 py-3 rounded-xl bg-black/40 border border-white/10 hover:border-amber-500/40 transition-colors text-left"
               >
                 <span className="text-xl">📋</span>
                 <div>
-                  <p className="text-sm text-white/80 font-medium">Paste text</p>
-                  <p className="text-[11px] text-white/40">Dispatch portal, email, or any offer text</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm text-white/80 font-medium">Paste text</p>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400">AI · needs connection</span>
+                  </div>
+                  <p className="text-[11px] text-white/40">Dispatch portal, union offer sheet, email — handles complex/varied formats best</p>
                 </div>
               </button>
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isParsing}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl bg-black/40 border border-white/10 hover:border-amber-500/40 transition-colors text-left disabled:opacity-50"
+                className="btn-bounce flex items-center gap-3 px-4 py-3 rounded-xl bg-black/40 border border-white/10 hover:border-amber-500/40 transition-colors text-left disabled:opacity-50"
               >
                 <span className="text-xl">📸</span>
                 <div>
-                  <p className="text-sm text-white/80 font-medium">Photo</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm text-white/80 font-medium">Photo</p>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400">AI · needs connection</span>
+                  </div>
                   <p className="text-[11px] text-white/40">Screenshot, text message, calendar, Nowsta</p>
                 </div>
               </button>
               <button
                 onClick={() => setInputMode('manual')}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl bg-black/40 border border-white/10 hover:border-amber-500/40 transition-colors text-left"
+                className="btn-bounce flex items-center gap-3 px-4 py-3 rounded-xl bg-black/40 border border-white/10 hover:border-amber-500/40 transition-colors text-left"
               >
                 <span className="text-xl">✏️</span>
                 <div>
-                  <p className="text-sm text-white/80 font-medium">Manual entry</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm text-white/80 font-medium">Manual entry</p>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">offline</span>
+                  </div>
                   <p className="text-[11px] text-white/40">Phone call, text, or verbal offer</p>
                 </div>
               </button>
+              <CatScratchButton />
               {isParsing && (
                 <div className="flex items-center gap-2 justify-center py-2">
                   <Loader2 size={14} className="animate-spin text-amber-500" />
@@ -688,18 +731,15 @@ export default function NewGigPage() {
               {/* Employer — full width, up top */}
               <div className="flex flex-col gap-1">
                <label className="text-[10px] font-body uppercase tracking-wider text-white/50">Employer</label>
-                <Input
+                <EmployerCombobox
                   value={manual.client}
-                  onChange={e => handleManualChange('client', e.target.value)}
+                  onChange={v => handleManualChange('client', v)}
+                  onSelectEmployer={emp => {
+                    if (!manual.hourlyRate && emp.defaultHourlyRate) handleManualChange('hourlyRate', emp.defaultHourlyRate.toString());
+                    if (!manual.payrollCompany && emp.payrollCompany) handleManualChange('payrollCompany', emp.payrollCompany);
+                  }}
                   placeholder="e.g. Fillmore Philadelphia"
-                  className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
-                  list="employer-suggestions"
                 />
-                <datalist id="employer-suggestions">
-                  {savedEmployers
-                    .filter(e => e.toLowerCase().includes(manual.client.toLowerCase()))
-                    .map(e => <option key={e} value={e} />)}
-                </datalist>
               </div>
 
               {/* Calendar + right-column fields side by side on desktop */}
@@ -720,7 +760,10 @@ export default function NewGigPage() {
                       onMonthChange={setCalendarMonth}
                       selected={manual.date ? new Date(manual.date + 'T12:00:00') : undefined}
                       onSelect={d => handleManualChange('date', d ? format(d, 'yyyy-MM-dd') : '')}
-                      className="text-white/80 [&_button]:text-white/70 [&_button:hover]:bg-white/10 [&_button[aria-selected]]:!bg-transparent [&_button[aria-selected]]:text-white/80 [&_button[aria-selected]]:outline [&_button[aria-selected]]:outline-2 [&_button[aria-selected]]:outline-purple-500 [&_button[aria-selected]]:-outline-offset-2 [&_button[aria-selected]]:!rounded-full [&_button[aria-selected]:hover]:!bg-transparent [&_button[data-today]]:!bg-blue-500 [&_button[data-today]]:!text-white [&_button[data-today][aria-selected]]:!bg-blue-500 [&_button[data-today][aria-selected]]:outline-none"
+                      classNames={{
+                        cell: "h-9 w-9 text-center text-sm p-0 relative focus-within:relative focus-within:z-20",
+                      }}
+                      className="text-white/80 [&_button]:text-white/70 [&_button:hover]:bg-white/10 [&_button[aria-selected]]:!bg-transparent [&_button[aria-selected]]:text-white [&_button[aria-selected]]:outline [&_button[aria-selected]]:outline-[3px] [&_button[aria-selected]]:outline-yellow-300 [&_button[aria-selected]]:-outline-offset-2 [&_button[aria-selected]]:!rounded-full [&_button[aria-selected]:hover]:!bg-transparent [&_button[data-today]]:!bg-blue-500 [&_button[data-today]]:!text-white [&_button[data-today][aria-selected]]:!bg-transparent [&_button[data-today][aria-selected]]:outline-yellow-300"
                     />
                   </div>
                 </div>
@@ -786,6 +829,45 @@ export default function NewGigPage() {
                 </div>
               </div>
 
+              {/* Additional dates — bulk-create the same shift across multiple days */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-body uppercase tracking-wider text-white/50">
+                    Additional dates {extraDates.length > 0 && <span className="text-lime-400">({extraDates.length})</span>}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setExtraDates(prev => [...prev, ''])}
+                    className="text-[11px] text-amber-400 hover:text-amber-300 transition-colors"
+                  >
+                    + Add another date
+                  </button>
+                </div>
+                {extraDates.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    {extraDates.map((d, i) => (
+                      <div key={i} className="flex items-center gap-1.5">
+                        <input
+                          type="date"
+                          value={d}
+                          onChange={e => setExtraDates(prev => prev.map((v, vi) => vi === i ? e.target.value : v))}
+                          className="flex-1 h-9 rounded-xl bg-black/40 border border-white/10 text-white/80 text-xs font-mono px-3 focus:outline-none focus:border-amber-500/40 [color-scheme:dark]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setExtraDates(prev => prev.filter((_, vi) => vi !== i))}
+                          className="text-white/40 hover:text-destructive transition-colors p-1.5"
+                          aria-label="Remove date"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                    <p className="text-[10px] text-white/30">Same employer, time, rate & details on each date — you'll be able to tweak any of them before saving.</p>
+                  </div>
+                )}
+              </div>
+
              {/* Bottom row — optional fields, mobile only; desktop these are in the right column */}
               <div className="grid grid-cols-2 gap-2 sm:hidden">
                 <div className="flex flex-col gap-1">
@@ -819,11 +901,11 @@ export default function NewGigPage() {
 
               <Button
                 onClick={handleManualSubmit}
-                disabled={!manual.date}
+                disabled={!manual.date && extraDates.every(d => !d)}
                 size="sm"
                 className="w-full gap-1.5 bg-amber-500/90 hover:bg-amber-500 text-black border-0 font-medium mt-1"
               >
-                <Check size={13} /> Add shift
+                <Check size={13} /> Add shift{[manual.date, ...extraDates].filter(Boolean).length > 1 ? 's' : ''}
               </Button>
             </div>
           )}
@@ -889,6 +971,63 @@ export default function NewGigPage() {
               {selected.size === jobs.length ? 'Deselect all' : 'Select all'}
             </button>
           </div>
+
+          {selected.size >= 2 && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] text-mono uppercase tracking-wider text-amber-400">
+                  Batch edit {selected.size} selected
+                </p>
+                <button
+                  onClick={removeSelectedJobs}
+                  className="text-[11px] text-destructive hover:underline flex items-center gap-1"
+                >
+                  <Trash2 size={12} /> Remove selected
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <EmployerCombobox
+                  value={batchEdit.client}
+                  onChange={v => setBatchEdit(b => ({ ...b, client: v }))}
+                  onSelectEmployer={emp => {
+                    if (!batchEdit.hourlyRate && emp.defaultHourlyRate) setBatchEdit(b => ({ ...b, hourlyRate: emp.defaultHourlyRate!.toString() }));
+                    if (!batchEdit.payrollCompany && emp.payrollCompany) setBatchEdit(b => ({ ...b, payrollCompany: emp.payrollCompany! }));
+                  }}
+                  placeholder="Client"
+                  className="[&>input]:h-8 [&>input]:text-xs"
+                />
+                <Input
+                  placeholder="Payroll co."
+                  value={batchEdit.payrollCompany}
+                  onChange={e => setBatchEdit(b => ({ ...b, payrollCompany: e.target.value }))}
+                  className="h-8 text-xs"
+                />
+                <Input
+                  placeholder="Venue"
+                  value={batchEdit.venue}
+                  onChange={e => setBatchEdit(b => ({ ...b, venue: e.target.value }))}
+                  className="h-8 text-xs"
+                />
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="Rate ($/hr)"
+                  value={batchEdit.hourlyRate}
+                  onChange={e => setBatchEdit(b => ({ ...b, hourlyRate: e.target.value }))}
+                  className="h-8 text-xs font-mono"
+                />
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={applyBatchEdit}
+                disabled={!batchEdit.client.trim() && !batchEdit.payrollCompany.trim() && !batchEdit.venue.trim() && !batchEdit.hourlyRate.trim()}
+              >
+                Apply to {selected.size} shift{selected.size !== 1 ? 's' : ''}
+              </Button>
+            </div>
+          )}
+
           <div className="flex flex-col gap-2">
             {jobs.map((job, i) => (
               <ShiftCard

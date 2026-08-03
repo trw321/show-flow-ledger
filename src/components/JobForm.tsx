@@ -3,9 +3,10 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import EmployerCombobox from '@/components/EmployerCombobox';
 import { Paperclip, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Job } from '@/lib/store';
+import type { Job, Employer } from '@/lib/store';
 
 const statusOptions = ['upcoming', 'in-progress', 'completed', 'cancelled'] as const;
 
@@ -53,6 +54,12 @@ export default function JobForm({ onSubmit, initial, onCancel }: {
 
   const removeAttachment = (idx: number) => setAttachments(prev => prev.filter((_, i) => i !== idx));
 
+  const handleSelectEmployer = (employer: Employer) => {
+    if (!hourlyRate && employer.defaultHourlyRate) setHourlyRate(employer.defaultHourlyRate.toString());
+    if (!payrollCompany && employer.payrollCompany) setPayrollCompany(employer.payrollCompany);
+    if (!paySchedule && employer.paySchedule) setPaySchedule(employer.paySchedule);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
@@ -84,7 +91,7 @@ export default function JobForm({ onSubmit, initial, onCancel }: {
         <Input placeholder="Job #" value={jobNumber} onChange={e => setJobNumber(e.target.value)} className="text-sm" />
         <Input placeholder="Job name*" value={name} onChange={e => setName(e.target.value)} required className="col-span-2 text-sm" />
       </div>
-      <Input placeholder="Client / Production Co." value={client} onChange={e => setClient(e.target.value)} className="text-sm" />
+      <EmployerCombobox value={client} onChange={setClient} onSelectEmployer={handleSelectEmployer} placeholder="Client / Production Co." />
       <Input placeholder="Venue / Location" value={venue} onChange={e => setVenue(e.target.value)} className="text-sm" />
 
       {/* Date & times */}

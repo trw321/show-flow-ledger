@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Loader2, Check, X, FileImage } from 'lucide-react';
 import { toast } from 'sonner';
 import { differenceInDays, parseISO } from 'date-fns';
@@ -157,6 +158,19 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
     setEntries(prev => prev.map((e, i) => i === depIdx ? { ...e, chosenRowKey: rowKey } : e));
   };
 
+  const updateDeposit = (depIdx: number, field: keyof ParsedDeposit, value: string | number) => {
+    setEntries(prev => prev.map((e, i) => {
+      if (i !== depIdx) return e;
+      const deposit = { ...e.deposit, [field]: value };
+      const matches = rows
+        .map(row => scoreMatch(deposit, row))
+        .filter(m => m.score > 0)
+        .sort((a, b) => b.score - a.score);
+      const chosenStillValid = e.chosenRowKey && matches.some(m => m.row.key === e.chosenRowKey);
+      return { ...e, deposit, matches, chosenRowKey: chosenStillValid ? e.chosenRowKey : null };
+    }));
+  };
+
   const confirmAll = () => {
     for (const entry of entries) {
       const row = entry.chosenRowKey ? rows.find(r => r.key === entry.chosenRowKey) : undefined;
@@ -195,14 +209,33 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
         <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
           {entries.map((entry, i) => (
             <div key={i} className="rounded-lg border border-border bg-card p-3">
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <p className="text-sm font-medium leading-tight">{entry.deposit.description}</p>
-                  <p className="text-xs text-muted-foreground text-mono mt-0.5">{entry.deposit.date}</p>
+              <div className="flex flex-col gap-1.5 mb-2">
+                <Input
+                  value={entry.deposit.description}
+                  onChange={e => updateDeposit(i, 'description', e.target.value)}
+                  className="h-8 text-sm font-medium"
+                  aria-label="Deposit description"
+                />
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={entry.deposit.date}
+                    onChange={e => updateDeposit(i, 'date', e.target.value)}
+                    className="h-8 text-xs text-mono flex-1"
+                    aria-label="Deposit date"
+                  />
+                  <div className="relative shrink-0 w-32">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-success">+$</span>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={entry.deposit.amount}
+                      onChange={e => updateDeposit(i, 'amount', parseFloat(e.target.value) || 0)}
+                      className="h-8 pl-6 text-sm font-bold text-mono text-success"
+                      aria-label="Deposit amount"
+                    />
+                  </div>
                 </div>
-                <p className="text-sm font-bold text-mono text-success ml-3 whitespace-nowrap">
-                  +${entry.deposit.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </p>
               </div>
 
               {entry.matches.length > 0 ? (

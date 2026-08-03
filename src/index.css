@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Creepster&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -56,6 +56,7 @@
 
     --font-display: 'Space Mono', monospace;
     --font-body: 'Space Grotesk', sans-serif;
+    --font-spooky: 'Creepster', cursive;
   }
 }
 
@@ -121,5 +122,24 @@
   }
   .starburst {
     clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+  }
+  .font-spooky {
+    font-family: var(--font-spooky);
+  }
+  .bj-stripes {
+    background: repeating-linear-gradient(
+      -45deg,
+      #0a0a0a,
+      #0a0a0a 10px,
+      #f2f2f2 10px,
+      #f2f2f2 20px
+    );
+  }
+  .btn-bounce {
+    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .btn-bounce:active {
+    transform: scale(0.92);
+    transition-duration: 0.1s;
   }
 }

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useData } from '@/lib/DataContext';
-import PageHeader from '@/components/PageHeader';
+import SpacePageWrapper from '@/components/SpacePageWrapper';
 import ExpenseReceiptUpload from '@/components/ExpenseReceiptUpload';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -232,9 +232,7 @@ export default function ExpensesPage() {
   };
 
   return (
-    <>
-      <PageHeader title="Expenses" description={`total: $${total.toLocaleString()}`} />
-
+    <SpacePageWrapper title="Expenses" description={`total: $${total.toLocaleString()}`}>
       {/* Receipt import */}
       <div className="mb-4">
         <ExpenseReceiptUpload />
@@ -337,6 +335,6 @@ export default function ExpensesPage() {
           )}
         </DialogContent>
       </Dialog>
-    </>
+    </SpacePageWrapper>
   );
 }
