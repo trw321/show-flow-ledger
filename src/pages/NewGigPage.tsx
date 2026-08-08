@@ -678,7 +678,7 @@ export default function NewGigPage() {
                 onClick={() => setInputMode('text')}
                 className="btn-bounce flex items-center gap-3 px-4 py-3 rounded-xl bg-black/40 border border-white/10 hover:border-amber-500/40 transition-colors text-left"
               >
-                <span className="text-xl">📋</span>
+                <span className="text-xl">🌙🌙</span>
                 <div>
                   <p className="text-sm text-white/80 font-medium">Copy Paste</p>
                   <p className="text-[11px] text-white/40">Dispatch portal, union offer sheet, email — handles complex/varied formats best</p>
@@ -699,7 +699,7 @@ export default function NewGigPage() {
                 onClick={() => setInputMode('manual')}
                 className="btn-bounce flex items-center gap-3 px-4 py-3 rounded-xl bg-black/40 border border-white/10 hover:border-amber-500/40 transition-colors text-left"
               >
-                <span className="text-xl">✏️</span>
+                <span className="text-xl">🃏</span>
                 <div>
                   <p className="text-sm text-white/80 font-medium">Manual entry</p>
                   <p className="text-[11px] text-white/40">Phone call, text, or verbal offer</p>
