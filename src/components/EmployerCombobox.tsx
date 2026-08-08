@@ -27,12 +27,14 @@ export default function EmployerCombobox({ value, onChange, onSelectEmployer, pl
   const [newRate, setNewRate] = useState('');
   const [newRule, setNewRule] = useState<Employer['overtimeRule']>('daily');
   const [newThreshold, setNewThreshold] = useState('');
+  const [newTimekeeping, setNewTimekeeping] = useState('');
 
   const openAdd = () => {
     setNewName(search || value);
     setNewRate('');
     setNewRule('daily');
     setNewThreshold('');
+    setNewTimekeeping('');
     setMode('add');
   };
 
@@ -49,6 +51,7 @@ export default function EmployerCombobox({ value, onChange, onSelectEmployer, pl
     const employer = await addEmployer({
       name: newName.trim(),
       defaultHourlyRate: newRate ? parseFloat(newRate) : undefined,
+      timekeepingApp: newTimekeeping.trim() || undefined,
       overtimeRule: newRule,
       weeklyOvertimeThresholdHours: newRule === 'weekly' ? (newThreshold ? parseFloat(newThreshold) : 40) : undefined,
       dailyOvertimeThresholdHours: newRule === 'daily' ? (newThreshold ? parseFloat(newThreshold) : 8) : undefined,
@@ -117,6 +120,10 @@ export default function EmployerCombobox({ value, onChange, onSelectEmployer, pl
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Default rate ($/hr)</label>
                 <Input type="number" step="0.01" value={newRate} onChange={e => setNewRate(e.target.value)} className="h-8 text-sm" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Timekeeping app (if not payroll)</label>
+                <Input value={newTimekeeping} onChange={e => setNewTimekeeping(e.target.value)} placeholder="e.g. TimeStation, Deputy" className="h-8 text-sm" />
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Overtime rule</label>

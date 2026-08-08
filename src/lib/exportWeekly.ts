@@ -8,7 +8,7 @@ function jobGross(job: Job, allJobs: Job[]): number {
   if (!hours) return 0;
   const rate = job.hourlyRate ?? 0;
   const dayMult = getDayMultiplier(job.date, job.client, allJobs, job.has6th7thDayRule ?? false);
-  const { totalPay } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, job.mealType);
+  const { totalPay } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock });
   return totalPay + (job.hasVacationPay ? totalPay * 0.08 : 0);
 }
 

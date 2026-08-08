@@ -680,10 +680,7 @@ export default function NewGigPage() {
               >
                 <span className="text-xl">📋</span>
                 <div>
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-sm text-white/80 font-medium">Paste text</p>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400">AI · needs connection</span>
-                  </div>
+                  <p className="text-sm text-white/80 font-medium">Copy Paste</p>
                   <p className="text-[11px] text-white/40">Dispatch portal, union offer sheet, email — handles complex/varied formats best</p>
                 </div>
               </button>
@@ -694,10 +691,7 @@ export default function NewGigPage() {
               >
                 <span className="text-xl">📸</span>
                 <div>
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-sm text-white/80 font-medium">Photo</p>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400">AI · needs connection</span>
-                  </div>
+                  <p className="text-sm text-white/80 font-medium">Photo</p>
                   <p className="text-[11px] text-white/40">Screenshot, text message, calendar, Nowsta</p>
                 </div>
               </button>
@@ -707,10 +701,7 @@ export default function NewGigPage() {
               >
                 <span className="text-xl">✏️</span>
                 <div>
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-sm text-white/80 font-medium">Manual entry</p>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">offline</span>
-                  </div>
+                  <p className="text-sm text-white/80 font-medium">Manual entry</p>
                   <p className="text-[11px] text-white/40">Phone call, text, or verbal offer</p>
                 </div>
               </button>
@@ -944,15 +935,6 @@ export default function NewGigPage() {
                   <span className="text-[11px] text-white/40 text-mono">
                     {jobs.length} shift{jobs.length !== 1 ? 's' : ''} ready
                   </span>
-                )}
-                {inputMode === 'text' && step === 'input' && (
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="text-white/40 hover:text-amber-500/80 transition-colors p-1"
-                    title="Switch to photo"
-                  >
-                    <span className="text-base">📸</span>
-                  </button>
                 )}
               </div>
             </>

@@ -34,7 +34,8 @@ export default function JobForm({ onSubmit, initial, onCancel }: {
   const [parkingCost, setParkingCost] = useState(initial?.parkingCost?.toString() ?? '');
   const [hoursWorked, setHoursWorked] = useState(initial?.hoursWorked?.toString() ?? '');
   const [mealPenalties, setMealPenalties] = useState(initial?.mealPenalties?.toString() ?? '0');
-  const [mealType, setMealType] = useState<Job['mealType']>(initial?.mealType ?? undefined);
+  const [mealDuration, setMealDuration] = useState<Job['mealDuration']>(initial?.mealDuration ?? undefined);
+  const [mealOnClock, setMealOnClock] = useState(initial?.mealOnClock ?? false);
   const [notes, setNotes] = useState(initial?.notes ?? '');
   const [attachments, setAttachments] = useState<string[]>(initial?.attachments ?? []);
   const [showPayDetails, setShowPayDetails] = useState(false);
@@ -79,7 +80,8 @@ export default function JobForm({ onSubmit, initial, onCancel }: {
       parkingCost: parkingCost ? parseFloat(parkingCost) : undefined,
       hoursWorked: hoursWorked ? parseFloat(hoursWorked) : undefined,
       mealPenalties: mealPenalties ? parseInt(mealPenalties) : 0,
-      mealType: mealType || undefined,
+      mealDuration,
+      mealOnClock: mealDuration ? mealOnClock : undefined,
       attachments,
     });
   };
@@ -110,12 +112,22 @@ export default function JobForm({ onSubmit, initial, onCancel }: {
       {/* Meals */}
       <div className="grid grid-cols-2 gap-2">
         <Input type="number" min="0" placeholder="Meal penalties" value={mealPenalties} onChange={e => setMealPenalties(e.target.value)} className="text-sm" />
-        <Select value={mealType || 'none'} onValueChange={(v) => setMealType(v === 'none' ? undefined : v as Job['mealType'])}>
+        <Select
+          value={mealDuration === undefined ? 'none' : `${mealDuration}-${mealOnClock ? 'on' : 'off'}`}
+          onValueChange={(v) => {
+            if (v === 'none') { setMealDuration(undefined); return; }
+            const [mins, onOff] = v.split('-');
+            setMealDuration(parseInt(mins) as Job['mealDuration']);
+            setMealOnClock(onOff === 'on');
+          }}
+        >
           <SelectTrigger className="text-sm"><SelectValue placeholder="Meal type" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="none">No meal break</SelectItem>
-            <SelectItem value="YWA">YWA — 1hr off clock</SelectItem>
-            <SelectItem value="NWA">NWA — 30min on clock</SelectItem>
+            <SelectItem value="0-off">Zero — meal penalty owed</SelectItem>
+            <SelectItem value="30-on">30min on clock</SelectItem>
+            <SelectItem value="45-on">45min on clock</SelectItem>
+            <SelectItem value="60-off">1hr off clock</SelectItem>
           </SelectContent>
         </Select>
       </div>

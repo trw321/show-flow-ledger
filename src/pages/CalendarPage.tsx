@@ -1,12 +1,11 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useData } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
-import CryptexReel from '@/components/CryptexReel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, isSameMonth, isSameDay, isToday, isPast } from 'date-fns';
+import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast } from 'date-fns';
 import type { Job } from '@/lib/store';
 import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak } from '@/lib/payCalc';
 import { cn } from '@/lib/utils';
@@ -26,10 +25,19 @@ const statusColors: Record<Job['status'], string> = {
   cancelled: 'bg-destructive/20 text-destructive border-destructive/30',
 };
 
+// status never auto-transitions off "upcoming"/"in-progress" as the date
+// passes — it only becomes "completed" once hours are logged. This flags
+// that gap for display, without changing the stored status itself.
+function isOverdueUpcoming(job: Job): boolean {
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  return (job.status === 'upcoming' || job.status === 'in-progress') && job.date < todayStr && (job.hoursWorked ?? 0) === 0;
+}
+
 // A job counts as "paid" once a linked income record is marked paid —
 // distinct from just "completed" (worked, pay estimated but not yet received).
 function jobDotClass(job: Job, paidJobIds: Set<string>): string {
   if (paidJobIds.has(job.id)) return 'bg-success';
+  if (isOverdueUpcoming(job)) return 'bg-amber-500';
   return statusDot[job.status];
 }
 
@@ -72,7 +80,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
   const [hoursWorked, setHoursWorked] = useState(job.hoursWorked?.toString() ?? '');
   const [minimumHours, setMinimumHours] = useState(job.minimumHours?.toString() ?? '');
   const [payrollCompany, setPayrollCompany] = useState(job.payrollCompany ?? '');
-  const [mealType, setMealType] = useState<Job['mealType']>(job.mealType ?? undefined);
+  const [mealDuration, setMealDuration] = useState<Job['mealDuration']>(job.mealDuration ?? undefined);
+  const [mealOnClock, setMealOnClock] = useState(job.mealOnClock ?? false);
+  const [mealPenalties, setMealPenalties] = useState(job.mealPenalties?.toString() ?? '');
   const [duplicating, setDuplicating] = useState(false);
   const [dupDates, setDupDates] = useState<string[]>(['']);
 
@@ -81,7 +91,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
     setHoursWorked(job.hoursWorked?.toString() ?? '');
     setMinimumHours(job.minimumHours?.toString() ?? '');
     setPayrollCompany(job.payrollCompany ?? '');
-    setMealType(job.mealType ?? undefined);
+    setMealDuration(job.mealDuration ?? undefined);
+    setMealOnClock(job.mealOnClock ?? false);
+    setMealPenalties(job.mealPenalties?.toString() ?? '');
     setDuplicating(false);
     setDupDates(['']);
   }, [job.id]);
@@ -105,7 +117,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
         has6th7thDayRule: job.has6th7thDayRule,
         hasVacationPay: job.hasVacationPay,
         steward: job.steward,
-        mealType: job.mealType,
+        mealDuration: job.mealDuration,
+        mealOnClock: job.mealOnClock,
         notes: job.notes,
       });
     }
@@ -125,8 +138,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
   const billableHours = Math.max(actualHours, minHours);
   const minimumApplied = minHours > 0 && actualHours < minHours && actualHours > 0;
   const rate = job.hourlyRate ?? 0;
+  const mealPenaltyUnits = parseFloat(mealPenalties) || 0;
   const payPreview = rate > 0 && billableHours > 0
-    ? calculateDayPay(actualHours, rate, minHours, job.mealPenalties ?? 0, 1, mealType)
+    ? calculateDayPay(actualHours, rate, minHours, mealDuration === 0 ? mealPenaltyUnits : (job.mealPenalties ?? 0), 1, { duration: mealDuration, onClock: mealOnClock })
     : null;
 
   const handleSave = () => {
@@ -136,7 +150,10 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
     const parsedMin = parseFloat(minimumHours);
     if (!isNaN(parsedMin) && parsedMin !== (job.minimumHours ?? 0)) updates.minimumHours = parsedMin > 0 ? parsedMin : undefined;
     if (payrollCompany !== (job.payrollCompany ?? '')) updates.payrollCompany = payrollCompany.trim() || undefined;
-    if (mealType !== (job.mealType ?? undefined)) updates.mealType = mealType;
+    if (mealDuration !== (job.mealDuration ?? undefined)) updates.mealDuration = mealDuration;
+    if (mealDuration && mealOnClock !== (job.mealOnClock ?? false)) updates.mealOnClock = mealOnClock;
+    const parsedPenalties = parseFloat(mealPenalties);
+    if (mealDuration === 0 && !isNaN(parsedPenalties) && parsedPenalties !== (job.mealPenalties ?? 0)) updates.mealPenalties = parsedPenalties > 0 ? parsedPenalties : undefined;
     onSave(updates);
   };
 
@@ -145,7 +162,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
     hoursWorked !== (job.hoursWorked?.toString() ?? '') ||
     minimumHours !== (job.minimumHours?.toString() ?? '') ||
     payrollCompany !== (job.payrollCompany ?? '') ||
-    mealType !== (job.mealType ?? undefined);
+    mealDuration !== (job.mealDuration ?? undefined) ||
+    (!!mealDuration && mealOnClock !== (job.mealOnClock ?? false)) ||
+    (mealDuration === 0 && mealPenalties !== (job.mealPenalties?.toString() ?? ''));
 
   return (
     <>
@@ -158,8 +177,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
         </div>
       </DialogHeader>
       <div className="space-y-4">
-        <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold text-mono uppercase tracking-wider border", statusColors[job.status])}>
-          {statusLabel[job.status]}
+        <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold text-mono uppercase tracking-wider border", isOverdueUpcoming(job) ? "bg-amber-500/20 text-amber-400 border-amber-500/30" : statusColors[job.status])}>
+          {isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
         </span>
         <div className="rounded-xl border border-border bg-secondary/10 p-3 space-y-2">
           {job.client && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Client</span><span className="font-medium text-xs">{job.client}</span></div>}
@@ -260,17 +279,43 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
           </div>
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">Meal Break</label>
-            <div className="grid grid-cols-3 gap-1.5">
-              {[{ value: 'YWA' as const, label: 'YWA', sub: '1hr walk away' }, { value: 'NWA' as const, label: 'NWA', sub: '30min on clock' }, { value: undefined, label: 'None', sub: 'No meal' }].map(({ value, label, sub }) => {
-                const active = mealType === value;
+            <div className="grid grid-cols-4 gap-1.5">
+              {([{ value: 0 as const, label: 'Zero' }, { value: 30 as const, label: '30m' }, { value: 45 as const, label: '45m' }, { value: 60 as const, label: '1hr' }]).map(({ value, label }) => {
+                const active = mealDuration === value;
                 return (
-                  <button key={label} type="button" onClick={() => setMealType(active ? undefined : value)} className={cn("rounded-xl border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
+                  <button key={label} type="button" onClick={() => setMealDuration(active ? undefined : value)} className={cn("rounded-xl border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
                     <p className={cn("text-sm font-bold text-mono", active && "text-primary")}>{label}</p>
-                    <p className="text-[9px] leading-tight mt-0.5 opacity-70">{sub}</p>
                   </button>
                 );
               })}
             </div>
+            {mealDuration !== undefined && mealDuration > 0 && (
+              <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                {[{ value: true, label: 'On the clock', sub: 'paid, no deduction' }, { value: false, label: 'Off the clock', sub: `${mealDuration}min deducted` }].map(({ value, label, sub }) => {
+                  const active = mealOnClock === value;
+                  return (
+                    <button key={label} type="button" onClick={() => setMealOnClock(value)} className={cn("rounded-xl border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
+                      <p className={cn("text-xs font-bold", active && "text-primary")}>{label}</p>
+                      <p className="text-[9px] leading-tight mt-0.5 opacity-70">{sub}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {mealDuration === 0 && (
+              <div className="pt-0.5">
+                <label className="text-[10px] text-mono uppercase text-muted-foreground">Meal penalty units (1 unit = 1hr at straight rate)</label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  placeholder="0"
+                  value={mealPenalties}
+                  onChange={e => setMealPenalties(e.target.value)}
+                  className="h-9 text-sm text-mono mt-1"
+                />
+              </div>
+            )}
           </div>
         </div>
         <div className="flex gap-2 pt-1">
@@ -292,24 +337,6 @@ export default function CalendarPage() {
   const [viewMode, setViewMode] = useState<'month' | 'year'>('month');
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [expandedGroupKey, setExpandedGroupKey] = useState<string | null>(null);
-
-  // Stable 36-month / 13-year windows (computed once) feed the cryptex reel —
-  // basing them on a fixed reference rather than the drifting currentDate/Year
-  // keeps each reel's item list — and therefore its drag positions — steady.
-  const monthReelItems = useMemo(() => {
-    const base = startOfMonth(new Date());
-    return Array.from({ length: 36 }, (_, i) => {
-      const d = addMonths(base, i - 18);
-      return { key: format(d, 'yyyy-MM'), label: format(d, "MMM ''yy") };
-    });
-  }, []);
-  const yearReelItems = useMemo(() => {
-    const base = new Date().getFullYear();
-    return Array.from({ length: 13 }, (_, i) => {
-      const y = base - 6 + i;
-      return { key: String(y), label: String(y) };
-    });
-  }, []);
 
   const jobsByDate = useMemo(() => {
     const map: Record<string, Job[]> = {};
@@ -335,7 +362,7 @@ export default function CalendarPage() {
         const rate = job.hourlyRate || 0;
         const employer = data.employers.find(e => e.name.toLowerCase() === job.client.toLowerCase());
         const multiplier = getDayMultiplier(date, job.client, data.jobs, job.has6th7thDayRule || false);
-        const result = calculateDayPay(hours, rate, job.minimumHours || 0, job.mealPenalties || 0, multiplier, job.mealType, {
+        const result = calculateDayPay(hours, rate, job.minimumHours || 0, job.mealPenalties || 0, multiplier, { duration: job.mealDuration, onClock: job.mealOnClock }, {
           rule: employer?.overtimeRule ?? 'daily',
           otThresholdHours: employer?.dailyOvertimeThresholdHours,
           dtThresholdHours: employer?.dailyDoubletimeThresholdHours,
@@ -425,31 +452,35 @@ export default function CalendarPage() {
 
   return (
     <SpacePageWrapper title="Calendar" description="Your month at a glance">
-      <div className="flex items-center justify-between mb-3 gap-2">
-        <CryptexReel
-          levels={[
-            {
-              items: [{ key: 'month', label: 'Month' }, { key: 'year', label: 'Year' }],
-              activeKey: viewMode,
-              onChange: (key) => setViewMode(key as 'month' | 'year'),
-            },
-            viewMode === 'month'
-              ? {
-                  items: monthReelItems,
-                  activeKey: format(currentDate, 'yyyy-MM'),
-                  onChange: (key) => setCurrentDate(new Date(key + '-01T12:00:00')),
-                }
-              : {
-                  items: yearReelItems,
-                  activeKey: String(currentYear),
-                  onChange: (key) => setCurrentYear(parseInt(key)),
-                },
-          ]}
-        />
-        <Button variant="outline" size="sm" className="h-7 text-[10px] px-3 rounded-full shrink-0"
-          onClick={() => { setCurrentDate(new Date()); setCurrentYear(new Date().getFullYear()); }}>
-          Today
-        </Button>
+      <div className="flex items-center gap-2 mb-3">
+        <div className="flex flex-1 bg-secondary/30 rounded-lg p-0.5">
+          <button onClick={() => setViewMode('month')} className={cn("flex-1 text-[10px] text-mono font-medium py-1 px-3 rounded-md transition-colors", viewMode === 'month' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>Month</button>
+          <button onClick={() => setViewMode('year')} className={cn("flex-1 text-[10px] text-mono font-medium py-1 px-3 rounded-md transition-colors", viewMode === 'year' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>Year</button>
+        </div>
+      </div>
+
+      <div className="flex items-stretch justify-between mb-3 gap-2">
+        <button
+          onClick={() => viewMode === 'month' ? setCurrentDate(prev => subMonths(prev, 1)) : setCurrentYear(prev => prev - 1)}
+          className="flex items-center justify-center w-12 min-h-[44px] rounded-xl bg-fuchsia-500/30 active:bg-fuchsia-500/50 text-fuchsia-400 transition-colors border border-fuchsia-500/40"
+        >
+          <ChevronLeft size={22} />
+        </button>
+        <div className="flex-1 flex items-center justify-center gap-2">
+          <h2 className="font-body text-base font-semibold tracking-wide">
+            {viewMode === 'month' ? format(currentDate, 'MMMM yyyy') : currentYear}
+          </h2>
+          <Button variant="outline" size="sm" className="h-6 text-[10px] px-2 rounded-full"
+            onClick={() => { setCurrentDate(new Date()); setCurrentYear(new Date().getFullYear()); }}>
+            Today
+          </Button>
+        </div>
+        <button
+          onClick={() => viewMode === 'month' ? setCurrentDate(prev => addMonths(prev, 1)) : setCurrentYear(prev => prev + 1)}
+          className="flex items-center justify-center w-12 min-h-[44px] rounded-xl bg-fuchsia-500/30 active:bg-fuchsia-500/50 text-fuchsia-400 transition-colors border border-fuchsia-500/40"
+        >
+          <ChevronRight size={22} />
+        </button>
       </div>
 
       {viewMode === 'month' && (
@@ -611,11 +642,12 @@ export default function CalendarPage() {
                   const hours = job.hoursWorked ?? 0;
                   const earned = hours * (job.hourlyRate ?? 0);
                   const paid = paidJobIds.has(job.id);
+                  const overdue = isOverdueUpcoming(job);
                   return (
-                    <div key={job.id} onClick={() => setSelectedJobId(job.id)} className={cn("rounded-xl border p-3 space-y-1 cursor-pointer hover:opacity-90 transition-opacity", paid ? "bg-success/20 text-success border-success/30" : statusColors[job.status])}>
+                    <div key={job.id} onClick={() => setSelectedJobId(job.id)} className={cn("rounded-xl border p-3 space-y-1 cursor-pointer hover:opacity-90 transition-opacity", paid ? "bg-success/20 text-success border-success/30" : overdue ? "bg-amber-500/20 text-amber-400 border-amber-500/30" : statusColors[job.status])}>
                       <div className="flex items-start justify-between">
                         <div><p className="font-medium text-sm">{job.name}</p><p className="text-xs opacity-70">{job.client}</p></div>
-                        <span className="text-[10px] text-mono uppercase font-medium opacity-70">{paid ? 'Paid' : job.status}</span>
+                        <span className="text-[10px] text-mono uppercase font-medium opacity-70">{paid ? 'Paid' : overdue ? 'Needs Hours' : job.status}</span>
                       </div>
                       {job.venue && <p className="text-xs opacity-60">{job.venue}</p>}
                       <div className="flex gap-3 text-xs text-mono">
@@ -752,7 +784,7 @@ export default function CalendarPage() {
                           >
                             <span className="text-xs text-mono">{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}</span>
                             <span className="text-[11px] text-mono text-muted-foreground">
-                              {(job.hoursWorked ?? 0) > 0 ? `${job.hoursWorked}h` : statusLabel[job.status]}
+                              {(job.hoursWorked ?? 0) > 0 ? `${job.hoursWorked}h` : isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
                               {job.startTime && !job.endTime && <span className="text-amber-400"> · no end time</span>}
                             </span>
                           </div>

@@ -51,16 +51,18 @@ const TAB_ORDER: TabKey[] = [
 interface EmployerFormState {
   name: string;
   defaultHourlyRate: string;
+  timekeepingApp: string;
   overtimeRule: Employer['overtimeRule'];
   threshold: string;
 }
 
-const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', overtimeRule: 'daily', threshold: '' };
+const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '' };
 
 function employerToForm(e: Employer): EmployerFormState {
   return {
     name: e.name,
     defaultHourlyRate: e.defaultHourlyRate?.toString() ?? '',
+    timekeepingApp: e.timekeepingApp ?? '',
     overtimeRule: e.overtimeRule,
     threshold: (e.overtimeRule === 'weekly' ? e.weeklyOvertimeThresholdHours : e.dailyOvertimeThresholdHours)?.toString() ?? '',
   };
@@ -108,6 +110,12 @@ function EmployerForm({ initial, onSave, onCancel }: {
           className="h-8 text-xs"
         />
       )}
+      <Input
+        placeholder="Timekeeping app (if not payroll)"
+        value={form.timekeepingApp}
+        onChange={e => setForm(f => ({ ...f, timekeepingApp: e.target.value }))}
+        className="h-8 text-xs"
+      />
       <div className="flex gap-2 justify-end pt-1">
         <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
         <Button size="sm" disabled={!form.name.trim()} onClick={() => onSave(form)}>Save</Button>
@@ -126,6 +134,7 @@ export default function SettingsPage() {
     await addEmployer({
       name: form.name.trim(),
       defaultHourlyRate: form.defaultHourlyRate ? parseFloat(form.defaultHourlyRate) : undefined,
+      timekeepingApp: form.timekeepingApp.trim() || undefined,
       overtimeRule: form.overtimeRule,
       weeklyOvertimeThresholdHours: form.overtimeRule === 'weekly' ? parseFloat(form.threshold || '40') : undefined,
       dailyOvertimeThresholdHours: form.overtimeRule === 'daily' ? parseFloat(form.threshold || '8') : undefined,
@@ -139,6 +148,7 @@ export default function SettingsPage() {
     await updateEmployer(id, {
       name: form.name.trim(),
       defaultHourlyRate: form.defaultHourlyRate ? parseFloat(form.defaultHourlyRate) : undefined,
+      timekeepingApp: form.timekeepingApp.trim() || undefined,
       overtimeRule: form.overtimeRule,
       weeklyOvertimeThresholdHours: form.overtimeRule === 'weekly' ? parseFloat(form.threshold || '40') : undefined,
       dailyOvertimeThresholdHours: form.overtimeRule === 'daily' ? parseFloat(form.threshold || '8') : undefined,
@@ -302,6 +312,7 @@ export default function SettingsPage() {
                     {emp.overtimeRule === 'weekly' && ` · OT after ${emp.weeklyOvertimeThresholdHours ?? 40}h/wk`}
                     {emp.overtimeRule === 'daily' && ` · OT after ${emp.dailyOvertimeThresholdHours ?? 8}h/day`}
                     {emp.overtimeRule === 'none' && ` · no overtime`}
+                    {emp.timekeepingApp && ` · tracks time in ${emp.timekeepingApp}`}
                   </p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">

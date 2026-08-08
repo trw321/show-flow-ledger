@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Scale, ChevronDown, ChevronUp, AlertTriangle, Upload, Pencil, Check, X } from 'lucide-react';
 import { format, addDays, endOfMonth, parseISO, differenceInDays } from 'date-fns';
 import { calculateExpectedPay } from '@/lib/payCalc';
+import { cn } from '@/lib/utils';
 import type { Job, Income } from '@/lib/store';
 
 // ── Money rain ───────────────────────────────────────────────────────────────
@@ -129,6 +130,7 @@ interface ReconciliationRow {
   isPaid: boolean;
   relatedIncomeIds: string[];
   hourlyRate?: number;
+  jobs: Job[];
   timeEntryDetails: { date: string; hours: number; pay: number; breakdown: string[] }[];
   incomeDetails: {
     date: string;
@@ -166,6 +168,17 @@ export default function PayReconciliationPage() {
     const clients = new Set(data.jobs.map(j => j.client).filter(Boolean));
     return Array.from(clients).sort();
   }, [data.jobs]);
+
+  // A job counts as paid once a linked income record is marked paid — the
+  // per-job boxes below use this, distinct from row.isPaid which just means
+  // "some income exists for this pay period" as a whole.
+  const paidJobIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const income of data.income) {
+      if (income.status === 'paid' && income.jobId) set.add(income.jobId);
+    }
+    return set;
+  }, [data.income]);
 
   const reconciliation = useMemo<ReconciliationRow[]>(() => {
     const rows: ReconciliationRow[] = [];
@@ -218,6 +231,7 @@ export default function PayReconciliationPage() {
             isPaid,
             relatedIncomeIds: periodIncome.map(i => i.id),
             hourlyRate: referenceJob.hourlyRate,
+            jobs: periodJobs,
             timeEntryDetails: payResult.details,
             payrollCompany: referenceJob.payrollCompany,
             incomeDetails: paidIncome.map(i => {
@@ -492,24 +506,34 @@ export default function PayReconciliationPage() {
                   <div className="border-t border-border bg-muted/20 px-4 py-4">
                     <div className="grid sm:grid-cols-2 gap-4">
                       <div>
-                        <h4 className="text-[10px] text-mono uppercase text-muted-foreground mb-2 font-semibold tracking-wider">Hours breakdown</h4>
+                        <h4 className="text-[10px] text-mono uppercase text-muted-foreground mb-2 font-semibold tracking-wider">Jobs in this period</h4>
                         {row.timeEntryDetails.length === 0 ? (
                           <p className="text-xs text-muted-foreground">No hours logged</p>
                         ) : (
-                          <div className="space-y-1">
-                            {row.timeEntryDetails.map((t, j) => (
-                              <div key={j} className="rounded bg-background px-3 py-1.5 text-xs">
-                                <div className="flex justify-between items-center">
-                                  <span>{format(parseISO(t.date), 'MMM d')} — {t.hours}h</span>
-                                  <span className="text-mono font-medium">${t.pay.toFixed(2)}</span>
-                                </div>
-                                {t.breakdown.length > 0 && (
-                                  <div className="mt-1 text-muted-foreground space-y-0.5 pl-2 border-l border-border">
-                                    {t.breakdown.map((line, k) => <p key={k}>{line}</p>)}
+                          <div className="space-y-1.5">
+                            {row.timeEntryDetails.map((t, j) => {
+                              const jobForDate = row.jobs.find(job => job.date === t.date);
+                              const paid = jobForDate ? paidJobIds.has(jobForDate.id) : false;
+                              return (
+                                <div
+                                  key={j}
+                                  className={cn(
+                                    'rounded-lg border px-3 py-1.5 text-xs transition-colors',
+                                    paid ? 'border-success/40 bg-success/10' : 'border-border bg-background text-muted-foreground'
+                                  )}
+                                >
+                                  <div className="flex justify-between items-center">
+                                    <span className={paid ? 'text-foreground' : undefined}>{format(parseISO(t.date), 'MMM d')} — {t.hours}h</span>
+                                    <span className={cn('text-mono font-medium', paid ? 'text-success' : 'text-foreground')}>${t.pay.toFixed(2)}</span>
                                   </div>
-                                )}
-                              </div>
-                            ))}
+                                  {t.breakdown.length > 0 && (
+                                    <div className="mt-1 space-y-0.5 pl-2 border-l border-border/60">
+                                      {t.breakdown.map((line, k) => <p key={k}>{line}</p>)}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
                       </div>

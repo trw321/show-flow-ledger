@@ -23,8 +23,12 @@ export interface Job {
   steward?: string;
   parkingCost?: number;
   hoursWorked?: number;
+  /** Minutes taken for the meal break: 0 means no meal was taken (see mealPenalties). */
+  mealDuration?: 0 | 30 | 45 | 60;
+  /** true = paid/on the clock (no hours deduction), false = unpaid/off the clock (mealDuration is deducted). Irrelevant when mealDuration is 0. */
+  mealOnClock?: boolean;
+  /** Units of meal-penalty pay owed (each = 1hr at straight rate) — only meaningful when mealDuration is 0. */
   mealPenalties?: number;
-  mealType?: 'YWA' | 'NWA';
   attachments?: string[];
   notes: string;
   createdAt: string;
@@ -72,6 +76,7 @@ export interface Employer {
   name: string;
   defaultHourlyRate?: number;
   payrollCompany?: string;
+  timekeepingApp?: string;
   paySchedule?: Job['paySchedule'];
   overtimeRule: 'daily' | 'weekly' | 'none';
   dailyOvertimeThresholdHours?: number;
@@ -96,11 +101,25 @@ export interface AppData {
 const CACHE_KEY = 'av-bookkeeper-data';
 const defaultData: AppData = { jobs: [], expenses: [], income: [], equipment: [], employers: [] };
 
+// Old jobs may still carry the retired mealType ('YWA'/'NWA') field instead of
+// mealDuration/mealOnClock. Convert on load so historical deduction behavior
+// (YWA = 1hr off-clock, NWA = 30min on-clock) stays exactly the same.
+function migrateJob(job: Job & { mealType?: 'YWA' | 'NWA' }): Job {
+  if (job.mealDuration === undefined && job.mealType) {
+    if (job.mealType === 'YWA') { job.mealDuration = 60; job.mealOnClock = false; }
+    else if (job.mealType === 'NWA') { job.mealDuration = 30; job.mealOnClock = true; }
+  }
+  delete job.mealType;
+  return job;
+}
+
 function loadCache(): AppData {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return defaultData;
-    return { ...defaultData, ...JSON.parse(raw) };
+    const parsed: AppData = { ...defaultData, ...JSON.parse(raw) };
+    parsed.jobs = (parsed.jobs || []).map(migrateJob);
+    return parsed;
   } catch {
     return defaultData;
   }

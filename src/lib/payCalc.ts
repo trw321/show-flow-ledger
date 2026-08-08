@@ -24,7 +24,7 @@ export function calculateDayPay(
   minimumHours: number = 0,
   mealPenalties: number = 0,
   dayMultiplier: number = 1,
-  mealType?: 'YWA' | 'NWA',
+  meal?: { duration?: 0 | 30 | 45 | 60; onClock?: boolean },
   overtimeOptions?: OvertimeOptions
 ): { billableHours: number; totalPay: number; breakdown: string[] } {
   const otRule = overtimeOptions?.rule ?? 'daily';
@@ -33,18 +33,20 @@ export function calculateDayPay(
   const otMultiplier = overtimeOptions?.otMultiplier ?? 1.5;
   const dtMultiplier = overtimeOptions?.dtMultiplier ?? 2.0;
 
-  // YWA = 1hr walk-away off the clock (deduct from hours)
-  // NWA = 30min meal on the clock (no deduction)
-  const mealDeduction = mealType === 'YWA' ? 1 : 0;
+  // A meal off the clock deducts its duration from billable hours; on the
+  // clock (paid straight through) never deducts, regardless of duration.
+  // Zero duration means no meal was taken at all — see mealPenalties instead.
+  const mealMinutes = meal?.duration ?? 0;
+  const mealDeduction = (mealMinutes > 0 && !meal?.onClock) ? mealMinutes / 60 : 0;
   const adjustedHours = Math.max(0, actualHours - mealDeduction);
   const billableHours = Math.max(adjustedHours, minimumHours);
   const effectiveRate = rate * dayMultiplier;
   const breakdown: string[] = [];
 
-  if (mealType === 'YWA') {
-    breakdown.push(`YWA: ${actualHours}h − 1h walk-away = ${adjustedHours}h`);
-  } else if (mealType === 'NWA') {
-    breakdown.push(`NWA: 30min meal on clock (no deduction)`);
+  if (mealMinutes > 0 && !meal?.onClock) {
+    breakdown.push(`${mealMinutes}min meal off clock: ${actualHours}h − ${mealDeduction}h = ${adjustedHours}h`);
+  } else if (mealMinutes > 0 && meal?.onClock) {
+    breakdown.push(`${mealMinutes}min meal on clock (no deduction)`);
   }
 
   let pay = 0;
@@ -211,22 +213,22 @@ export function calculateExpectedPay(
   };
 
   // Group by date
-  const byDate = new Map<string, { hours: number; mealPenalties: number; rate: number; mealType?: 'YWA' | 'NWA' }>();
+  const byDate = new Map<string, { hours: number; mealPenalties: number; rate: number; mealDuration?: 0 | 30 | 45 | 60; mealOnClock?: boolean }>();
   for (const job of jobs) {
     const hours = job.hoursWorked ?? 0;
     if (hours <= 0) continue;
     const rate = job.hourlyRate || referenceJob.hourlyRate || 0;
-    const existing = byDate.get(job.date) || { hours: 0, mealPenalties: 0, rate, mealType: job.mealType };
+    const existing = byDate.get(job.date) || { hours: 0, mealPenalties: 0, rate, mealDuration: job.mealDuration, mealOnClock: job.mealOnClock };
     existing.hours += hours;
     existing.mealPenalties += job.mealPenalties || 0;
     existing.rate = rate;
-    if (job.mealType) existing.mealType = job.mealType;
+    if (job.mealDuration !== undefined) { existing.mealDuration = job.mealDuration; existing.mealOnClock = job.mealOnClock; }
     byDate.set(job.date, existing);
   }
 
-  for (const [date, { hours, mealPenalties, rate, mealType }] of byDate.entries()) {
+  for (const [date, { hours, mealPenalties, rate, mealDuration, mealOnClock }] of byDate.entries()) {
     const dayMultiplier = getDayMultiplier(date, referenceJob.client, allJobs, referenceJob.has6th7thDayRule || false);
-    const result = calculateDayPay(hours, rate, referenceJob.minimumHours || 0, mealPenalties, dayMultiplier, mealType, overtimeOptions);
+    const result = calculateDayPay(hours, rate, referenceJob.minimumHours || 0, mealPenalties, dayMultiplier, { duration: mealDuration, onClock: mealOnClock }, overtimeOptions);
     total += result.totalPay;
     details.push({ date, hours, pay: result.totalPay, breakdown: result.breakdown });
   }

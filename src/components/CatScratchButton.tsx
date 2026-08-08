@@ -34,7 +34,8 @@ interface CatScratchEntry {
   venue?: string;
   startTime?: string;
   endTime?: string;
-  mealType?: 'YWA' | 'NWA';
+  mealDuration?: 0 | 30 | 45 | 60;
+  mealOnClock?: boolean;
   mealPenalties?: number;
   paid: boolean;
   grossPay?: number;
@@ -165,8 +166,24 @@ function parseCatScratch(text: string, year: number): { entries: CatScratchEntry
       endTime = fmt(timeMatch[2]);
     }
 
-    // Meal type
-    const mealType = /\bYWA\b/i.test(rest) ? 'YWA' : /\bNWA\b/i.test(rest) ? 'NWA' : undefined;
+    // Meal duration + on/off clock — "YWA"/"NWA" kept for backward compatibility
+    // (YWA = 1hr off clock, NWA = 30min on clock), plus explicit "30 off",
+    // "45min on clock", "zero"/"no meal" for any of the four durations.
+    let mealDuration: 0 | 30 | 45 | 60 | undefined;
+    let mealOnClock: boolean | undefined;
+    const minuteMealMatch = rest.match(/\b(\d{1,3})\s*(?:min|minute)s?\b.{0,12}?\b(on|off)\b|\b(on|off)\b.{0,12}?\b(\d{1,3})\s*(?:min|minute)s?\b/i);
+    if (/\bYWA\b/i.test(rest)) { mealDuration = 60; mealOnClock = false; }
+    else if (/\bNWA\b/i.test(rest)) { mealDuration = 30; mealOnClock = true; }
+    else if (minuteMealMatch) {
+      const mins = parseInt(minuteMealMatch[1] ?? minuteMealMatch[4]);
+      const onOff = (minuteMealMatch[2] ?? minuteMealMatch[3]).toLowerCase();
+      if (mins === 0 || mins === 30 || mins === 45 || mins === 60) {
+        mealDuration = mins as 0 | 30 | 45 | 60;
+        mealOnClock = onOff === 'on';
+      }
+    } else if (/\bzero\b|\bno meal\b/i.test(rest)) {
+      mealDuration = 0;
+    }
 
     // Meal penalties
     const mpMatch = rest.match(/(\d+)\s*MP/i);
@@ -207,7 +224,7 @@ function parseCatScratch(text: string, year: number): { entries: CatScratchEntry
     const venue = venueMatch ? venueMatch[1].trim() : undefined;
 
     entries.push({
-      date, venue, startTime, endTime, mealType, mealPenalties,
+      date, venue, startTime, endTime, mealDuration, mealOnClock, mealPenalties,
       paid, grossPay, netPay, payrollCompany, position, minimumHours,
       notes: rest,
       raw: line,
@@ -304,16 +321,33 @@ export default function CatScratchButton({ className }: { className?: string }) 
   const [acceptedKeys, setAcceptedKeys] = useState<Set<number>>(new Set());
   const [pendingEmployer, setPendingEmployer] = useState<EmployerHint | null>(null);
   const [justSavedEmployer, setJustSavedEmployer] = useState<string | null>(null);
+  const [activeJobIds, setActiveJobIds] = useState<Set<string>>(new Set());
+  const [insertedPrefixes, setInsertedPrefixes] = useState<Record<string, string>>({});
 
+  // Only jobs that still need hours logged — once hoursWorked is set (via this
+  // flow or elsewhere, e.g. Calendar), the job drops out of this list.
   const recentJobs = [...data.jobs]
+    .filter(j => (j.hoursWorked ?? 0) === 0)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 8);
 
-  const insertJobLine = (job: Job) => {
-    const dateStr = format(new Date(job.date + 'T12:00:00'), 'M.d.yy');
-    const base = [dateStr, job.venue || job.name].filter(Boolean).join(' ');
-    const label = job.startTime ? `${base} ${job.startTime} - ` : `${base} `;
-    setText(prev => (prev.trim() ? `${prev.replace(/\s+$/, '')}\n${label}` : label));
+  const toggleJobLine = (job: Job) => {
+    setJustSavedEmployer(null);
+    if (activeJobIds.has(job.id)) {
+      const prefix = insertedPrefixes[job.id]?.trim();
+      if (prefix) {
+        setText(prev => prev.split('\n').filter(line => !line.trimStart().startsWith(prefix)).join('\n'));
+      }
+      setActiveJobIds(prev => { const next = new Set(prev); next.delete(job.id); return next; });
+      setInsertedPrefixes(prev => { const next = { ...prev }; delete next[job.id]; return next; });
+    } else {
+      const dateStr = format(new Date(job.date + 'T12:00:00'), 'M.d.yy');
+      const base = [dateStr, job.venue || job.name].filter(Boolean).join(' ');
+      const label = job.startTime ? `${base} ${job.startTime} - ` : `${base} `;
+      setText(prev => (prev.trim() ? `${prev.replace(/\s+$/, '')}\n${label}` : label));
+      setActiveJobIds(prev => new Set(prev).add(job.id));
+      setInsertedPrefixes(prev => ({ ...prev, [job.id]: label }));
+    }
   };
 
   const handleParse = () => {
@@ -360,7 +394,10 @@ export default function CatScratchButton({ className }: { className?: string }) 
     if (matchedJob) {
       const updates: Partial<Job> = {};
       if (entry.endTime && !matchedJob.endTime) updates.endTime = entry.endTime;
-      if (entry.mealType && !matchedJob.mealType) updates.mealType = entry.mealType;
+      if (entry.mealDuration !== undefined && matchedJob.mealDuration === undefined) {
+        updates.mealDuration = entry.mealDuration;
+        updates.mealOnClock = entry.mealOnClock;
+      }
       if (entry.mealPenalties && !matchedJob.mealPenalties) updates.mealPenalties = entry.mealPenalties;
       if (entry.minimumHours && !matchedJob.minimumHours) updates.minimumHours = entry.minimumHours;
       if (entry.payrollCompany && !matchedJob.payrollCompany) updates.payrollCompany = entry.payrollCompany;
@@ -395,7 +432,8 @@ export default function CatScratchButton({ className }: { className?: string }) 
         hoursWorked: entry.hoursWorked,
         hourlyRate: entry.hourlyRate,
         status: entry.hoursWorked ? 'completed' : 'upcoming',
-        mealType: entry.mealType,
+        mealDuration: entry.mealDuration,
+        mealOnClock: entry.mealOnClock,
         mealPenalties: entry.mealPenalties,
         minimumHours: entry.minimumHours,
         payrollCompany: entry.payrollCompany,
@@ -413,7 +451,7 @@ export default function CatScratchButton({ className }: { className?: string }) 
     <>
       <Burst />
       <button
-        onClick={() => { setOpen(true); setStep('input'); setText(''); setJustSavedEmployer(null); }}
+        onClick={() => { setOpen(true); setStep('input'); setText(''); setJustSavedEmployer(null); setActiveJobIds(new Set()); setInsertedPrefixes({}); }}
         className={cn(
           "btn-bounce flex items-center gap-3 px-4 py-3 rounded-xl bg-black/40 border border-white/10 hover:border-amber-500/40 transition-colors text-left",
           className
@@ -421,15 +459,12 @@ export default function CatScratchButton({ className }: { className?: string }) 
       >
         <span className="text-xl">🐾</span>
         <div>
-          <div className="flex items-center gap-1.5">
-            <p className="text-sm text-white/80 font-medium">Add Hours</p>
-            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">offline</span>
-          </div>
+          <p className="text-sm text-white/80 font-medium">Add Hours</p>
           <p className="text-[11px] text-white/40">Paste notes — match hours to logged jobs, or add a new employer</p>
         </div>
       </button>
 
-      <Dialog open={open} onOpenChange={o => { if (!o) { setOpen(false); setStep('input'); setJustSavedEmployer(null); } }}>
+      <Dialog open={open} onOpenChange={o => { if (!o) { setOpen(false); setStep('input'); setJustSavedEmployer(null); setActiveJobIds(new Set()); setInsertedPrefixes({}); } }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl">
           <DialogHeader>
             <DialogTitle className="font-display text-lg">Add Hours</DialogTitle>
@@ -445,19 +480,25 @@ export default function CatScratchButton({ className }: { className?: string }) 
               )}
               {recentJobs.length > 0 && (
                 <div className="space-y-1.5">
-                  <p className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Recently added — tap to insert</p>
+                  <p className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Recently added — tap to insert, tap again to remove</p>
                   <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-0.5 px-0.5">
-                    {recentJobs.map(job => (
-                      <button
-                        key={job.id}
-                        type="button"
-                        onClick={() => insertJobLine(job)}
-                        className="shrink-0 rounded-xl border border-border bg-secondary/30 hover:border-primary/40 hover:bg-secondary/50 transition-colors px-3 py-2 text-left"
-                      >
-                        <p className="text-xs font-medium truncate max-w-[9rem]">{job.venue || job.name}</p>
-                        <p className="text-[10px] text-mono text-muted-foreground">{format(new Date(job.date + 'T12:00:00'), 'MMM d')}{job.startTime && ` · ${job.startTime}`}{job.client && ` · ${job.client}`}</p>
-                      </button>
-                    ))}
+                    {recentJobs.map(job => {
+                      const active = activeJobIds.has(job.id);
+                      return (
+                        <button
+                          key={job.id}
+                          type="button"
+                          onClick={() => toggleJobLine(job)}
+                          className={cn(
+                            'shrink-0 rounded-xl border transition-colors px-3 py-2 text-left',
+                            active ? 'border-primary bg-primary/10' : 'border-border bg-secondary/30 hover:border-primary/40 hover:bg-secondary/50'
+                          )}
+                        >
+                          <p className="text-xs font-medium truncate max-w-[9rem]">{job.venue || job.name}</p>
+                          <p className="text-[10px] text-mono text-muted-foreground">{format(new Date(job.date + 'T12:00:00'), 'MMM d')}{job.startTime && ` · ${job.startTime}`}{job.client && ` · ${job.client}`}</p>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -528,7 +569,7 @@ export default function CatScratchButton({ className }: { className?: string }) 
                         {result.entry.startTime && `${result.entry.startTime}${result.entry.endTime ? ` – ${result.entry.endTime}` : ''} · `}
                         {result.entry.hoursWorked ? `${result.entry.hoursWorked}h` : ''}
                         {result.entry.hourlyRate ? ` · $${result.entry.hourlyRate}/hr` : ''}
-                        {result.entry.mealType ? ` · ${result.entry.mealType}` : ''}
+                        {result.entry.mealDuration !== undefined ? ` · ${result.entry.mealDuration === 0 ? 'no meal' : `${result.entry.mealDuration}min ${result.entry.mealOnClock ? 'on' : 'off'} clock`}` : ''}
                         {result.entry.mealPenalties ? ` · ${result.entry.mealPenalties}MP` : ''}
                         {result.entry.grossPay ? ` · $${result.entry.grossPay}` : ''}
                       </p>
