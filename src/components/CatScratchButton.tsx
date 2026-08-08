@@ -465,23 +465,23 @@ export default function CatScratchButton({ className }: { className?: string }) 
       </button>
 
       <Dialog open={open} onOpenChange={o => { if (!o) { setOpen(false); setStep('input'); setJustSavedEmployer(null); setActiveJobIds(new Set()); setInsertedPrefixes({}); } }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto overflow-x-hidden rounded-2xl">
           <DialogHeader>
             <DialogTitle className="font-display text-lg">Add Hours</DialogTitle>
             <p className="text-xs text-muted-foreground mt-0.5">Paste your notes and I'll match them to your logged jobs</p>
           </DialogHeader>
 
           {step === 'input' && (
-            <div className="space-y-3">
+            <div className="space-y-3 min-w-0">
               {justSavedEmployer && (
                 <div className="rounded-xl border border-success/30 bg-success/5 px-3 py-2 text-xs text-success">
                   ✓ {justSavedEmployer} saved. Add their work dates below (e.g. "june 1-6: 56 hrs") and parse again.
                 </div>
               )}
               {recentJobs.length > 0 && (
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 min-w-0">
                   <p className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Recently added — tap to insert, tap again to remove</p>
-                  <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-0.5 px-0.5">
+                  <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-0.5 px-0.5 min-w-0">
                     {recentJobs.map(job => {
                       const active = activeJobIds.has(job.id);
                       return (
