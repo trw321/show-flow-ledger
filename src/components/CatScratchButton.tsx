@@ -457,7 +457,7 @@ export default function CatScratchButton({ className }: { className?: string }) 
           className
         )}
       >
-        <span className="text-xl">🐾</span>
+        <span className="text-xl">⏳</span>
         <div>
           <p className="text-sm text-white/80 font-medium">Add Hours</p>
           <p className="text-[11px] text-white/40">Paste notes — match hours to logged jobs, or add a new employer</p>
