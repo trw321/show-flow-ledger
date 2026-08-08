@@ -6,6 +6,8 @@ type VortexPhase = 'idle' | 'pulling' | 'vortex' | 'flash' | 'settling';
 interface Props {
   phase: VortexPhase;
   className?: string;
+  /** Override the default star count (80 full-power / 40 low-power). */
+  starCount?: number;
 }
 
 interface Star {
@@ -25,7 +27,7 @@ interface Particle {
   alpha: number;
 }
 
-export default function VortexCanvas({ phase, className }: Props) {
+export default function VortexCanvas({ phase, className, starCount: starCountOverride }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const phaseRef = useRef<VortexPhase>(phase);
   const rafRef = useRef<number>(0);
@@ -46,7 +48,7 @@ export default function VortexCanvas({ phase, className }: Props) {
     // Reduced motion: skip animation entirely, draw static ring
     const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const lowPower = (navigator.hardwareConcurrency ?? 4) <= 2;
-    const starCount = lowPower ? 40 : 80;
+    const starCount = starCountOverride ?? (lowPower ? 40 : 80);
 
     const ro = new ResizeObserver(entries => {
       for (const entry of entries) {
@@ -198,7 +200,7 @@ export default function VortexCanvas({ phase, className }: Props) {
       cancelAnimationFrame(rafRef.current);
       ro.disconnect();
     };
-  }, []);
+  }, [starCountOverride]);
 
   return (
     <canvas

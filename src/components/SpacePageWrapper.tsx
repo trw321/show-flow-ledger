@@ -5,13 +5,14 @@ interface Props {
   description?: string;
   action?: React.ReactNode;
   children: React.ReactNode;
+  starCount?: number;
 }
 
-export default function SpacePageWrapper({ title, description, action, children }: Props) {
+export default function SpacePageWrapper({ title, description, action, children, starCount }: Props) {
   return (
     <div className="relative rounded-2xl border border-white/10 overflow-hidden">
       <div className="absolute inset-0">
-        <VortexCanvas phase="idle" className="w-full h-full" />
+        <VortexCanvas phase="idle" className="w-full h-full" starCount={starCount} />
       </div>
       <div className="relative z-10 p-4 md:p-5">
         <div className="mb-4 md:mb-6">
