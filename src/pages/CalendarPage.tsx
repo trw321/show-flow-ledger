@@ -685,7 +685,7 @@ export default function CalendarPage() {
         const monthPrefix = format(currentDate, 'yyyy-MM');
         const needsLog = data.jobs.filter(job => {
           const jobDate = new Date(job.date + 'T12:00:00');
-          return (isToday(jobDate) || isPast(jobDate)) && (job.hoursWorked ?? 0) === 0 && job.status !== 'cancelled' && job.date.startsWith(monthPrefix);
+          return (isToday(jobDate) || isPast(jobDate)) && (job.hoursWorked ?? 0) === 0 && job.status !== 'cancelled' && job.status !== 'completed' && job.date.startsWith(monthPrefix);
         }).sort((a, b) => a.date.localeCompare(b.date));
         if (needsLog.length === 0) return null;
         const groups: Record<string, Job[]> = {};
@@ -737,7 +737,7 @@ export default function CalendarPage() {
         return (
           <div className="mt-4 flex flex-col gap-2">
             <h2 className="text-[9px] font-body uppercase tracking-widest text-muted-foreground/50 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-success inline-block" />
+              <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-400 inline-block" />
               This month's shifts
             </h2>
             <div className="flex flex-col gap-1.5">
@@ -754,7 +754,7 @@ export default function CalendarPage() {
                   ? `${dateRange} · ${totalHours}h${totalEarned > 0 ? ` · $${totalEarned.toLocaleString()}` : ''}`
                   : `${dateRange} · ${statusLabel[first.status]}${first.startTime ? ` · ${first.startTime}` : ''}`;
                 return (
-                  <div key={key} className="rounded-xl border border-border bg-card overflow-hidden">
+                  <div key={key} className="rounded-xl border border-fuchsia-400/25 bg-fuchsia-400/5 overflow-hidden">
                     <div
                       onClick={() => isGroup ? setExpandedGroupKey(expanded ? null : key) : openJob(first)}
                       className="p-2.5 flex items-center gap-2 opacity-70 cursor-pointer active:opacity-50 transition-opacity"
@@ -775,12 +775,12 @@ export default function CalendarPage() {
                       )}
                     </div>
                     {isGroup && expanded && (
-                      <div className="border-t border-border divide-y divide-border/50">
+                      <div className="border-t border-fuchsia-400/20 divide-y divide-fuchsia-400/10">
                         {jobs.map(job => (
                           <div
                             key={job.id}
                             onClick={() => openJob(job)}
-                            className="px-3 py-2 pl-6 flex items-center justify-between gap-2 cursor-pointer hover:bg-secondary/40 active:bg-secondary/60 transition-colors"
+                            className="px-3 py-2 pl-6 flex items-center justify-between gap-2 cursor-pointer hover:bg-fuchsia-400/10 active:bg-fuchsia-400/15 transition-colors"
                           >
                             <span className="text-xs text-mono">{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}</span>
                             <span className="text-[11px] text-mono text-muted-foreground">
