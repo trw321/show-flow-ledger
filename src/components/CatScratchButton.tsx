@@ -442,9 +442,24 @@ export default function CatScratchButton({ className }: { className?: string }) 
         hasVacationPay: false,
       });
     }
-    setAcceptedKeys(prev => new Set([...prev, idx]));
+    const nextAccepted = new Set(acceptedKeys).add(idx);
+    setAcceptedKeys(nextAccepted);
     fireCelebration();
     toast.success(matchedJob ? 'Job updated' : 'New job created');
+
+    // Once every entry in this batch has been applied, reset back to a
+    // clean input — the pasted text was a one-time instruction, not
+    // something that should linger as a re-submittable suggestion.
+    if (nextAccepted.size === matchResults.length) {
+      setTimeout(() => {
+        setStep('input');
+        setText('');
+        setMatchResults([]);
+        setAcceptedKeys(new Set());
+        setActiveJobIds(new Set());
+        setInsertedPrefixes({});
+      }, 900);
+    }
   };
 
   return (
