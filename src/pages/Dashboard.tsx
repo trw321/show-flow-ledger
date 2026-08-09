@@ -129,7 +129,7 @@ export default function Dashboard() {
           {isOnStage ? '🎤 On Stage' : '🎭 On Deck'}
         </h2>
         {!nextJob ? (
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4 flex flex-col items-center gap-1 py-6">
+          <div className="rounded-xl border border-white/10 bg-black/30 p-4 flex flex-col items-center gap-1 py-6">
             <p className="text-2xl">🌅</p>
             <p className="text-xs text-muted-foreground font-body">No jobs on the horizon</p>
           </div>
@@ -175,9 +175,9 @@ export default function Dashboard() {
               <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Paid</p>
               <p className="text-lg font-bold text-mono text-emerald-400 mt-1">${thisMonthPaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
             </div>
-            <div className={`rounded-xl border p-3 ${thisMonthUnpaid > 0 ? 'border-amber-500/30 bg-amber-500/5 shadow-[0_0_16px_2px_rgba(245,158,11,0.12)]' : 'border-emerald-500/30 bg-emerald-500/5 shadow-[0_0_16px_2px_rgba(16,185,129,0.12)]'}`}>
+            <div className="rounded-xl border border-yellow-400/30 bg-yellow-400/5 shadow-[0_0_16px_2px_rgba(250,204,21,0.12)] p-3">
               <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Unpaid</p>
-              <p className={`text-lg font-bold text-mono mt-1 ${thisMonthUnpaid > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+              <p className="text-lg font-bold text-mono mt-1 text-yellow-400">
                 {thisMonthUnpaid > 0 ? `$${thisMonthUnpaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}` : '✓'}
               </p>
             </div>
@@ -201,9 +201,9 @@ export default function Dashboard() {
               <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Paid</p>
               <p className="text-lg font-bold text-mono text-emerald-400 mt-1">${ytdPaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
             </div>
-            <div className={`rounded-xl border p-3 ${ytdExpected - ytdPaid > 0 ? 'border-amber-500/30 bg-amber-500/5 shadow-[0_0_16px_2px_rgba(245,158,11,0.12)]' : 'border-emerald-500/30 bg-emerald-500/5 shadow-[0_0_16px_2px_rgba(16,185,129,0.12)]'}`}>
+            <div className="rounded-xl border border-yellow-400/30 bg-yellow-400/5 shadow-[0_0_16px_2px_rgba(250,204,21,0.12)] p-3">
               <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Unpaid</p>
-              <p className={`text-lg font-bold text-mono mt-1 ${ytdExpected - ytdPaid > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+              <p className="text-lg font-bold text-mono mt-1 text-yellow-400">
                 {ytdExpected - ytdPaid > 0 ? `$${Math.max(0, ytdExpected - ytdPaid).toLocaleString(undefined, { minimumFractionDigits: 0 })}` : '✓'}
               </p>
             </div>

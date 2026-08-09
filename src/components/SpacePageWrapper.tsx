@@ -10,7 +10,7 @@ interface Props {
 
 export default function SpacePageWrapper({ title, description, action, children, starCount }: Props) {
   return (
-    <div className="relative rounded-2xl border border-white/10 overflow-hidden">
+    <div className="relative rounded-2xl border border-white/10 overflow-hidden bg-[#0a0806]">
       <div className="absolute inset-0">
         <VortexCanvas phase="idle" className="w-full h-full" starCount={starCount} />
       </div>

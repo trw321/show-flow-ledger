@@ -58,6 +58,15 @@ export default function VortexCanvas({ phase, className, starCount: starCountOve
     });
     ro.observe(canvas);
 
+    // ResizeObserver's first callback fires asynchronously, so without this the
+    // canvas is still at its default 300x150 when stars are placed below —
+    // on a tall page that leaves everything past the first ~150px empty.
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+    }
+
     // Init stars
     const stars: Star[] = Array.from({ length: starCount }, () => ({
       x: Math.random() * canvas.width,
