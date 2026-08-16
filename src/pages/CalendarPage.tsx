@@ -135,7 +135,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
 
   const employer = resolveEmployer(job.client, data.employers);
   const rawNightHours = ((employer?.nightPremiumEnabled ?? true) && job.startTime && endTime)
-    ? calculateNightHours(job.startTime, endTime, employer.nightPremiumStartHour ?? 0, employer.nightPremiumEndHour)
+    ? calculateNightHours(job.startTime, endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour)
     : 0;
   const nightHours = nightPremiumConfirmed ? rawNightHours : 0;
 
@@ -488,7 +488,7 @@ export default function CalendarPage() {
       const employer = resolveEmployer(job.client, data.employers);
       const multiplier = getDayMultiplier(job.date, job.client, data.jobs, job.has6th7thDayRule || false);
       const nightHours = ((employer?.nightPremiumEnabled ?? true) && job.nightPremiumConfirmed !== false && job.startTime && job.endTime)
-        ? calculateNightHours(job.startTime, job.endTime, employer.nightPremiumStartHour ?? 0, employer.nightPremiumEndHour)
+        ? calculateNightHours(job.startTime, job.endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour)
         : 0;
       const result = calculateDayPay(hours, rate, job.minimumHours || 0, job.mealPenalties || 0, multiplier, { duration: job.mealDuration, onClock: job.mealOnClock }, {
         rule: employer?.overtimeRule ?? 'daily',

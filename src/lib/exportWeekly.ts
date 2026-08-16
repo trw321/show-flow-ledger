@@ -11,7 +11,7 @@ function jobGross(job: Job, allJobs: Job[], employers: Employer[]): number {
   const employer = resolveEmployer(job.client, employers);
   const dayMult = getDayMultiplier(job.date, job.client, allJobs, job.has6th7thDayRule ?? false);
   const nightHours = ((employer?.nightPremiumEnabled ?? true) && job.nightPremiumConfirmed !== false && job.startTime && job.endTime)
-    ? calculateNightHours(job.startTime, job.endTime, employer.nightPremiumStartHour ?? 0, employer.nightPremiumEndHour)
+    ? calculateNightHours(job.startTime, job.endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour)
     : 0;
   const { totalPay } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock }, {
     rule: employer?.overtimeRule ?? 'daily',

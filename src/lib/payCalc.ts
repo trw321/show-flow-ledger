@@ -302,7 +302,7 @@ export function calculateExpectedPay(
     const dayMultiplier = getDayMultiplier(date, referenceJob.client, allJobs, referenceJob.has6th7thDayRule || false);
     let nightHours = 0;
     if ((employer?.nightPremiumEnabled ?? true) && nightConfirmed !== false && startTime && endTime) {
-      nightHours = calculateNightHours(startTime, endTime, employer.nightPremiumStartHour ?? 0, employer.nightPremiumEndHour);
+      nightHours = calculateNightHours(startTime, endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour);
     }
     const result = calculateDayPay(hours, rate, referenceJob.minimumHours || 0, mealPenalties, dayMultiplier, { duration: mealDuration, onClock: mealOnClock }, { ...overtimeOptions, nightHours });
     total += result.totalPay;
