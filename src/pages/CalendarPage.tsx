@@ -4,10 +4,10 @@ import SpacePageWrapper from '@/components/SpacePageWrapper';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast } from 'date-fns';
 import type { Job } from '@/lib/store';
-import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours } from '@/lib/payCalc';
+import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -93,7 +93,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
   onSave: (updates: Partial<Job>) => void;
   onDuplicated: (count: number) => void;
 }) {
-  const { data, addJob } = useData();
+  const { data, addJob, updateIncome } = useData();
   const [endTime, setEndTime] = useState(job.endTime ?? '');
   const [hoursWorked, setHoursWorked] = useState(job.hoursWorked?.toString() ?? '');
   const [hourlyRate, setHourlyRate] = useState(job.hourlyRate?.toString() ?? '');
@@ -103,12 +103,14 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
   const [mealOnClock, setMealOnClock] = useState(job.mealOnClock ?? false);
   const [mealPenalties, setMealPenalties] = useState(job.mealPenalties?.toString() ?? '');
   const [nightPremiumConfirmed, setNightPremiumConfirmed] = useState(job.nightPremiumConfirmed ?? true);
+  const [nightPremiumActualHours, setNightPremiumActualHours] = useState(job.nightPremiumActualHours?.toString() ?? '');
   const [payStub, setPayStub] = useState(job.payStub ?? '');
+  const [editing, setEditing] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   const [dupDates, setDupDates] = useState<string[]>(['']);
   const stubInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  const resetFieldsFromJob = () => {
     setEndTime(job.endTime ?? '');
     setHoursWorked(job.hoursWorked?.toString() ?? '');
     setHourlyRate(job.hourlyRate?.toString() ?? '');
@@ -118,10 +120,22 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
     setMealOnClock(job.mealOnClock ?? false);
     setMealPenalties(job.mealPenalties?.toString() ?? '');
     setNightPremiumConfirmed(job.nightPremiumConfirmed ?? true);
+    setNightPremiumActualHours(job.nightPremiumActualHours?.toString() ?? '');
     setPayStub(job.payStub ?? '');
     setDuplicating(false);
     setDupDates(['']);
+  };
+
+  useEffect(() => {
+    resetFieldsFromJob();
+    setEditing(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [job.id]);
+
+  const handleCancelEdit = () => {
+    resetFieldsFromJob();
+    setEditing(false);
+  };
 
   const handleStubUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -133,11 +147,17 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
     if (stubInputRef.current) stubInputRef.current.value = '';
   };
 
+  const paidIncomeForJob = data.income.filter(i => i.jobId === job.id && i.status === 'paid');
+
   const employer = resolveEmployer(job.client, data.employers);
   const rawNightHours = ((employer?.nightPremiumEnabled ?? true) && job.startTime && endTime)
     ? calculateNightHours(job.startTime, endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour)
     : 0;
-  const nightHours = nightPremiumConfirmed ? rawNightHours : 0;
+  const parsedNightActualHours = nightPremiumActualHours.trim() === '' ? undefined : parseFloat(nightPremiumActualHours);
+  const validNightActualHours = parsedNightActualHours !== undefined && !isNaN(parsedNightActualHours)
+    ? Math.max(0, Math.min(parsedNightActualHours, rawNightHours))
+    : undefined;
+  const nightHours = resolveConfirmedNightHours(rawNightHours, nightPremiumConfirmed, nightPremiumConfirmed ? undefined : validNightActualHours);
 
   const handleDuplicate = async () => {
     const dates = [...new Set(dupDates.filter(Boolean))].filter(d => d !== job.date);
@@ -217,10 +237,17 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
     if (mealDuration && mealOnClock !== (job.mealOnClock ?? false)) updates.mealOnClock = mealOnClock;
     const parsedPenalties = parseFloat(mealPenalties);
     if (mealDuration === 0 && !isNaN(parsedPenalties) && parsedPenalties !== (job.mealPenalties ?? 0)) updates.mealPenalties = parsedPenalties > 0 ? parsedPenalties : undefined;
-    if (rawNightHours > 0 && nightPremiumConfirmed !== (job.nightPremiumConfirmed ?? true)) updates.nightPremiumConfirmed = nightPremiumConfirmed;
+    if (rawNightHours > 0) {
+      if (nightPremiumConfirmed !== (job.nightPremiumConfirmed ?? true)) updates.nightPremiumConfirmed = nightPremiumConfirmed;
+      const nextActualHours = nightPremiumConfirmed ? undefined : validNightActualHours;
+      if (nextActualHours !== (job.nightPremiumActualHours ?? undefined)) updates.nightPremiumActualHours = nextActualHours;
+    }
     if (payStub !== (job.payStub ?? '')) updates.payStub = payStub || undefined;
     onSave(updates);
   };
+
+  const nightActualHoursChanged = rawNightHours > 0 && !nightPremiumConfirmed &&
+    validNightActualHours !== (job.nightPremiumActualHours ?? undefined);
 
   const hasChanges =
     endTime !== (job.endTime ?? '') ||
@@ -232,6 +259,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
     (!!mealDuration && mealOnClock !== (job.mealOnClock ?? false)) ||
     (mealDuration === 0 && mealPenalties !== (job.mealPenalties?.toString() ?? '')) ||
     (rawNightHours > 0 && nightPremiumConfirmed !== (job.nightPremiumConfirmed ?? true)) ||
+    nightActualHoursChanged ||
     payStub !== (job.payStub ?? '');
 
   return (
@@ -248,13 +276,30 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
         <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold text-mono uppercase tracking-wider border", isOverdueUpcoming(job) ? "bg-amber-500/20 text-amber-400 border-amber-500/30" : statusColors[job.status])}>
           {isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
         </span>
+        {paidIncomeForJob.length > 0 && (
+          <button
+            type="button"
+            onClick={async () => {
+              for (const inc of paidIncomeForJob) await updateIncome(inc.id, { status: 'pending' });
+              toast.success('Marked unpaid');
+            }}
+            className="flex items-center gap-2.5 rounded-xl border border-success/40 bg-success/10 p-3 w-full text-left"
+          >
+            <span className="text-lg shrink-0">💰</span>
+            <span className="flex-1 text-xs">
+              <span className="font-medium block">Marked paid — ${paidIncomeForJob.reduce((s, i) => s + i.amount, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+              <span className="text-[11px] text-muted-foreground">Didn't confirm this yourself? Tap to undo.</span>
+            </span>
+          </button>
+        )}
         <div className="rounded-xl border border-border bg-secondary/10 p-3 space-y-2">
           {job.client && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Client</span><span className="font-medium text-xs">{job.client}</span></div>}
           {(job.payrollCompany || payrollCompany) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Employer / Payroll</span><span className="font-medium text-xs">{payrollCompany || job.payrollCompany}</span></div>}
           {job.venue && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Venue</span><span className="font-medium text-xs">{job.venue}</span></div>}
           {job.date && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Date</span><span className="font-medium text-xs text-mono">{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d, yyyy')}</span></div>}
           {job.jobNumber && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Job #</span><span className="font-medium text-xs text-mono">{job.jobNumber}</span></div>}
-          {job.startTime && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Start</span><span className="font-medium text-xs text-mono">{job.startTime}</span></div>}
+          {job.startTime && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Start</span><span className="font-medium text-xs text-mono">{job.startTime}{endTime ? ` – ${endTime}` : ''}</span></div>}
+          {actualHours > 0 && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Hours Worked</span><span className="font-medium text-xs text-mono">{actualHours}h</span></div>}
           {rate > 0 && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Rate</span><span className="font-medium text-xs text-mono">${rate}/hr</span></div>}
         </div>
         {payPreview && (
@@ -264,7 +309,24 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
               <span className="font-bold text-sm text-mono text-success">${payPreview.totalPay.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
             </div>
             {minimumApplied && <p className="text-[10px] text-accent font-medium">{minHours}h minimum call — contract guarantees payment for {minHours}h</p>}
+            {payPreview.breakdown.length > 0 && (
+              <div className="pt-1 space-y-0.5 border-t border-border/40 mt-1">
+                {payPreview.breakdown.map((line, i) => (
+                  <p key={i} className="text-[10px] text-mono text-muted-foreground">{line}</p>
+                ))}
+              </div>
+            )}
           </div>
+        )}
+
+        {!editing && (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-border bg-secondary/20 py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
+          >
+            <Pencil size={12} /> Edit shift
+          </button>
         )}
 
         <label className={cn(
@@ -296,6 +358,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
           <input ref={stubInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleStubUpload} />
         </label>
 
+        {editing && (
+        <>
         <div className="rounded-xl border border-border overflow-hidden">
           <button
             type="button"
@@ -372,12 +436,11 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">Min. Call</label>
             <div className="grid grid-cols-3 gap-1.5">
-              {[{ hours: 4, label: '4h', sub: 'Split shift' }, { hours: 5, label: '5h', sub: 'Normal call' }, { hours: 8, label: '8h', sub: 'Lead role' }].map(({ hours, label, sub }) => {
+              {[4, 5, 8].map(hours => {
                 const active = minimumHours === hours.toString();
                 return (
-                  <button key={hours} type="button" onClick={() => handleMinimumClick(hours)} className={cn("rounded-xl border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
-                    <p className={cn("text-sm font-bold text-mono", active && "text-primary")}>{label}</p>
-                    <p className="text-[9px] leading-tight mt-0.5 opacity-70">{sub}</p>
+                  <button key={hours} type="button" onClick={() => handleMinimumClick(hours)} className={cn("rounded-xl border py-2 text-center text-sm font-bold text-mono transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
+                    {hours}h
                   </button>
                 );
               })}
@@ -426,26 +489,50 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
         </div>
 
         {rawNightHours > 0 && (
-          <label className="flex items-start gap-2.5 rounded-xl border border-primary/30 bg-primary/5 p-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={nightPremiumConfirmed}
-              onChange={e => setNightPremiumConfirmed(e.target.checked)}
-              className="mt-0.5 rounded border-border"
-            />
-            <span className="text-xs">
-              <span className="font-medium">{rawNightHours}h after midnight were actually worked</span>
-              <span className="block text-[11px] text-muted-foreground mt-0.5">
-                Paid at {employer?.nightPremiumMultiplier ?? 2}× straight rate. Uncheck if that time was minimum-call padding you didn't really work — it'll bill at straight time instead.
+          <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 space-y-2.5">
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={nightPremiumConfirmed}
+                onChange={e => setNightPremiumConfirmed(e.target.checked)}
+                className="mt-0.5 rounded border-border"
+              />
+              <span className="text-xs">
+                <span className="font-medium">{rawNightHours}h after midnight were actually worked</span>
+                <span className="block text-[11px] text-muted-foreground mt-0.5">
+                  Paid at {employer?.nightPremiumMultiplier ?? 2}× straight rate. Uncheck if some or all of that time was minimum-call padding you didn't really work.
+                </span>
               </span>
-            </span>
-          </label>
+            </label>
+            {!nightPremiumConfirmed && (
+              <div className="pl-6 space-y-1">
+                <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">
+                  Was any of it actually worked? (0 = none)
+                </label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min="0"
+                    max={rawNightHours}
+                    step="0.25"
+                    value={nightPremiumActualHours}
+                    onChange={e => setNightPremiumActualHours(e.target.value)}
+                    placeholder="0"
+                    className="h-8 text-sm text-mono w-24"
+                  />
+                  <span className="text-[11px] text-muted-foreground">of {rawNightHours}h — the rest bills straight time</span>
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         <div className="flex gap-2 pt-1">
-          <Button variant="outline" size="sm" className="flex-1" onClick={onBack}>Cancel</Button>
-          <Button size="sm" className="flex-1" disabled={!hasChanges} onClick={handleSave}>Save</Button>
+          <Button variant="outline" size="sm" className="flex-1" onClick={handleCancelEdit}>Cancel</Button>
+          <Button size="sm" className="flex-1" disabled={!hasChanges} onClick={() => { handleSave(); setEditing(false); }}>Save</Button>
         </div>
+        </>
+        )}
       </div>
     </>
   );
@@ -528,6 +615,8 @@ export default function CalendarPage() {
   const handleMarkPaid = async (job: Job) => {
     const amount = jobPay[job.id] ?? 0;
     if (amount <= 0) return;
+    const confirmed = window.confirm(`Confirm the money for "${job.name}" (${job.client}) actually came in?\n\n$${amount.toLocaleString(undefined, { maximumFractionDigits: 0 })} will be logged as paid.`);
+    if (!confirmed) return;
     await addIncome({
       jobId: job.id,
       client: job.client,

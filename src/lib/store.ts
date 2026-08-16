@@ -29,8 +29,10 @@ export interface Job {
   mealOnClock?: boolean;
   /** Units of meal-penalty pay owed (each = 1hr at straight rate) — only meaningful when mealDuration is 0. */
   mealPenalties?: number;
-  /** For employers with nightPremiumEnabled: were the hours past midnight actually worked (true, gets the premium) vs. just minimum-call padding that was never really worked (false, straight time)? Undefined = not asked yet / not applicable. */
+  /** For employers with nightPremiumEnabled: were the hours past midnight actually worked (true, gets the premium) vs. just minimum-call padding that was never really worked (false, straight time)? Undefined = not asked yet / not applicable. Superseded by nightPremiumActualHours when that's set — this stays around for the simple all-or-nothing case and old saved jobs. */
   nightPremiumConfirmed?: boolean;
+  /** Set only when the worked/padding split of the after-midnight hours isn't all-or-nothing — e.g. 3 calculated night hours but only 1.5 were actually worked, the rest was unworked minimum-call padding. Takes precedence over nightPremiumConfirmed when present. Undefined = not partially split (see nightPremiumConfirmed instead). */
+  nightPremiumActualHours?: number;
   attachments?: string[];
   /** Data URI of the uploaded pay stub/check image for this job — lets you flag which jobs still need a stub logged, and eventually compare the stub's actual breakdown against the calculated pay. */
   payStub?: string;

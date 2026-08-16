@@ -164,6 +164,22 @@ export function calculateNightHours(
 }
 
 /**
+ * Applies the worked-vs-padding confirmation to a computed night-hours count.
+ * nightPremiumActualHours (an exact split — e.g. only 1.5 of 3 calculated
+ * night hours were actually worked, the rest was unworked minimum-call
+ * padding) takes precedence when set. Otherwise falls back to the simpler
+ * all-or-nothing nightPremiumConfirmed flag.
+ */
+export function resolveConfirmedNightHours(
+  rawNightHours: number,
+  confirmed: boolean | undefined,
+  actualHours: number | undefined
+): number {
+  if (actualHours !== undefined) return Math.max(0, Math.min(actualHours, rawNightHours));
+  return confirmed === false ? 0 : rawNightHours;
+}
+
+/**
  * How many consecutive calendar days (including entryDate) have been worked
  * in a row for the given client, counting backward from entryDate. Returns 0
  * if entryDate itself has no worked hours logged for that client. Used both
@@ -284,26 +300,26 @@ export function calculateExpectedPay(
   };
 
   // Group by date
-  const byDate = new Map<string, { hours: number; mealPenalties: number; rate: number; mealDuration?: 0 | 30 | 45 | 60; mealOnClock?: boolean; startTime?: string; endTime?: string; nightConfirmed?: boolean }>();
+  const byDate = new Map<string, { hours: number; mealPenalties: number; rate: number; mealDuration?: 0 | 30 | 45 | 60; mealOnClock?: boolean; startTime?: string; endTime?: string; nightConfirmed?: boolean; nightActualHours?: number }>();
   for (const job of jobs) {
     const hours = job.hoursWorked ?? 0;
     if (hours <= 0) continue;
     const rate = job.hourlyRate || referenceJob.hourlyRate || 0;
-    const existing = byDate.get(job.date) || { hours: 0, mealPenalties: 0, rate, mealDuration: job.mealDuration, mealOnClock: job.mealOnClock, startTime: job.startTime, endTime: job.endTime, nightConfirmed: job.nightPremiumConfirmed };
+    const existing = byDate.get(job.date) || { hours: 0, mealPenalties: 0, rate, mealDuration: job.mealDuration, mealOnClock: job.mealOnClock, startTime: job.startTime, endTime: job.endTime, nightConfirmed: job.nightPremiumConfirmed, nightActualHours: job.nightPremiumActualHours };
     existing.hours += hours;
     existing.mealPenalties += job.mealPenalties || 0;
     existing.rate = rate;
     if (job.mealDuration !== undefined) { existing.mealDuration = job.mealDuration; existing.mealOnClock = job.mealOnClock; }
-    if (job.startTime) { existing.startTime = job.startTime; existing.endTime = job.endTime; existing.nightConfirmed = job.nightPremiumConfirmed; }
+    if (job.startTime) { existing.startTime = job.startTime; existing.endTime = job.endTime; existing.nightConfirmed = job.nightPremiumConfirmed; existing.nightActualHours = job.nightPremiumActualHours; }
     byDate.set(job.date, existing);
   }
 
-  for (const [date, { hours, mealPenalties, rate, mealDuration, mealOnClock, startTime, endTime, nightConfirmed }] of byDate.entries()) {
+  for (const [date, { hours, mealPenalties, rate, mealDuration, mealOnClock, startTime, endTime, nightConfirmed, nightActualHours }] of byDate.entries()) {
     const dayMultiplier = getDayMultiplier(date, referenceJob.client, allJobs, referenceJob.has6th7thDayRule || false);
-    let nightHours = 0;
-    if ((employer?.nightPremiumEnabled ?? true) && nightConfirmed !== false && startTime && endTime) {
-      nightHours = calculateNightHours(startTime, endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour);
-    }
+    const rawNightHours = ((employer?.nightPremiumEnabled ?? true) && startTime && endTime)
+      ? calculateNightHours(startTime, endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour)
+      : 0;
+    const nightHours = resolveConfirmedNightHours(rawNightHours, nightConfirmed, nightActualHours);
     const result = calculateDayPay(hours, rate, referenceJob.minimumHours || 0, mealPenalties, dayMultiplier, { duration: mealDuration, onClock: mealOnClock }, { ...overtimeOptions, nightHours });
     total += result.totalPay;
     details.push({ date, hours, pay: result.totalPay, breakdown: result.breakdown });
