@@ -29,6 +29,8 @@ export interface Job {
   mealOnClock?: boolean;
   /** Units of meal-penalty pay owed (each = 1hr at straight rate) — only meaningful when mealDuration is 0. */
   mealPenalties?: number;
+  /** For employers with nightPremiumEnabled: were the hours past midnight actually worked (true, gets the premium) vs. just minimum-call padding that was never really worked (false, straight time)? Undefined = not asked yet / not applicable. */
+  nightPremiumConfirmed?: boolean;
   attachments?: string[];
   notes: string;
   createdAt: string;
@@ -84,6 +86,11 @@ export interface Employer {
   weeklyOvertimeThresholdHours?: number;
   overtimeMultiplier?: number;
   doubletimeMultiplier?: number;
+  /** IATSE-style rule: hours actually worked after midnight (or a custom start hour) are paid at nightPremiumMultiplier. Minimum-call padding never gets this — only clock-time-derived worked hours. */
+  nightPremiumEnabled?: boolean;
+  nightPremiumStartHour?: number; // 0-23, default 0 (midnight)
+  nightPremiumEndHour?: number;   // 0-23, optional — undefined means "until end of shift"
+  nightPremiumMultiplier?: number; // default 2.0
   notes?: string;
   createdAt: string;
 }

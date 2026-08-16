@@ -7,6 +7,16 @@ export interface OvertimeOptions {
   dtThresholdHours?: number;
   otMultiplier?: number;
   dtMultiplier?: number;
+  /**
+   * Hours actually worked (already net of meal deduction) that fall after the
+   * employer's night-premium start time — e.g. a 10:30pm-3am call has 3 night
+   * hours (midnight-3am). Never includes minimum-call padding: a minimum that
+   * extends past midnight but wasn't actually worked stays at straight time.
+   * These hours are pulled out of the normal OT ladder and billed flatly at
+   * nightMultiplier — no stacking with daily OT/DT past that multiplier.
+   */
+  nightHours?: number;
+  nightMultiplier?: number;
 }
 
 /**
@@ -16,6 +26,8 @@ export interface OvertimeOptions {
  *   'daily' (the default, matching every employer that hasn't set an explicit rule).
  *   'weekly'/'none' employers bill straight time here; weekly OT is a separate additive
  *   bonus from calculateWeeklyOvertimeBonus, computed across that employer's whole week.
+ * - Night premium (e.g. IATSE-style hours-after-midnight double time), carved out of
+ *   the ladder above and billed flat — see OvertimeOptions.nightHours.
  * - Meal penalties: each = 1 hour at straight rate
  */
 export function calculateDayPay(
@@ -32,6 +44,7 @@ export function calculateDayPay(
   const dtThreshold = overtimeOptions?.dtThresholdHours ?? 12;
   const otMultiplier = overtimeOptions?.otMultiplier ?? 1.5;
   const dtMultiplier = overtimeOptions?.dtMultiplier ?? 2.0;
+  const nightMultiplier = overtimeOptions?.nightMultiplier ?? 2.0;
 
   // A meal off the clock deducts its duration from billable hours; on the
   // clock (paid straight through) never deducts, regardless of duration.
@@ -49,17 +62,22 @@ export function calculateDayPay(
     breakdown.push(`${mealMinutes}min meal on clock (no deduction)`);
   }
 
+  // Night hours can never exceed what was actually worked (padding-only hours
+  // beyond adjustedHours are never night-eligible), nor the billable total.
+  const nightHours = Math.max(0, Math.min(overtimeOptions?.nightHours ?? 0, adjustedHours, billableHours));
+  const ladderHours = billableHours - nightHours;
+
   let pay = 0;
 
   if (otRule !== 'daily') {
-    pay = billableHours * effectiveRate;
-    breakdown.push(`${billableHours}h × $${effectiveRate.toFixed(2)} = $${pay.toFixed(2)}`);
-  } else if (billableHours <= otThreshold) {
-    pay = billableHours * effectiveRate;
-    breakdown.push(`${billableHours}h × $${effectiveRate.toFixed(2)} = $${pay.toFixed(2)}`);
-  } else if (billableHours <= dtThreshold) {
+    pay = ladderHours * effectiveRate;
+    if (ladderHours > 0) breakdown.push(`${ladderHours}h × $${effectiveRate.toFixed(2)} = $${pay.toFixed(2)}`);
+  } else if (ladderHours <= otThreshold) {
+    pay = ladderHours * effectiveRate;
+    if (ladderHours > 0) breakdown.push(`${ladderHours}h × $${effectiveRate.toFixed(2)} = $${pay.toFixed(2)}`);
+  } else if (ladderHours <= dtThreshold) {
     const straightPay = otThreshold * effectiveRate;
-    const otHours = billableHours - otThreshold;
+    const otHours = ladderHours - otThreshold;
     const otPay = otHours * effectiveRate * otMultiplier;
     pay = straightPay + otPay;
     breakdown.push(`${otThreshold}h straight × $${effectiveRate.toFixed(2)} = $${straightPay.toFixed(2)}`);
@@ -68,12 +86,18 @@ export function calculateDayPay(
     const straightPay = otThreshold * effectiveRate;
     const otHours = dtThreshold - otThreshold;
     const otPay = otHours * effectiveRate * otMultiplier;
-    const dtHours = billableHours - dtThreshold;
+    const dtHours = ladderHours - dtThreshold;
     const dtPay = dtHours * effectiveRate * dtMultiplier;
     pay = straightPay + otPay + dtPay;
     breakdown.push(`${otThreshold}h straight × $${effectiveRate.toFixed(2)} = $${straightPay.toFixed(2)}`);
     breakdown.push(`${otHours}h OT (${otMultiplier}×) × $${effectiveRate.toFixed(2)} = $${otPay.toFixed(2)}`);
     breakdown.push(`${dtHours}h DT (${dtMultiplier}×) × $${effectiveRate.toFixed(2)} = $${dtPay.toFixed(2)}`);
+  }
+
+  if (nightHours > 0) {
+    const nightPay = nightHours * effectiveRate * nightMultiplier;
+    pay += nightPay;
+    breakdown.push(`${nightHours}h after midnight (${nightMultiplier}×) × $${effectiveRate.toFixed(2)} = $${nightPay.toFixed(2)}`);
   }
 
   if (mealPenalties > 0) {
@@ -91,6 +115,52 @@ export function calculateDayPay(
   }
 
   return { billableHours, totalPay: pay, breakdown };
+}
+
+function parseTimeToMinutes(t: string): number {
+  const m = t.match(/(\d{1,2}):?(\d{2})?\s*(am|pm|a|p)?/i);
+  if (!m) return NaN;
+  let h = parseInt(m[1]);
+  const min = parseInt(m[2] || '0');
+  const ap = (m[3] || '').toLowerCase();
+  if (ap.startsWith('p') && h < 12) h += 12;
+  if (ap.startsWith('a') && h === 12) h = 0;
+  return h * 60 + min;
+}
+
+/**
+ * Hours of a shift [startTime, endTime) that fall at/after nightStartHour
+ * (default midnight) — i.e. the hours actually worked past the one night-
+ * premium boundary this shift runs into. Returns 0 if the shift never
+ * crosses that boundary (including one that starts already past it with no
+ * earlier crossing — e.g. a 1am-5am call isn't treated as "past midnight"
+ * since nothing here crossed into a new day; set a custom nightStartHour if
+ * that distinction matters for a given contract).
+ * nightEndHour, if given, caps the window (e.g. 0-6 = midnight to 6am);
+ * otherwise the window runs to the end of the shift.
+ */
+export function calculateNightHours(
+  startTime: string,
+  endTime: string,
+  nightStartHour: number = 0,
+  nightEndHour?: number
+): number {
+  const s = parseTimeToMinutes(startTime);
+  const eRaw = parseTimeToMinutes(endTime);
+  if (isNaN(s) || isNaN(eRaw)) return 0;
+  let e = eRaw;
+  if (e <= s) e += 24 * 60; // shift crosses midnight
+
+  let windowStart = nightStartHour * 60;
+  while (windowStart <= s) windowStart += 24 * 60;
+  if (windowStart > e) return 0;
+
+  const windowEnd = nightEndHour !== undefined
+    ? windowStart + (((nightEndHour - nightStartHour + 24) % 24) || 24) * 60
+    : e;
+
+  const overlapEnd = Math.min(e, windowEnd);
+  return Math.max(0, Math.round(((overlapEnd - windowStart) / 60) * 100) / 100);
 }
 
 /**
@@ -210,25 +280,31 @@ export function calculateExpectedPay(
     dtThresholdHours: employer?.dailyDoubletimeThresholdHours ?? 12,
     otMultiplier: employer?.overtimeMultiplier ?? 1.5,
     dtMultiplier: employer?.doubletimeMultiplier ?? 2.0,
+    nightMultiplier: employer?.nightPremiumMultiplier ?? 2.0,
   };
 
   // Group by date
-  const byDate = new Map<string, { hours: number; mealPenalties: number; rate: number; mealDuration?: 0 | 30 | 45 | 60; mealOnClock?: boolean }>();
+  const byDate = new Map<string, { hours: number; mealPenalties: number; rate: number; mealDuration?: 0 | 30 | 45 | 60; mealOnClock?: boolean; startTime?: string; endTime?: string; nightConfirmed?: boolean }>();
   for (const job of jobs) {
     const hours = job.hoursWorked ?? 0;
     if (hours <= 0) continue;
     const rate = job.hourlyRate || referenceJob.hourlyRate || 0;
-    const existing = byDate.get(job.date) || { hours: 0, mealPenalties: 0, rate, mealDuration: job.mealDuration, mealOnClock: job.mealOnClock };
+    const existing = byDate.get(job.date) || { hours: 0, mealPenalties: 0, rate, mealDuration: job.mealDuration, mealOnClock: job.mealOnClock, startTime: job.startTime, endTime: job.endTime, nightConfirmed: job.nightPremiumConfirmed };
     existing.hours += hours;
     existing.mealPenalties += job.mealPenalties || 0;
     existing.rate = rate;
     if (job.mealDuration !== undefined) { existing.mealDuration = job.mealDuration; existing.mealOnClock = job.mealOnClock; }
+    if (job.startTime) { existing.startTime = job.startTime; existing.endTime = job.endTime; existing.nightConfirmed = job.nightPremiumConfirmed; }
     byDate.set(job.date, existing);
   }
 
-  for (const [date, { hours, mealPenalties, rate, mealDuration, mealOnClock }] of byDate.entries()) {
+  for (const [date, { hours, mealPenalties, rate, mealDuration, mealOnClock, startTime, endTime, nightConfirmed }] of byDate.entries()) {
     const dayMultiplier = getDayMultiplier(date, referenceJob.client, allJobs, referenceJob.has6th7thDayRule || false);
-    const result = calculateDayPay(hours, rate, referenceJob.minimumHours || 0, mealPenalties, dayMultiplier, { duration: mealDuration, onClock: mealOnClock }, overtimeOptions);
+    let nightHours = 0;
+    if (employer?.nightPremiumEnabled && nightConfirmed !== false && startTime && endTime) {
+      nightHours = calculateNightHours(startTime, endTime, employer.nightPremiumStartHour ?? 0, employer.nightPremiumEndHour);
+    }
+    const result = calculateDayPay(hours, rate, referenceJob.minimumHours || 0, mealPenalties, dayMultiplier, { duration: mealDuration, onClock: mealOnClock }, { ...overtimeOptions, nightHours });
     total += result.totalPay;
     details.push({ date, hours, pay: result.totalPay, breakdown: result.breakdown });
   }

@@ -54,9 +54,10 @@ interface EmployerFormState {
   timekeepingApp: string;
   overtimeRule: Employer['overtimeRule'];
   threshold: string;
+  nightPremiumEnabled: boolean;
 }
 
-const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '' };
+const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '', nightPremiumEnabled: false };
 
 function employerToForm(e: Employer): EmployerFormState {
   return {
@@ -65,6 +66,7 @@ function employerToForm(e: Employer): EmployerFormState {
     timekeepingApp: e.timekeepingApp ?? '',
     overtimeRule: e.overtimeRule,
     threshold: (e.overtimeRule === 'weekly' ? e.weeklyOvertimeThresholdHours : e.dailyOvertimeThresholdHours)?.toString() ?? '',
+    nightPremiumEnabled: e.nightPremiumEnabled ?? false,
   };
 }
 
@@ -116,6 +118,13 @@ function EmployerForm({ initial, onSave, onCancel }: {
         onChange={e => setForm(f => ({ ...f, timekeepingApp: e.target.value }))}
         className="h-8 text-xs"
       />
+      <div className="flex items-center justify-between gap-2 pt-1">
+        <span className="text-xs">Night premium (midnight = 2×)</span>
+        <Switch
+          checked={form.nightPremiumEnabled}
+          onCheckedChange={v => setForm(f => ({ ...f, nightPremiumEnabled: v }))}
+        />
+      </div>
       <div className="flex gap-2 justify-end pt-1">
         <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
         <Button size="sm" disabled={!form.name.trim()} onClick={() => onSave(form)}>Save</Button>
@@ -140,6 +149,8 @@ export default function SettingsPage() {
       dailyOvertimeThresholdHours: form.overtimeRule === 'daily' ? parseFloat(form.threshold || '8') : undefined,
       overtimeMultiplier: 1.5,
       doubletimeMultiplier: 2.0,
+      nightPremiumEnabled: form.nightPremiumEnabled,
+      nightPremiumMultiplier: 2.0,
     });
     setAddingEmployer(false);
   };
@@ -152,6 +163,8 @@ export default function SettingsPage() {
       overtimeRule: form.overtimeRule,
       weeklyOvertimeThresholdHours: form.overtimeRule === 'weekly' ? parseFloat(form.threshold || '40') : undefined,
       dailyOvertimeThresholdHours: form.overtimeRule === 'daily' ? parseFloat(form.threshold || '8') : undefined,
+      nightPremiumEnabled: form.nightPremiumEnabled,
+      nightPremiumMultiplier: 2.0,
     });
     setEditingEmployerId(null);
   };
@@ -312,6 +325,7 @@ export default function SettingsPage() {
                     {emp.overtimeRule === 'weekly' && ` · OT after ${emp.weeklyOvertimeThresholdHours ?? 40}h/wk`}
                     {emp.overtimeRule === 'daily' && ` · OT after ${emp.dailyOvertimeThresholdHours ?? 8}h/day`}
                     {emp.overtimeRule === 'none' && ` · no overtime`}
+                    {emp.nightPremiumEnabled && ` · night premium`}
                     {emp.timekeepingApp && ` · tracks time in ${emp.timekeepingApp}`}
                   </p>
                 </div>

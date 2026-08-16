@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast } from 'date-fns';
 import type { Job } from '@/lib/store';
-import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak } from '@/lib/payCalc';
+import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours } from '@/lib/payCalc';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -75,7 +75,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
   onSave: (updates: Partial<Job>) => void;
   onDuplicated: (count: number) => void;
 }) {
-  const { addJob } = useData();
+  const { data, addJob } = useData();
   const [endTime, setEndTime] = useState(job.endTime ?? '');
   const [hoursWorked, setHoursWorked] = useState(job.hoursWorked?.toString() ?? '');
   const [minimumHours, setMinimumHours] = useState(job.minimumHours?.toString() ?? '');
@@ -83,6 +83,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
   const [mealDuration, setMealDuration] = useState<Job['mealDuration']>(job.mealDuration ?? undefined);
   const [mealOnClock, setMealOnClock] = useState(job.mealOnClock ?? false);
   const [mealPenalties, setMealPenalties] = useState(job.mealPenalties?.toString() ?? '');
+  const [nightPremiumConfirmed, setNightPremiumConfirmed] = useState(job.nightPremiumConfirmed ?? true);
   const [duplicating, setDuplicating] = useState(false);
   const [dupDates, setDupDates] = useState<string[]>(['']);
 
@@ -94,9 +95,16 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
     setMealDuration(job.mealDuration ?? undefined);
     setMealOnClock(job.mealOnClock ?? false);
     setMealPenalties(job.mealPenalties?.toString() ?? '');
+    setNightPremiumConfirmed(job.nightPremiumConfirmed ?? true);
     setDuplicating(false);
     setDupDates(['']);
   }, [job.id]);
+
+  const employer = data.employers.find(e => e.name.toLowerCase() === job.client.toLowerCase());
+  const rawNightHours = (employer?.nightPremiumEnabled && job.startTime && endTime)
+    ? calculateNightHours(job.startTime, endTime, employer.nightPremiumStartHour ?? 0, employer.nightPremiumEndHour)
+    : 0;
+  const nightHours = nightPremiumConfirmed ? rawNightHours : 0;
 
   const handleDuplicate = async () => {
     const dates = [...new Set(dupDates.filter(Boolean))].filter(d => d !== job.date);
@@ -119,6 +127,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
         steward: job.steward,
         mealDuration: job.mealDuration,
         mealOnClock: job.mealOnClock,
+        nightPremiumConfirmed: job.nightPremiumConfirmed,
         notes: job.notes,
       });
     }
@@ -140,7 +149,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
   const rate = job.hourlyRate ?? 0;
   const mealPenaltyUnits = parseFloat(mealPenalties) || 0;
   const payPreview = rate > 0 && billableHours > 0
-    ? calculateDayPay(actualHours, rate, minHours, mealDuration === 0 ? mealPenaltyUnits : (job.mealPenalties ?? 0), 1, { duration: mealDuration, onClock: mealOnClock })
+    ? calculateDayPay(actualHours, rate, minHours, mealDuration === 0 ? mealPenaltyUnits : (job.mealPenalties ?? 0), 1, { duration: mealDuration, onClock: mealOnClock }, { nightHours, nightMultiplier: employer?.nightPremiumMultiplier })
     : null;
 
   const handleSave = () => {
@@ -154,6 +163,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
     if (mealDuration && mealOnClock !== (job.mealOnClock ?? false)) updates.mealOnClock = mealOnClock;
     const parsedPenalties = parseFloat(mealPenalties);
     if (mealDuration === 0 && !isNaN(parsedPenalties) && parsedPenalties !== (job.mealPenalties ?? 0)) updates.mealPenalties = parsedPenalties > 0 ? parsedPenalties : undefined;
+    if (rawNightHours > 0 && nightPremiumConfirmed !== (job.nightPremiumConfirmed ?? true)) updates.nightPremiumConfirmed = nightPremiumConfirmed;
     onSave(updates);
   };
 
@@ -164,7 +174,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
     payrollCompany !== (job.payrollCompany ?? '') ||
     mealDuration !== (job.mealDuration ?? undefined) ||
     (!!mealDuration && mealOnClock !== (job.mealOnClock ?? false)) ||
-    (mealDuration === 0 && mealPenalties !== (job.mealPenalties?.toString() ?? ''));
+    (mealDuration === 0 && mealPenalties !== (job.mealPenalties?.toString() ?? '')) ||
+    (rawNightHours > 0 && nightPremiumConfirmed !== (job.nightPremiumConfirmed ?? true));
 
   return (
     <>
@@ -318,6 +329,24 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
             )}
           </div>
         </div>
+
+        {rawNightHours > 0 && (
+          <label className="flex items-start gap-2.5 rounded-xl border border-primary/30 bg-primary/5 p-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={nightPremiumConfirmed}
+              onChange={e => setNightPremiumConfirmed(e.target.checked)}
+              className="mt-0.5 rounded border-border"
+            />
+            <span className="text-xs">
+              <span className="font-medium">{rawNightHours}h after midnight were actually worked</span>
+              <span className="block text-[11px] text-muted-foreground mt-0.5">
+                Paid at {employer?.nightPremiumMultiplier ?? 2}× straight rate. Uncheck if that time was minimum-call padding you didn't really work — it'll bill at straight time instead.
+              </span>
+            </span>
+          </label>
+        )}
+
         <div className="flex gap-2 pt-1">
           <Button variant="outline" size="sm" className="flex-1" onClick={onBack}>Cancel</Button>
           <Button size="sm" className="flex-1" disabled={!hasChanges} onClick={handleSave}>Save</Button>
@@ -362,12 +391,17 @@ export default function CalendarPage() {
         const rate = job.hourlyRate || 0;
         const employer = data.employers.find(e => e.name.toLowerCase() === job.client.toLowerCase());
         const multiplier = getDayMultiplier(date, job.client, data.jobs, job.has6th7thDayRule || false);
+        const nightHours = (employer?.nightPremiumEnabled && job.nightPremiumConfirmed !== false && job.startTime && job.endTime)
+          ? calculateNightHours(job.startTime, job.endTime, employer.nightPremiumStartHour ?? 0, employer.nightPremiumEndHour)
+          : 0;
         const result = calculateDayPay(hours, rate, job.minimumHours || 0, job.mealPenalties || 0, multiplier, { duration: job.mealDuration, onClock: job.mealOnClock }, {
           rule: employer?.overtimeRule ?? 'daily',
           otThresholdHours: employer?.dailyOvertimeThresholdHours,
           dtThresholdHours: employer?.dailyDoubletimeThresholdHours,
           otMultiplier: employer?.overtimeMultiplier,
           dtMultiplier: employer?.doubletimeMultiplier,
+          nightHours,
+          nightMultiplier: employer?.nightPremiumMultiplier,
         });
         dayPay += result.totalPay;
         if (employer) dayPay += calculateWeeklyOvertimeBonus(job, data.jobs, employer);

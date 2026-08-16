@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { ChevronsUpDown, Plus, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -28,6 +29,7 @@ export default function EmployerCombobox({ value, onChange, onSelectEmployer, pl
   const [newRule, setNewRule] = useState<Employer['overtimeRule']>('daily');
   const [newThreshold, setNewThreshold] = useState('');
   const [newTimekeeping, setNewTimekeeping] = useState('');
+  const [newNightPremium, setNewNightPremium] = useState(false);
 
   const openAdd = () => {
     setNewName(search || value);
@@ -35,6 +37,7 @@ export default function EmployerCombobox({ value, onChange, onSelectEmployer, pl
     setNewRule('daily');
     setNewThreshold('');
     setNewTimekeeping('');
+    setNewNightPremium(false);
     setMode('add');
   };
 
@@ -57,6 +60,8 @@ export default function EmployerCombobox({ value, onChange, onSelectEmployer, pl
       dailyOvertimeThresholdHours: newRule === 'daily' ? (newThreshold ? parseFloat(newThreshold) : 8) : undefined,
       overtimeMultiplier: 1.5,
       doubletimeMultiplier: 2.0,
+      nightPremiumEnabled: newNightPremium,
+      nightPremiumMultiplier: 2.0,
     });
     if (employer) handleSelect(employer);
   };
@@ -93,6 +98,7 @@ export default function EmployerCombobox({ value, onChange, onSelectEmployer, pl
                             {emp.overtimeRule === 'weekly' && ` · OT >${emp.weeklyOvertimeThresholdHours ?? 40}h/wk`}
                             {emp.overtimeRule === 'daily' && ` · OT >${emp.dailyOvertimeThresholdHours ?? 8}h/day`}
                             {emp.overtimeRule === 'none' && ` · no OT`}
+                            {emp.nightPremiumEnabled && ` · night premium`}
                           </span>
                         </div>
                       </CommandItem>
@@ -150,6 +156,12 @@ export default function EmployerCombobox({ value, onChange, onSelectEmployer, pl
                   />
                 </div>
               )}
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">
+                  Night premium (midnight = 2×)
+                </label>
+                <Switch checked={newNightPremium} onCheckedChange={setNewNightPremium} />
+              </div>
               <Button size="sm" onClick={handleSave} disabled={!newName.trim()} className="mt-1">
                 Save employer
               </Button>

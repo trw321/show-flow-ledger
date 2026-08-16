@@ -6,7 +6,7 @@ import { ChevronDown, Download } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, isToday } from 'date-fns';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
-import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus } from '@/lib/payCalc';
+import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours } from '@/lib/payCalc';
 import type { Job, Employer } from '@/lib/store';
 
 function jobGross(job: Job, allJobs: Job[], employers: Employer[] = []): number {
@@ -15,12 +15,17 @@ function jobGross(job: Job, allJobs: Job[], employers: Employer[] = []): number 
   const rate = job.hourlyRate ?? 0;
   const employer = employers.find(e => e.name.toLowerCase() === job.client.toLowerCase());
   const dayMult = getDayMultiplier(job.date, job.client, allJobs, job.has6th7thDayRule ?? false);
+  const nightHours = (employer?.nightPremiumEnabled && job.nightPremiumConfirmed !== false && job.startTime && job.endTime)
+    ? calculateNightHours(job.startTime, job.endTime, employer.nightPremiumStartHour ?? 0, employer.nightPremiumEndHour)
+    : 0;
   const { totalPay } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock }, {
     rule: employer?.overtimeRule ?? 'daily',
     otThresholdHours: employer?.dailyOvertimeThresholdHours,
     dtThresholdHours: employer?.dailyDoubletimeThresholdHours,
     otMultiplier: employer?.overtimeMultiplier,
     dtMultiplier: employer?.doubletimeMultiplier,
+    nightHours,
+    nightMultiplier: employer?.nightPremiumMultiplier,
   });
   const weeklyBonus = employer ? calculateWeeklyOvertimeBonus(job, allJobs, employer) : 0;
   const gross = totalPay + weeklyBonus;
@@ -120,7 +125,7 @@ export default function Dashboard() {
         <span className="text-xs text-white/40 font-body ml-auto">{totalHours.toFixed(1)}h logged</span>
       </div>
 
-      <ExportButton onClick={() => exportWeeklyToExcel(data.jobs, showExpenses ? data.expenses : [], showIncome ? data.income : [])} />
+      <ExportButton onClick={() => exportWeeklyToExcel(data.jobs, showExpenses ? data.expenses : [], showIncome ? data.income : [], data.employers)} />
 
       {/* On Deck / On Stage */}
       <div className="mb-6">

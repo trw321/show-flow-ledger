@@ -1,15 +1,29 @@
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
-import type { Job, Expense, Income } from './store';
-import { calculateDayPay, getDayMultiplier } from './payCalc';
+import type { Job, Expense, Income, Employer } from './store';
+import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours } from './payCalc';
 
-function jobGross(job: Job, allJobs: Job[]): number {
+function jobGross(job: Job, allJobs: Job[], employers: Employer[]): number {
   const hours = job.hoursWorked ?? 0;
   if (!hours) return 0;
   const rate = job.hourlyRate ?? 0;
+  const employer = employers.find(e => e.name.toLowerCase() === job.client.toLowerCase());
   const dayMult = getDayMultiplier(job.date, job.client, allJobs, job.has6th7thDayRule ?? false);
-  const { totalPay } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock });
-  return totalPay + (job.hasVacationPay ? totalPay * 0.08 : 0);
+  const nightHours = (employer?.nightPremiumEnabled && job.nightPremiumConfirmed !== false && job.startTime && job.endTime)
+    ? calculateNightHours(job.startTime, job.endTime, employer.nightPremiumStartHour ?? 0, employer.nightPremiumEndHour)
+    : 0;
+  const { totalPay } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock }, {
+    rule: employer?.overtimeRule ?? 'daily',
+    otThresholdHours: employer?.dailyOvertimeThresholdHours,
+    dtThresholdHours: employer?.dailyDoubletimeThresholdHours,
+    otMultiplier: employer?.overtimeMultiplier,
+    dtMultiplier: employer?.doubletimeMultiplier,
+    nightHours,
+    nightMultiplier: employer?.nightPremiumMultiplier,
+  });
+  const weeklyBonus = employer ? calculateWeeklyOvertimeBonus(job, allJobs, employer) : 0;
+  const gross = totalPay + weeklyBonus;
+  return gross + (job.hasVacationPay ? gross * 0.08 : 0);
 }
 
 function downloadXLSX(rows: Record<string, string | number | undefined | null>[], fileName: string) {
@@ -24,7 +38,7 @@ function downloadXLSX(rows: Record<string, string | number | undefined | null>[]
   XLSX.writeFile(workbook, fileName);
 }
 
-export function exportWeeklyToExcel(jobs: Job[], expenses: Expense[], income: Income[]) {
+export function exportWeeklyToExcel(jobs: Job[], expenses: Expense[], income: Income[], employers: Employer[] = []) {
   // Build one flat row per job
   const jobRows = [...jobs]
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -42,7 +56,7 @@ export function exportWeeklyToExcel(jobs: Job[], expenses: Expense[], income: In
       'Hours Worked': j.hoursWorked ?? '',
       'Hourly Rate': j.hourlyRate ?? '',
       'Min Hours': j.minimumHours ?? '',
-      'Gross Earnings': j.hoursWorked ? jobGross(j, jobs).toFixed(2) : '',
+      'Gross Earnings': j.hoursWorked ? jobGross(j, jobs, employers).toFixed(2) : '',
       'Expense Amount': '',
       'Expense Category': '',
       'Income Amount': '',
