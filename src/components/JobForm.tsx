@@ -10,6 +10,40 @@ import type { Job, Employer } from '@/lib/store';
 
 const statusOptions = ['upcoming', 'in-progress', 'completed', 'cancelled'] as const;
 
+function parseTimeToMins(t: string): number {
+  const m = t.match(/(\d{1,2}):?(\d{2})?\s*(am|pm|a|p)?/i);
+  if (!m) return NaN;
+  let h = parseInt(m[1]);
+  const min = parseInt(m[2] || '0');
+  const ap = (m[3] || '').toLowerCase();
+  if (ap.startsWith('p') && h < 12) h += 12;
+  if (ap.startsWith('a') && h === 12) h = 0;
+  return h * 60 + min;
+}
+
+function calcHours(start: string, end: string): number {
+  let s = parseTimeToMins(start);
+  let e = parseTimeToMins(end);
+  if (isNaN(s) || isNaN(e)) return 0;
+  if (e <= s) e += 24 * 60;
+  return Math.max(0, (e - s) / 60);
+}
+
+function minutesToTimeStr(totalMins: number): string {
+  const m = ((Math.round(totalMins) % (24 * 60)) + 24 * 60) % (24 * 60);
+  const h = Math.floor(m / 60);
+  const min = m % 60;
+  const ap = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${min.toString().padStart(2, '0')} ${ap}`;
+}
+
+function addHoursToTime(start: string, hours: number): string {
+  const s = parseTimeToMins(start);
+  if (isNaN(s) || !isFinite(hours) || hours <= 0) return '';
+  return minutesToTimeStr(s + hours * 60);
+}
+
 export default function JobForm({ onSubmit, initial, onCancel }: {
   onSubmit: (job: Omit<Job, 'id' | 'createdAt'>) => void;
   initial?: Partial<Job>;
@@ -55,6 +89,31 @@ export default function JobForm({ onSubmit, initial, onCancel }: {
 
   const removeAttachment = (idx: number) => setAttachments(prev => prev.filter((_, i) => i !== idx));
 
+  const handleStartTimeChange = (val: string) => {
+    setStartTime(val);
+    if (val && endTime) {
+      const h = calcHours(val, endTime);
+      if (h > 0) setHoursWorked(parseFloat(h.toFixed(2)).toString());
+    } else if (val && hoursWorked) {
+      const h = parseFloat(hoursWorked);
+      if (!isNaN(h) && h > 0) setEndTime(addHoursToTime(val, h));
+    }
+  };
+
+  const handleEndTimeChange = (val: string) => {
+    setEndTime(val);
+    if (startTime && val) {
+      const h = calcHours(startTime, val);
+      if (h > 0) setHoursWorked(parseFloat(h.toFixed(2)).toString());
+    }
+  };
+
+  const handleHoursWorkedChange = (val: string) => {
+    setHoursWorked(val);
+    const h = parseFloat(val);
+    if (startTime && !isNaN(h) && h > 0) setEndTime(addHoursToTime(startTime, h));
+  };
+
   const handleSelectEmployer = (employer: Employer) => {
     if (!hourlyRate && employer.defaultHourlyRate) setHourlyRate(employer.defaultHourlyRate.toString());
     if (!payrollCompany && employer.payrollCompany) setPayrollCompany(employer.payrollCompany);
@@ -99,13 +158,13 @@ export default function JobForm({ onSubmit, initial, onCancel }: {
       {/* Date & times */}
       <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="text-sm" />
       <div className="grid grid-cols-2 gap-2">
-        <Input placeholder="Start (e.g. 08:00 AM)" value={startTime} onChange={e => setStartTime(e.target.value)} className="text-sm" />
-        <Input placeholder="End (e.g. 05:00 PM)" value={endTime} onChange={e => setEndTime(e.target.value)} className="text-sm" />
+        <Input placeholder="Start (e.g. 08:00 AM)" value={startTime} onChange={e => handleStartTimeChange(e.target.value)} className="text-sm" />
+        <Input placeholder="End (e.g. 05:00 PM)" value={endTime} onChange={e => handleEndTimeChange(e.target.value)} className="text-sm" />
       </div>
 
       {/* Hours & pay — most important */}
       <div className="grid grid-cols-2 gap-2">
-        <Input type="number" step="0.25" min="0" placeholder="Hours worked" value={hoursWorked} onChange={e => setHoursWorked(e.target.value)} className="text-sm" />
+        <Input type="number" step="0.25" min="0" placeholder="Hours worked" value={hoursWorked} onChange={e => handleHoursWorkedChange(e.target.value)} className="text-sm" />
         <Input type="number" step="0.01" min="0" placeholder="Rate ($/hr)" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} className="text-sm" />
       </div>
 

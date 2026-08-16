@@ -57,7 +57,7 @@ interface EmployerFormState {
   nightPremiumEnabled: boolean;
 }
 
-const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '', nightPremiumEnabled: false };
+const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '', nightPremiumEnabled: true };
 
 function employerToForm(e: Employer): EmployerFormState {
   return {
@@ -66,7 +66,7 @@ function employerToForm(e: Employer): EmployerFormState {
     timekeepingApp: e.timekeepingApp ?? '',
     overtimeRule: e.overtimeRule,
     threshold: (e.overtimeRule === 'weekly' ? e.weeklyOvertimeThresholdHours : e.dailyOvertimeThresholdHours)?.toString() ?? '',
-    nightPremiumEnabled: e.nightPremiumEnabled ?? false,
+    nightPremiumEnabled: e.nightPremiumEnabled ?? true,
   };
 }
 
@@ -325,7 +325,7 @@ export default function SettingsPage() {
                     {emp.overtimeRule === 'weekly' && ` · OT after ${emp.weeklyOvertimeThresholdHours ?? 40}h/wk`}
                     {emp.overtimeRule === 'daily' && ` · OT after ${emp.dailyOvertimeThresholdHours ?? 8}h/day`}
                     {emp.overtimeRule === 'none' && ` · no overtime`}
-                    {emp.nightPremiumEnabled && ` · night premium`}
+                    {(emp.nightPremiumEnabled ?? true) && ` · night premium`}
                     {emp.timekeepingApp && ` · tracks time in ${emp.timekeepingApp}`}
                   </p>
                 </div>

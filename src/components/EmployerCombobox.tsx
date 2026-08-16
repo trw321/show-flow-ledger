@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useData } from '@/lib/DataContext';
 import type { Employer } from '@/lib/store';
+import { bestEmployerMatch, SUGGEST_MATCH_THRESHOLD } from '@/lib/employerMatch';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { ChevronsUpDown, Plus, ArrowLeft } from 'lucide-react';
+import { ChevronsUpDown, Plus, ArrowLeft, Wand2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -29,7 +30,8 @@ export default function EmployerCombobox({ value, onChange, onSelectEmployer, pl
   const [newRule, setNewRule] = useState<Employer['overtimeRule']>('daily');
   const [newThreshold, setNewThreshold] = useState('');
   const [newTimekeeping, setNewTimekeeping] = useState('');
-  const [newNightPremium, setNewNightPremium] = useState(false);
+  const [newNightPremium, setNewNightPremium] = useState(true);
+  const [dismissedSuggestion, setDismissedSuggestion] = useState('');
 
   const openAdd = () => {
     setNewName(search || value);
@@ -37,7 +39,7 @@ export default function EmployerCombobox({ value, onChange, onSelectEmployer, pl
     setNewRule('daily');
     setNewThreshold('');
     setNewTimekeeping('');
-    setNewNightPremium(false);
+    setNewNightPremium(true);
     setMode('add');
   };
 
@@ -48,6 +50,16 @@ export default function EmployerCombobox({ value, onChange, onSelectEmployer, pl
     setMode('list');
     setSearch('');
   };
+
+  // "Did you mean…" — typed text is close to a saved employer but not an exact
+  // match (typo, different casing/punctuation, abbreviation). Never auto-applies;
+  // the user has to confirm before it's treated as that employer.
+  const suggestion = useMemo(() => {
+    if (!value.trim() || value === dismissedSuggestion) return null;
+    if (data.employers.some(e => e.name.toLowerCase() === value.trim().toLowerCase())) return null;
+    const match = bestEmployerMatch(value, data.employers);
+    return match && match.score >= SUGGEST_MATCH_THRESHOLD && match.score < 1 ? match : null;
+  }, [value, data.employers, dismissedSuggestion]);
 
   const handleSave = async () => {
     if (!newName.trim()) return;
@@ -67,6 +79,7 @@ export default function EmployerCombobox({ value, onChange, onSelectEmployer, pl
   };
 
   return (
+    <div className="flex flex-col gap-1">
     <div className={cn('flex gap-1.5', className)}>
       <Input
         value={value}
@@ -98,7 +111,7 @@ export default function EmployerCombobox({ value, onChange, onSelectEmployer, pl
                             {emp.overtimeRule === 'weekly' && ` · OT >${emp.weeklyOvertimeThresholdHours ?? 40}h/wk`}
                             {emp.overtimeRule === 'daily' && ` · OT >${emp.dailyOvertimeThresholdHours ?? 8}h/day`}
                             {emp.overtimeRule === 'none' && ` · no OT`}
-                            {emp.nightPremiumEnabled && ` · night premium`}
+                            {(emp.nightPremiumEnabled ?? true) && ` · night premium`}
                           </span>
                         </div>
                       </CommandItem>
@@ -169,6 +182,25 @@ export default function EmployerCombobox({ value, onChange, onSelectEmployer, pl
           )}
         </PopoverContent>
       </Popover>
+    </div>
+      {suggestion && (
+        <button
+          type="button"
+          onClick={() => { handleSelect(suggestion.employer); setDismissedSuggestion(''); }}
+          className="flex items-center gap-1.5 text-[11px] text-amber-400 hover:text-amber-300 transition-colors text-left"
+        >
+          <Wand2 size={11} className="shrink-0" />
+          <span>
+            Did you mean <span className="font-semibold">{suggestion.employer.name}</span>?
+          </span>
+          <span
+            onClick={(e) => { e.stopPropagation(); setDismissedSuggestion(value); }}
+            className="ml-auto text-muted-foreground hover:text-foreground underline"
+          >
+            No
+          </span>
+        </button>
+      )}
     </div>
   );
 }

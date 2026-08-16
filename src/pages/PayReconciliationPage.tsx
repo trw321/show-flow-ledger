@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Scale, ChevronDown, ChevronUp, AlertTriangle, Upload, Pencil, Check, X } from 'lucide-react';
 import { format, addDays, endOfMonth, parseISO, differenceInDays } from 'date-fns';
 import { calculateExpectedPay } from '@/lib/payCalc';
+import { resolveEmployer } from '@/lib/employerMatch';
 import { cn } from '@/lib/utils';
 import type { Job, Income } from '@/lib/store';
 
@@ -209,7 +210,7 @@ export default function PayReconciliationPage() {
 
         const paidIncome = periodIncome.filter(i => i.status === 'paid');
         const totalHours = periodJobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
-        const employer = data.employers.find(e => e.name.toLowerCase() === referenceJob.client.toLowerCase());
+        const employer = resolveEmployer(referenceJob.client, data.employers);
         const payResult = calculateExpectedPay(periodJobs, referenceJob, data.jobs, employer);
         const expectedPay = payResult.total;
         const actualPaid = paidIncome.reduce((s, i) => s + i.amount, 0);

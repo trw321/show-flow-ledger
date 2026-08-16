@@ -2,14 +2,15 @@ import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import type { Job, Expense, Income, Employer } from './store';
 import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours } from './payCalc';
+import { resolveEmployer } from './employerMatch';
 
 function jobGross(job: Job, allJobs: Job[], employers: Employer[]): number {
   const hours = job.hoursWorked ?? 0;
   if (!hours) return 0;
   const rate = job.hourlyRate ?? 0;
-  const employer = employers.find(e => e.name.toLowerCase() === job.client.toLowerCase());
+  const employer = resolveEmployer(job.client, employers);
   const dayMult = getDayMultiplier(job.date, job.client, allJobs, job.has6th7thDayRule ?? false);
-  const nightHours = (employer?.nightPremiumEnabled && job.nightPremiumConfirmed !== false && job.startTime && job.endTime)
+  const nightHours = ((employer?.nightPremiumEnabled ?? true) && job.nightPremiumConfirmed !== false && job.startTime && job.endTime)
     ? calculateNightHours(job.startTime, job.endTime, employer.nightPremiumStartHour ?? 0, employer.nightPremiumEndHour)
     : 0;
   const { totalPay } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock }, {

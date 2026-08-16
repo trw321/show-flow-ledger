@@ -8,6 +8,7 @@ import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Recei
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast } from 'date-fns';
 import type { Job } from '@/lib/store';
 import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours } from '@/lib/payCalc';
+import { resolveEmployer } from '@/lib/employerMatch';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -67,6 +68,23 @@ function calcHours(start: string, end: string): number {
   return Math.max(0, (e - s) / 60);
 }
 
+function minutesToTimeStr(totalMins: number): string {
+  const m = ((Math.round(totalMins) % (24 * 60)) + 24 * 60) % (24 * 60);
+  const h = Math.floor(m / 60);
+  const min = m % 60;
+  const ap = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${min.toString().padStart(2, '0')} ${ap}`;
+}
+
+// Reverse of calcHours — given a start time and a worked-hours count, derives
+// the clock end time (e.g. "9:00 AM" + 5 -> "2:00 PM").
+function addHoursToTime(start: string, hours: number): string {
+  const s = parseTimeToMins(start);
+  if (isNaN(s) || !isFinite(hours) || hours <= 0) return '';
+  return minutesToTimeStr(s + hours * 60);
+}
+
 // ── Job detail view ───────────────────────────────────────────────────────────
 
 function JobDetailView({ job, onBack, onSave, onDuplicated }: {
@@ -115,8 +133,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
     if (stubInputRef.current) stubInputRef.current.value = '';
   };
 
-  const employer = data.employers.find(e => e.name.toLowerCase() === job.client.toLowerCase());
-  const rawNightHours = (employer?.nightPremiumEnabled && job.startTime && endTime)
+  const employer = resolveEmployer(job.client, data.employers);
+  const rawNightHours = ((employer?.nightPremiumEnabled ?? true) && job.startTime && endTime)
     ? calculateNightHours(job.startTime, endTime, employer.nightPremiumStartHour ?? 0, employer.nightPremiumEndHour)
     : 0;
   const nightHours = nightPremiumConfirmed ? rawNightHours : 0;
@@ -154,6 +172,26 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
     if (job.startTime && val) {
       const h = calcHours(job.startTime, val);
       if (h > 0) setHoursWorked(parseFloat(h.toFixed(2)).toString());
+    }
+  };
+
+  const handleHoursWorkedChange = (val: string) => {
+    setHoursWorked(val);
+    const h = parseFloat(val);
+    if (job.startTime && !isNaN(h) && h > 0) {
+      setEndTime(addHoursToTime(job.startTime, h));
+    }
+  };
+
+  const handleMinimumClick = (hours: number) => {
+    const isActive = minimumHours === hours.toString();
+    setMinimumHours(isActive ? '' : hours.toString());
+    // Only used as a convenience default when hours worked hasn't been
+    // entered yet — never overwrites real logged/derived hours, since a
+    // minimum call and actual hours worked are frequently different numbers.
+    if (!isActive && !hoursWorked) {
+      setHoursWorked(hours.toString());
+      if (job.startTime && !endTime) setEndTime(addHoursToTime(job.startTime, hours));
     }
   };
 
@@ -321,7 +359,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Hours Worked</label>
-              <Input type="number" min="0" step="0.5" value={hoursWorked} onChange={e => setHoursWorked(e.target.value)} placeholder="e.g. 3" className="h-9 text-sm text-mono" />
+              <Input type="number" min="0" step="0.5" value={hoursWorked} onChange={e => handleHoursWorkedChange(e.target.value)} placeholder="e.g. 3" className="h-9 text-sm text-mono" />
             </div>
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Rate ($/hr)</label>
@@ -337,7 +375,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
               {[{ hours: 4, label: '4h', sub: 'Split shift' }, { hours: 5, label: '5h', sub: 'Normal call' }, { hours: 8, label: '8h', sub: 'Lead role' }].map(({ hours, label, sub }) => {
                 const active = minimumHours === hours.toString();
                 return (
-                  <button key={hours} type="button" onClick={() => setMinimumHours(active ? '' : hours.toString())} className={cn("rounded-xl border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
+                  <button key={hours} type="button" onClick={() => handleMinimumClick(hours)} className={cn("rounded-xl border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
                     <p className={cn("text-sm font-bold text-mono", active && "text-primary")}>{label}</p>
                     <p className="text-[9px] leading-tight mt-0.5 opacity-70">{sub}</p>
                   </button>
@@ -447,9 +485,9 @@ export default function CalendarPage() {
       const hours = job.hoursWorked ?? 0;
       if (hours <= 0) continue;
       const rate = job.hourlyRate || 0;
-      const employer = data.employers.find(e => e.name.toLowerCase() === job.client.toLowerCase());
+      const employer = resolveEmployer(job.client, data.employers);
       const multiplier = getDayMultiplier(job.date, job.client, data.jobs, job.has6th7thDayRule || false);
-      const nightHours = (employer?.nightPremiumEnabled && job.nightPremiumConfirmed !== false && job.startTime && job.endTime)
+      const nightHours = ((employer?.nightPremiumEnabled ?? true) && job.nightPremiumConfirmed !== false && job.startTime && job.endTime)
         ? calculateNightHours(job.startTime, job.endTime, employer.nightPremiumStartHour ?? 0, employer.nightPremiumEndHour)
         : 0;
       const result = calculateDayPay(hours, rate, job.minimumHours || 0, job.mealPenalties || 0, multiplier, { duration: job.mealDuration, onClock: job.mealOnClock }, {
