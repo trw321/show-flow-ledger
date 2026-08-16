@@ -416,7 +416,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function CalendarPage() {
-  const { data, updateJob } = useData();
+  const { data, updateJob, addIncome } = useData();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -438,35 +438,68 @@ export default function CalendarPage() {
     return set;
   }, [data.income]);
 
-  const payByDate = useMemo(() => {
+  // Per-job expected pay — the single source of truth behind the calendar's
+  // day/week/month totals below AND the "Awaiting payment" list, so they can
+  // never drift out of sync with each other.
+  const jobPay = useMemo(() => {
     const map: Record<string, number> = {};
-    for (const [date, jobs] of Object.entries(jobsByDate)) {
-      let dayPay = 0;
-      for (const job of jobs) {
-        const hours = job.hoursWorked ?? 0;
-        if (hours <= 0) continue;
-        const rate = job.hourlyRate || 0;
-        const employer = data.employers.find(e => e.name.toLowerCase() === job.client.toLowerCase());
-        const multiplier = getDayMultiplier(date, job.client, data.jobs, job.has6th7thDayRule || false);
-        const nightHours = (employer?.nightPremiumEnabled && job.nightPremiumConfirmed !== false && job.startTime && job.endTime)
-          ? calculateNightHours(job.startTime, job.endTime, employer.nightPremiumStartHour ?? 0, employer.nightPremiumEndHour)
-          : 0;
-        const result = calculateDayPay(hours, rate, job.minimumHours || 0, job.mealPenalties || 0, multiplier, { duration: job.mealDuration, onClock: job.mealOnClock }, {
-          rule: employer?.overtimeRule ?? 'daily',
-          otThresholdHours: employer?.dailyOvertimeThresholdHours,
-          dtThresholdHours: employer?.dailyDoubletimeThresholdHours,
-          otMultiplier: employer?.overtimeMultiplier,
-          dtMultiplier: employer?.doubletimeMultiplier,
-          nightHours,
-          nightMultiplier: employer?.nightPremiumMultiplier,
-        });
-        dayPay += result.totalPay;
-        if (employer) dayPay += calculateWeeklyOvertimeBonus(job, data.jobs, employer);
-      }
-      if (dayPay > 0) map[date] = dayPay;
+    for (const job of data.jobs) {
+      const hours = job.hoursWorked ?? 0;
+      if (hours <= 0) continue;
+      const rate = job.hourlyRate || 0;
+      const employer = data.employers.find(e => e.name.toLowerCase() === job.client.toLowerCase());
+      const multiplier = getDayMultiplier(job.date, job.client, data.jobs, job.has6th7thDayRule || false);
+      const nightHours = (employer?.nightPremiumEnabled && job.nightPremiumConfirmed !== false && job.startTime && job.endTime)
+        ? calculateNightHours(job.startTime, job.endTime, employer.nightPremiumStartHour ?? 0, employer.nightPremiumEndHour)
+        : 0;
+      const result = calculateDayPay(hours, rate, job.minimumHours || 0, job.mealPenalties || 0, multiplier, { duration: job.mealDuration, onClock: job.mealOnClock }, {
+        rule: employer?.overtimeRule ?? 'daily',
+        otThresholdHours: employer?.dailyOvertimeThresholdHours,
+        dtThresholdHours: employer?.dailyDoubletimeThresholdHours,
+        otMultiplier: employer?.overtimeMultiplier,
+        dtMultiplier: employer?.doubletimeMultiplier,
+        nightHours,
+        nightMultiplier: employer?.nightPremiumMultiplier,
+      });
+      let pay = result.totalPay;
+      if (employer) pay += calculateWeeklyOvertimeBonus(job, data.jobs, employer);
+      if (pay > 0) map[job.id] = pay;
     }
     return map;
-  }, [jobsByDate, data.jobs, data.employers]);
+  }, [data.jobs, data.employers]);
+
+  const payByDate = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const job of data.jobs) {
+      const pay = jobPay[job.id];
+      if (!pay) continue;
+      map[job.date] = (map[job.date] || 0) + pay;
+    }
+    return map;
+  }, [data.jobs, jobPay]);
+
+  // Completed shifts with calculated pay that haven't been matched to a
+  // received payment yet — tap one to confirm the money came in.
+  const awaitingPayment = useMemo(() =>
+    data.jobs
+      .filter(j => (jobPay[j.id] ?? 0) > 0 && !paidJobIds.has(j.id))
+      .sort((a, b) => a.date.localeCompare(b.date)),
+    [data.jobs, jobPay, paidJobIds]
+  );
+
+  const handleMarkPaid = async (job: Job) => {
+    const amount = jobPay[job.id] ?? 0;
+    if (amount <= 0) return;
+    await addIncome({
+      jobId: job.id,
+      client: job.client,
+      description: job.name,
+      amount,
+      date: format(new Date(), 'yyyy-MM-dd'),
+      status: 'paid',
+    });
+    toast.success(`Marked ${job.name} paid — $${amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}`);
+  };
 
   // Dates that are the 6th+ consecutive day worked for the same employer —
   // flagged regardless of whether "6th/7th day rule" is checked on the job,
@@ -815,6 +848,38 @@ export default function CalendarPage() {
           </div>
         );
       })()}
+
+      {awaitingPayment.length > 0 && (
+        <div className="mt-6 flex flex-col gap-2">
+          <h2 className="text-[9px] font-body uppercase tracking-widest text-muted-foreground/50 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-success inline-block" />
+            Awaiting Payment
+          </h2>
+          <div className="flex flex-col gap-2">
+            {awaitingPayment.map(job => {
+              const amount = jobPay[job.id] ?? 0;
+              return (
+                <button
+                  key={job.id}
+                  type="button"
+                  onClick={() => handleMarkPaid(job)}
+                  className="rounded-xl border border-success/25 bg-success/5 p-3 flex items-center gap-3 text-left cursor-pointer active:opacity-70 transition-opacity"
+                >
+                  <span className="shrink-0 w-9 h-9 rounded-full bg-success/15 flex items-center justify-center text-lg">💰</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{job.name}</p>
+                    <p className="text-xs text-muted-foreground">{job.client} · {format(new Date(job.date + 'T12:00:00'), 'MMM d')}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-bold text-mono text-success">${amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                    <p className="text-[9px] text-muted-foreground/60">tap to confirm</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {(() => {
         const monthPrefix = format(currentDate, 'yyyy-MM');

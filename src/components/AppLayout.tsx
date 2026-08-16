@@ -3,7 +3,6 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   ClipboardCheck,
-  CalendarDays,
   Receipt,
   Settings,
   Menu,
@@ -22,8 +21,7 @@ interface NavItem {
 
 const ALL_NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', to: '/', icon: <LayoutDashboard size={18} /> },
-  { label: 'Job Log', to: '/new', icon: <ClipboardCheck size={18} /> },
-  { label: 'Calendar', to: '/calendar', icon: <CalendarDays size={18} /> },
+  { label: 'Log & Calendar', to: '/new', icon: <ClipboardCheck size={18} /> },
   { label: 'Expenses', to: '/expenses', icon: <Receipt size={18} /> },
   { label: 'Pay', to: '/pay', icon: <DollarSign size={18} /> },
   { label: 'Settings', to: '/settings', icon: <Settings size={18} /> },
@@ -31,8 +29,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
 
 const ALL_TAB_ITEMS: NavItem[] = [
   { label: 'Dashboard', to: '/', icon: <LayoutDashboard size={20} /> },
-  { label: 'Job Log', to: '/new', icon: <ClipboardCheck size={20} /> },
-  { label: 'Calendar', to: '/calendar', icon: <CalendarDays size={20} /> },
+  { label: 'Log & Calendar', to: '/new', icon: <ClipboardCheck size={20} /> },
   { label: 'Pay', to: '/pay', icon: <DollarSign size={20} /> },
 ];
 
