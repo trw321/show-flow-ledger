@@ -1,10 +1,10 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useData } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast } from 'date-fns';
 import type { Job } from '@/lib/store';
 import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours } from '@/lib/payCalc';
@@ -78,27 +78,42 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
   const { data, addJob } = useData();
   const [endTime, setEndTime] = useState(job.endTime ?? '');
   const [hoursWorked, setHoursWorked] = useState(job.hoursWorked?.toString() ?? '');
+  const [hourlyRate, setHourlyRate] = useState(job.hourlyRate?.toString() ?? '');
   const [minimumHours, setMinimumHours] = useState(job.minimumHours?.toString() ?? '');
   const [payrollCompany, setPayrollCompany] = useState(job.payrollCompany ?? '');
   const [mealDuration, setMealDuration] = useState<Job['mealDuration']>(job.mealDuration ?? undefined);
   const [mealOnClock, setMealOnClock] = useState(job.mealOnClock ?? false);
   const [mealPenalties, setMealPenalties] = useState(job.mealPenalties?.toString() ?? '');
   const [nightPremiumConfirmed, setNightPremiumConfirmed] = useState(job.nightPremiumConfirmed ?? true);
+  const [payStub, setPayStub] = useState(job.payStub ?? '');
   const [duplicating, setDuplicating] = useState(false);
   const [dupDates, setDupDates] = useState<string[]>(['']);
+  const stubInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setEndTime(job.endTime ?? '');
     setHoursWorked(job.hoursWorked?.toString() ?? '');
+    setHourlyRate(job.hourlyRate?.toString() ?? '');
     setMinimumHours(job.minimumHours?.toString() ?? '');
     setPayrollCompany(job.payrollCompany ?? '');
     setMealDuration(job.mealDuration ?? undefined);
     setMealOnClock(job.mealOnClock ?? false);
     setMealPenalties(job.mealPenalties?.toString() ?? '');
     setNightPremiumConfirmed(job.nightPremiumConfirmed ?? true);
+    setPayStub(job.payStub ?? '');
     setDuplicating(false);
     setDupDates(['']);
   }, [job.id]);
+
+  const handleStubUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { toast.error('File too large (max 5MB)'); return; }
+    const reader = new FileReader();
+    reader.onload = () => setPayStub(reader.result as string);
+    reader.readAsDataURL(file);
+    if (stubInputRef.current) stubInputRef.current.value = '';
+  };
 
   const employer = data.employers.find(e => e.name.toLowerCase() === job.client.toLowerCase());
   const rawNightHours = (employer?.nightPremiumEnabled && job.startTime && endTime)
@@ -146,7 +161,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
   const minHours = parseFloat(minimumHours) || 0;
   const billableHours = Math.max(actualHours, minHours);
   const minimumApplied = minHours > 0 && actualHours < minHours && actualHours > 0;
-  const rate = job.hourlyRate ?? 0;
+  const rate = parseFloat(hourlyRate) || 0;
   const mealPenaltyUnits = parseFloat(mealPenalties) || 0;
   const payPreview = rate > 0 && billableHours > 0
     ? calculateDayPay(actualHours, rate, minHours, mealDuration === 0 ? mealPenaltyUnits : (job.mealPenalties ?? 0), 1, { duration: mealDuration, onClock: mealOnClock }, { nightHours, nightMultiplier: employer?.nightPremiumMultiplier })
@@ -156,6 +171,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
     const updates: Partial<Job> = {};
     if (endTime !== (job.endTime ?? '')) updates.endTime = endTime || undefined;
     if (actualHours > 0) { updates.hoursWorked = actualHours; updates.status = 'completed'; }
+    if (hourlyRate !== (job.hourlyRate?.toString() ?? '')) updates.hourlyRate = rate > 0 ? rate : undefined;
     const parsedMin = parseFloat(minimumHours);
     if (!isNaN(parsedMin) && parsedMin !== (job.minimumHours ?? 0)) updates.minimumHours = parsedMin > 0 ? parsedMin : undefined;
     if (payrollCompany !== (job.payrollCompany ?? '')) updates.payrollCompany = payrollCompany.trim() || undefined;
@@ -164,18 +180,21 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
     const parsedPenalties = parseFloat(mealPenalties);
     if (mealDuration === 0 && !isNaN(parsedPenalties) && parsedPenalties !== (job.mealPenalties ?? 0)) updates.mealPenalties = parsedPenalties > 0 ? parsedPenalties : undefined;
     if (rawNightHours > 0 && nightPremiumConfirmed !== (job.nightPremiumConfirmed ?? true)) updates.nightPremiumConfirmed = nightPremiumConfirmed;
+    if (payStub !== (job.payStub ?? '')) updates.payStub = payStub || undefined;
     onSave(updates);
   };
 
   const hasChanges =
     endTime !== (job.endTime ?? '') ||
     hoursWorked !== (job.hoursWorked?.toString() ?? '') ||
+    hourlyRate !== (job.hourlyRate?.toString() ?? '') ||
     minimumHours !== (job.minimumHours?.toString() ?? '') ||
     payrollCompany !== (job.payrollCompany ?? '') ||
     mealDuration !== (job.mealDuration ?? undefined) ||
     (!!mealDuration && mealOnClock !== (job.mealOnClock ?? false)) ||
     (mealDuration === 0 && mealPenalties !== (job.mealPenalties?.toString() ?? '')) ||
-    (rawNightHours > 0 && nightPremiumConfirmed !== (job.nightPremiumConfirmed ?? true));
+    (rawNightHours > 0 && nightPremiumConfirmed !== (job.nightPremiumConfirmed ?? true)) ||
+    payStub !== (job.payStub ?? '');
 
   return (
     <>
@@ -209,6 +228,35 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
             {minimumApplied && <p className="text-[10px] text-accent font-medium">{minHours}h minimum call — contract guarantees payment for {minHours}h</p>}
           </div>
         )}
+
+        <label className={cn(
+          "flex items-center gap-2.5 rounded-xl border p-3 cursor-pointer transition-colors",
+          payStub ? "border-success/40 bg-success/5" : "border-dashed border-border bg-secondary/10 hover:border-primary/30"
+        )}>
+          <div className={cn(
+            "shrink-0 w-8 h-8 rounded-lg flex items-center justify-center",
+            payStub ? "bg-success/20 text-success" : "bg-secondary text-muted-foreground"
+          )}>
+            <Receipt size={15} />
+          </div>
+          <span className="flex-1 min-w-0">
+            <span className="text-xs font-medium block">{payStub ? 'Pay stub uploaded' : 'No pay stub uploaded'}</span>
+            <span className="text-[10px] text-muted-foreground block">
+              {payStub ? 'Tap to replace' : 'Attach the stub/check when it arrives to verify pay later'}
+            </span>
+          </span>
+          {payStub && (
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPayStub(''); }}
+              className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+              aria-label="Remove pay stub"
+            >
+              <X size={14} />
+            </button>
+          )}
+          <input ref={stubInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleStubUpload} />
+        </label>
 
         <div className="rounded-xl border border-border overflow-hidden">
           <button
@@ -270,10 +318,19 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
               <p className="text-[10px] text-mono text-muted-foreground">{job.startTime} → {endTime} = <span className="text-primary font-semibold">{calcHours(job.startTime, endTime).toFixed(1)}h</span></p>
             )}
           </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Hours Worked</label>
-            <Input type="number" min="0" step="0.5" value={hoursWorked} onChange={e => setHoursWorked(e.target.value)} placeholder="e.g. 3" className="h-9 text-sm text-mono" />
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Hours Worked</label>
+              <Input type="number" min="0" step="0.5" value={hoursWorked} onChange={e => setHoursWorked(e.target.value)} placeholder="e.g. 3" className="h-9 text-sm text-mono" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Rate ($/hr)</label>
+              <Input type="number" min="0" step="0.01" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} placeholder="e.g. 45" className="h-9 text-sm text-mono" />
+            </div>
           </div>
+          {!rate && (
+            <p className="text-[10px] text-amber-400 -mt-1">⚠ No rate set — pay won't calculate until this is filled in</p>
+          )}
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">Min. Call</label>
             <div className="grid grid-cols-3 gap-1.5">
@@ -684,10 +741,11 @@ export default function CalendarPage() {
                         <span className="text-[10px] text-mono uppercase font-medium opacity-70">{paid ? 'Paid' : overdue ? 'Needs Hours' : job.status}</span>
                       </div>
                       {job.venue && <p className="text-xs opacity-60">{job.venue}</p>}
-                      <div className="flex gap-3 text-xs text-mono">
+                      <div className="flex items-center gap-3 text-xs text-mono">
                         {job.startTime && <span>{job.startTime}{job.endTime ? ` – ${job.endTime}` : ''}</span>}
                         {hours > 0 && <span>{hours}h</span>}
                         {earned > 0 && <span className="font-semibold">${earned.toLocaleString()}</span>}
+                        <Receipt size={11} className={job.payStub ? 'opacity-70' : 'opacity-25'} aria-label={job.payStub ? 'Pay stub uploaded' : 'No pay stub'} />
                       </div>
                       {job.startTime && !job.endTime && (
                         <p className="text-[10px] text-amber-400 font-medium">⚠ No end time set — tap to add it</p>
@@ -798,6 +856,9 @@ export default function CalendarPage() {
                         <div className="flex items-center gap-2">
                           <p className="text-sm truncate">{first.name} <span className="text-muted-foreground">· {first.client}</span></p>
                           {isGroup && <span className="text-[10px] text-mono bg-success/20 text-success px-1.5 py-0.5 rounded-full shrink-0">{jobs.length}d</span>}
+                          {!isGroup && totalHours > 0 && (
+                            <Receipt size={11} className={cn('shrink-0', first.payStub ? 'text-success opacity-80' : 'opacity-25')} aria-label={first.payStub ? 'Pay stub uploaded' : 'No pay stub'} />
+                          )}
                         </div>
                         <p className="text-[11px] text-mono text-muted-foreground">{subtitle}</p>
                         {first.jobNumber && <p className="text-[10px] text-mono text-muted-foreground/50">#{first.jobNumber}</p>}
@@ -817,9 +878,12 @@ export default function CalendarPage() {
                             className="px-3 py-2 pl-6 flex items-center justify-between gap-2 cursor-pointer hover:bg-fuchsia-400/10 active:bg-fuchsia-400/15 transition-colors"
                           >
                             <span className="text-xs text-mono">{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}</span>
-                            <span className="text-[11px] text-mono text-muted-foreground">
+                            <span className="flex items-center gap-1.5 text-[11px] text-mono text-muted-foreground">
                               {(job.hoursWorked ?? 0) > 0 ? `${job.hoursWorked}h` : isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
                               {job.startTime && !job.endTime && <span className="text-amber-400"> · no end time</span>}
+                              {(job.hoursWorked ?? 0) > 0 && (
+                                <Receipt size={10} className={job.payStub ? 'text-success opacity-80' : 'opacity-25'} aria-label={job.payStub ? 'Pay stub uploaded' : 'No pay stub'} />
+                              )}
                             </span>
                           </div>
                         ))}

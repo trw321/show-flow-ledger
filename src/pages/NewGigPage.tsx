@@ -437,7 +437,7 @@ export default function NewGigPage() {
       venue: manual.venue.trim(),
       date,
       startTime: manual.startTime.trim() || undefined,
-      status: 'confirmed',
+      status: 'upcoming',
       payrollCompany: manual.payrollCompany.trim() || undefined,
       hourlyRate: manual.hourlyRate ? parseFloat(manual.hourlyRate) : undefined,
       notes: manual.position.trim() ? `Position: ${manual.position.trim()}` : undefined,

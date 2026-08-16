@@ -32,6 +32,8 @@ export interface Job {
   /** For employers with nightPremiumEnabled: were the hours past midnight actually worked (true, gets the premium) vs. just minimum-call padding that was never really worked (false, straight time)? Undefined = not asked yet / not applicable. */
   nightPremiumConfirmed?: boolean;
   attachments?: string[];
+  /** Data URI of the uploaded pay stub/check image for this job — lets you flag which jobs still need a stub logged, and eventually compare the stub's actual breakdown against the calculated pay. */
+  payStub?: string;
   notes: string;
   createdAt: string;
 }
