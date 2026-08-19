@@ -582,12 +582,13 @@ export default function NewGigPage() {
       });
 
       setParseProgress('Parsing with AI…');
-      // smart-import (not the older parse-job-image) — it has the CB/callback
-      // date-range expansion ("CB THRU 8/27 AND THEN 8/30") that parse-job-image
-      // never learned, plus a layout description matching mobile dispatch cards.
-      const resp = await callAPI(`${supabaseUrl}/functions/v1/smart-import`, supabaseKey, {
-        imageBase64: base64,
-        imageMimeType: file.type || 'image/jpeg',
+      // Reverted from smart-import back to parse-job-image: smart-import isn't
+      // deployed on the actual live Supabase project (confirmed via a CORS
+      // preflight failure from a real browser), so this is the endpoint that's
+      // actually reachable. CB/THRU handling was ported into its prompt instead.
+      const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-job-image`, supabaseKey, {
+        base64,
+        mimeType: file.type || 'image/jpeg',
       });
 
       if (!resp.ok) throw new Error((await resp.json()).error || 'Failed to parse image');

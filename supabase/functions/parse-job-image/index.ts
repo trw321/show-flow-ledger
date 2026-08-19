@@ -54,6 +54,17 @@ Extract these fields for each job found in the image:
 Industry terminology:
 - "SAME DAY CB" or "same day callback" means a callback for more work — it may be on the same day or a different date. Treat it as a separate job entry. The CB time is the START time of the callback job. End times are rarely provided — leave endTime empty unless explicitly stated.
 
+CALLBACKS ⚠️ ONE RECORD WITH CB = MULTIPLE JOBS — never skip:
+- "CB 3/18, 3/20" → extra job per date (inherit year from parent)
+- "CB 3/24, 3/25 FOR LOAD OUT" → extra jobs on 3/24 AND 3/25; "FOR LOAD OUT" is trailing note text (not a date) → notes on both CB jobs. Output = 3 jobs total.
+- "CB 2/6," trailing comma → single date 2/6
+- "CB THRU 10/7" (parent 10/5) → jobs on 10/5, 10/6, 10/7 (every calendar day in between, inclusive)
+- "CB THRU 10/7 THEN 10/17 & 10/18 FOR LOAD OUT" → 10/5–10/7 (one job per day) plus 10/17, 10/18, notes="FOR LOAD OUT" on the trailing dates. Output = 5 jobs total.
+- "CB THRU 8/27 AND THEN 8/30, NITE" (parent 8/22) → one job per day 8/22–8/27 (6 jobs) plus 8/30 with notes="NITE". Output = 7 jobs total.
+- "DARK [date]" in a range → skip that date, don't create a job for it
+- "CB 3/15 @10A FOR LOAD OUT" → CB on 3/15, startTime=10:00 AM, notes="FOR LOAD OUT"
+- "CB @ 10PM" / "SAME DAY CB, 10PM" (no date) → same-day CB at that time
+
 Be flexible — the image may be a screenshot of a dispatch email, a schedule, a table, or a photo of a printed document.`,
             },
             {
