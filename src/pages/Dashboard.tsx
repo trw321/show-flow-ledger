@@ -6,12 +6,12 @@ import { ChevronDown, Download } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, isToday } from 'date-fns';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
-import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours } from '@/lib/payCalc';
+import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import type { Job, Employer } from '@/lib/store';
 
 function jobGross(job: Job, allJobs: Job[], employers: Employer[] = []): number {
-  const hours = job.hoursWorked ?? 0;
+  const hours = effectiveHoursWorked(job);
   if (!hours) return 0;
   const rate = job.hourlyRate ?? 0;
   const employer = resolveEmployer(job.client, employers);
@@ -65,7 +65,7 @@ export default function Dashboard() {
     catch { return false; }
   });
 
-  const thisMonthHours = thisMonthJobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
+  const thisMonthHours = thisMonthJobs.reduce((s, j) => s + effectiveHoursWorked(j), 0);
   const thisMonthExpected = thisMonthJobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers), 0);
   const thisMonthPaid = data.income
     .filter(i => i.status === 'paid' && (() => { try { return isWithinInterval(parseISO(i.date), { start: monthStart, end: monthEnd }); } catch { return false; } })())
@@ -75,7 +75,7 @@ export default function Dashboard() {
   // ── YTD ──────────────────────────────────────────────────────────────────
   const yearPrefix = format(new Date(), 'yyyy');
   const ytdJobs = data.jobs.filter(j => j.date.startsWith(yearPrefix));
-  const ytdHours = ytdJobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
+  const ytdHours = ytdJobs.reduce((s, j) => s + effectiveHoursWorked(j), 0);
   const ytdExpected = ytdJobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers), 0);
   const ytdPaid = data.income
     .filter(i => i.status === 'paid' && i.date.startsWith(yearPrefix))
@@ -87,7 +87,7 @@ export default function Dashboard() {
     for (const job of data.jobs) {
       const key = job.client || 'Unknown';
       if (!map[key]) map[key] = { hours: 0, earned: 0, jobs: 0 };
-      map[key].hours += job.hoursWorked ?? 0;
+      map[key].hours += effectiveHoursWorked(job);
       map[key].earned += jobGross(job, data.jobs, data.employers);
       map[key].jobs += 1;
     }
@@ -112,7 +112,7 @@ export default function Dashboard() {
 
   const totalIncome = data.income.reduce((s, i) => s + i.amount, 0);
   const totalExpenses = data.expenses.reduce((s, e) => s + e.amount, 0);
-  const totalHours = data.jobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
+  const totalHours = data.jobs.reduce((s, j) => s + effectiveHoursWorked(j), 0);
   const netProfit = totalIncome - totalExpenses;
   const displayTotal = showExpenses ? netProfit : totalIncome;
 

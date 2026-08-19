@@ -4,10 +4,10 @@ import SpacePageWrapper from '@/components/SpacePageWrapper';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast } from 'date-fns';
 import type { Job } from '@/lib/store';
-import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours } from '@/lib/payCalc';
+import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -31,7 +31,7 @@ const statusColors: Record<Job['status'], string> = {
 // that gap for display, without changing the stored status itself.
 function isOverdueUpcoming(job: Job): boolean {
   const todayStr = format(new Date(), 'yyyy-MM-dd');
-  return (job.status === 'upcoming' || job.status === 'in-progress') && job.date < todayStr && (job.hoursWorked ?? 0) === 0;
+  return (job.status === 'upcoming' || job.status === 'in-progress') && job.date < todayStr && effectiveHoursWorked(job) === 0;
 }
 
 // A job counts as "paid" once a linked income record is marked paid —
@@ -87,11 +87,12 @@ function addHoursToTime(start: string, hours: number): string {
 
 // ── Job detail view ───────────────────────────────────────────────────────────
 
-function JobDetailView({ job, onBack, onSave, onDuplicated }: {
+function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   job: Job;
   onBack: () => void;
   onSave: (updates: Partial<Job>) => void;
   onDuplicated: (count: number) => void;
+  onDelete: () => void;
 }) {
   const { data, addJob, updateIncome } = useData();
   const [endTime, setEndTime] = useState(job.endTime ?? '');
@@ -112,7 +113,11 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
 
   const resetFieldsFromJob = () => {
     setEndTime(job.endTime ?? '');
-    setHoursWorked(job.hoursWorked?.toString() ?? '');
+    // Older/imported shifts can have both times but never got hoursWorked
+    // computed (only happened when someone retyped End Time by hand) — derive
+    // it here too so reopening one shows the right hours instead of 0.
+    const derivedHours = (!job.hoursWorked && job.startTime && job.endTime) ? calcHours(job.startTime, job.endTime) : 0;
+    setHoursWorked(job.hoursWorked?.toString() ?? (derivedHours > 0 ? parseFloat(derivedHours.toFixed(2)).toString() : ''));
     setHourlyRate(job.hourlyRate?.toString() ?? '');
     setMinimumHours(job.minimumHours?.toString() ?? '');
     setPayrollCompany(job.payrollCompany ?? '');
@@ -145,6 +150,11 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
     reader.onload = () => setPayStub(reader.result as string);
     reader.readAsDataURL(file);
     if (stubInputRef.current) stubInputRef.current.value = '';
+  };
+
+  const handleDelete = () => {
+    const confirmed = window.confirm(`Delete "${job.name}" on ${format(new Date(job.date + 'T12:00:00'), 'MMM d, yyyy')}?\n\nThis cannot be undone.`);
+    if (confirmed) onDelete();
   };
 
   const paidIncomeForJob = data.income.filter(i => i.jobId === job.id && i.status === 'paid');
@@ -269,7 +279,10 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
           <button onClick={onBack} className="text-muted-foreground hover:text-foreground transition-colors p-1 -ml-1 rounded-lg hover:bg-secondary">
             <ArrowLeft size={16} />
           </button>
-          <DialogTitle className="text-mono text-sm">{job.name}</DialogTitle>
+          <DialogTitle className="text-mono text-sm flex-1">{job.name}</DialogTitle>
+          <button onClick={handleDelete} className="text-muted-foreground hover:text-destructive transition-colors p-1 rounded-lg hover:bg-destructive/10" aria-label="Delete shift">
+            <Trash2 size={15} />
+          </button>
         </div>
       </DialogHeader>
       <div className="space-y-4">
@@ -541,7 +554,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated }: {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function CalendarPage() {
-  const { data, updateJob, addIncome } = useData();
+  const { data, updateJob, addIncome, deleteJob } = useData();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -569,7 +582,7 @@ export default function CalendarPage() {
   const jobPay = useMemo(() => {
     const map: Record<string, number> = {};
     for (const job of data.jobs) {
-      const hours = job.hoursWorked ?? 0;
+      const hours = effectiveHoursWorked(job);
       if (hours <= 0) continue;
       const rate = job.hourlyRate || 0;
       const employer = resolveEmployer(job.client, data.employers);
@@ -636,7 +649,7 @@ export default function CalendarPage() {
     for (const [date, jobs] of Object.entries(jobsByDate)) {
       let maxStreak = 0;
       for (const job of jobs) {
-        if ((job.hoursWorked ?? 0) <= 0) continue;
+        if (effectiveHoursWorked(job) <= 0) continue;
         const streak = getConsecutiveDayStreak(date, job.client, data.jobs);
         if (streak > maxStreak) maxStreak = streak;
       }
@@ -666,7 +679,7 @@ export default function CalendarPage() {
       if (!isSameMonth(day, currentDate)) return;
       const key = format(day, 'yyyy-MM-dd');
       jobCount += (jobsByDate[key] || []).length;
-      hours += (jobsByDate[key] || []).reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
+      hours += (jobsByDate[key] || []).reduce((s, j) => s + effectiveHoursWorked(j), 0);
       pay += payByDate[key] || 0;
     });
     return { hours, pay, jobCount, weekStart: week[0] };
@@ -678,7 +691,7 @@ export default function CalendarPage() {
     for (const [date, jobs] of Object.entries(jobsByDate)) {
       if (!date.startsWith(prefix)) continue;
       totalJobs += jobs.length;
-      totalHours += jobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
+      totalHours += jobs.reduce((s, j) => s + effectiveHoursWorked(j), 0);
       totalPay += payByDate[date] || 0;
     }
     return { totalHours, totalPay, totalJobs };
@@ -690,7 +703,7 @@ export default function CalendarPage() {
     for (const [date, jobs] of Object.entries(jobsByDate)) {
       if (!date.startsWith(prefix)) continue;
       totalJobs += jobs.length;
-      totalHours += jobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
+      totalHours += jobs.reduce((s, j) => s + effectiveHoursWorked(j), 0);
       totalPay += payByDate[date] || 0;
     }
     return { totalJobs, totalHours, totalPay };
@@ -890,7 +903,7 @@ export default function CalendarPage() {
                   </div>
                 )}
                 {selectedJobs.map(job => {
-                  const hours = job.hoursWorked ?? 0;
+                  const hours = effectiveHoursWorked(job);
                   const earned = hours * (job.hourlyRate ?? 0);
                   const paid = paidJobIds.has(job.id);
                   const overdue = isOverdueUpcoming(job);
@@ -928,6 +941,7 @@ export default function CalendarPage() {
               onBack={() => setSelectedJobId(null)}
               onSave={(updates) => { updateJob(selectedJob.id, updates); setSelectedJobId(null); toast.success('Job updated'); }}
               onDuplicated={(count) => { closeDialog(); toast.success(`Created ${count} shift${count !== 1 ? 's' : ''}`); }}
+              onDelete={async () => { await deleteJob(selectedJob.id); closeDialog(); toast.success('Shift deleted'); }}
             />
           )}
         </DialogContent>
@@ -937,7 +951,7 @@ export default function CalendarPage() {
         const monthPrefix = format(currentDate, 'yyyy-MM');
         const needsLog = data.jobs.filter(job => {
           const jobDate = new Date(job.date + 'T12:00:00');
-          return (isToday(jobDate) || isPast(jobDate)) && (job.hoursWorked ?? 0) === 0 && job.status !== 'cancelled' && job.status !== 'completed' && job.date.startsWith(monthPrefix);
+          return (isToday(jobDate) || isPast(jobDate)) && effectiveHoursWorked(job) === 0 && job.status !== 'cancelled' && job.status !== 'completed' && job.date.startsWith(monthPrefix);
         }).sort((a, b) => a.date.localeCompare(b.date));
         if (needsLog.length === 0) return null;
         const groups: Record<string, Job[]> = {};
@@ -1027,8 +1041,8 @@ export default function CalendarPage() {
             <div className="flex flex-col gap-1.5">
               {Object.entries(loggedGroups).map(([key, jobs]) => {
                 const first = jobs[0];
-                const totalHours = jobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
-                const totalEarned = jobs.reduce((s, j) => s + (j.hoursWorked ?? 0) * (j.hourlyRate ?? 0), 0);
+                const totalHours = jobs.reduce((s, j) => s + effectiveHoursWorked(j), 0);
+                const totalEarned = jobs.reduce((s, j) => s + effectiveHoursWorked(j) * (j.hourlyRate ?? 0), 0);
                 const last = jobs[jobs.length - 1];
                 const dateRange = jobs.length > 1 ? `${format(new Date(last.date + 'T12:00:00'), 'MMM d')} – ${format(new Date(first.date + 'T12:00:00'), 'MMM d')}` : format(new Date(first.date + 'T12:00:00'), 'MMM d');
                 const isGroup = jobs.length > 1;
@@ -1071,9 +1085,9 @@ export default function CalendarPage() {
                           >
                             <span className="text-xs text-mono">{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}</span>
                             <span className="flex items-center gap-1.5 text-[11px] text-mono text-muted-foreground">
-                              {(job.hoursWorked ?? 0) > 0 ? `${job.hoursWorked}h` : isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
+                              {effectiveHoursWorked(job) > 0 ? `${effectiveHoursWorked(job)}h` : isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
                               {job.startTime && !job.endTime && <span className="text-amber-400"> · no end time</span>}
-                              {(job.hoursWorked ?? 0) > 0 && (
+                              {effectiveHoursWorked(job) > 0 && (
                                 <Receipt size={10} className={job.payStub ? 'text-success opacity-80' : 'opacity-25'} aria-label={job.payStub ? 'Pay stub uploaded' : 'No pay stub'} />
                               )}
                             </span>

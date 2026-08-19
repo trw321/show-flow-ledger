@@ -186,14 +186,17 @@ function expandCBRecord(record: string): string[] {
     }
     const thenMatch = rem.match(/\b(THEN|AND)\b(.*)/i);
     if (thenMatch) {
-      const thenPart = thenMatch[2].trim().replace(/\bAT\s+/gi, '@');
+      // "AND THEN 8/30" — the regex above only consumes whichever connector
+      // word ("AND") comes first, leaving a literal "THEN " still prefixed
+      // on the remainder, which broke the date match below. Strip it too.
+      const thenPart = thenMatch[2].trim().replace(/^(?:AND|THEN)\s+/i, '').replace(/\bAT\s+/gi, '@');
       const parts = thenPart.split(/\s*,\s*/);
       let trailingTime: string | undefined;
       let trailingNote: string | undefined;
       const thenEntries: CBEntry[] = [];
       for (const part of parts) {
         const dm = part.match(/^(\d{1,2}\/\d{1,2})(.*)/);
-        if (!dm) continue;
+        if (!dm) { if (part.trim()) trailingNote = part.trim(); continue; }
         let rem2 = dm[2].trim();
         let timeOverride: string | undefined;
         const atM = rem2.match(/^(@\S+)\s*(.*)/);
@@ -579,9 +582,12 @@ export default function NewGigPage() {
       });
 
       setParseProgress('Parsing with AI…');
-      const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-job-image`, supabaseKey, {
-        base64,
-        mimeType: file.type || 'image/jpeg',
+      // smart-import (not the older parse-job-image) — it has the CB/callback
+      // date-range expansion ("CB THRU 8/27 AND THEN 8/30") that parse-job-image
+      // never learned, plus a layout description matching mobile dispatch cards.
+      const resp = await callAPI(`${supabaseUrl}/functions/v1/smart-import`, supabaseKey, {
+        imageBase64: base64,
+        imageMimeType: file.type || 'image/jpeg',
       });
 
       if (!resp.ok) throw new Error((await resp.json()).error || 'Failed to parse image');
@@ -857,37 +863,6 @@ export default function NewGigPage() {
                     <p className="text-[10px] text-white/30">Same employer, time, rate & details on each date — you'll be able to tweak any of them before saving.</p>
                   </div>
                 )}
-              </div>
-
-             {/* Bottom row — optional fields, mobile only; desktop these are in the right column */}
-              <div className="grid grid-cols-2 gap-2 sm:hidden">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Event name</label>
-              <Input
-                    value={manual.name}
-                    onChange={e => handleManualChange('name', e.target.value)}
-                    placeholder="e.g. Olivia Rodrigo"
-                    className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Venue</label>
-                  <Input
-                    value={manual.venue}
-                    onChange={e => handleManualChange('venue', e.target.value)}
-                    placeholder="e.g. The Met"
-                    className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
-                  />
-                </div>
-                <div className="col-span-2 flex flex-col gap-1">
-                  <label className="text-[10px] text-mono uppercase tracking-wider text-white/50">Payroll co.</label>
-                  <Input
-                    value={manual.payrollCompany}
-                    onChange={e => handleManualChange('payrollCompany', e.target.value)}
-                    placeholder="e.g. AVTS"
-                    className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
-                  />
-                </div>
               </div>
 
               <Button

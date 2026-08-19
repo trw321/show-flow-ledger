@@ -129,6 +129,23 @@ function parseTimeToMinutes(t: string): number {
 }
 
 /**
+ * A job's worked hours, falling back to the wall-clock duration between
+ * startTime and endTime when hoursWorked was never explicitly set — e.g. a
+ * shift imported/logged with both clock times but no separate hours entry.
+ * Without this, every pay calculation (and the "needs hours" reminder) treats
+ * that shift as 0 hours worked even though both times are right there.
+ */
+export function effectiveHoursWorked(job: Job): number {
+  if (job.hoursWorked) return job.hoursWorked;
+  if (!job.startTime || !job.endTime) return 0;
+  const s = parseTimeToMinutes(job.startTime);
+  let e = parseTimeToMinutes(job.endTime);
+  if (isNaN(s) || isNaN(e)) return 0;
+  if (e <= s) e += 24 * 60;
+  return Math.max(0, (e - s) / 60);
+}
+
+/**
  * Hours of a shift [startTime, endTime) that fall at/after nightStartHour
  * (default midnight) — i.e. the hours actually worked past the one night-
  * premium boundary this shift runs into. Returns 0 if the shift never
@@ -194,7 +211,7 @@ export function getConsecutiveDayStreak(
   const targetDate = startOfDay(parseISO(entryDate));
 
   const relevantJobs = allJobs.filter(
-    j => j.client === client && (j.hoursWorked ?? 0) > 0
+    j => j.client === client && effectiveHoursWorked(j) > 0
   );
 
   const workDates = [...new Set(relevantJobs.map(j => j.date))]
@@ -245,7 +262,7 @@ export function getDayMultiplier(
  */
 export function calculateWeeklyOvertimeBonus(job: Job, allJobs: Job[], employer: Employer): number {
   if (employer.overtimeRule !== 'weekly') return 0;
-  const hours = job.hoursWorked ?? 0;
+  const hours = effectiveHoursWorked(job);
   if (hours <= 0) return 0;
   const rate = job.hourlyRate ?? employer.defaultHourlyRate ?? 0;
   if (rate <= 0) return 0;
@@ -258,7 +275,7 @@ export function calculateWeeklyOvertimeBonus(job: Job, allJobs: Job[], employer:
   const weekEnd = endOfWeek(jobDate, { weekStartsOn: 0 });
 
   const weekJobs = allJobs
-    .filter(j => j.client.toLowerCase() === job.client.toLowerCase() && (j.hoursWorked ?? 0) > 0)
+    .filter(j => j.client.toLowerCase() === job.client.toLowerCase() && effectiveHoursWorked(j) > 0)
     .filter(j => {
       const d = startOfDay(parseISO(j.date));
       return d >= weekStart && d <= weekEnd;
@@ -268,7 +285,7 @@ export function calculateWeeklyOvertimeBonus(job: Job, allJobs: Job[], employer:
   let cumulativeBefore = 0;
   for (const j of weekJobs) {
     if (j.id === job.id) break;
-    cumulativeBefore += j.hoursWorked ?? 0;
+    cumulativeBefore += effectiveHoursWorked(j);
   }
 
   const cumulativeAfter = cumulativeBefore + hours;
@@ -302,7 +319,7 @@ export function calculateExpectedPay(
   // Group by date
   const byDate = new Map<string, { hours: number; mealPenalties: number; rate: number; mealDuration?: 0 | 30 | 45 | 60; mealOnClock?: boolean; startTime?: string; endTime?: string; nightConfirmed?: boolean; nightActualHours?: number }>();
   for (const job of jobs) {
-    const hours = job.hoursWorked ?? 0;
+    const hours = effectiveHoursWorked(job);
     if (hours <= 0) continue;
     const rate = job.hourlyRate || referenceJob.hourlyRate || 0;
     const existing = byDate.get(job.date) || { hours: 0, mealPenalties: 0, rate, mealDuration: job.mealDuration, mealOnClock: job.mealOnClock, startTime: job.startTime, endTime: job.endTime, nightConfirmed: job.nightPremiumConfirmed, nightActualHours: job.nightPremiumActualHours };

@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Scale, ChevronDown, ChevronUp, AlertTriangle, Upload, Pencil, Check, X } from 'lucide-react';
 import { format, addDays, endOfMonth, parseISO, differenceInDays } from 'date-fns';
-import { calculateExpectedPay } from '@/lib/payCalc';
+import { calculateExpectedPay, effectiveHoursWorked } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { cn } from '@/lib/utils';
 import type { Job, Income } from '@/lib/store';
@@ -197,7 +197,7 @@ export default function PayReconciliationPage() {
       const periods = getPayPeriods(referenceJob);
 
       for (const period of periods) {
-        const periodJobs = prodJobs.filter(j => (j.hoursWorked ?? 0) > 0);
+        const periodJobs = prodJobs.filter(j => effectiveHoursWorked(j) > 0);
         const paymentWindow = addDays(period.end, 90);
 
         const periodIncome = data.income.filter(i => {
@@ -209,7 +209,7 @@ export default function PayReconciliationPage() {
         });
 
         const paidIncome = periodIncome.filter(i => i.status === 'paid');
-        const totalHours = periodJobs.reduce((s, j) => s + (j.hoursWorked ?? 0), 0);
+        const totalHours = periodJobs.reduce((s, j) => s + effectiveHoursWorked(j), 0);
         const employer = resolveEmployer(referenceJob.client, data.employers);
         const payResult = calculateExpectedPay(periodJobs, referenceJob, data.jobs, employer);
         const expectedPay = payResult.total;

@@ -1,11 +1,11 @@
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import type { Job, Expense, Income, Employer } from './store';
-import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours } from './payCalc';
+import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked } from './payCalc';
 import { resolveEmployer } from './employerMatch';
 
 function jobGross(job: Job, allJobs: Job[], employers: Employer[]): number {
-  const hours = job.hoursWorked ?? 0;
+  const hours = effectiveHoursWorked(job);
   if (!hours) return 0;
   const rate = job.hourlyRate ?? 0;
   const employer = resolveEmployer(job.client, employers);
@@ -55,10 +55,10 @@ export function exportWeeklyToExcel(jobs: Job[], expenses: Expense[], income: In
       Status: j.status,
       'Start Time': j.startTime ?? '',
       'End Time': j.endTime ?? '',
-      'Hours Worked': j.hoursWorked ?? '',
+      'Hours Worked': effectiveHoursWorked(j) || '',
       'Hourly Rate': j.hourlyRate ?? '',
       'Min Hours': j.minimumHours ?? '',
-      'Gross Earnings': j.hoursWorked ? jobGross(j, jobs, employers).toFixed(2) : '',
+      'Gross Earnings': effectiveHoursWorked(j) ? jobGross(j, jobs, employers).toFixed(2) : '',
       'Expense Amount': '',
       'Expense Category': '',
       'Income Amount': '',

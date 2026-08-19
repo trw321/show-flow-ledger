@@ -245,15 +245,18 @@ function expandCBRecord(record: string): string[] {
     // THEN / AND block: additional dates after the range
     const thenMatch = rem.match(/\b(THEN|AND)\b(.*)/i);
     if (thenMatch) {
+      // "AND THEN 8/30" — the regex above only consumes whichever connector
+      // word ("AND") comes first, leaving a literal "THEN " still prefixed
+      // on the remainder, which broke the date match below. Strip it too.
       // Normalize "AT time" → "@time" so isTimeToken catches it
-      const thenPart = thenMatch[2].trim().replace(/\bAT\s+/gi, '@');
+      const thenPart = thenMatch[2].trim().replace(/^(?:AND|THEN)\s+/i, '').replace(/\bAT\s+/gi, '@');
       const parts = thenPart.split(/\s*,\s*/);
       let trailingTime: string | undefined;
       let trailingNote: string | undefined;
       const thenEntries: CBEntry[] = [];
       for (const part of parts) {
         const dm = part.match(/^(\d{1,2}\/\d{1,2})(.*)/);
-        if (!dm) continue;
+        if (!dm) { if (part.trim()) trailingNote = part.trim(); continue; }
         let rem2 = dm[2].trim();
         let timeOverride: string | undefined;
         const atM = rem2.match(/^(@\S+)\s*(.*)/);

@@ -560,13 +560,16 @@ export default function CatScratchButton({ className }: { className?: string }) 
           {step === 'review' && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-xs text-muted-foreground">{matchResults.length} entries found</p>
+                <p className="text-xs text-muted-foreground">
+                  {matchResults.length - acceptedKeys.size} of {matchResults.length} entries left
+                </p>
                 <button onClick={() => setStep('input')} className="text-xs text-primary hover:underline">← Back</button>
               </div>
               {matchResults.map((result, idx) => {
                 const accepted = acceptedKeys.has(idx);
+                if (accepted) return null;
                 return (
-                  <div key={idx} className={cn("rounded-xl border p-3 space-y-2 transition-colors", accepted ? "border-success/30 bg-success/5 opacity-60" : "border-border bg-card")}>
+                  <div key={idx} className="rounded-xl border border-border bg-card p-3 space-y-2 transition-colors">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="text-xs font-mono text-muted-foreground shrink-0">
@@ -610,20 +613,17 @@ export default function CatScratchButton({ className }: { className?: string }) 
                       </div>
                     )}
 
-                    {!accepted && (
-                      <button
-                        onClick={() => handleApply(result, idx)}
-                        className={cn(
-                          "w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-body transition-colors",
-                          result.matchedJob
-                            ? "bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20"
-                            : "bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20"
-                        )}
-                      >
-                        {result.matchedJob ? <><Check size={12} /> Apply to job</> : <><Plus size={12} /> Create new job</>}
-                      </button>
-                    )}
-                    {accepted && <p className="text-[10px] text-success text-center font-body">✓ Applied</p>}
+                    <button
+                      onClick={() => handleApply(result, idx)}
+                      className={cn(
+                        "w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-body transition-colors",
+                        result.matchedJob
+                          ? "bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20"
+                          : "bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20"
+                      )}
+                    >
+                      {result.matchedJob ? <><Check size={12} /> Apply to job</> : <><Plus size={12} /> Create new job</>}
+                    </button>
                   </div>
                 );
               })}
