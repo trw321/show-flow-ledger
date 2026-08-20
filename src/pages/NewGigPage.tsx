@@ -247,6 +247,81 @@ function expandCBRecord(record: string): string[] {
   return [parentRecord, ...cbRecords];
 }
 
+// Deterministic fallback for "CB THRU <date> [DARK <date>] [AND/THEN <date>...]"
+// left unexpanded in a parsed job's notes. The text-paste path already expands
+// this in JS before the AI ever sees it (expandCBRecord above), so it's
+// reliable there — but the photo path asks GPT-4o vision to both read the
+// image AND do this date-range expansion itself, and that's not consistent
+// call to call. Rather than re-prompt-engineer indefinitely, catch whatever
+// the AI left unexpanded and do the date math here instead, same as the text
+// path already does. No-op (returns the job unchanged) when there's nothing
+// to expand, so it's safe to run over every parsed job regardless of source.
+function expandThruNotes(job: ParsedJob): ParsedJob[] {
+  const notes = job.notes ?? '';
+  const cbMatch = notes.match(/^(.*?)\s*\bC\/?B(?:'?[Ss])?\b[,\s]*/i);
+  if (!cbMatch || !job.date) return [job];
+  if (/\bNO\s+C\/?B\b/i.test(notes)) return [job];
+
+  const prefix = cbMatch[1].trim();
+  let cbContent = notes.slice(cbMatch[0].length).trim();
+  cbContent = cbContent.replace(/^SAME\s*DAY\s*,?\s*/i, '').trim();
+  if (!/^THRU\b/i.test(cbContent)) return [job];
+
+  // Built at midnight (not noon-anchored) to match parseMD below exactly —
+  // mixing time-of-day between the two caused an off-by-one that silently
+  // dropped the range's last day.
+  const [py, pm, pd] = job.date.split('-').map(Number);
+  if (!py || !pm || !pd) return [job];
+  const parentDate = new Date(py, pm - 1, pd);
+  const year = py;
+  const parseMD = (md: string): Date | null => {
+    const [m, d] = md.split('/').map(Number);
+    return m && d ? new Date(year, m - 1, d) : null;
+  };
+  const fmtISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  const thruM = cbContent.match(/^THRU\s+(\d{1,2}\/\d{1,2})(.*)/i);
+  const thruEnd = thruM ? parseMD(thruM[1]) : null;
+  if (!thruM || !thruEnd) return [job];
+  let rem = thruM[2].trim();
+
+  const dark = new Set<string>();
+  rem = rem.replace(/,?\s*\bDARK\s+(\d{1,2}\/\d{1,2})/gi, (_m, d: string) => { dark.add(d.trim()); return ''; }).trim();
+
+  const dailyDates: Date[] = [];
+  const cur = new Date(parentDate);
+  cur.setDate(cur.getDate() + 1);
+  while (cur <= thruEnd) {
+    const md = `${cur.getMonth() + 1}/${cur.getDate()}`;
+    if (!dark.has(md)) dailyDates.push(new Date(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  const extraEntries: { date: Date; note?: string }[] = [];
+  const thenMatch = rem.match(/\b(THEN|AND)\b(.*)/i);
+  if (thenMatch) {
+    const thenPart = thenMatch[2].trim().replace(/^(?:AND|THEN)\s+/i, '');
+    let trailingNote: string | undefined;
+    for (const part of thenPart.split(/\s*,\s*/)) {
+      const dm = part.match(/^(\d{1,2}\/\d{1,2})(.*)/);
+      if (!dm) { if (part.trim()) trailingNote = part.trim(); continue; }
+      const d = parseMD(dm[1]);
+      if (!d) continue;
+      const noteText = dm[2].trim() || undefined;
+      if (noteText) trailingNote = noteText;
+      extraEntries.push({ date: d, note: noteText });
+    }
+    for (const e of extraEntries) if (!e.note && trailingNote) e.note = trailingNote;
+  }
+
+  if (dailyDates.length === 0 && extraEntries.length === 0) return [job];
+
+  const parentJob: ParsedJob = { ...job, notes: prefix || undefined };
+  const dailyJobs: ParsedJob[] = dailyDates.map(d => ({ ...job, date: fmtISO(d), notes: undefined }));
+  const extraJobs: ParsedJob[] = extraEntries.map(e => ({ ...job, date: fmtISO(e.date), notes: e.note }));
+  return [parentJob, ...dailyJobs, ...extraJobs];
+}
+
 async function callAPI(url: string, key: string, body: object): Promise<Response> {
   return fetch(url, {
     method: 'POST',
@@ -508,15 +583,17 @@ export default function NewGigPage() {
         return;
       }
 
-      allJobs.sort((a, b) => a.date.localeCompare(b.date));
+      // Deterministic backstop for any "CB THRU X..." the AI left unexpanded
+      const expandedJobs = allJobs.flatMap(expandThruNotes);
+      expandedJobs.sort((a, b) => a.date.localeCompare(b.date));
 
       const dateCounts = new Map<string, number>();
-      for (const j of allJobs) dateCounts.set(j.date, (dateCounts.get(j.date) ?? 0) + 1);
+      for (const j of expandedJobs) dateCounts.set(j.date, (dateCounts.get(j.date) ?? 0) + 1);
       const conflicts = [...dateCounts.entries()].filter(([, n]) => n > 1).map(([d]) => d);
       if (conflicts.length) toast.warning(`Multiple jobs on ${conflicts.join(', ')} — review highlighted cards`);
 
-      setJobs(allJobs);
-      setSelected(new Set(allJobs.map((_, i) => i)));
+      setJobs(expandedJobs);
+      setSelected(new Set(expandedJobs.map((_, i) => i)));
 
       setVortexPhase('flash');
       setTimeout(() => {
@@ -525,7 +602,7 @@ export default function NewGigPage() {
         setTimeout(() => setVortexPhase('idle'), 1200);
       }, 400);
 
-      toast.success(`Found ${allJobs.length} shift${allJobs.length === 1 ? '' : 's'}`);
+      toast.success(`Found ${expandedJobs.length} shift${expandedJobs.length === 1 ? '' : 's'}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to parse');
       setVortexPhase('pulling');
@@ -611,16 +688,19 @@ export default function NewGigPage() {
         return;
       }
 
-      allJobs.sort((a, b) => a.date.localeCompare(b.date));
-      setJobs(allJobs);
-      setSelected(new Set(allJobs.map((_, i) => i)));
+      // Deterministic backstop for any "CB THRU X..." the AI left unexpanded
+      // — vision extraction isn't reliable call-to-call at doing this math itself.
+      const expandedJobs = allJobs.flatMap(expandThruNotes);
+      expandedJobs.sort((a, b) => a.date.localeCompare(b.date));
+      setJobs(expandedJobs);
+      setSelected(new Set(expandedJobs.map((_, i) => i)));
       setVortexPhase('flash');
       setTimeout(() => {
         setVortexPhase('settling');
         setStep('review');
         setTimeout(() => setVortexPhase('idle'), 1200);
       }, 400);
-      toast.success(`Found ${allJobs.length} shift${allJobs.length === 1 ? '' : 's'}`);
+      toast.success(`Found ${expandedJobs.length} shift${expandedJobs.length === 1 ? '' : 's'}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to parse image');
       setVortexPhase('idle');
