@@ -316,10 +316,54 @@ function expandThruNotes(job: ParsedJob): ParsedJob[] {
 
   if (dailyDates.length === 0 && extraEntries.length === 0) return [job];
 
+  // Callback entries almost never come with a real end time — the one on the
+  // template job (if any) belongs to that specific day, not every day in the
+  // range, so it's dropped rather than copied onto every generated entry.
   const parentJob: ParsedJob = { ...job, notes: prefix || undefined };
-  const dailyJobs: ParsedJob[] = dailyDates.map(d => ({ ...job, date: fmtISO(d), notes: undefined }));
-  const extraJobs: ParsedJob[] = extraEntries.map(e => ({ ...job, date: fmtISO(e.date), notes: e.note }));
+  const dailyJobs: ParsedJob[] = dailyDates.map(d => ({ ...job, date: fmtISO(d), notes: undefined, endTime: undefined }));
+  const extraJobs: ParsedJob[] = extraEntries.map(e => ({ ...job, date: fmtISO(e.date), notes: e.note, endTime: undefined }));
   return [parentJob, ...dailyJobs, ...extraJobs];
+}
+
+/**
+ * Runs expandThruNotes across a whole parsed batch, but guards against
+ * re-expanding a job number the AI already split into multiple entries —
+ * without this, a batch where the AI partially expanded a range (e.g. 3 of 7
+ * days, each still carrying the original "CB THRU..." text in its notes)
+ * would have every one of those entries independently re-expand the full
+ * range again, producing a quadratic explosion of duplicates instead of the
+ * intended 7. If ANY entry in a job-number group still has unexpanded THRU
+ * text, the whole group is discarded and rebuilt fresh from one template
+ * entry; groups with nothing left to expand pass through untouched.
+ */
+function expandThruNotesForBatch(jobs: ParsedJob[]): ParsedJob[] {
+  const groups = new Map<string, ParsedJob[]>();
+  const order: string[] = [];
+  jobs.forEach(j => {
+    const key = j.jobNumber?.trim() || `${j.date}__${j.client}__${j.venue}__${j.name}`;
+    if (!groups.has(key)) { groups.set(key, []); order.push(key); }
+    groups.get(key)!.push(j);
+  });
+
+  const result: ParsedJob[] = [];
+  for (const key of order) {
+    const group = groups.get(key)!;
+    const unexpandedIdx = group.findIndex(j => expandThruNotes(j).length > 1);
+    if (unexpandedIdx === -1) {
+      result.push(...group);
+    } else {
+      result.push(...expandThruNotes(group[unexpandedIdx]));
+    }
+  }
+  // A shift can't legitimately end at the exact moment it starts — that's
+  // always a bad extraction, not a real zero-duration call. Applied broadly,
+  // not just to entries this function generated.
+  const normTimeForCompare = (t?: string) => (t ?? '').trim().toLowerCase().replace(/^0/, '');
+  return result.map(j =>
+    j.startTime && j.endTime && normTimeForCompare(j.startTime) === normTimeForCompare(j.endTime)
+      ? { ...j, endTime: undefined }
+      : j
+  );
 }
 
 async function callAPI(url: string, key: string, body: object): Promise<Response> {
@@ -584,7 +628,7 @@ export default function NewGigPage() {
       }
 
       // Deterministic backstop for any "CB THRU X..." the AI left unexpanded
-      const expandedJobs = allJobs.flatMap(expandThruNotes);
+      const expandedJobs = expandThruNotesForBatch(allJobs);
       expandedJobs.sort((a, b) => a.date.localeCompare(b.date));
 
       const dateCounts = new Map<string, number>();
@@ -690,7 +734,7 @@ export default function NewGigPage() {
 
       // Deterministic backstop for any "CB THRU X..." the AI left unexpanded
       // — vision extraction isn't reliable call-to-call at doing this math itself.
-      const expandedJobs = allJobs.flatMap(expandThruNotes);
+      const expandedJobs = expandThruNotesForBatch(allJobs);
       expandedJobs.sort((a, b) => a.date.localeCompare(b.date));
       setJobs(expandedJobs);
       setSelected(new Set(expandedJobs.map((_, i) => i)));
