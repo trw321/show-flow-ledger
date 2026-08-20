@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useData } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
 import FallingPlanets from '@/components/FallingPlanets';
-import { ChevronDown, Download } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, isToday } from 'date-fns';
+import { ChevronDown, Download, AlertTriangle } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, isToday, differenceInCalendarDays } from 'date-fns';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked } from '@/lib/payCalc';
@@ -50,6 +51,7 @@ export default function Dashboard() {
   const { data } = useData();
   const { prefs } = useUserPrefs();
   const [employerExpanded, setEmployerExpanded] = useState(false);
+  const navigate = useNavigate();
 
   if (!data) return null;
 
@@ -116,6 +118,14 @@ export default function Dashboard() {
   const netProfit = totalIncome - totalExpenses;
   const displayTotal = showExpenses ? netProfit : totalIncome;
 
+  // ── Needs hours ──────────────────────────────────────────────────────────
+  // Surfaced here (not just at the bottom of Log & Calendar) so a shift from
+  // weeks ago can't quietly roll off the page unnoticed once the month turns over.
+  const needsHours = data.jobs
+    .filter(j => j.date <= today && effectiveHoursWorked(j) === 0 && j.status !== 'cancelled' && j.status !== 'completed')
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const oldestNeedsHoursDays = needsHours.length > 0 ? differenceInCalendarDays(new Date(), parseISO(needsHours[0].date)) : 0;
+
   return (
     <SpacePageWrapper title="Dashboard" description="Welcome back" starCount={220}>
       <FallingPlanets />
@@ -126,6 +136,23 @@ export default function Dashboard() {
         </span>
         <span className="text-xs text-white/40 font-body ml-auto">{totalHours.toFixed(1)}h logged</span>
       </div>
+
+      {needsHours.length > 0 && (
+        <button
+          onClick={() => navigate('/new')}
+          className="relative z-10 w-full mb-6 flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-left hover:bg-amber-500/15 transition-colors"
+        >
+          <AlertTriangle size={18} className="text-amber-400 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-amber-300">
+              {needsHours.length} shift{needsHours.length !== 1 ? 's' : ''} still need{needsHours.length === 1 ? 's' : ''} hours logged
+            </p>
+            <p className="text-[11px] text-amber-400/70 font-body">
+              Oldest is {oldestNeedsHoursDays === 0 ? 'today' : `${oldestNeedsHoursDays}d ago`} — tap to log or mark it
+            </p>
+          </div>
+        </button>
+      )}
 
       <ExportButton onClick={() => exportWeeklyToExcel(data.jobs, showExpenses ? data.expenses : [], showIncome ? data.income : [], data.employers)} />
 

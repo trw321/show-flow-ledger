@@ -7,7 +7,7 @@ import { Upload, Loader2, Check, X, ChevronRight, ChevronDown, AlertTriangle, Tr
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { getJobDedupKey } from '@/lib/jobDedup';
+import { getJobDedupKey, findLikelyDuplicate } from '@/lib/jobDedup';
 import type { Job } from '@/lib/store';
 import VortexCanvas from '@/components/VortexCanvas';
 import CatScratchButton from '@/components/CatScratchButton';
@@ -256,12 +256,13 @@ async function callAPI(url: string, key: string, body: object): Promise<Response
 }
 
 function ShiftCard({
-  job, index, selected, conflict, onToggle, onChange,
+  job, index, selected, conflict, existingMatch, onToggle, onChange,
 }: {
   job: ParsedJob;
   index: number;
   selected: boolean;
   conflict: boolean;
+  existingMatch?: Job;
   onToggle: () => void;
   onChange: (field: keyof ParsedJob, value: string | number | undefined) => void;
 }) {
@@ -271,7 +272,7 @@ function ShiftCard({
     <div className={cn(
       'rounded-xl border transition-colors overflow-hidden',
       selected
-        ? conflict ? 'border-amber-500/50 bg-amber-500/5' : 'border-primary/30 bg-primary/5'
+        ? existingMatch ? 'border-destructive/50 bg-destructive/5' : conflict ? 'border-amber-500/50 bg-amber-500/5' : 'border-primary/30 bg-primary/5'
         : 'border-border bg-card opacity-50',
     )}>
       <div className="flex items-center gap-2 p-3">
@@ -315,6 +316,15 @@ function ShiftCard({
           </div>
         </button>
       </div>
+
+      {existingMatch && (
+        <div className="mx-3 mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-2.5 py-2 text-[11px] text-destructive flex items-start gap-1.5">
+          <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+          <span>
+            Possible duplicate — you already have <span className="font-medium">"{existingMatch.name}"</span> for job #{existingMatch.jobNumber} on this date. Uncheck this one to skip it, or leave it checked if it's really a separate call.
+          </span>
+        </div>
+      )}
 
       {expanded && (
         <div className="border-t border-border px-3 pb-3 pt-3 flex flex-col gap-2">
@@ -646,6 +656,19 @@ export default function NewGigPage() {
     jobs.forEach(j => { counts[j.date] = (counts[j.date] ?? 0) + 1; });
     return new Set(Object.entries(counts).filter(([, n]) => n > 1).map(([d]) => d));
   }, [jobs]);
+
+  // Catches re-parsing the same dispatch a second time (e.g. once via paste,
+  // once via photo) even when the two parses came out with different
+  // completeness — flagged for review, not silently skipped, since they may
+  // genuinely be a distinct callback under the same job number.
+  const existingMatches = useMemo(() => {
+    const map = new Map<number, Job>();
+    jobs.forEach((job, i) => {
+      const match = findLikelyDuplicate(job, data.jobs);
+      if (match) map.set(i, match);
+    });
+    return map;
+  }, [jobs, data.jobs]);
 
   const hasContent = text.trim().length > 0 || step === 'review';
   const manualHasContent = Object.values(manual).some(v => v.trim() !== '');
@@ -994,6 +1017,7 @@ export default function NewGigPage() {
                 index={i}
                 selected={selected.has(i)}
                 conflict={conflictDates.has(job.date)}
+                existingMatch={existingMatches.get(i)}
                 onToggle={() => setSelected(prev => { const next = new Set(prev); next.has(i) ? next.delete(i) : next.add(i); return next; })}
                 onChange={(field, value) => updateJob(i, field, value)}
               />

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2 } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast } from 'date-fns';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, differenceInCalendarDays } from 'date-fns';
 import type { Job } from '@/lib/store';
 import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
@@ -948,10 +948,12 @@ export default function CalendarPage() {
       </Dialog>
 
       {(() => {
-        const monthPrefix = format(currentDate, 'yyyy-MM');
+        // Not scoped to the currently-viewed month — a shift stays flagged
+        // here until it's logged or cancelled, however many months go by,
+        // so it can't silently roll off the page once the calendar advances.
         const needsLog = data.jobs.filter(job => {
           const jobDate = new Date(job.date + 'T12:00:00');
-          return (isToday(jobDate) || isPast(jobDate)) && effectiveHoursWorked(job) === 0 && job.status !== 'cancelled' && job.status !== 'completed' && job.date.startsWith(monthPrefix);
+          return (isToday(jobDate) || isPast(jobDate)) && effectiveHoursWorked(job) === 0 && job.status !== 'cancelled' && job.status !== 'completed';
         }).sort((a, b) => a.date.localeCompare(b.date));
         if (needsLog.length === 0) return null;
         const groups: Record<string, Job[]> = {};
@@ -971,12 +973,15 @@ export default function CalendarPage() {
                 const first = jobs[0];
                 const last = jobs[jobs.length - 1];
                 const dateRange = jobs.length > 1 ? `${format(new Date(first.date + 'T12:00:00'), 'MMM d')} – ${format(new Date(last.date + 'T12:00:00'), 'MMM d')}` : format(new Date(first.date + 'T12:00:00'), 'MMM d');
+                const daysAgo = differenceInCalendarDays(new Date(), new Date(first.date + 'T12:00:00'));
+                const stale = daysAgo >= 7;
                 return (
-                  <div key={key} onClick={() => setSelectedDate(first.date)} className="rounded-xl border border-accent/20 bg-accent/5 p-3 flex items-center gap-3 cursor-pointer active:opacity-70 transition-opacity">
+                  <div key={key} onClick={() => setSelectedDate(first.date)} className={cn("rounded-xl border p-3 flex items-center gap-3 cursor-pointer active:opacity-70 transition-opacity", stale ? "border-destructive/40 bg-destructive/5" : "border-accent/20 bg-accent/5")}>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="font-medium text-sm truncate">{first.name}</p>
                         {jobs.length > 1 && <span className="text-[10px] text-mono bg-accent/20 text-accent px-1.5 py-0.5 rounded-full shrink-0">{jobs.length}d</span>}
+                        {stale && <span className="text-[10px] text-mono bg-destructive/20 text-destructive px-1.5 py-0.5 rounded-full shrink-0">{daysAgo}d ago</span>}
                       </div>
                       <p className="text-xs text-muted-foreground">{first.client} · {dateRange}</p>
                       {first.jobNumber && <p className="text-[10px] text-mono text-muted-foreground/60 mt-0.5">#{first.jobNumber}</p>}
