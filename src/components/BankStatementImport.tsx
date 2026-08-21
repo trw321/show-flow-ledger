@@ -6,6 +6,59 @@ import { toast } from 'sonner';
 import { differenceInDays, parseISO } from 'date-fns';
 import type { Income } from '@/lib/store';
 
+// OpenAI's vision API only accepts real images, not PDF bytes directly, so a
+// PDF has to be rendered to an image client-side first. Renders up to the
+// first few pages and stacks them into one tall image, then feeds it through
+// the exact same pipeline as an uploaded screenshot — no server-side changes
+// needed at all. pdfjs-dist is a large library, so it's dynamically imported
+// here rather than at module scope — people who never touch PDF import
+// shouldn't pay for it in their initial bundle.
+const MAX_PDF_PAGES = 4;
+
+async function pdfToImageDataUrl(file: File): Promise<{ dataUrl: string; truncated: boolean }> {
+  const [pdfjsLib, { default: pdfjsWorkerUrl }] = await Promise.all([
+    import('pdfjs-dist'),
+    import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
+  ]);
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
+
+  const buffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  const pageCount = Math.min(pdf.numPages, MAX_PDF_PAGES);
+  const scale = 2; // render at 2x for sharper text before it goes to OCR/vision
+
+  const canvases: HTMLCanvasElement[] = [];
+  let totalHeight = 0;
+  let maxWidth = 0;
+  for (let i = 1; i <= pageCount; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) continue;
+    await page.render({ canvasContext: ctx, viewport, canvas }).promise;
+    canvases.push(canvas);
+    totalHeight += canvas.height;
+    maxWidth = Math.max(maxWidth, canvas.width);
+  }
+
+  const combined = document.createElement('canvas');
+  combined.width = maxWidth;
+  combined.height = totalHeight;
+  const combinedCtx = combined.getContext('2d')!;
+  combinedCtx.fillStyle = '#ffffff';
+  combinedCtx.fillRect(0, 0, combined.width, combined.height);
+  let y = 0;
+  for (const c of canvases) {
+    combinedCtx.drawImage(c, 0, y);
+    y += c.height;
+  }
+
+  return { dataUrl: combined.toDataURL('image/png'), truncated: pdf.numPages > MAX_PDF_PAGES };
+}
+
 interface ParsedDeposit {
   description: string;
   amount: number;
@@ -102,23 +155,35 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
   const [entries, setEntries] = useState<DepositEntry[]>([]);
 
   const handleFile = useCallback(async (file: File) => {
-    if (!file.type.startsWith('image/')) { toast.error('Please upload an image file'); return; }
-    if (file.size > 10 * 1024 * 1024) { toast.error('File too large (max 10MB)'); return; }
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (!isPdf && !file.type.startsWith('image/')) { toast.error('Please upload an image or PDF file'); return; }
+    if (file.size > 15 * 1024 * 1024) { toast.error('File too large (max 15MB)'); return; }
 
     setLoading(true);
     setEntries([]);
 
-    const reader = new FileReader();
-    reader.onload = () => setPreview(reader.result as string);
-    reader.readAsDataURL(file);
-
-    const buffer = await file.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-    let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-    const base64 = btoa(binary);
-
     try {
+      let dataUrl: string;
+      let mimeType: string;
+
+      if (isPdf) {
+        const { dataUrl: rendered, truncated } = await pdfToImageDataUrl(file);
+        if (truncated) toast.warning(`Only the first ${MAX_PDF_PAGES} pages were analyzed`);
+        dataUrl = rendered;
+        mimeType = 'image/png';
+      } else {
+        dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        mimeType = file.type;
+      }
+
+      setPreview(dataUrl);
+      const base64 = dataUrl.split(',')[1];
+
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       const jobsContext = rows.map(r => ({ name: r.periodLabel, client: r.client }));
@@ -126,7 +191,7 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
       const resp = await fetch(`${supabaseUrl}/functions/v1/parse-statement`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${supabaseKey}` },
-        body: JSON.stringify({ imageBase64: base64, mimeType: file.type, type: 'income', jobs: jobsContext }),
+        body: JSON.stringify({ imageBase64: base64, mimeType, type: 'income', jobs: jobsContext }),
       });
 
       if (!resp.ok) {
@@ -328,7 +393,7 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
         >
           <FileImage size={32} className="text-muted-foreground mb-3" />
           <p className="text-sm text-muted-foreground text-center">
-            Drop a bank statement screenshot here or click to browse
+            Drop a bank statement screenshot or PDF here, or click to browse
           </p>
           <p className="text-xs text-muted-foreground mt-1">
             AI extracts deposits and matches them to your pay periods
@@ -336,7 +401,7 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
           <input
             id="bank-stmt-input"
             type="file"
-            accept="image/*"
+            accept="image/*,.pdf,application/pdf"
             className="hidden"
             onClick={e => e.stopPropagation()}
             onChange={e => { const f = e.target.files?.[0]; if (f) { handleFile(f); e.currentTarget.value = ''; } }}

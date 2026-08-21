@@ -6,6 +6,7 @@ import { Check, Plus, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useCelebration } from '@/components/Celebration';
+import { effectiveHoursWorked } from '@/lib/payCalc';
 import type { Job } from '@/lib/store';
 
 // ── Time / cat scratch parsing ─────────────────────────────────────────────
@@ -324,10 +325,12 @@ export default function CatScratchButton({ className }: { className?: string }) 
   const [activeJobIds, setActiveJobIds] = useState<Set<string>>(new Set());
   const [insertedPrefixes, setInsertedPrefixes] = useState<Record<string, string>>({});
 
-  // Only jobs that still need hours logged — once hoursWorked is set (via this
-  // flow or elsewhere, e.g. Calendar), the job drops out of this list.
+  // Only jobs that still need hours logged AND have actually happened (today
+  // or earlier) — a shift that hasn't occurred yet has no hours to log and
+  // was just cluttering this list up before its date arrived.
+  const today = format(new Date(), 'yyyy-MM-dd');
   const recentJobs = [...data.jobs]
-    .filter(j => (j.hoursWorked ?? 0) === 0)
+    .filter(j => j.date <= today && effectiveHoursWorked(j) === 0)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 8);
 

@@ -187,7 +187,18 @@ export default function PayReconciliationPage() {
 
     for (const job of data.jobs) {
       if (filterJobClient !== 'all' && job.client !== filterJobClient) continue;
-      const key = `${job.client}||${job.payrollCompany || ''}`;
+      // A job on an actual recurring pay schedule (weekly/bi-weekly/etc) needs
+      // every shift for that employer grouped together so the period math can
+      // work. But most one-off gig work has no paySchedule set (or is
+      // 'per-project'), and grouping those purely by client/payroll merged
+      // EVERY unrelated dispatch for the same employer into one row — mark
+      // one shift paid and it dragged every other shift for that client along
+      // with it. Group those by job number (or job id if there isn't one) too,
+      // so only line items that are actually the same dispatch stay together.
+      const isScheduled = job.paySchedule && job.paySchedule !== 'per-project';
+      const key = isScheduled
+        ? `${job.client}||${job.payrollCompany || ''}`
+        : `${job.client}||${job.payrollCompany || ''}||${job.jobNumber?.trim() || job.id}`;
       if (!productions[key]) productions[key] = [];
       productions[key].push(job);
     }
@@ -203,9 +214,15 @@ export default function PayReconciliationPage() {
         const periodIncome = data.income.filter(i => {
           const d = parseISO(i.date);
           if (d > paymentWindow) return false;
-          return i.jobId === referenceJob.id ||
-                 namesMatch(i.client, referenceJob.client) ||
-                 namesMatch(i.client, referenceJob.payrollCompany);
+          // Income already linked to a specific job only ever counts toward
+          // that job's own row — falling through to the name match here was
+          // letting a payment tied to one shift also show as "paid" on every
+          // other row for the same employer, since they legitimately share
+          // the same client name. The name-match fallback is for genuinely
+          // unlinked income (e.g. an imported bank statement not yet tied to
+          // a specific job) only.
+          if (i.jobId) return i.jobId === referenceJob.id;
+          return namesMatch(i.client, referenceJob.client) || namesMatch(i.client, referenceJob.payrollCompany);
         });
 
         const paidIncome = periodIncome.filter(i => i.status === 'paid');
@@ -349,7 +366,7 @@ export default function PayReconciliationPage() {
           <DialogHeader>
             <DialogTitle className="text-mono">Import Bank Statement</DialogTitle>
             <p className="text-xs text-muted-foreground mt-1">
-              Upload a screenshot of your bank statement, check, or pay stub. AI will extract the amount and suggest which job it belongs to.
+              Upload a screenshot or PDF of your bank statement, check, or pay stub. AI will extract the amount and suggest which job it belongs to.
             </p>
           </DialogHeader>
           <BankStatementImport
