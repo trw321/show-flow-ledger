@@ -8,22 +8,31 @@ import {
   Menu,
   X,
   DollarSign,
+  TrendingUp,
+  Wallet,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
+import { useUserPrefs, TabKey } from '@/lib/UserPrefsContext';
 
 interface NavItem {
   label: string;
   to: string;
   icon: React.ReactNode;
+  tab?: TabKey;
 }
 
+// Dashboard, Log & Calendar, Pay, and Settings are the core loop — always
+// shown. Expenses/Income/Pay Outs are the ones Settings' "Visible Sections"
+// panel actually controls.
 const ALL_NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', to: '/', icon: <LayoutDashboard size={18} /> },
   { label: 'Log & Calendar', to: '/new', icon: <ClipboardCheck size={18} /> },
-  { label: 'Expenses', to: '/expenses', icon: <Receipt size={18} /> },
+  { label: 'Expenses', to: '/expenses', icon: <Receipt size={18} />, tab: 'expenses' },
+  { label: 'Income', to: '/income', icon: <TrendingUp size={18} />, tab: 'income' },
   { label: 'Pay', to: '/pay', icon: <DollarSign size={18} /> },
+  { label: 'Pay Outs', to: '/payouts', icon: <Wallet size={18} />, tab: 'payouts' },
   { label: 'Settings', to: '/settings', icon: <Settings size={18} /> },
 ];
 
@@ -35,10 +44,12 @@ const ALL_TAB_ITEMS: NavItem[] = [
 
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
+  const { prefs } = useUserPrefs();
+  const items = ALL_NAV_ITEMS.filter(item => !item.tab || prefs.tabs[item.tab]);
 
   return (
     <nav className="flex flex-col gap-1 p-3">
-      {ALL_NAV_ITEMS.map(item => {
+      {items.map(item => {
         const active =
           item.to === '/'
             ? location.pathname === '/'

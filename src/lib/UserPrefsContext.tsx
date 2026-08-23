@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-export type TabKey =
-  | 'calendar' | 'log' | 'expenses' | 'taxes'
-  | 'income' | 'reconciliation' | 'equipment' | 'discover'
-  | 'scheduling' | 'payouts';
+// Calendar/log/reconciliation/equipment/taxes/discover/scheduling used to be
+// keys here too, but nothing in the app ever actually read those tabs (only
+// expenses/income are checked anywhere) and their pages are gone — Log &
+// Calendar and Pay are core to the app now, not something to hide. Down to
+// just the genuinely optional secondary features.
+export type TabKey = 'expenses' | 'income' | 'payouts';
 
 export type WorkerType = 'w2' | '1099' | 'boss' | 'custom';
 
@@ -14,34 +16,15 @@ export interface UserPrefs {
 }
 
 export const TAB_LABELS: Record<TabKey, { label: string; description: string }> = {
-  calendar:       { label: 'Calendar',        description: 'Monthly view of your gig schedule' },
-  log:            { label: 'Job Log',          description: 'Pre-load jobs and log hours on the day' },
-  expenses:       { label: 'Expenses',         description: 'Track deductible business expenses (1099)' },
-  taxes:          { label: 'Taxes',            description: 'Quarterly tax estimates and breakdowns' },
-  income:         { label: 'Income',           description: 'Invoice tracking and payment records' },
-  reconciliation: { label: 'Reconciliation',   description: 'Verify your paychecks match hours worked' },
-  equipment:      { label: 'Equipment',        description: 'Track your gear, serial numbers, and values' },
-  discover:       { label: 'Discover',         description: 'Crew resources and industry tools' },
-  scheduling:     { label: 'Scheduling',       description: 'Manage crew schedules and timesheets' },
-  payouts:        { label: 'Pay Outs',         description: 'Record and track payments made to crew' },
+  expenses: { label: 'Expenses', description: 'Track deductible business expenses (1099)' },
+  income:   { label: 'Income',   description: 'Invoice tracking and payment records' },
+  payouts:  { label: 'Pay Outs', description: 'Record and track payments made to crew' },
 };
 
 export const WORKER_PRESETS: Record<'w2' | '1099' | 'boss', Record<TabKey, boolean>> = {
-  w2: {
-    calendar: true, log: true, expenses: false, taxes: true,
-    income: true, reconciliation: true, equipment: false, discover: true,
-    scheduling: false, payouts: false,
-  },
-  '1099': {
-    calendar: true, log: true, expenses: true, taxes: true,
-    income: true, reconciliation: true, equipment: false, discover: true,
-    scheduling: false, payouts: false,
-  },
-  boss: {
-    calendar: true, log: true, expenses: true, taxes: true,
-    income: true, reconciliation: true, equipment: true, discover: true,
-    scheduling: true, payouts: true,
-  },
+  w2:     { expenses: false, income: true, payouts: false },
+  '1099': { expenses: true,  income: true, payouts: false },
+  boss:   { expenses: true,  income: true, payouts: true },
 };
 
 const DEFAULT_PREFS: UserPrefs = { workerType: '1099', tabs: WORKER_PRESETS['1099'] };

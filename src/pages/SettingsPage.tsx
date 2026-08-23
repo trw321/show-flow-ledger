@@ -42,11 +42,7 @@ const WORKER_OPTIONS: { type: 'w2' | '1099' | 'boss'; label: string; subtitle: s
   },
 ];
 
-const TAB_ORDER: TabKey[] = [
-  'calendar', 'log', 'reconciliation', 'equipment',
-  'income', 'expenses', 'taxes', 'discover',
-  'scheduling', 'payouts',
-];
+const TAB_ORDER: TabKey[] = ['expenses', 'income', 'payouts'];
 
 interface EmployerFormState {
   name: string;
@@ -258,23 +254,20 @@ export default function SettingsPage() {
         <div className="grid grid-cols-3 gap-3 text-[10px] text-muted-foreground">
           <div>
             <p className="font-semibold text-foreground mb-1">W2 Employee</p>
-            <p className="text-success">Income, recon, taxes, calendar</p>
-            <p className="text-muted-foreground/50 mt-1">No expenses or equipment — employer pays taxes, you don't rent gear.</p>
+            <p className="text-success">Income only</p>
+            <p className="text-muted-foreground/50 mt-1">No expenses — employer handles taxes and payroll.</p>
           </div>
           <div>
             <p className="font-semibold text-foreground mb-1">1099 Contractor</p>
-            <p className="text-success">Expenses, income, recon, taxes</p>
-            <p className="text-muted-foreground/50 mt-1">Full financials — deductions, quarterly taxes, invoicing. No equipment tab.</p>
+            <p className="text-success">Expenses, income</p>
+            <p className="text-muted-foreground/50 mt-1">Full financials — deductions and invoicing.</p>
           </div>
           <div>
             <p className="font-semibold text-foreground mb-1">Boss</p>
-            <p className="text-success">+ Everything</p>
-            <p className="text-muted-foreground/50 mt-1">Owner/operator — scheduling, crew timesheets, pay outs, equipment, and full financials.</p>
+            <p className="text-success">+ Pay Outs</p>
+            <p className="text-muted-foreground/50 mt-1">Owner/operator — also tracks payments made to crew.</p>
           </div>
         </div>
-        <p className="text-[9px] text-mono text-accent/70 pt-1 border-t border-border/30">
-          Note: Reconciliation requires Income — toggling one will sync the other.
-        </p>
       </section>
 
       {/* Employers */}
