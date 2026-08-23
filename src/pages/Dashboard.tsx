@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useData } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
 import FallingPlanets from '@/components/FallingPlanets';
-import { ChevronDown, Download, AlertTriangle } from 'lucide-react';
+import { ChevronDown, Download, Zap, Eye, Flame } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, isToday, differenceInCalendarDays } from 'date-fns';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
+import { useNeedsHours } from '@/lib/useNeedsHours';
+import { getPayTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
 import type { Job, Employer } from '@/lib/store';
 
 function jobGross(job: Job, allJobs: Job[], employers: Employer[] = []): number {
@@ -121,14 +123,78 @@ export default function Dashboard() {
   // ── Needs hours ──────────────────────────────────────────────────────────
   // Surfaced here (not just at the bottom of Log & Calendar) so a shift from
   // weeks ago can't quietly roll off the page unnoticed once the month turns over.
-  const needsHours = data.jobs
-    .filter(j => j.date <= today && effectiveHoursWorked(j) === 0 && j.status !== 'cancelled' && j.status !== 'completed')
-    .sort((a, b) => a.date.localeCompare(b.date));
-  const oldestNeedsHoursDays = needsHours.length > 0 ? differenceInCalendarDays(new Date(), parseISO(needsHours[0].date)) : 0;
+  const { jobsNeedingHours, oldestDays: oldestNeedsHoursDays } = useNeedsHours(data.jobs);
+
+  // ── Pay check due ────────────────────────────────────────────────────────
+  // Worked, priced, but nothing received yet — escalates the longer it waits.
+  const paidJobIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const income of data.income) {
+      if (income.status === 'paid' && income.jobId) set.add(income.jobId);
+    }
+    return set;
+  }, [data.income]);
+
+  const awaitingPayment = useMemo(() => {
+    return data.jobs
+      .map(job => ({ job, pay: jobGross(job, data.jobs, data.employers) }))
+      .filter(({ job, pay }) => pay > 0 && !paidJobIds.has(job.id))
+      .sort((a, b) => a.job.date.localeCompare(b.job.date));
+  }, [data.jobs, data.employers, paidJobIds]);
+
+  const oldestUnpaid = awaitingPayment[0];
+  const daysSinceOldestUnpaid = oldestUnpaid ? differenceInCalendarDays(new Date(), parseISO(oldestUnpaid.job.date)) : 0;
+  const payTier: PayTimingTier = oldestUnpaid ? getPayTimingTier(daysSinceOldestUnpaid) : 'none';
+  const totalUnpaidDue = awaitingPayment.reduce((s, { pay }) => s + pay, 0);
 
   return (
     <SpacePageWrapper title="Dashboard" description="Welcome back" starCount={220}>
       <FallingPlanets />
+
+      {jobsNeedingHours.length > 0 && (
+        <button
+          onClick={() => navigate(`/new?job=${jobsNeedingHours[0].id}`)}
+          className="pulse-shift-end relative z-10 w-full mb-4 flex items-center gap-3 rounded-lg border-2 border-accent bg-accent/10 px-4 py-4 text-left hover:bg-accent/15 transition-colors"
+        >
+          <Zap size={24} className="text-accent shrink-0" fill="currentColor" />
+          <div className="min-w-0">
+            <p className="text-base font-display font-bold uppercase tracking-wide text-accent">
+              Log Hours{jobsNeedingHours.length > 1 ? ` — ${jobsNeedingHours.length} Shifts` : ''}
+            </p>
+            <p className="text-xs text-accent/70 font-body mt-0.5">
+              {jobsNeedingHours[0].name} · {oldestNeedsHoursDays === 0 ? 'today' : `${oldestNeedsHoursDays}d ago`} — tap to close it out
+            </p>
+          </div>
+        </button>
+      )}
+
+      {payTier !== 'none' && oldestUnpaid && (
+        <button
+          onClick={() => navigate('/pay')}
+          className={
+            'relative z-10 w-full mb-6 flex items-center gap-3 rounded-lg border-2 px-4 py-4 text-left transition-colors ' +
+            (payTier === 'watching' ? 'pulse-pay-watching border-primary bg-primary/10 hover:bg-primary/15'
+              : payTier === 'warm' ? 'pulse-pay-warm border-amber-500 bg-amber-500/10 hover:bg-amber-500/15'
+              : 'pulse-pay-blazing border-red-500 bg-gradient-to-br from-red-500/15 to-orange-500/10 hover:from-red-500/20')
+          }
+        >
+          {payTier === 'watching' && <Eye size={22} className="text-primary shrink-0" />}
+          {payTier === 'warm' && <Flame size={22} className="flame-flicker text-amber-400 shrink-0" />}
+          {payTier === 'blazing' && <span className="flame-flicker text-2xl shrink-0">🔥</span>}
+          <div className="min-w-0">
+            <p className={
+              'text-base font-display font-bold uppercase tracking-wide ' +
+              (payTier === 'watching' ? 'text-primary' : payTier === 'warm' ? 'text-amber-400' : 'text-red-400')
+            }>
+              {PAY_TIMING_LABELS[payTier]} — Check For Pay
+            </p>
+            <p className={'text-xs font-body mt-0.5 ' + (payTier === 'watching' ? 'text-primary/70' : payTier === 'warm' ? 'text-amber-400/70' : 'text-red-400/70')}>
+              ${totalUnpaidDue.toLocaleString(undefined, { maximumFractionDigits: 0 })} unpaid · {daysSinceOldestUnpaid}d since {oldestUnpaid.job.name}
+            </p>
+          </div>
+        </button>
+      )}
+
       <div className="relative z-10 mb-6 flex items-baseline gap-3">
         <span className="text-3xl md:text-4xl font-bold text-mono text-white">${displayTotal.toLocaleString()}</span>
         <span className={`text-xs font-body uppercase tracking-wider ${displayTotal >= 0 ? 'text-success' : 'text-destructive'}`}>
@@ -136,23 +202,6 @@ export default function Dashboard() {
         </span>
         <span className="text-xs text-white/40 font-body ml-auto">{totalHours.toFixed(1)}h logged</span>
       </div>
-
-      {needsHours.length > 0 && (
-        <button
-          onClick={() => navigate('/new')}
-          className="relative z-10 w-full mb-6 flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-left hover:bg-amber-500/15 transition-colors"
-        >
-          <AlertTriangle size={18} className="text-amber-400 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-amber-300">
-              {needsHours.length} shift{needsHours.length !== 1 ? 's' : ''} still need{needsHours.length === 1 ? 's' : ''} hours logged
-            </p>
-            <p className="text-[11px] text-amber-400/70 font-body">
-              Oldest is {oldestNeedsHoursDays === 0 ? 'today' : `${oldestNeedsHoursDays}d ago`} — tap to log or mark it
-            </p>
-          </div>
-        </button>
-      )}
 
       <ExportButton onClick={() => exportWeeklyToExcel(data.jobs, showExpenses ? data.expenses : [], showIncome ? data.income : [], data.employers)} />
 

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useData } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
 import { Button } from '@/components/ui/button';
@@ -8,6 +9,7 @@ import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Recei
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, differenceInCalendarDays } from 'date-fns';
 import type { Job } from '@/lib/store';
 import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked } from '@/lib/payCalc';
+import { needsHours } from '@/lib/useNeedsHours';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -561,6 +563,20 @@ export default function CalendarPage() {
   const [viewMode, setViewMode] = useState<'month' | 'year'>('month');
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [expandedGroupKey, setExpandedGroupKey] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Deep-link from Dashboard's hero cards (?job=<id>) straight into that
+  // shift's detail view instead of making the user hunt for it on the grid.
+  useEffect(() => {
+    const jobId = searchParams.get('job');
+    if (!jobId) return;
+    const job = data.jobs.find(j => j.id === jobId);
+    if (job) {
+      setSelectedDate(job.date);
+      setSelectedJobId(job.id);
+    }
+    setSearchParams(prev => { prev.delete('job'); return prev; }, { replace: true });
+  }, [searchParams, data.jobs, setSearchParams]);
 
   const jobsByDate = useMemo(() => {
     const map: Record<string, Job[]> = {};
@@ -951,10 +967,7 @@ export default function CalendarPage() {
         // Not scoped to the currently-viewed month — a shift stays flagged
         // here until it's logged or cancelled, however many months go by,
         // so it can't silently roll off the page once the calendar advances.
-        const needsLog = data.jobs.filter(job => {
-          const jobDate = new Date(job.date + 'T12:00:00');
-          return (isToday(jobDate) || isPast(jobDate)) && effectiveHoursWorked(job) === 0 && job.status !== 'cancelled' && job.status !== 'completed';
-        }).sort((a, b) => a.date.localeCompare(b.date));
+        const needsLog = data.jobs.filter(needsHours).sort((a, b) => a.date.localeCompare(b.date));
         if (needsLog.length === 0) return null;
         const groups: Record<string, Job[]> = {};
         for (const job of needsLog) {
