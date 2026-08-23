@@ -392,7 +392,7 @@ function ShiftCard({
 
   return (
     <div className={cn(
-      'rounded-xl border transition-colors overflow-hidden',
+      'rounded-md border transition-colors overflow-hidden',
       selected
         ? existingMatch ? 'border-destructive/50 bg-destructive/5' : conflict ? 'border-amber-500/50 bg-amber-500/5' : 'border-primary/30 bg-primary/5'
         : 'border-border bg-card opacity-50',
@@ -915,8 +915,8 @@ export default function NewGigPage() {
         onChange={handlePhotoSelect}
       />
 
-      <div className="relative rounded-2xl overflow-hidden" style={{ minHeight: 220 }}>
-        <div className="absolute inset-0 rounded-2xl overflow-hidden">
+      <div className="relative rounded-lg overflow-hidden" style={{ minHeight: 220 }}>
+        <div className="absolute inset-0 rounded-lg overflow-hidden">
           <VortexCanvas phase={vortexPhase} className="w-full h-full" />
         </div>
         <div className="relative z-10 p-4 flex flex-col gap-3">
@@ -965,7 +965,7 @@ export default function NewGigPage() {
                     Date <span className="text-lime-400">*</span>
                   </label>
                   <div
-                    className="rounded-xl overflow-hidden border border-white/10 bg-black/40"
+                    className="rounded-md overflow-hidden border border-white/10 bg-black/40"
                     {...swipe}
                   >
                     <Calendar
@@ -1065,7 +1065,7 @@ export default function NewGigPage() {
                           type="date"
                           value={d}
                           onChange={e => setExtraDates(prev => prev.map((v, vi) => vi === i ? e.target.value : v))}
-                          className="flex-1 h-9 rounded-xl bg-black/40 border border-white/10 text-white/80 text-xs font-mono px-3 focus:outline-none focus:border-amber-500/40 [color-scheme:dark]"
+                          className="flex-1 h-9 rounded-md bg-black/40 border border-white/10 text-white/80 text-xs font-mono px-3 focus:outline-none focus:border-amber-500/40 [color-scheme:dark]"
                         />
                         <button
                           type="button"
@@ -1108,7 +1108,7 @@ export default function NewGigPage() {
                     : 'Paste a dispatch offer, hours note, email, or text here…'
                 }
                 className={cn(
-                  'w-full bg-black/40 backdrop-blur-sm border border-white/10 rounded-xl',
+                  'w-full bg-black/40 backdrop-blur-sm border border-white/10 rounded-md',
                   'px-3 py-2.5 text-xs text-mono text-white/80 placeholder:text-white/25',
                   'focus:outline-none focus:border-amber-500/40 focus:bg-black/50',
                   'resize-none transition-colors leading-relaxed',
@@ -1174,7 +1174,7 @@ export default function NewGigPage() {
           </div>
 
           {selected.size >= 2 && (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 flex flex-col gap-2">
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <p className="text-[11px] text-mono uppercase tracking-wider text-amber-400">
                   Batch edit {selected.size} selected
@@ -1258,7 +1258,7 @@ export default function NewGigPage() {
             const accepted = hoursAccepted.has(idx);
             if (accepted) return null;
             return (
-              <div key={idx} className="rounded-xl border border-border bg-card p-3 space-y-2 transition-colors">
+              <div key={idx} className="rounded-md border border-border bg-card p-3 space-y-2 transition-colors">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-xs font-mono text-muted-foreground shrink-0">

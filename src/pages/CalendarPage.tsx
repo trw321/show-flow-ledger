@@ -298,7 +298,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
               for (const inc of paidIncomeForJob) await updateIncome(inc.id, { status: 'pending' });
               toast.success('Marked unpaid');
             }}
-            className="flex items-center gap-2.5 rounded-xl border border-success/40 bg-success/10 p-3 w-full text-left"
+            className="flex items-center gap-2.5 rounded-md border border-success/40 bg-success/10 p-3 w-full text-left"
           >
             <span className="text-lg shrink-0">💰</span>
             <span className="flex-1 text-xs">
@@ -307,7 +307,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
             </span>
           </button>
         )}
-        <div className="rounded-xl border border-border bg-secondary/10 p-3 space-y-2">
+        <div className="rounded-md border border-border bg-secondary/10 p-3 space-y-2">
           {job.client && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Client</span><span className="font-medium text-xs">{job.client}</span></div>}
           {(job.payrollCompany || payrollCompany) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Employer / Payroll</span><span className="font-medium text-xs">{payrollCompany || job.payrollCompany}</span></div>}
           {job.venue && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Venue</span><span className="font-medium text-xs">{job.venue}</span></div>}
@@ -318,7 +318,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
           {rate > 0 && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Rate</span><span className="font-medium text-xs text-mono">${rate}/hr</span></div>}
         </div>
         {payPreview && (
-          <div className={cn("rounded-xl border p-3 space-y-1.5", minimumApplied ? "border-accent/40 bg-accent/5" : "border-success/30 bg-success/5")}>
+          <div className={cn("rounded-md border p-3 space-y-1.5", minimumApplied ? "border-accent/40 bg-accent/5" : "border-success/30 bg-success/5")}>
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">{minimumApplied ? `Worked ${actualHours}h — paid for ${billableHours}h minimum` : `Worked ${actualHours}h`}</span>
               <span className="font-bold text-sm text-mono text-success">${payPreview.totalPay.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
@@ -338,14 +338,14 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
           <button
             type="button"
             onClick={() => setEditing(true)}
-            className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-border bg-secondary/20 py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
+            className="w-full flex items-center justify-center gap-1.5 rounded-md border border-border bg-secondary/20 py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
           >
             <Pencil size={12} /> Edit shift
           </button>
         )}
 
         <label className={cn(
-          "flex items-center gap-2.5 rounded-xl border p-3 cursor-pointer transition-colors",
+          "flex items-center gap-2.5 rounded-md border p-3 cursor-pointer transition-colors",
           payStub ? "border-success/40 bg-success/5" : "border-dashed border-border bg-secondary/10 hover:border-primary/30"
         )}>
           <div className={cn(
@@ -375,7 +375,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
 
         {editing && (
         <>
-        <div className="rounded-xl border border-border overflow-hidden">
+        <div className="rounded-md border border-border overflow-hidden">
           <button
             type="button"
             onClick={() => setDuplicating(d => !d)}
@@ -454,7 +454,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
               {[4, 5, 8].map(hours => {
                 const active = minimumHours === hours.toString();
                 return (
-                  <button key={hours} type="button" onClick={() => handleMinimumClick(hours)} className={cn("rounded-xl border py-2 text-center text-sm font-bold text-mono transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
+                  <button key={hours} type="button" onClick={() => handleMinimumClick(hours)} className={cn("rounded-md border py-2 text-center text-sm font-bold text-mono transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
                     {hours}h
                   </button>
                 );
@@ -467,7 +467,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
               {([{ value: 0 as const, label: 'Zero' }, { value: 30 as const, label: '30m' }, { value: 45 as const, label: '45m' }, { value: 60 as const, label: '1hr' }]).map(({ value, label }) => {
                 const active = mealDuration === value;
                 return (
-                  <button key={label} type="button" onClick={() => setMealDuration(active ? undefined : value)} className={cn("rounded-xl border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
+                  <button key={label} type="button" onClick={() => setMealDuration(active ? undefined : value)} className={cn("rounded-md border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
                     <p className={cn("text-sm font-bold text-mono", active && "text-primary")}>{label}</p>
                   </button>
                 );
@@ -478,7 +478,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
                 {[{ value: true, label: 'On the clock', sub: 'paid, no deduction' }, { value: false, label: 'Off the clock', sub: `${mealDuration}min deducted` }].map(({ value, label, sub }) => {
                   const active = mealOnClock === value;
                   return (
-                    <button key={label} type="button" onClick={() => setMealOnClock(value)} className={cn("rounded-xl border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
+                    <button key={label} type="button" onClick={() => setMealOnClock(value)} className={cn("rounded-md border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
                       <p className={cn("text-xs font-bold", active && "text-primary")}>{label}</p>
                       <p className="text-[9px] leading-tight mt-0.5 opacity-70">{sub}</p>
                     </button>
@@ -504,7 +504,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
         </div>
 
         {rawNightHours > 0 && (
-          <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 space-y-2.5">
+          <div className="rounded-md border border-primary/30 bg-primary/5 p-3 space-y-2.5">
             <label className="flex items-start gap-2.5 cursor-pointer">
               <input
                 type="checkbox"
@@ -742,7 +742,7 @@ export default function CalendarPage() {
       <div className="flex items-stretch justify-between mb-3 gap-2">
         <button
           onClick={() => viewMode === 'month' ? setCurrentDate(prev => subMonths(prev, 1)) : setCurrentYear(prev => prev - 1)}
-          className="flex items-center justify-center w-12 min-h-[44px] rounded-xl bg-fuchsia-500/30 active:bg-fuchsia-500/50 text-fuchsia-400 transition-colors border border-fuchsia-500/40"
+          className="flex items-center justify-center w-12 min-h-[44px] rounded-md bg-fuchsia-500/30 active:bg-fuchsia-500/50 text-fuchsia-400 transition-colors border border-fuchsia-500/40"
         >
           <ChevronLeft size={22} />
         </button>
@@ -757,7 +757,7 @@ export default function CalendarPage() {
         </div>
         <button
           onClick={() => viewMode === 'month' ? setCurrentDate(prev => addMonths(prev, 1)) : setCurrentYear(prev => prev + 1)}
-          className="flex items-center justify-center w-12 min-h-[44px] rounded-xl bg-fuchsia-500/30 active:bg-fuchsia-500/50 text-fuchsia-400 transition-colors border border-fuchsia-500/40"
+          className="flex items-center justify-center w-12 min-h-[44px] rounded-md bg-fuchsia-500/30 active:bg-fuchsia-500/50 text-fuchsia-400 transition-colors border border-fuchsia-500/40"
         >
           <ChevronRight size={22} />
         </button>
@@ -876,7 +876,7 @@ export default function CalendarPage() {
               );
             })}
           </div>
-          <div className="mt-4 rounded-xl border border-border/40 bg-secondary/10 p-3">
+          <div className="mt-4 rounded-md border border-border/40 bg-secondary/10 p-3">
             <p className="text-[9px] font-body uppercase tracking-widest text-muted-foreground/50 mb-2">{currentYear} Total</p>
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">{yearStats.totalJobs > 0 ? `${yearStats.totalJobs} job${yearStats.totalJobs !== 1 ? 's' : ''}` : 'No jobs yet'}</span>
@@ -899,7 +899,7 @@ export default function CalendarPage() {
       )}
 
       <Dialog open={!!selectedDate} onOpenChange={(o) => !o && closeDialog()}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto rounded-2xl">
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto rounded-lg">
           {!selectedJob ? (
             <>
               <DialogHeader>
@@ -909,7 +909,7 @@ export default function CalendarPage() {
               </DialogHeader>
               <div className="space-y-2">
                 {selectedDate && sixthSeventhDayDates[selectedDate] > 0 && (
-                  <div className="rounded-xl border border-pink-500/40 bg-pink-500/10 px-3 py-2 text-xs text-pink-400">
+                  <div className="rounded-md border border-pink-500/40 bg-pink-500/10 px-3 py-2 text-xs text-pink-400">
                     ⚠ {sixthSeventhDayDates[selectedDate]}th consecutive day worked{' '}
                     {selectedJobs
                       .filter(job => getConsecutiveDayStreak(selectedDate, job.client, data.jobs) >= 6)
@@ -924,7 +924,7 @@ export default function CalendarPage() {
                   const paid = paidJobIds.has(job.id);
                   const overdue = isOverdueUpcoming(job);
                   return (
-                    <div key={job.id} onClick={() => setSelectedJobId(job.id)} className={cn("rounded-xl border p-3 space-y-1 cursor-pointer hover:opacity-90 transition-opacity", paid ? "bg-success/20 text-success border-success/30" : overdue ? "bg-amber-500/20 text-amber-400 border-amber-500/30" : statusColors[job.status])}>
+                    <div key={job.id} onClick={() => setSelectedJobId(job.id)} className={cn("rounded-md border p-3 space-y-1 cursor-pointer hover:opacity-90 transition-opacity", paid ? "bg-success/20 text-success border-success/30" : overdue ? "bg-amber-500/20 text-amber-400 border-amber-500/30" : statusColors[job.status])}>
                       <div className="flex items-start justify-between">
                         <div><p className="font-medium text-sm">{job.name}</p><p className="text-xs opacity-70">{job.client}</p></div>
                         <span className="text-[10px] text-mono uppercase font-medium opacity-70">{paid ? 'Paid' : overdue ? 'Needs Hours' : job.status}</span>
@@ -989,7 +989,7 @@ export default function CalendarPage() {
                 const daysAgo = differenceInCalendarDays(new Date(), new Date(first.date + 'T12:00:00'));
                 const stale = daysAgo >= 7;
                 return (
-                  <div key={key} onClick={() => setSelectedDate(first.date)} className={cn("rounded-xl border p-3 flex items-center gap-3 cursor-pointer active:opacity-70 transition-opacity", stale ? "border-destructive/40 bg-destructive/5" : "border-accent/20 bg-accent/5")}>
+                  <div key={key} onClick={() => setSelectedDate(first.date)} className={cn("rounded-md border p-3 flex items-center gap-3 cursor-pointer active:opacity-70 transition-opacity", stale ? "border-destructive/40 bg-destructive/5" : "border-accent/20 bg-accent/5")}>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="font-medium text-sm truncate">{first.name}</p>
@@ -1022,7 +1022,7 @@ export default function CalendarPage() {
                   key={job.id}
                   type="button"
                   onClick={() => handleMarkPaid(job)}
-                  className="rounded-xl border border-success/25 bg-success/5 p-3 flex items-center gap-3 text-left cursor-pointer active:opacity-70 transition-opacity"
+                  className="rounded-md border border-success/25 bg-success/5 p-3 flex items-center gap-3 text-left cursor-pointer active:opacity-70 transition-opacity"
                 >
                   <span className="shrink-0 w-9 h-9 rounded-full bg-success/15 flex items-center justify-center text-lg">💰</span>
                   <div className="flex-1 min-w-0">
@@ -1070,7 +1070,7 @@ export default function CalendarPage() {
                   ? `${dateRange} · ${totalHours}h${totalEarned > 0 ? ` · $${totalEarned.toLocaleString()}` : ''}`
                   : `${dateRange} · ${statusLabel[first.status]}${first.startTime ? ` · ${first.startTime}` : ''}`;
                 return (
-                  <div key={key} className="rounded-xl border border-fuchsia-400/25 bg-fuchsia-400/5 overflow-hidden">
+                  <div key={key} className="rounded-md border border-fuchsia-400/25 bg-fuchsia-400/5 overflow-hidden">
                     <div
                       onClick={() => isGroup ? setExpandedGroupKey(expanded ? null : key) : openJob(first)}
                       className="p-2.5 flex items-center gap-2 opacity-70 cursor-pointer active:opacity-50 transition-opacity"

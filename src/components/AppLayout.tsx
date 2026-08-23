@@ -60,7 +60,7 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
             to={item.to}
             onClick={onNavigate}
             className={cn(
-              'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-body transition-colors',
+              'flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-body transition-colors',
               active
                 ? 'bg-primary/10 text-primary font-medium'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
@@ -79,7 +79,7 @@ function BottomTabBar() {
   const location = useLocation();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 flex border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 flex pb-[env(safe-area-inset-bottom)] border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
       {ALL_TAB_ITEMS.map(item => {
         const active =
           item.to === '/'
@@ -116,8 +116,8 @@ export default function AppLayout() {
         <SidebarNav />
       </aside>
 
-      {/* Mobile header */}
-      <div className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-3 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+      {/* Mobile header — pt- includes the safe-area inset so it clears the notch/status bar */}
+      <div className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
         <span className="text-xl font-display">Show Flow</span>
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
           <SheetTrigger asChild>
@@ -134,9 +134,9 @@ export default function AppLayout() {
         </Sheet>
       </div>
 
-      {/* Main content */}
+      {/* Main content — top/bottom margins on mobile mirror the fixed header/tab bar's actual height, safe-area inset included, so content never sits under either */}
       <main className="flex-1 flex flex-col min-w-0">
-        <div className="flex-1 px-4 py-6 md:px-8 md:py-8 mt-14 md:mt-0 mb-16 md:mb-0 max-w-2xl w-full mx-auto">
+        <div className="flex-1 px-4 py-6 md:px-8 md:py-8 mt-[calc(3.5rem+env(safe-area-inset-top))] md:mt-0 mb-[calc(4rem+env(safe-area-inset-bottom))] md:mb-0 max-w-2xl w-full mx-auto">
           <Outlet />
         </div>
       </main>

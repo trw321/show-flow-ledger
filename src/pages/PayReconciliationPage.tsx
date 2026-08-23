@@ -408,7 +408,7 @@ export default function PayReconciliationPage() {
             const isEditing = editingKey === key;
 
             return (
-              <div key={key} className="rounded-xl border border-border bg-card overflow-hidden">
+              <div key={key} className="rounded-md border border-border bg-card overflow-hidden">
 
                 {/* Snapshot row */}
                 <div className="flex items-center gap-3 px-4 py-3">

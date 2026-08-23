@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Creepster&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Creepster&family=Oswald:wght@500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -43,7 +43,7 @@
     --input: 0 0% 16%;
     --ring: 252 78% 60%;
 
-    --radius: 1rem;
+    --radius: 0.375rem;
 
     --sidebar-background: 0 0% 3%;
     --sidebar-foreground: 0 0% 55%;
@@ -57,6 +57,7 @@
     --font-display: 'Space Mono', monospace;
     --font-body: 'Space Grotesk', sans-serif;
     --font-spooky: 'Creepster', cursive;
+    --font-condensed: 'Oswald', sans-serif;
   }
 }
 
@@ -116,6 +117,10 @@
     font-family: var(--font-display);
     letter-spacing: 0.05em;
   }
+  .text-condensed {
+    font-family: var(--font-condensed);
+    letter-spacing: 0.02em;
+  }
   .funky-gradient {
     background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--info)), hsl(var(--accent)));
   }
@@ -166,6 +171,15 @@
   .flame-flicker {
     animation: flame-flicker 0.9s ease-in-out infinite;
   }
+
+  /* Arena-lighting haze layered over the starfield on every page */
+  .haze-fog {
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse 60% 40% at 20% 15%, hsl(var(--primary) / 0.14), transparent 60%),
+      radial-gradient(ellipse 55% 35% at 85% 80%, hsl(var(--accent) / 0.12), transparent 60%);
+    animation: haze-drift 14s ease-in-out infinite;
+  }
 }
 
 @keyframes pulse-shift-end {
@@ -193,4 +207,9 @@
   25% { opacity: 0.85; transform: translateY(-1px) scale(1.05); }
   50% { opacity: 1; transform: translateY(0.5px) scale(0.96); }
   75% { opacity: 0.9; transform: translateY(-0.5px) scale(1.03); }
+}
+
+@keyframes haze-drift {
+  0%, 100% { opacity: 0.7; transform: translate3d(0, 0, 0) scale(1); }
+  50% { opacity: 1; transform: translate3d(1%, -1%, 0) scale(1.04); }
 }

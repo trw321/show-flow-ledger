@@ -41,7 +41,7 @@ function ExportButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="btn-bounce w-full mb-6 flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 py-3 px-4 text-sm font-semibold text-white/90 transition-colors"
+      className="btn-bounce w-full mb-6 flex items-center justify-center gap-2 rounded-md border border-white/10 bg-white/5 hover:bg-white/10 py-3 px-4 text-sm font-semibold text-white/90 transition-colors"
     >
       <Download size={16} />
       Export to Excel
@@ -158,7 +158,7 @@ export default function Dashboard() {
         >
           <Zap size={24} className="text-accent shrink-0" fill="currentColor" />
           <div className="min-w-0">
-            <p className="text-base font-display font-bold uppercase tracking-wide text-accent">
+            <p className="text-lg text-condensed font-semibold uppercase tracking-wide text-accent">
               Log Hours{jobsNeedingHours.length > 1 ? ` — ${jobsNeedingHours.length} Shifts` : ''}
             </p>
             <p className="text-xs text-accent/70 font-body mt-0.5">
@@ -183,7 +183,7 @@ export default function Dashboard() {
           {payTier === 'blazing' && <span className="flame-flicker text-2xl shrink-0">🔥</span>}
           <div className="min-w-0">
             <p className={
-              'text-base font-display font-bold uppercase tracking-wide ' +
+              'text-lg text-condensed font-semibold uppercase tracking-wide ' +
               (payTier === 'watching' ? 'text-primary' : payTier === 'warm' ? 'text-amber-400' : 'text-red-400')
             }>
               {PAY_TIMING_LABELS[payTier]} — Check For Pay
@@ -196,7 +196,7 @@ export default function Dashboard() {
       )}
 
       <div className="relative z-10 mb-6 flex items-baseline gap-3">
-        <span className="text-3xl md:text-4xl font-bold text-mono text-white">${displayTotal.toLocaleString()}</span>
+        <span className="text-3xl md:text-4xl font-bold text-condensed text-white">${displayTotal.toLocaleString()}</span>
         <span className={`text-xs font-body uppercase tracking-wider ${displayTotal >= 0 ? 'text-success' : 'text-destructive'}`}>
           {showExpenses ? 'net' : 'income'} {displayTotal >= 0 ? '↑' : '↓'}
         </span>
@@ -212,12 +212,15 @@ export default function Dashboard() {
           {isOnStage ? '🎤 On Stage' : '🎭 On Deck'}
         </h2>
         {!nextJob ? (
-          <div className="rounded-xl border border-white/10 bg-black/30 p-4 flex flex-col items-center gap-1 py-6">
+          <div className="rounded-md border border-white/10 bg-black/30 p-4 flex flex-col items-center gap-1 py-6">
             <p className="text-2xl">🌅</p>
             <p className="text-xs text-muted-foreground font-body">No jobs on the horizon</p>
           </div>
         ) : (
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+          <button
+            onClick={() => navigate(`/new?job=${nextJob.id}`)}
+            className="w-full rounded-md border border-white/10 bg-white/5 p-4 text-left hover:bg-white/10 active:opacity-80 transition-colors"
+          >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-base font-display truncate">{nextJob.name}</p>
@@ -232,7 +235,7 @@ export default function Dashboard() {
               {nextJob.hourlyRate && <span>· ${nextJob.hourlyRate}/hr</span>}
               {nextJob.minimumHours && <span>· {nextJob.minimumHours}h min</span>}
             </div>
-          </div>
+          </button>
         )}
       </div>
 
@@ -246,19 +249,19 @@ export default function Dashboard() {
               <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />
               {format(new Date(), 'MMM')}
             </h2>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+            <div className="rounded-md border border-white/10 bg-white/5 p-3">
               <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Hours</p>
               <p className="text-lg font-bold text-mono mt-1">{thisMonthHours.toFixed(1)}</p>
             </div>
-            <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 shadow-[0_0_16px_2px_rgba(139,92,246,0.12)] p-3">
+            <div className="rounded-md border border-violet-500/30 bg-violet-500/5 shadow-[0_0_16px_2px_rgba(139,92,246,0.12)] p-3">
               <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Earned</p>
               <p className="text-lg font-bold text-mono mt-1 text-violet-300">${thisMonthExpected.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
             </div>
-            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 shadow-[0_0_16px_2px_rgba(16,185,129,0.12)] p-3">
+            <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 shadow-[0_0_16px_2px_rgba(16,185,129,0.12)] p-3">
               <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Paid</p>
               <p className="text-lg font-bold text-mono text-emerald-400 mt-1">${thisMonthPaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
             </div>
-            <div className="rounded-xl border border-yellow-400/30 bg-yellow-400/5 shadow-[0_0_16px_2px_rgba(250,204,21,0.12)] p-3">
+            <div className="rounded-md border border-yellow-400/30 bg-yellow-400/5 shadow-[0_0_16px_2px_rgba(250,204,21,0.12)] p-3">
               <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Unpaid</p>
               <p className="text-lg font-bold text-mono mt-1 text-yellow-400">
                 {thisMonthUnpaid > 0 ? `$${thisMonthUnpaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}` : '✓'}
@@ -272,19 +275,19 @@ export default function Dashboard() {
               <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />
               {yearPrefix}
             </h2>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+            <div className="rounded-md border border-white/10 bg-white/5 p-3">
               <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Hours</p>
               <p className="text-lg font-bold text-mono mt-1">{ytdHours.toFixed(1)}</p>
             </div>
-            <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 shadow-[0_0_16px_2px_rgba(139,92,246,0.12)] p-3">
+            <div className="rounded-md border border-violet-500/30 bg-violet-500/5 shadow-[0_0_16px_2px_rgba(139,92,246,0.12)] p-3">
               <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Earned</p>
               <p className="text-lg font-bold text-mono mt-1 text-violet-300">${ytdExpected.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
             </div>
-            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 shadow-[0_0_16px_2px_rgba(16,185,129,0.12)] p-3">
+            <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 shadow-[0_0_16px_2px_rgba(16,185,129,0.12)] p-3">
               <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Paid</p>
               <p className="text-lg font-bold text-mono text-emerald-400 mt-1">${ytdPaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
             </div>
-            <div className="rounded-xl border border-yellow-400/30 bg-yellow-400/5 shadow-[0_0_16px_2px_rgba(250,204,21,0.12)] p-3">
+            <div className="rounded-md border border-yellow-400/30 bg-yellow-400/5 shadow-[0_0_16px_2px_rgba(250,204,21,0.12)] p-3">
               <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Unpaid</p>
               <p className="text-lg font-bold text-mono mt-1 text-yellow-400">
                 {ytdExpected - ytdPaid > 0 ? `$${Math.max(0, ytdExpected - ytdPaid).toLocaleString(undefined, { minimumFractionDigits: 0 })}` : '✓'}
@@ -296,7 +299,7 @@ export default function Dashboard() {
       </div>
       {/* ── By employer ────────────────────────────────────────────────────── */}
       {byEmployer.length > 0 && (
-        <div className="mb-6 rounded-xl border border-violet-500/20 bg-card overflow-hidden shadow-[0_0_16px_2px_rgba(139,92,246,0.08)]">
+        <div className="mb-6 rounded-md border border-violet-500/20 bg-card overflow-hidden shadow-[0_0_16px_2px_rgba(139,92,246,0.08)]">
           <button
             onClick={() => setEmployerExpanded(e => !e)}
             className="w-full px-4 py-3 flex items-center justify-between hover:bg-secondary/30 transition-colors"
@@ -324,11 +327,11 @@ export default function Dashboard() {
 
       {/* Recent expenses — only if there are any */}
       {showExpenses && recentExpenses.length > 0 && (
-        <div className="mb-6 rounded-xl border border-amber-500/20 bg-card p-4 shadow-[0_0_16px_2px_rgba(245,158,11,0.08)]">
+        <div className="mb-6 rounded-md border border-amber-500/20 bg-card p-4 shadow-[0_0_16px_2px_rgba(245,158,11,0.08)]">
           <h2 className="text-[10px] font-body mb-3 text-muted-foreground uppercase tracking-widest">Recent Expenses</h2>
           <div className="space-y-2">
             {recentExpenses.map(exp => (
-              <div key={exp.id} className="flex items-center justify-between rounded-xl bg-secondary/50 px-3 py-2">
+              <div key={exp.id} className="flex items-center justify-between rounded-md bg-secondary/50 px-3 py-2">
                 <div>
                   <p className="text-sm font-medium">{exp.description}</p>
                   <p className="text-xs text-muted-foreground font-body">{exp.category}</p>
