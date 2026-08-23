@@ -3,16 +3,19 @@ import { useState, useRef, useCallback, useMemo } from 'react';
 import { useData } from '@/lib/DataContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Upload, Loader2, Check, X, ChevronRight, ChevronDown, AlertTriangle, Trash2 } from 'lucide-react';
+import { Upload, Loader2, Check, Plus, X, ChevronRight, ChevronDown, AlertTriangle, Trash2, Camera, PenLine } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { getJobDedupKey, findLikelyDuplicate } from '@/lib/jobDedup';
 import type { Job } from '@/lib/store';
 import VortexCanvas from '@/components/VortexCanvas';
-import CatScratchButton from '@/components/CatScratchButton';
 import EmployerCombobox from '@/components/EmployerCombobox';
 import { useCelebration } from '@/components/Celebration';
+import {
+  hourUpdateToEntry, matchEntries as matchHourEntries, calcHours,
+  type HoursEntry, type MatchResult as HoursMatchResult, type SmartImportHourUpdate,
+} from '@/lib/hoursMatching';
 
 interface ParsedJob {
   jobNumber?: string;
@@ -42,7 +45,7 @@ interface ManualEntry {
 }
 
 type VortexPhase = 'idle' | 'pulling' | 'vortex' | 'flash' | 'settling';
-type InputMode = 'choose' | 'text' | 'photo' | 'manual';
+type Step = 'input' | 'review-jobs' | 'review-hours';
 
 function toAmPm(s: string): string {
   const u = s.toUpperCase();
@@ -499,6 +502,13 @@ function ShiftCard({
   );
 }
 
+function confidenceBadge(c: HoursMatchResult['confidence']) {
+  if (c === 'high') return <span className="text-[10px] font-body px-1.5 py-0.5 rounded bg-success/20 text-success">🟢 High</span>;
+  if (c === 'medium') return <span className="text-[10px] font-body px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">🟡 Medium</span>;
+  if (c === 'low') return <span className="text-[10px] font-body px-1.5 py-0.5 rounded bg-destructive/20 text-destructive">🔴 Low</span>;
+  return <span className="text-[10px] font-body px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">No match</span>;
+}
+
 function useSwipeMonth(onPrev: () => void, onNext: () => void) {
   const touchStartX = useRef<number | null>(null);
   const onTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
@@ -523,7 +533,7 @@ const EMPTY_MANUAL: ManualEntry = {
 };
 
 export default function NewGigPage() {
-  const { data, addJob } = useData();
+  const { data, addJob, updateJob: updateExistingJob, addIncome } = useData();
   const { fire: fireCelebration, Burst } = useCelebration();
 
   const [text, setText] = useState('');
@@ -533,12 +543,14 @@ export default function NewGigPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [batchEdit, setBatchEdit] = useState({ client: '', payrollCompany: '', venue: '', hourlyRate: '' });
   const [isImporting, setIsImporting] = useState(false);
-  const [step, setStep] = useState<'input' | 'review'>('input');
+  const [step, setStep] = useState<Step>('input');
   const [vortexPhase, setVortexPhase] = useState<VortexPhase>('idle');
-  const [inputMode, setInputMode] = useState<InputMode>('choose');
+  const [manualOpen, setManualOpen] = useState(false);
   const [manual, setManual] = useState<ManualEntry>(EMPTY_MANUAL);
   const [extraDates, setExtraDates] = useState<string[]>([]);
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
+  const [hoursResults, setHoursResults] = useState<HoursMatchResult[]>([]);
+  const [hoursAccepted, setHoursAccepted] = useState<Set<number>>(new Set());
   const swipe = useSwipeMonth(
     () => setCalendarMonth(m => new Date(m.getFullYear(), m.getMonth() - 1)),
     () => setCalendarMonth(m => new Date(m.getFullYear(), m.getMonth() + 1)),
@@ -580,12 +592,66 @@ export default function NewGigPage() {
     setJobs(newJobs);
     setSelected(new Set(newJobs.map((_, i) => i)));
     setExtraDates([]);
+    setManualOpen(false);
     setVortexPhase('flash');
     setTimeout(() => {
       setVortexPhase('settling');
-      setStep('review');
+      setStep('review-jobs');
       setTimeout(() => setVortexPhase('idle'), 1200);
     }, 400);
+  };
+
+  // Applies the jobs branch of a smart-import (or structured-format) result:
+  // dedup-aware, THRU-expanding, shared by both the text and photo paths.
+  const finishJobsParse = (allJobs: ParsedJob[]) => {
+    if (allJobs.length === 0) {
+      toast.error('No jobs found — check the pasted text');
+      setVortexPhase('pulling');
+      return;
+    }
+
+    // Deterministic backstop for any "CB THRU X..." the AI left unexpanded
+    const expandedJobs = expandThruNotesForBatch(allJobs);
+    expandedJobs.sort((a, b) => a.date.localeCompare(b.date));
+
+    const dateCounts = new Map<string, number>();
+    for (const j of expandedJobs) dateCounts.set(j.date, (dateCounts.get(j.date) ?? 0) + 1);
+    const conflicts = [...dateCounts.entries()].filter(([, n]) => n > 1).map(([d]) => d);
+    if (conflicts.length) toast.warning(`Multiple jobs on ${conflicts.join(', ')} — review highlighted cards`);
+
+    setJobs(expandedJobs);
+    setSelected(new Set(expandedJobs.map((_, i) => i)));
+
+    setVortexPhase('flash');
+    setTimeout(() => {
+      setVortexPhase('settling');
+      setStep('review-jobs');
+      setTimeout(() => setVortexPhase('idle'), 1200);
+    }, 400);
+
+    toast.success(`Found ${expandedJobs.length} shift${expandedJobs.length === 1 ? '' : 's'}`);
+  };
+
+  // Applies the hours branch of a smart-import result: matches each parsed
+  // entry against existing jobs (same scoring CatScratchButton used) and
+  // drops into a review-and-apply list instead of a job-creation review.
+  const finishHoursParse = (updates: SmartImportHourUpdate[]) => {
+    if (updates.length === 0) {
+      toast.error('No hours found — check the pasted text');
+      setVortexPhase('pulling');
+      return;
+    }
+    const entries = updates.map(hourUpdateToEntry);
+    const results = matchHourEntries(entries, data.jobs);
+    setHoursResults(results);
+    setHoursAccepted(new Set());
+    setVortexPhase('flash');
+    setTimeout(() => {
+      setVortexPhase('settling');
+      setStep('review-hours');
+      setTimeout(() => setVortexPhase('idle'), 1200);
+    }, 400);
+    toast.success(`Found ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}`);
   };
 
   const handleParse = async () => {
@@ -595,8 +661,6 @@ export default function NewGigPage() {
     setParseProgress('');
 
     try {
-      const allJobs: ParsedJob[] = [];
-
       if (/^\d{4}-\d{4}/m.test(text)) {
         const records = splitJobRecords(text);
         const expanded: string[] = [];
@@ -604,6 +668,7 @@ export default function NewGigPage() {
         const BATCH = 5;
         const batches: string[][] = [];
         for (let i = 0; i < expanded.length; i += BATCH) batches.push(expanded.slice(i, i + BATCH));
+        const allJobs: ParsedJob[] = [];
         for (let b = 0; b < batches.length; b++) {
           setParseProgress(`Parsing ${b + 1} of ${batches.length}…`);
           const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-jobs`, supabaseKey, {
@@ -613,46 +678,94 @@ export default function NewGigPage() {
           const d = await resp.json();
           allJobs.push(...(d.jobs || []));
         }
-      } else {
-        setParseProgress('Classifying…');
-        const resp = await callAPI(`${supabaseUrl}/functions/v1/smart-import`, supabaseKey, { text });
-        if (!resp.ok) throw new Error((await resp.json()).error || 'Failed to parse');
-        const result = await resp.json();
-        allJobs.push(...(result.jobs || []));
-      }
-
-      if (allJobs.length === 0) {
-        toast.error('No jobs found — check the pasted text');
-        setVortexPhase('pulling');
+        finishJobsParse(allJobs);
         return;
       }
 
-      // Deterministic backstop for any "CB THRU X..." the AI left unexpanded
-      const expandedJobs = expandThruNotesForBatch(allJobs);
-      expandedJobs.sort((a, b) => a.date.localeCompare(b.date));
+      setParseProgress('Classifying…');
+      const resp = await callAPI(`${supabaseUrl}/functions/v1/smart-import`, supabaseKey, { text });
+      if (!resp.ok) throw new Error((await resp.json()).error || 'Failed to parse');
+      const result = await resp.json();
 
-      const dateCounts = new Map<string, number>();
-      for (const j of expandedJobs) dateCounts.set(j.date, (dateCounts.get(j.date) ?? 0) + 1);
-      const conflicts = [...dateCounts.entries()].filter(([, n]) => n > 1).map(([d]) => d);
-      if (conflicts.length) toast.warning(`Multiple jobs on ${conflicts.join(', ')} — review highlighted cards`);
-
-      setJobs(expandedJobs);
-      setSelected(new Set(expandedJobs.map((_, i) => i)));
-
-      setVortexPhase('flash');
-      setTimeout(() => {
-        setVortexPhase('settling');
-        setStep('review');
-        setTimeout(() => setVortexPhase('idle'), 1200);
-      }, 400);
-
-      toast.success(`Found ${expandedJobs.length} shift${expandedJobs.length === 1 ? '' : 's'}`);
+      if (result.type === 'hours') finishHoursParse(result.hourUpdates || []);
+      else if (result.type === 'income') {
+        toast.info('That looks like a payment record, not a shift — check it under Pay instead.');
+        setVortexPhase('pulling');
+      } else finishJobsParse(result.jobs || []);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to parse');
       setVortexPhase('pulling');
     } finally {
       setIsParsing(false);
       setParseProgress('');
+    }
+  };
+
+  const handleApplyHours = async (result: HoursMatchResult, idx: number) => {
+    const { entry, matchedJob } = result;
+    if (matchedJob) {
+      const updates: Partial<Job> = {};
+      if (entry.endTime && !matchedJob.endTime) updates.endTime = entry.endTime;
+      if (entry.mealDuration !== undefined && matchedJob.mealDuration === undefined) {
+        updates.mealDuration = entry.mealDuration;
+        updates.mealOnClock = entry.mealOnClock;
+      }
+      if (entry.mealPenalties && !matchedJob.mealPenalties) updates.mealPenalties = entry.mealPenalties;
+      if (entry.minimumHours && !matchedJob.minimumHours) updates.minimumHours = entry.minimumHours;
+      if (entry.payrollCompany && !matchedJob.payrollCompany) updates.payrollCompany = entry.payrollCompany;
+      if (entry.startTime && !matchedJob.startTime) updates.startTime = entry.startTime;
+      if (entry.hourlyRate && !matchedJob.hourlyRate) updates.hourlyRate = entry.hourlyRate;
+      if (entry.hoursWorked && !matchedJob.hoursWorked) {
+        updates.hoursWorked = entry.hoursWorked;
+        updates.status = 'completed';
+      } else if (entry.endTime && entry.startTime) {
+        const h = calcHours(entry.startTime, entry.endTime);
+        if (h > 0 && !matchedJob.hoursWorked) { updates.hoursWorked = h; updates.status = 'completed'; }
+      }
+      await updateExistingJob(matchedJob.id, updates);
+      if (entry.paid && entry.grossPay) {
+        await addIncome({
+          jobId: matchedJob.id,
+          client: matchedJob.client,
+          description: `Add hours — ${format(new Date(entry.date + 'T12:00:00'), 'MMM d')}`,
+          amount: entry.grossPay,
+          date: entry.date,
+          status: 'paid',
+        });
+      }
+    } else {
+      await addJob({
+        name: entry.venue || 'New shift',
+        client: entry.client || entry.payrollCompany || 'Unknown',
+        venue: entry.venue || '',
+        date: entry.date,
+        startTime: entry.startTime,
+        endTime: entry.endTime,
+        hoursWorked: entry.hoursWorked,
+        hourlyRate: entry.hourlyRate,
+        status: entry.hoursWorked ? 'completed' : 'upcoming',
+        mealDuration: entry.mealDuration,
+        mealOnClock: entry.mealOnClock,
+        mealPenalties: entry.mealPenalties,
+        minimumHours: entry.minimumHours,
+        payrollCompany: entry.payrollCompany,
+        notes: entry.notes || '',
+        has6th7thDayRule: false,
+        hasVacationPay: false,
+      });
+    }
+    const nextAccepted = new Set(hoursAccepted).add(idx);
+    setHoursAccepted(nextAccepted);
+    fireCelebration();
+    toast.success(matchedJob ? 'Job updated' : 'New job created');
+
+    if (nextAccepted.size === hoursResults.length) {
+      setTimeout(() => {
+        setStep('input');
+        setText('');
+        setHoursResults([]);
+        setHoursAccepted(new Set());
+      }, 900);
     }
   };
 
@@ -686,12 +799,13 @@ export default function NewGigPage() {
       (failed ? ` · ${failed} failed` : '')
     );
     setText(''); setJobs([]); setSelected(new Set()); setStep('input'); setVortexPhase('idle');
-    setManual(EMPTY_MANUAL); setInputMode('choose');
+    setManual(EMPTY_MANUAL); setManualOpen(false);
   };
 
   const handleClear = () => {
     setText(''); setJobs([]); setSelected(new Set()); setStep('input');
-    setVortexPhase('idle'); setInputMode('choose'); setManual(EMPTY_MANUAL); setExtraDates([]);
+    setVortexPhase('idle'); setManualOpen(false); setManual(EMPTY_MANUAL); setExtraDates([]);
+    setHoursResults([]); setHoursAccepted(new Set());
   };
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -713,38 +827,30 @@ export default function NewGigPage() {
       });
 
       setParseProgress('Parsing with AI…');
-      // Reverted from smart-import back to parse-job-image: smart-import isn't
-      // deployed on the actual live Supabase project (confirmed via a CORS
-      // preflight failure from a real browser), so this is the endpoint that's
-      // actually reachable. CB/THRU handling was ported into its prompt instead.
-      const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-job-image`, supabaseKey, {
-        base64,
-        mimeType: file.type || 'image/jpeg',
-      });
+      const mimeType = file.type || 'image/jpeg';
 
-      if (!resp.ok) throw new Error((await resp.json()).error || 'Failed to parse image');
-      const result = await resp.json();
-      const allJobs: ParsedJob[] = result.jobs || [];
-
-      if (allJobs.length === 0) {
-        toast.error('No jobs found in image');
-        setVortexPhase('idle');
-        return;
+      // smart-import handles images too (classifies jobs/income/hours like the
+      // text path), but it hasn't reliably been reachable from the browser in
+      // the past (CORS preflight failures) — parse-job-image is the fallback
+      // that's always worked, at the cost of only ever producing jobs.
+      let result: { type?: string; jobs?: ParsedJob[]; hourUpdates?: SmartImportHourUpdate[] };
+      try {
+        const resp = await callAPI(`${supabaseUrl}/functions/v1/smart-import`, supabaseKey, {
+          imageBase64: base64, imageMimeType: mimeType,
+        });
+        if (!resp.ok) throw new Error('smart-import unreachable');
+        result = await resp.json();
+      } catch {
+        const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-job-image`, supabaseKey, { base64, mimeType });
+        if (!resp.ok) throw new Error((await resp.json()).error || 'Failed to parse image');
+        result = await resp.json();
       }
 
-      // Deterministic backstop for any "CB THRU X..." the AI left unexpanded
-      // — vision extraction isn't reliable call-to-call at doing this math itself.
-      const expandedJobs = expandThruNotesForBatch(allJobs);
-      expandedJobs.sort((a, b) => a.date.localeCompare(b.date));
-      setJobs(expandedJobs);
-      setSelected(new Set(expandedJobs.map((_, i) => i)));
-      setVortexPhase('flash');
-      setTimeout(() => {
-        setVortexPhase('settling');
-        setStep('review');
-        setTimeout(() => setVortexPhase('idle'), 1200);
-      }, 400);
-      toast.success(`Found ${expandedJobs.length} shift${expandedJobs.length === 1 ? '' : 's'}`);
+      if (result.type === 'hours') finishHoursParse(result.hourUpdates || []);
+      else if (result.type === 'income') {
+        toast.info('That looks like a payment record, not a shift — check it under Pay instead.');
+        setVortexPhase('idle');
+      } else finishJobsParse(result.jobs || []);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to parse image');
       setVortexPhase('idle');
@@ -755,7 +861,7 @@ export default function NewGigPage() {
     }
   };
 
-  const updateJob = (idx: number, field: keyof ParsedJob, value: string | number | undefined) =>
+  const updateParsedJob = (idx: number, field: keyof ParsedJob, value: string | number | undefined) =>
     setJobs(prev => prev.map((j, i) => i === idx ? { ...j, [field]: value } : j));
 
   const batchUpdateJobs = (field: keyof ParsedJob, value: string | number | undefined) =>
@@ -794,7 +900,7 @@ export default function NewGigPage() {
     return map;
   }, [jobs, data.jobs]);
 
-  const hasContent = text.trim().length > 0 || step === 'review';
+  const hasContent = text.trim().length > 0 || step === 'review-jobs' || step === 'review-hours';
   const manualHasContent = Object.values(manual).some(v => v.trim() !== '');
 
   return (
@@ -818,60 +924,23 @@ export default function NewGigPage() {
             <h1 className="text-xs text-mono uppercase tracking-widest text-white/60 font-medium">
               Job Log
             </h1>
-            {(hasContent || manualHasContent || inputMode !== 'choose') && (
+            {(hasContent || manualHasContent || manualOpen) && (
               <button onClick={handleClear} className="text-white/40 hover:text-white/70 transition-colors p-1" aria-label="Clear">
                 <X size={14} />
               </button>
             )}
           </div>
 
-          {/* Mode chooser */}
-          {inputMode === 'choose' && step === 'input' && (
-            <div className="flex flex-col gap-2 py-4">
-              <button
-                onClick={() => setInputMode('text')}
-                className="btn-bounce flex items-center gap-3 px-4 py-3 rounded-xl bg-black/40 border border-white/10 hover:border-amber-500/40 transition-colors text-left"
-              >
-                <span className="text-xl">🌙🌙</span>
-                <div>
-                  <p className="text-sm text-white/80 font-medium">Copy Paste</p>
-                  <p className="text-[11px] text-white/40">Dispatch portal, union offer sheet, email — handles complex/varied formats best</p>
-                </div>
-              </button>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isParsing}
-                className="btn-bounce flex items-center gap-3 px-4 py-3 rounded-xl bg-black/40 border border-white/10 hover:border-amber-500/40 transition-colors text-left disabled:opacity-50"
-              >
-                <span className="text-xl">📸</span>
-                <div>
-                  <p className="text-sm text-white/80 font-medium">Photo</p>
-                  <p className="text-[11px] text-white/40">Screenshot, text message, calendar, Nowsta</p>
-                </div>
-              </button>
-              <button
-                onClick={() => setInputMode('manual')}
-                className="btn-bounce flex items-center gap-3 px-4 py-3 rounded-xl bg-black/40 border border-white/10 hover:border-amber-500/40 transition-colors text-left"
-              >
-                <span className="text-xl">🃏</span>
-                <div>
-                  <p className="text-sm text-white/80 font-medium">Manual entry</p>
-                  <p className="text-[11px] text-white/40">Phone call, text, or verbal offer</p>
-                </div>
-              </button>
-              <CatScratchButton />
-              {isParsing && (
-                <div className="flex items-center gap-2 justify-center py-2">
-                  <Loader2 size={14} className="animate-spin text-amber-500" />
-                  <span className="text-xs text-white/60 text-mono">{parseProgress}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Manual entry mode */}
-          {inputMode === 'manual' && step === 'input' && (
+          {/* Manual entry — collapsed fallback, not the primary path */}
+          {manualOpen && step === 'input' && (
             <div className="flex flex-col gap-3 py-2">
+              <button
+                type="button"
+                onClick={() => setManualOpen(false)}
+                className="self-start text-[11px] text-white/40 hover:text-white/70 transition-colors"
+              >
+                ← Back to paste
+              </button>
 
               {/* Employer — full width, up top */}
               <div className="flex flex-col gap-1">
@@ -1024,8 +1093,8 @@ export default function NewGigPage() {
             </div>
           )}
 
-          {/* Text input mode */}
-          {(inputMode === 'text' || step === 'review') && (
+          {/* Unified paste-or-photo intake — one box handles offers, hours notes, and everything in between */}
+          {!manualOpen && (
             <>
               <textarea
                 ref={textareaRef}
@@ -1033,7 +1102,11 @@ export default function NewGigPage() {
                 onChange={handleTextChange}
                 disabled={isParsing}
                 rows={6}
-                placeholder={step === 'review' ? 'Paste more shifts to add them…' : 'Paste dispatch text here…'}
+                placeholder={
+                  step !== 'input'
+                    ? 'Paste more to add it…'
+                    : 'Paste a dispatch offer, hours note, email, or text here…'
+                }
                 className={cn(
                   'w-full bg-black/40 backdrop-blur-sm border border-white/10 rounded-xl',
                   'px-3 py-2.5 text-xs text-mono text-white/80 placeholder:text-white/25',
@@ -1041,9 +1114,9 @@ export default function NewGigPage() {
                   'resize-none transition-colors leading-relaxed',
                   isParsing && 'opacity-50 cursor-not-allowed',
                 )}
-                aria-label="Paste dispatch text"
+                aria-label="Paste dispatch text or hours note"
               />
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Button
                   onClick={handleParse}
                   disabled={isParsing || !text.trim()}
@@ -1054,10 +1127,33 @@ export default function NewGigPage() {
                     ? <><Loader2 size={13} className="animate-spin" />{parseProgress || 'Parsing…'}</>
                     : <><Upload size={13} />Parse</>}
                 </Button>
-                {step === 'review' && (
+                <Button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isParsing}
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 bg-black/40 border-white/10 text-white/80 hover:bg-black/60 hover:text-white"
+                >
+                  <Camera size={13} /> Photo
+                </Button>
+                {step === 'review-jobs' && (
                   <span className="text-[11px] text-white/40 text-mono">
                     {jobs.length} shift{jobs.length !== 1 ? 's' : ''} ready
                   </span>
+                )}
+                {step === 'review-hours' && (
+                  <span className="text-[11px] text-white/40 text-mono">
+                    {hoursResults.length - hoursAccepted.size} of {hoursResults.length} left
+                  </span>
+                )}
+                {step === 'input' && (
+                  <button
+                    type="button"
+                    onClick={() => setManualOpen(true)}
+                    className="ml-auto flex items-center gap-1 text-[11px] text-white/40 hover:text-white/70 transition-colors"
+                  >
+                    <PenLine size={11} /> Enter manually
+                  </button>
                 )}
               </div>
             </>
@@ -1065,7 +1161,7 @@ export default function NewGigPage() {
         </div>
       </div>
 
-      {step === 'review' && jobs.length > 0 && (
+      {step === 'review-jobs' && jobs.length > 0 && (
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <h2 className="text-xs text-mono uppercase tracking-wider text-muted-foreground">Review shifts</h2>
@@ -1143,7 +1239,7 @@ export default function NewGigPage() {
                 conflict={conflictDates.has(job.date)}
                 existingMatch={existingMatches.get(i)}
                 onToggle={() => setSelected(prev => { const next = new Set(prev); next.has(i) ? next.delete(i) : next.add(i); return next; })}
-                onChange={(field, value) => updateJob(i, field, value)}
+                onChange={(field, value) => updateParsedJob(i, field, value)}
               />
             ))}
           </div>
@@ -1152,6 +1248,70 @@ export default function NewGigPage() {
               ? <><Loader2 size={14} className="animate-spin" />Saving…</>
               : <><Check size={14} />Save {selected.size} shift{selected.size !== 1 ? 's' : ''}</>}
           </Button>
+        </div>
+      )}
+
+      {step === 'review-hours' && hoursResults.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <h2 className="text-xs text-mono uppercase tracking-wider text-muted-foreground">Match hours to shifts</h2>
+          {hoursResults.map((result, idx) => {
+            const accepted = hoursAccepted.has(idx);
+            if (accepted) return null;
+            return (
+              <div key={idx} className="rounded-xl border border-border bg-card p-3 space-y-2 transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs font-mono text-muted-foreground shrink-0">
+                      {format(new Date(result.entry.date + 'T12:00:00'), 'MMM d')}
+                    </span>
+                    {result.entry.venue && <span className="text-xs font-medium truncate">{result.entry.venue}</span>}
+                  </div>
+                  {confidenceBadge(result.confidence)}
+                </div>
+
+                {(result.entry.startTime || result.entry.hoursWorked) && (
+                  <p className="text-[11px] text-mono text-muted-foreground">
+                    {result.entry.startTime && `${result.entry.startTime}${result.entry.endTime ? ` – ${result.entry.endTime}` : ''} · `}
+                    {result.entry.hoursWorked ? `${result.entry.hoursWorked}h` : ''}
+                    {result.entry.hourlyRate ? ` · $${result.entry.hourlyRate}/hr` : ''}
+                    {result.entry.mealDuration !== undefined ? ` · ${result.entry.mealDuration === 0 ? 'no meal' : `${result.entry.mealDuration}min ${result.entry.mealOnClock ? 'on' : 'off'} clock`}` : ''}
+                  </p>
+                )}
+                {result.entry.notes && !result.entry.startTime && (
+                  <p className="text-[11px] text-muted-foreground italic">{result.entry.notes}</p>
+                )}
+
+                {result.matchedJob && (
+                  <div className="rounded-lg bg-secondary/30 px-2.5 py-1.5 text-[11px]">
+                    <p className="font-medium">{result.matchedJob.name}</p>
+                    <p className="text-muted-foreground">{result.matchedJob.client}{result.matchedJob.venue ? ` · ${result.matchedJob.venue}` : ''}</p>
+                  </div>
+                )}
+
+                {result.conflicts.length > 0 && (
+                  <div className="space-y-0.5">
+                    {result.conflicts.map((c, ci) => (
+                      <p key={ci} className="text-[10px] text-amber-400 flex items-center gap-1">
+                        <AlertTriangle size={10} /> {c}
+                      </p>
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  onClick={() => handleApplyHours(result, idx)}
+                  className={cn(
+                    "w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-body transition-colors",
+                    result.matchedJob
+                      ? "bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20"
+                      : "bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20"
+                  )}
+                >
+                  {result.matchedJob ? <><Check size={12} /> Apply to shift</> : <><Plus size={12} /> Create new shift</>}
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
