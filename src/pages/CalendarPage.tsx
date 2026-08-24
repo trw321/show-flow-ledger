@@ -281,8 +281,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
           <button onClick={onBack} className="text-muted-foreground hover:text-foreground transition-colors p-1 -ml-1 rounded-lg hover:bg-secondary">
             <ArrowLeft size={16} />
           </button>
-          <DialogTitle className="text-mono text-sm flex-1">{job.name}</DialogTitle>
-          <button onClick={handleDelete} className="text-muted-foreground hover:text-destructive transition-colors p-1 rounded-lg hover:bg-destructive/10" aria-label="Delete shift">
+          <DialogTitle className="text-mono text-sm flex-1 truncate pr-1">{job.name}</DialogTitle>
+          <button onClick={handleDelete} className="mr-7 text-muted-foreground hover:text-destructive transition-colors p-1 rounded-lg hover:bg-destructive/10" aria-label="Delete shift">
             <Trash2 size={15} />
           </button>
         </div>
