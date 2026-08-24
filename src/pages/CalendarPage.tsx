@@ -291,6 +291,48 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
         <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold text-mono uppercase tracking-wider border", isOverdueUpcoming(job) ? "bg-amber-500/20 text-amber-400 border-amber-500/30" : statusColors[job.status])}>
           {isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
         </span>
+
+        {/* Always front-and-center — no "Edit shift" tap required to log the
+            one thing this dialog usually gets opened for. Glows while hours
+            are still missing, stays available afterward to correct them. */}
+        <div className={cn(
+          "rounded-md border p-3 space-y-2.5",
+          actualHours === 0 ? "border-2 border-accent bg-accent/10 glow-accent" : "border-border bg-secondary/10"
+        )}>
+          <p className={cn("text-[9px] text-mono font-bold tracking-widest uppercase", actualHours === 0 ? "text-accent" : "text-muted-foreground/50")}>
+            {actualHours === 0 ? 'Log Hours' : 'Hours & Pay'}
+          </p>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">End Time</label>
+            <Input
+              autoFocus={actualHours === 0}
+              value={endTime}
+              onChange={e => handleEndTimeChange(e.target.value)}
+              placeholder="e.g. 18:00 or 6:00 PM"
+              className="h-10 text-base text-mono"
+            />
+            {job.startTime && endTime && calcHours(job.startTime, endTime) > 0 && (
+              <p className="text-[10px] text-mono text-muted-foreground">{job.startTime} → {endTime} = <span className="text-accent font-semibold">{calcHours(job.startTime, endTime).toFixed(1)}h</span></p>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Hours Worked</label>
+              <Input type="number" min="0" step="0.5" value={hoursWorked} onChange={e => handleHoursWorkedChange(e.target.value)} placeholder="e.g. 8" className="h-9 text-sm text-mono" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Rate ($/hr)</label>
+              <Input type="number" min="0" step="0.01" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} placeholder="e.g. 45" className="h-9 text-sm text-mono" />
+            </div>
+          </div>
+          {!rate && (
+            <p className="text-[10px] text-amber-400">⚠ No rate set — pay won't calculate until this is filled in</p>
+          )}
+          <Button size="sm" className="w-full" disabled={!hasChanges} onClick={handleSave}>
+            Save Hours
+          </Button>
+        </div>
+
         {paidIncomeForJob.length > 0 && (
           <button
             type="button"
@@ -428,26 +470,6 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
             <label className="text-xs text-muted-foreground">Employer / Payroll Company</label>
             <Input value={payrollCompany} onChange={e => setPayrollCompany(e.target.value)} placeholder="e.g. Nolan AV, Live Nation" className="h-9 text-sm" />
           </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">End Time</label>
-            <Input value={endTime} onChange={e => handleEndTimeChange(e.target.value)} placeholder="e.g. 18:00 or 6:00 PM" className="h-9 text-sm text-mono" />
-            {job.startTime && endTime && calcHours(job.startTime, endTime) > 0 && (
-              <p className="text-[10px] text-mono text-muted-foreground">{job.startTime} → {endTime} = <span className="text-primary font-semibold">{calcHours(job.startTime, endTime).toFixed(1)}h</span></p>
-            )}
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Hours Worked</label>
-              <Input type="number" min="0" step="0.5" value={hoursWorked} onChange={e => handleHoursWorkedChange(e.target.value)} placeholder="e.g. 3" className="h-9 text-sm text-mono" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Rate ($/hr)</label>
-              <Input type="number" min="0" step="0.01" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} placeholder="e.g. 45" className="h-9 text-sm text-mono" />
-            </div>
-          </div>
-          {!rate && (
-            <p className="text-[10px] text-amber-400 -mt-1">⚠ No rate set — pay won't calculate until this is filled in</p>
-          )}
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">Min. Call</label>
             <div className="grid grid-cols-3 gap-1.5">
