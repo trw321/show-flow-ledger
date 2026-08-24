@@ -33,10 +33,13 @@
     --success: 76 92% 48%;
     --success-foreground: 0 0% 5%;
 
-    --info: 210 100% 55%;
+    /* Matched to the amber-500/blue-500 raw colors Income/BankStatementImport
+       already use for these exact meanings, so routing those call sites
+       through the token is a no-op recolor, not a shift. */
+    --info: 217 91% 60%;
     --info-foreground: 0 0% 100%;
 
-    --warning: 50 100% 55%;
+    --warning: 38 92% 50%;
     --warning-foreground: 0 0% 5%;
 
     --border: 0 0% 16%;
@@ -54,8 +57,13 @@
     --sidebar-border: 0 0% 12%;
     --sidebar-ring: 252 78% 60%;
 
-    --font-display: 'Space Mono', monospace;
-    --font-body: 'Space Grotesk', sans-serif;
+    /* Headings = DM Serif Display, body/UI text = DM Sans, data/numbers/
+       labels/timestamps = Space Mono via --font-mono (.text-mono reads
+       this — it used to incorrectly read --font-display, which is why
+       headings and data numbers rendered in the same font). */
+    --font-display: 'DM Serif Display', serif;
+    --font-body: 'DM Sans', sans-serif;
+    --font-mono: 'Space Mono', monospace;
     --font-spooky: 'Creepster', cursive;
     --font-condensed: 'Oswald', sans-serif;
   }
@@ -114,7 +122,7 @@
     border-color: hsl(var(--primary) / 0.4);
   }
   .text-mono {
-    font-family: var(--font-display);
+    font-family: var(--font-mono);
     letter-spacing: 0.05em;
   }
   .text-condensed {
