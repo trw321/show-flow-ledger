@@ -8,7 +8,6 @@ import CalendarPage from '@/pages/CalendarPage';
 import ExpensesPage from '@/pages/ExpensesPage';
 import IncomePage from '@/pages/IncomePage';
 import PayOutsPage from '@/pages/PayOutsPage';
-import PayReconciliationPage from '@/pages/PayReconciliationPage';
 import SettingsPage from '@/pages/SettingsPage';
 import AuthPage from '@/pages/AuthPage';
 import PatternAuthPage from '@/pages/PatternAuthPage';
@@ -29,7 +28,7 @@ export default function App() {
             <Route path="/expenses" element={<ExpensesPage />} />
             <Route path="/income" element={<IncomePage />} />
             <Route path="/payouts" element={<PayOutsPage />} />
-            <Route path="/pay" element={<PayReconciliationPage />} />
+            <Route path="/pay" element={<Navigate to="/income" replace />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<NotFound />} />
           </Route>

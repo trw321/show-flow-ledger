@@ -1,9 +1,10 @@
 // Escalating "where's my money" tiers for shifts that are worked and priced
 // but have no payment logged at all yet. This is deliberately a flat,
 // schedule-agnostic lag (not per-employer paySchedule like getLagStatus in
-// PayReconciliationPage, which judges payments that already arrived) — the
-// user picked a fixed default: 3 weeks is a typical wait before anything
-// needs to sound the alarm, then it escalates the longer it goes unpaid.
+// IncomePage's reconciliation section, which judges payments that already
+// arrived) — the user picked a fixed default: 3 weeks is a typical wait
+// before anything needs to sound the alarm, then it escalates the longer
+// it goes unpaid.
 export type PayTimingTier = 'none' | 'watching' | 'warm' | 'blazing';
 
 const WATCHING_AT_DAYS = 21;
