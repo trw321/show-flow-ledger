@@ -97,6 +97,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   onDelete: () => void;
 }) {
   const { data, addJob, updateIncome } = useData();
+  const [client, setClient] = useState(job.client ?? '');
+  const [startTime, setStartTime] = useState(job.startTime ?? '');
   const [endTime, setEndTime] = useState(job.endTime ?? '');
   const [hoursWorked, setHoursWorked] = useState(job.hoursWorked?.toString() ?? '');
   const [hourlyRate, setHourlyRate] = useState(job.hourlyRate?.toString() ?? '');
@@ -114,6 +116,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   const stubInputRef = useRef<HTMLInputElement>(null);
 
   const resetFieldsFromJob = () => {
+    setClient(job.client ?? '');
+    setStartTime(job.startTime ?? '');
     setEndTime(job.endTime ?? '');
     // Older/imported shifts can have both times but never got hoursWorked
     // computed (only happened when someone retyped End Time by hand) — derive
@@ -161,9 +165,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
 
   const paidIncomeForJob = data.income.filter(i => i.jobId === job.id && i.status === 'paid');
 
-  const employer = resolveEmployer(job.client, data.employers);
-  const rawNightHours = ((employer?.nightPremiumEnabled ?? true) && job.startTime && endTime)
-    ? calculateNightHours(job.startTime, endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour)
+  const employer = resolveEmployer(client, data.employers);
+  const rawNightHours = ((employer?.nightPremiumEnabled ?? true) && startTime && endTime)
+    ? calculateNightHours(startTime, endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour)
     : 0;
   const parsedNightActualHours = nightPremiumActualHours.trim() === '' ? undefined : parseFloat(nightPremiumActualHours);
   const validNightActualHours = parsedNightActualHours !== undefined && !isNaN(parsedNightActualHours)
@@ -201,8 +205,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
 
   const handleEndTimeChange = (val: string) => {
     setEndTime(val);
-    if (job.startTime && val) {
-      const h = calcHours(job.startTime, val);
+    if (startTime && val) {
+      const h = calcHours(startTime, val);
       if (h > 0) setHoursWorked(parseFloat(h.toFixed(2)).toString());
     }
   };
@@ -210,8 +214,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   const handleHoursWorkedChange = (val: string) => {
     setHoursWorked(val);
     const h = parseFloat(val);
-    if (job.startTime && !isNaN(h) && h > 0) {
-      setEndTime(addHoursToTime(job.startTime, h));
+    if (startTime && !isNaN(h) && h > 0) {
+      setEndTime(addHoursToTime(startTime, h));
     }
   };
 
@@ -223,7 +227,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
     // minimum call and actual hours worked are frequently different numbers.
     if (!isActive && !hoursWorked) {
       setHoursWorked(hours.toString());
-      if (job.startTime && !endTime) setEndTime(addHoursToTime(job.startTime, hours));
+      if (startTime && !endTime) setEndTime(addHoursToTime(startTime, hours));
     }
   };
 
@@ -239,6 +243,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
 
   const handleSave = () => {
     const updates: Partial<Job> = {};
+    if (client.trim() !== (job.client ?? '') && client.trim()) updates.client = client.trim();
+    if (startTime !== (job.startTime ?? '')) updates.startTime = startTime || undefined;
     if (endTime !== (job.endTime ?? '')) updates.endTime = endTime || undefined;
     if (actualHours > 0) { updates.hoursWorked = actualHours; updates.status = 'completed'; }
     if (hourlyRate !== (job.hourlyRate?.toString() ?? '')) updates.hourlyRate = rate > 0 ? rate : undefined;
@@ -262,6 +268,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
     validNightActualHours !== (job.nightPremiumActualHours ?? undefined);
 
   const hasChanges =
+    (client.trim() !== (job.client ?? '') && client.trim() !== '') ||
+    startTime !== (job.startTime ?? '') ||
     endTime !== (job.endTime ?? '') ||
     hoursWorked !== (job.hoursWorked?.toString() ?? '') ||
     hourlyRate !== (job.hourlyRate?.toString() ?? '') ||
@@ -311,8 +319,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
               placeholder="e.g. 18:00 or 6:00 PM"
               className="h-10 text-base text-mono"
             />
-            {job.startTime && endTime && calcHours(job.startTime, endTime) > 0 && (
-              <p className="text-[10px] text-mono text-muted-foreground">{job.startTime} → {endTime} = <span className="text-accent font-semibold">{calcHours(job.startTime, endTime).toFixed(1)}h</span></p>
+            {startTime && endTime && calcHours(startTime, endTime) > 0 && (
+              <p className="text-[10px] text-mono text-muted-foreground">{startTime} → {endTime} = <span className="text-accent font-semibold">{calcHours(startTime, endTime).toFixed(1)}h</span></p>
             )}
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -350,12 +358,12 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
           </button>
         )}
         <div className="rounded-md border border-border bg-secondary/10 p-3 space-y-2">
-          {job.client && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Client</span><span className="font-medium text-xs">{job.client}</span></div>}
+          {(client || job.client) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Client</span><span className="font-medium text-xs">{client || job.client}</span></div>}
           {(job.payrollCompany || payrollCompany) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Employer / Payroll</span><span className="font-medium text-xs">{payrollCompany || job.payrollCompany}</span></div>}
           {job.venue && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Venue</span><span className="font-medium text-xs">{job.venue}</span></div>}
           {job.date && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Date</span><span className="font-medium text-xs text-mono">{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d, yyyy')}</span></div>}
           {job.jobNumber && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Job #</span><span className="font-medium text-xs text-mono">{job.jobNumber}</span></div>}
-          {job.startTime && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Start</span><span className="font-medium text-xs text-mono">{job.startTime}{endTime ? ` – ${endTime}` : ''}</span></div>}
+          {(startTime || job.startTime) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Start</span><span className="font-medium text-xs text-mono">{startTime || job.startTime}{endTime ? ` – ${endTime}` : ''}</span></div>}
           {actualHours > 0 && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Hours Worked</span><span className="font-medium text-xs text-mono">{actualHours}h</span></div>}
           {rate > 0 && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Rate</span><span className="font-medium text-xs text-mono">${rate}/hr</span></div>}
         </div>
@@ -466,6 +474,14 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
 
         <div className="space-y-3">
           <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/50 uppercase">Update Job</p>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Client</label>
+            <Input value={client} onChange={e => setClient(e.target.value)} placeholder="e.g. Live Nation" className="h-9 text-sm" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Start Time</label>
+            <Input value={startTime} onChange={e => setStartTime(e.target.value)} placeholder="e.g. 08:00 AM" className="h-9 text-sm text-mono" />
+          </div>
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Employer / Payroll Company</label>
             <Input value={payrollCompany} onChange={e => setPayrollCompany(e.target.value)} placeholder="e.g. Nolan AV, Live Nation" className="h-9 text-sm" />

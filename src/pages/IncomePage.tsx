@@ -630,76 +630,69 @@ export default function IncomePage() {
             const isEditing = editingKey === key;
 
             return (
-              <div key={key} className="rounded-md border border-border bg-card overflow-hidden">
+              <div key={key} className="rounded-2xl border border-border bg-card p-3.5 hover:border-primary/20 transition-colors">
 
-                {/* Snapshot row */}
-                <div className="flex items-center gap-3 px-4 py-3">
+                <div className="flex items-start gap-3">
+                  {/* Main info — tap to expand */}
+                  <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setExpandedRow(isExpanded ? null : key)}>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold text-sm">{row.client}</p>
+                      <span className={cn(
+                        "text-[9px] font-bold text-mono uppercase rounded-full px-2 py-0.5 border",
+                        row.isPaid ? "bg-success/15 text-success border-success/30" : "bg-secondary text-muted-foreground border-border"
+                      )}>
+                        {row.isPaid ? 'paid' : 'unpaid'}
+                      </span>
+                      {/* Money bag paid toggle */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handlePaidToggle(row); }}
+                        disabled={isToggling}
+                        className={cn(
+                          "w-6 h-6 rounded-full flex items-center justify-center text-sm transition-opacity",
+                          isToggling ? "opacity-40" : "opacity-80 hover:opacity-100"
+                        )}
+                        title={row.isPaid ? 'Mark unpaid' : 'Mark paid'}
+                      >
+                        💰
+                      </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {row.periodLabel}
+                      {row.payrollCompany ? ` · via ${row.payrollCompany}` : ''}
+                    </p>
+                    <p className="text-[10px] text-mono text-muted-foreground mt-1">
+                      {row.totalHours.toFixed(1)}h worked
+                      {row.isPaid && row.actualPaid > 0 && ` · $${row.actualPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })} received`}
+                    </p>
+                  </div>
 
-                  {/* Money bag paid toggle */}
-                  <button
-                    onClick={() => handlePaidToggle(row)}
-                    disabled={isToggling}
-                    className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-lg transition-all duration-200 ${
-                      isToggling ? 'opacity-50' : ''
-                    } ${
-                      row.isPaid
-                        ? 'bg-success/20 ring-2 ring-success'
-                        : 'bg-secondary ring-1 ring-border opacity-40 hover:opacity-70 hover:ring-border/80'
-                    }`}
-                    title={row.isPaid ? 'Mark unpaid' : 'Mark paid'}
-                  >
-                    💰
-                  </button>
-
-                  {/* Main info */}
-                  <button
-                    className="flex-1 flex items-center justify-between gap-2 text-left min-w-0"
-                    onClick={() => setExpandedRow(isExpanded ? null : key)}
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{row.client}</p>
-                      <p className="text-[11px] text-muted-foreground text-mono truncate">
-                        {row.periodLabel}
-                        {row.payrollCompany ? ` · via ${row.payrollCompany}` : ''}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-mono">${row.expectedPay.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                      <p className={`text-[10px] text-mono font-bold ${isMatch ? 'text-success' : isOver ? 'text-primary' : 'text-destructive'}`}>
+                        {isMatch ? '✓ match' : `${row.difference >= 0 ? '+' : ''}$${row.difference.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="text-right">
-                        <p className="text-xs text-mono font-medium">${row.expectedPay.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                        <p className={`text-[10px] text-mono font-bold ${isMatch ? 'text-success' : isOver ? 'text-primary' : 'text-destructive'}`}>
-                          {isMatch ? '✓ match' : `${row.difference >= 0 ? '+' : ''}$${row.difference.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
-                        </p>
-                      </div>
-                      {isExpanded ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
-                    </div>
-                  </button>
-
-                  {/* Edit pencil */}
-                  <button
-                    onClick={() => isEditing ? setEditingKey(null) : startEdit(row, key)}
-                    className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-                    title="Edit"
-                  >
-                    <Pencil size={13} />
-                  </button>
-                </div>
-
-                {/* Quick stats bar */}
-                <div className="flex items-center gap-4 px-4 pb-3 border-t border-border/50 pt-2">
-                  <span className="text-[10px] text-mono text-muted-foreground">{row.totalHours.toFixed(1)}h worked</span>
-                  {row.isPaid && row.actualPaid > 0 && (
-                    <span className="text-[10px] text-mono text-success">${row.actualPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })} received</span>
-                  )}
-                  <span className={`text-[10px] text-mono px-1.5 py-0.5 rounded ${
-                    row.isPaid ? 'bg-success/10 text-success' : 'bg-secondary text-muted-foreground'
-                  }`}>
-                    {row.isPaid ? 'paid' : 'unpaid'}
-                  </span>
+                    <button
+                      onClick={() => isEditing ? setEditingKey(null) : startEdit(row, key)}
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                      title="Edit"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      onClick={() => setExpandedRow(isExpanded ? null : key)}
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                      title={isExpanded ? 'Collapse' : 'Expand'}
+                    >
+                      {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Inline edit form */}
                 {isEditing && (
-                  <div className="border-t border-border bg-muted/30 px-4 py-4">
+                  <div className="-mx-3.5 mt-3 border-t border-border bg-muted/30 px-4 py-4">
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="text-[10px] text-mono uppercase text-muted-foreground font-semibold tracking-wider">Edit details</h4>
                       <div className="flex gap-2">
@@ -743,7 +736,7 @@ export default function IncomePage() {
 
                 {/* Expanded detail */}
                 {isExpanded && (
-                  <div className="border-t border-border bg-muted/20 px-4 py-4">
+                  <div className="-mx-3.5 mt-3 border-t border-border bg-muted/20 px-4 py-4">
                     <div className="grid sm:grid-cols-2 gap-4">
                       <div>
                         <h4 className="text-[10px] text-mono uppercase text-muted-foreground mb-2 font-semibold tracking-wider">Jobs in this period</h4>
