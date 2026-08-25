@@ -848,7 +848,11 @@ export default function CalendarPage() {
               const cells: (number | null)[] = [...Array(firstDow).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
               while (cells.length % 7 !== 0) cells.push(null);
               return (
-                <div key={mi}>
+                <div
+                  key={mi}
+                  onClick={() => { setCurrentDate(monthStart); setViewMode('month'); }}
+                  className="cursor-pointer rounded-md -m-1 p-1 transition-colors hover:bg-secondary/40"
+                >
                   <div className="flex items-center justify-between mb-0.5">
                     <p className="text-[9px] font-body font-medium uppercase tracking-wider text-foreground/60">{format(monthStart, 'MMM')}</p>
                     {monthPay > 0 && <span className="text-[7px] text-mono text-success font-semibold">${monthPay >= 1000 ? `${(monthPay / 1000).toFixed(1)}k` : monthPay.toFixed(0)}</span>}
@@ -863,7 +867,11 @@ export default function CalendarPage() {
                       const hasCompleted = dayJobs.some(j => j.status === 'completed');
                       const hasUpcoming = dayJobs.some(j => j.status === 'upcoming' || j.status === 'in-progress');
                       return (
-                        <div key={ci} onClick={() => dayJobs.length > 0 && setSelectedDate(dateKey)} className={cn('h-3 flex items-center justify-center text-[6px] text-mono rounded-[2px] transition-colors select-none', dayJobs.length > 0 && 'cursor-pointer', hasPaid && 'bg-success/30 text-success font-semibold', !hasPaid && hasCompleted && 'bg-primary/25 text-primary', !hasPaid && !hasCompleted && hasUpcoming && 'bg-accent/20 text-accent', !dayJobs.length && 'text-muted-foreground/25', todayFlag && 'ring-1 ring-inset ring-primary/70')}>
+                        <div
+                          key={ci}
+                          onClick={(e) => { if (dayJobs.length > 0) { e.stopPropagation(); setSelectedDate(dateKey); } }}
+                          className={cn('h-3 flex items-center justify-center text-[6px] text-mono rounded-[2px] transition-colors select-none', dayJobs.length > 0 && 'cursor-pointer', hasPaid && 'bg-success/30 text-success font-semibold', !hasPaid && hasCompleted && 'bg-primary/25 text-primary', !hasPaid && !hasCompleted && hasUpcoming && 'bg-accent/20 text-accent', !dayJobs.length && 'text-muted-foreground/25', todayFlag && 'ring-1 ring-inset ring-primary/70')}
+                        >
                           {day}
                         </div>
                       );
