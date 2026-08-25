@@ -421,7 +421,7 @@ export default function PayReconciliationPage() {
                       isToggling ? 'opacity-50' : ''
                     } ${
                       row.isPaid
-                        ? 'bg-success/20 ring-2 ring-success shadow-[0_0_0_4px_rgba(74,222,128,0.3),0_0_16px_6px_rgba(255,255,255,0.2)]'
+                        ? 'bg-success/20 ring-2 ring-success'
                         : 'bg-secondary ring-1 ring-border opacity-40 hover:opacity-70 hover:ring-border/80'
                     }`}
                     title={row.isPaid ? 'Mark unpaid' : 'Mark paid'}
@@ -576,7 +576,7 @@ export default function PayReconciliationPage() {
                               const payorDiffers = !namesMatch(inc.payorName, row.client);
                               const isLateCheck = inc.paymentMethod === 'check' && (inc.lagStatus === 'late' || inc.lagStatus === 'unusual');
                               return (
-                                <div key={j} className={`rounded px-3 py-1.5 text-xs space-y-0.5 ${isLateCheck ? 'bg-amber-500/5 border border-amber-500/20' : 'bg-background'}`}>
+                                <div key={j} className={`rounded px-3 py-1.5 text-xs space-y-0.5 ${isLateCheck ? 'bg-warning/5 border border-warning/20' : 'bg-background'}`}>
                                   <div className="flex justify-between items-center gap-2">
                                     <div className="min-w-0 truncate">
                                       <span>{format(parseISO(inc.date), 'MMM d')}</span>
@@ -587,8 +587,8 @@ export default function PayReconciliationPage() {
                                   <div className="flex items-center gap-2 flex-wrap">
                                     {inc.paymentMethod && (
                                       <span className={`text-[10px] text-mono px-1.5 py-0.5 rounded border ${
-                                        inc.paymentMethod === 'direct_deposit' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                                        : inc.paymentMethod === 'check' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                        inc.paymentMethod === 'direct_deposit' ? 'bg-info/10 text-info border-info/20'
+                                        : inc.paymentMethod === 'check' ? 'bg-warning/10 text-warning border-warning/20'
                                         : inc.paymentMethod === 'cash' ? 'bg-success/10 text-success border-success/20'
                                         : 'bg-secondary text-muted-foreground border-border'
                                       }`}>
