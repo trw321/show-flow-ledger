@@ -910,7 +910,7 @@ export default function CalendarPage() {
           </div>
           <div className="mt-2 flex items-center gap-3 px-1">
             <span className="text-[8px] text-muted-foreground/40 font-body uppercase tracking-wider">Legend</span>
-            {[{ color: 'bg-accent/20', label: 'Upcoming' }, { color: 'bg-success/15', label: 'Completed' }, { color: 'bg-success/30', label: 'Paid' }].map(({ color, label }) => (
+            {[{ color: 'bg-accent/20', label: 'Upcoming' }, { color: 'bg-primary/25', label: 'Completed' }, { color: 'bg-success/30', label: 'Paid' }].map(({ color, label }) => (
               <div key={label} className="flex items-center gap-1">
                 <div className={cn('w-3 h-3 rounded-[2px]', color)} />
                 <span className="text-[8px] text-muted-foreground/50 font-body">{label}</span>
@@ -1033,7 +1033,7 @@ export default function CalendarPage() {
       {awaitingPayment.length > 0 && (
         <div className="mt-6 flex flex-col gap-2">
           <h2 className="text-[9px] font-body uppercase tracking-widest text-muted-foreground/50 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-success inline-block" />
+            <span className="w-1.5 h-1.5 rounded-full bg-warning inline-block" />
             Awaiting Payment
           </h2>
           <div className="flex flex-col gap-2">
@@ -1044,15 +1044,15 @@ export default function CalendarPage() {
                   key={job.id}
                   type="button"
                   onClick={() => handleMarkPaid(job)}
-                  className="rounded-md border border-success/25 bg-success/5 p-3 flex items-center gap-3 text-left cursor-pointer active:opacity-70 transition-opacity"
+                  className="rounded-md border border-warning/25 bg-warning/5 p-3 flex items-center gap-3 text-left cursor-pointer active:opacity-70 transition-opacity"
                 >
-                  <span className="shrink-0 w-9 h-9 rounded-full bg-success/15 flex items-center justify-center text-lg">💰</span>
+                  <span className="shrink-0 w-9 h-9 rounded-full bg-warning/15 flex items-center justify-center text-lg">💰</span>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm truncate">{job.name}</p>
                     <p className="text-xs text-muted-foreground">{job.client} · {format(new Date(job.date + 'T12:00:00'), 'MMM d')}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-sm font-bold text-mono text-success">${amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                    <p className="text-sm font-bold text-mono text-warning">${amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
                     <p className="text-[9px] text-muted-foreground/60">tap to confirm</p>
                   </div>
                 </button>
