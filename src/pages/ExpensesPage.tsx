@@ -233,7 +233,7 @@ export default function ExpensesPage() {
 
   return (
     <SpacePageWrapper title="Expenses" description={`total: $${total.toLocaleString()}`}>
-      <div className="max-w-lg">
+      <div className="max-w-lg mx-auto">
       {/* Receipt import */}
       <div className="mb-4">
         <ExpenseReceiptUpload />
