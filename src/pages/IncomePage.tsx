@@ -225,7 +225,7 @@ export default function IncomePage() {
   return (
     <SpacePageWrapper>
       <div className="max-w-lg mx-auto">
-      <PageHeader title="Income" description={`total: $${total.toLocaleString()}`} />
+      <PageHeader title="$" description={`total: $${total.toLocaleString()}`} />
 
       {/* Statement import */}
       <div className="mb-4">
