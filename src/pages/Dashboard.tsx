@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useData } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
 import FallingPlanets from '@/components/FallingPlanets';
-import { ChevronDown, Download, Zap, Eye, Flame } from 'lucide-react';
+import StatCard from '@/components/StatCard';
+import { ChevronDown, Download, Zap, Eye, Flame, Clock, DollarSign, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, isToday, differenceInCalendarDays } from 'date-fns';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
@@ -154,11 +155,11 @@ export default function Dashboard() {
       {jobsNeedingHours.length > 0 && (
         <button
           onClick={() => navigate(`/new?job=${jobsNeedingHours[0].id}`)}
-          className="pulse-shift-end relative z-10 w-full mb-4 flex items-center gap-3 rounded-lg border-2 border-accent bg-accent/10 px-4 py-4 text-left hover:bg-accent/15 transition-colors"
+          className="relative z-10 w-full mb-4 flex items-center gap-3 rounded-md border border-accent/50 bg-accent/5 hover:border-accent/70 hover:bg-accent/10 px-4 py-4 text-left transition-colors"
         >
-          <Zap size={24} className="text-accent shrink-0" fill="currentColor" />
+          <Zap size={20} className="text-accent shrink-0" />
           <div className="min-w-0">
-            <p className="text-lg text-condensed font-semibold uppercase tracking-wide text-accent">
+            <p className="text-sm font-semibold text-accent">
               Log Hours{jobsNeedingHours.length > 1 ? ` — ${jobsNeedingHours.length} Shifts` : ''}
             </p>
             <p className="text-xs text-accent/70 font-body mt-0.5">
@@ -172,23 +173,23 @@ export default function Dashboard() {
         <button
           onClick={() => navigate('/pay')}
           className={
-            'relative z-10 w-full mb-6 flex items-center gap-3 rounded-lg border-2 px-4 py-4 text-left transition-colors ' +
-            (payTier === 'watching' ? 'pulse-pay-watching border-primary bg-primary/10 hover:bg-primary/15'
-              : payTier === 'warm' ? 'pulse-pay-warm border-amber-500 bg-amber-500/10 hover:bg-amber-500/15'
-              : 'pulse-pay-blazing border-red-500 bg-gradient-to-br from-red-500/15 to-orange-500/10 hover:from-red-500/20')
+            'relative z-10 w-full mb-6 flex items-center gap-3 rounded-md border px-4 py-4 text-left transition-colors ' +
+            (payTier === 'watching' ? 'border-primary/50 bg-primary/5 hover:border-primary/70 hover:bg-primary/10'
+              : payTier === 'warm' ? 'border-warning/50 bg-warning/5 hover:border-warning/70 hover:bg-warning/10'
+              : 'border-destructive/50 bg-destructive/5 hover:border-destructive/70 hover:bg-destructive/10')
           }
         >
-          {payTier === 'watching' && <Eye size={22} className="text-primary shrink-0" />}
-          {payTier === 'warm' && <Flame size={22} className="flame-flicker text-amber-400 shrink-0" />}
-          {payTier === 'blazing' && <span className="flame-flicker text-2xl shrink-0">🔥</span>}
+          {payTier === 'watching' && <Eye size={18} className="text-primary shrink-0" />}
+          {payTier === 'warm' && <Flame size={18} className="flame-flicker text-warning shrink-0" />}
+          {payTier === 'blazing' && <span className="flame-flicker text-xl shrink-0">🔥</span>}
           <div className="min-w-0">
             <p className={
-              'text-lg text-condensed font-semibold uppercase tracking-wide ' +
-              (payTier === 'watching' ? 'text-primary' : payTier === 'warm' ? 'text-amber-400' : 'text-red-400')
+              'text-sm font-semibold ' +
+              (payTier === 'watching' ? 'text-primary' : payTier === 'warm' ? 'text-warning' : 'text-destructive')
             }>
               {PAY_TIMING_LABELS[payTier]} — Check For Pay
             </p>
-            <p className={'text-xs font-body mt-0.5 ' + (payTier === 'watching' ? 'text-primary/70' : payTier === 'warm' ? 'text-amber-400/70' : 'text-red-400/70')}>
+            <p className={'text-xs font-body mt-0.5 ' + (payTier === 'watching' ? 'text-primary/70' : payTier === 'warm' ? 'text-warning/70' : 'text-destructive/70')}>
               ${totalUnpaidDue.toLocaleString(undefined, { maximumFractionDigits: 0 })} unpaid · {daysSinceOldestUnpaid}d since {oldestUnpaid.job.name}
             </p>
           </div>
@@ -196,7 +197,7 @@ export default function Dashboard() {
       )}
 
       <div className="relative z-10 mb-6 flex items-baseline gap-3">
-        <span className="text-3xl md:text-4xl font-bold text-condensed text-white">${displayTotal.toLocaleString()}</span>
+        <span className="text-3xl md:text-4xl font-bold text-mono text-white">${displayTotal.toLocaleString()}</span>
         <span className={`text-xs font-body uppercase tracking-wider ${displayTotal >= 0 ? 'text-success' : 'text-destructive'}`}>
           {showExpenses ? 'net' : 'income'} {displayTotal >= 0 ? '↑' : '↓'}
         </span>
@@ -208,7 +209,7 @@ export default function Dashboard() {
       {/* On Deck / On Stage */}
       <div className="mb-6">
         <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60 mb-3 flex items-center gap-2">
-          <span className={`w-1.5 h-1.5 rounded-full inline-block ${isOnStage ? 'bg-fuchsia-500' : 'bg-amber-400'}`} />
+          <span className={`w-1.5 h-1.5 rounded-full inline-block ${isOnStage ? 'bg-primary' : 'bg-accent'}`} />
           {isOnStage ? '🎤 On Stage' : '🎭 On Deck'}
         </h2>
         {!nextJob ? (
@@ -226,7 +227,7 @@ export default function Dashboard() {
                 <p className="text-base font-display truncate">{nextJob.name}</p>
                 <p className="text-xs text-muted-foreground font-body truncate mt-0.5">{nextJob.client}{nextJob.venue ? ` · ${nextJob.venue}` : ''}</p>
               </div>
-              <span className={`shrink-0 inline-block rounded-full px-2 py-0.5 text-[10px] font-body font-medium ${isOnStage ? 'bg-fuchsia-500/20 text-fuchsia-300' : 'bg-amber-400/20 text-amber-300'}`}>
+              <span className={`shrink-0 inline-block rounded-full px-2 py-0.5 text-[10px] font-body font-medium ${isOnStage ? 'bg-primary/20 text-primary' : 'bg-accent/20 text-accent'}`}>
                 {isOnStage ? 'today' : format(parseISO(nextJob.date), 'MMM d')}
               </span>
             </div>
@@ -245,61 +246,41 @@ export default function Dashboard() {
 
           {/* Left — This month */}
           <div className="flex flex-col gap-2">
-            <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />
+            <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60">
               {format(new Date(), 'MMM')}
             </h2>
-            <div className="rounded-md border border-white/10 bg-white/5 p-3">
-              <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Hours</p>
-              <p className="text-lg font-bold text-mono mt-1">{thisMonthHours.toFixed(1)}</p>
-            </div>
-            <div className="rounded-md border border-violet-500/30 bg-violet-500/5 shadow-[0_0_16px_2px_rgba(139,92,246,0.12)] p-3">
-              <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Earned</p>
-              <p className="text-lg font-bold text-mono mt-1 text-violet-300">${thisMonthExpected.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
-            </div>
-            <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 shadow-[0_0_16px_2px_rgba(16,185,129,0.12)] p-3">
-              <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Paid</p>
-              <p className="text-lg font-bold text-mono text-emerald-400 mt-1">${thisMonthPaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
-            </div>
-            <div className="rounded-md border border-yellow-400/30 bg-yellow-400/5 shadow-[0_0_16px_2px_rgba(250,204,21,0.12)] p-3">
-              <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Unpaid</p>
-              <p className="text-lg font-bold text-mono mt-1 text-yellow-400">
-                {thisMonthUnpaid > 0 ? `$${thisMonthUnpaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}` : '✓'}
-              </p>
-            </div>
+            <StatCard label="Hours" value={thisMonthHours.toFixed(1)} icon={Clock} />
+            <StatCard label="Earned" value={`$${thisMonthExpected.toLocaleString(undefined, { minimumFractionDigits: 0 })}`} icon={DollarSign} variant="primary" />
+            <StatCard label="Paid" value={`$${thisMonthPaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}`} icon={CheckCircle2} variant="success" />
+            <StatCard
+              label="Unpaid"
+              value={thisMonthUnpaid > 0 ? `$${thisMonthUnpaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}` : '✓'}
+              icon={AlertTriangle}
+              variant={thisMonthUnpaid > 0 ? 'warning' : 'default'}
+            />
           </div>
 
           {/* Right — YTD */}
           <div className="flex flex-col gap-2">
-            <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />
+            <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60">
               {yearPrefix}
             </h2>
-            <div className="rounded-md border border-white/10 bg-white/5 p-3">
-              <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Hours</p>
-              <p className="text-lg font-bold text-mono mt-1">{ytdHours.toFixed(1)}</p>
-            </div>
-            <div className="rounded-md border border-violet-500/30 bg-violet-500/5 shadow-[0_0_16px_2px_rgba(139,92,246,0.12)] p-3">
-              <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Earned</p>
-              <p className="text-lg font-bold text-mono mt-1 text-violet-300">${ytdExpected.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
-            </div>
-            <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 shadow-[0_0_16px_2px_rgba(16,185,129,0.12)] p-3">
-              <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Paid</p>
-              <p className="text-lg font-bold text-mono text-emerald-400 mt-1">${ytdPaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
-            </div>
-            <div className="rounded-md border border-yellow-400/30 bg-yellow-400/5 shadow-[0_0_16px_2px_rgba(250,204,21,0.12)] p-3">
-              <p className="text-[10px] font-body uppercase text-muted-foreground leading-tight">Unpaid</p>
-              <p className="text-lg font-bold text-mono mt-1 text-yellow-400">
-                {ytdExpected - ytdPaid > 0 ? `$${Math.max(0, ytdExpected - ytdPaid).toLocaleString(undefined, { minimumFractionDigits: 0 })}` : '✓'}
-              </p>
-            </div>
+            <StatCard label="Hours" value={ytdHours.toFixed(1)} icon={Clock} />
+            <StatCard label="Earned" value={`$${ytdExpected.toLocaleString(undefined, { minimumFractionDigits: 0 })}`} icon={DollarSign} variant="primary" />
+            <StatCard label="Paid" value={`$${ytdPaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}`} icon={CheckCircle2} variant="success" />
+            <StatCard
+              label="Unpaid"
+              value={ytdExpected - ytdPaid > 0 ? `$${Math.max(0, ytdExpected - ytdPaid).toLocaleString(undefined, { minimumFractionDigits: 0 })}` : '✓'}
+              icon={AlertTriangle}
+              variant={ytdExpected - ytdPaid > 0 ? 'warning' : 'default'}
+            />
           </div>
 
         </div>
       </div>
       {/* ── By employer ────────────────────────────────────────────────────── */}
       {byEmployer.length > 0 && (
-        <div className="mb-6 rounded-md border border-violet-500/20 bg-card overflow-hidden shadow-[0_0_16px_2px_rgba(139,92,246,0.08)]">
+        <div className="mb-6 rounded-md border border-border bg-card overflow-hidden">
           <button
             onClick={() => setEmployerExpanded(e => !e)}
             className="w-full px-4 py-3 flex items-center justify-between hover:bg-secondary/30 transition-colors"
@@ -315,7 +296,7 @@ export default function Dashboard() {
                     <p className="text-sm font-medium truncate">{client}</p>
                     <p className="text-[10px] font-body text-muted-foreground">{jobs} job{jobs !== 1 ? 's' : ''} · {hours.toFixed(1)}h</p>
                   </div>
-                  <p className="text-sm font-bold text-mono text-violet-300 shrink-0 ml-3">
+                  <p className="text-sm font-bold text-mono text-foreground shrink-0 ml-3">
                     ${earned.toLocaleString(undefined, { minimumFractionDigits: 0 })}
                   </p>
                 </div>
@@ -327,7 +308,7 @@ export default function Dashboard() {
 
       {/* Recent expenses — only if there are any */}
       {showExpenses && recentExpenses.length > 0 && (
-        <div className="mb-6 rounded-md border border-amber-500/20 bg-card p-4 shadow-[0_0_16px_2px_rgba(245,158,11,0.08)]">
+        <div className="mb-6 rounded-md border border-border bg-card p-4">
           <h2 className="text-[10px] font-body mb-3 text-muted-foreground uppercase tracking-widest">Recent Expenses</h2>
           <div className="space-y-2">
             {recentExpenses.map(exp => (
