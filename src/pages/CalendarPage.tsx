@@ -15,16 +15,16 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 const statusDot: Record<Job['status'], string> = {
-  upcoming: 'bg-blue-500',
-  'in-progress': 'bg-blue-500',
-  completed: 'bg-purple-500',
+  upcoming: 'bg-accent',
+  'in-progress': 'bg-accent',
+  completed: 'bg-primary',
   cancelled: 'bg-destructive',
 };
 
 const statusColors: Record<Job['status'], string> = {
-  upcoming: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  'in-progress': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  completed: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  upcoming: 'bg-accent/20 text-accent border-accent/30',
+  'in-progress': 'bg-accent/20 text-accent border-accent/30',
+  completed: 'bg-primary/20 text-primary border-primary/30',
   cancelled: 'bg-destructive/20 text-destructive border-destructive/30',
 };
 
@@ -40,7 +40,7 @@ function isOverdueUpcoming(job: Job): boolean {
 // distinct from just "completed" (worked, pay estimated but not yet received).
 function jobDotClass(job: Job, paidJobIds: Set<string>): string {
   if (paidJobIds.has(job.id)) return 'bg-success';
-  if (isOverdueUpcoming(job)) return 'bg-amber-500';
+  if (isOverdueUpcoming(job)) return 'bg-warning';
   return statusDot[job.status];
 }
 
@@ -288,16 +288,16 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
         </div>
       </DialogHeader>
       <div className="space-y-4">
-        <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold text-mono uppercase tracking-wider border", isOverdueUpcoming(job) ? "bg-amber-500/20 text-amber-400 border-amber-500/30" : statusColors[job.status])}>
+        <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold text-mono uppercase tracking-wider border", isOverdueUpcoming(job) ? "bg-warning/20 text-warning border-warning/30" : statusColors[job.status])}>
           {isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
         </span>
 
         {/* Always front-and-center — no "Edit shift" tap required to log the
-            one thing this dialog usually gets opened for. Glows while hours
-            are still missing, stays available afterward to correct them. */}
+            one thing this dialog usually gets opened for. Flat, accent-bordered
+            while hours are still missing, stays available afterward to correct them. */}
         <div className={cn(
           "rounded-md border p-3 space-y-2.5",
-          actualHours === 0 ? "border-2 border-accent bg-accent/10 glow-accent" : "border-border bg-secondary/10"
+          actualHours === 0 ? "border-accent/50 bg-accent/5" : "border-border bg-secondary/10"
         )}>
           <p className={cn("text-[9px] text-mono font-bold tracking-widest uppercase", actualHours === 0 ? "text-accent" : "text-muted-foreground/50")}>
             {actualHours === 0 ? 'Log Hours' : 'Hours & Pay'}
@@ -326,7 +326,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
             </div>
           </div>
           {!rate && (
-            <p className="text-[10px] text-amber-400">⚠ No rate set — pay won't calculate until this is filled in</p>
+            <p className="text-[10px] text-warning">⚠ No rate set — pay won't calculate until this is filled in</p>
           )}
           <Button size="sm" className="w-full" disabled={!hasChanges} onClick={handleSave}>
             Save Hours
@@ -764,7 +764,7 @@ export default function CalendarPage() {
       <div className="flex items-stretch justify-between mb-3 gap-2">
         <button
           onClick={() => viewMode === 'month' ? setCurrentDate(prev => subMonths(prev, 1)) : setCurrentYear(prev => prev - 1)}
-          className="flex items-center justify-center w-12 min-h-[44px] rounded-md bg-fuchsia-500/30 active:bg-fuchsia-500/50 text-fuchsia-400 transition-colors border border-fuchsia-500/40"
+          className="flex items-center justify-center w-12 min-h-[44px] rounded-md bg-primary/30 active:bg-primary/50 text-primary transition-colors border border-primary/40"
         >
           <ChevronLeft size={22} />
         </button>
@@ -779,7 +779,7 @@ export default function CalendarPage() {
         </div>
         <button
           onClick={() => viewMode === 'month' ? setCurrentDate(prev => addMonths(prev, 1)) : setCurrentYear(prev => prev + 1)}
-          className="flex items-center justify-center w-12 min-h-[44px] rounded-md bg-fuchsia-500/30 active:bg-fuchsia-500/50 text-fuchsia-400 transition-colors border border-fuchsia-500/40"
+          className="flex items-center justify-center w-12 min-h-[44px] rounded-md bg-primary/30 active:bg-primary/50 text-primary transition-colors border border-primary/40"
         >
           <ChevronRight size={22} />
         </button>
@@ -811,11 +811,11 @@ export default function CalendarPage() {
                     !isCurrentMonth && 'opacity-30',
                     todayFlag && 'bg-primary/10',
                     hasJobs && 'cursor-pointer active:bg-secondary/60',
-                    sixthSeventhStreak && 'bg-pink-500/20 ring-1 ring-pink-500/60'
+                    sixthSeventhStreak && 'bg-warning/20 ring-1 ring-warning/60'
                   )}
                 >
                   {sixthSeventhStreak > 0 && (
-                    <span className="absolute top-0 right-0.5 w-1.5 h-1.5 rounded-full bg-pink-500" />
+                    <span className="absolute top-0 right-0.5 w-1.5 h-1.5 rounded-full bg-warning" />
                   )}
                   {todayFlag ? (
                     <span className="relative w-6 h-6 flex items-center justify-center">
@@ -888,7 +888,7 @@ export default function CalendarPage() {
                       const hasCompleted = dayJobs.some(j => j.status === 'completed');
                       const hasUpcoming = dayJobs.some(j => j.status === 'upcoming' || j.status === 'in-progress');
                       return (
-                        <div key={ci} onClick={() => dayJobs.length > 0 && setSelectedDate(dateKey)} className={cn('h-3 flex items-center justify-center text-[6px] text-mono rounded-[2px] transition-colors select-none', dayJobs.length > 0 && 'cursor-pointer', hasPaid && 'bg-success/30 text-success font-semibold', !hasPaid && hasCompleted && 'bg-purple-500/25 text-purple-400', !hasPaid && !hasCompleted && hasUpcoming && 'bg-blue-500/20 text-blue-400', !dayJobs.length && 'text-muted-foreground/25', todayFlag && 'ring-1 ring-inset ring-primary/70')}>
+                        <div key={ci} onClick={() => dayJobs.length > 0 && setSelectedDate(dateKey)} className={cn('h-3 flex items-center justify-center text-[6px] text-mono rounded-[2px] transition-colors select-none', dayJobs.length > 0 && 'cursor-pointer', hasPaid && 'bg-success/30 text-success font-semibold', !hasPaid && hasCompleted && 'bg-primary/25 text-primary', !hasPaid && !hasCompleted && hasUpcoming && 'bg-accent/20 text-accent', !dayJobs.length && 'text-muted-foreground/25', todayFlag && 'ring-1 ring-inset ring-primary/70')}>
                           {day}
                         </div>
                       );
@@ -931,7 +931,7 @@ export default function CalendarPage() {
               </DialogHeader>
               <div className="space-y-2">
                 {selectedDate && sixthSeventhDayDates[selectedDate] > 0 && (
-                  <div className="rounded-md border border-pink-500/40 bg-pink-500/10 px-3 py-2 text-xs text-pink-400">
+                  <div className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
                     ⚠ {sixthSeventhDayDates[selectedDate]}th consecutive day worked{' '}
                     {selectedJobs
                       .filter(job => getConsecutiveDayStreak(selectedDate, job.client, data.jobs) >= 6)
@@ -946,7 +946,7 @@ export default function CalendarPage() {
                   const paid = paidJobIds.has(job.id);
                   const overdue = isOverdueUpcoming(job);
                   return (
-                    <div key={job.id} onClick={() => setSelectedJobId(job.id)} className={cn("rounded-md border p-3 space-y-1 cursor-pointer hover:opacity-90 transition-opacity", paid ? "bg-success/20 text-success border-success/30" : overdue ? "bg-amber-500/20 text-amber-400 border-amber-500/30" : statusColors[job.status])}>
+                    <div key={job.id} onClick={() => setSelectedJobId(job.id)} className={cn("rounded-md border p-3 space-y-1 cursor-pointer hover:opacity-90 transition-opacity", paid ? "bg-success/20 text-success border-success/30" : overdue ? "bg-warning/20 text-warning border-warning/30" : statusColors[job.status])}>
                       <div className="flex items-start justify-between">
                         <div><p className="font-medium text-sm">{job.name}</p><p className="text-xs opacity-70">{job.client}</p></div>
                         <span className="text-[10px] text-mono uppercase font-medium opacity-70">{paid ? 'Paid' : overdue ? 'Needs Hours' : job.status}</span>
@@ -959,7 +959,7 @@ export default function CalendarPage() {
                         <Receipt size={11} className={job.payStub ? 'opacity-70' : 'opacity-25'} aria-label={job.payStub ? 'Pay stub uploaded' : 'No pay stub'} />
                       </div>
                       {job.startTime && !job.endTime && (
-                        <p className="text-[10px] text-amber-400 font-medium">⚠ No end time set — tap to add it</p>
+                        <p className="text-[10px] text-warning font-medium">⚠ No end time set — tap to add it</p>
                       )}
                       <p className="text-[10px] opacity-40 text-mono">Tap for details →</p>
                     </div>
@@ -1075,7 +1075,7 @@ export default function CalendarPage() {
         return (
           <div className="mt-4 flex flex-col gap-2">
             <h2 className="text-[9px] font-body uppercase tracking-widest text-muted-foreground/50 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-400 inline-block" />
+              <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
               This month's shifts
             </h2>
             <div className="flex flex-col gap-1.5">
@@ -1092,7 +1092,7 @@ export default function CalendarPage() {
                   ? `${dateRange} · ${totalHours}h${totalEarned > 0 ? ` · $${totalEarned.toLocaleString()}` : ''}`
                   : `${dateRange} · ${statusLabel[first.status]}${first.startTime ? ` · ${first.startTime}` : ''}`;
                 return (
-                  <div key={key} className="rounded-md border border-fuchsia-400/25 bg-fuchsia-400/5 overflow-hidden">
+                  <div key={key} className="rounded-md border border-primary/25 bg-primary/5 overflow-hidden">
                     <div
                       onClick={() => isGroup ? setExpandedGroupKey(expanded ? null : key) : openJob(first)}
                       className="p-2.5 flex items-center gap-2 opacity-70 cursor-pointer active:opacity-50 transition-opacity"
@@ -1116,17 +1116,17 @@ export default function CalendarPage() {
                       )}
                     </div>
                     {isGroup && expanded && (
-                      <div className="border-t border-fuchsia-400/20 divide-y divide-fuchsia-400/10">
+                      <div className="border-t border-primary/20 divide-y divide-primary/10">
                         {jobs.map(job => (
                           <div
                             key={job.id}
                             onClick={() => openJob(job)}
-                            className="px-3 py-2 pl-6 flex items-center justify-between gap-2 cursor-pointer hover:bg-fuchsia-400/10 active:bg-fuchsia-400/15 transition-colors"
+                            className="px-3 py-2 pl-6 flex items-center justify-between gap-2 cursor-pointer hover:bg-primary/10 active:bg-primary/15 transition-colors"
                           >
                             <span className="text-xs text-mono">{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}</span>
                             <span className="flex items-center gap-1.5 text-[11px] text-mono text-muted-foreground">
                               {effectiveHoursWorked(job) > 0 ? `${effectiveHoursWorked(job)}h` : isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
-                              {job.startTime && !job.endTime && <span className="text-amber-400"> · no end time</span>}
+                              {job.startTime && !job.endTime && <span className="text-warning"> · no end time</span>}
                               {effectiveHoursWorked(job) > 0 && (
                                 <Receipt size={10} className={job.payStub ? 'text-success opacity-80' : 'opacity-25'} aria-label={job.payStub ? 'Pay stub uploaded' : 'No pay stub'} />
                               )}

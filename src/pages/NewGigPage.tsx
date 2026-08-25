@@ -394,7 +394,7 @@ function ShiftCard({
     <div className={cn(
       'rounded-md border transition-colors overflow-hidden',
       selected
-        ? existingMatch ? 'border-destructive/50 bg-destructive/5' : conflict ? 'border-amber-500/50 bg-amber-500/5' : 'border-primary/30 bg-primary/5'
+        ? existingMatch ? 'border-destructive/50 bg-destructive/5' : conflict ? 'border-warning/50 bg-warning/5' : 'border-primary/30 bg-primary/5'
         : 'border-border bg-card opacity-50',
     )}>
       <div className="flex items-center gap-2 p-3">
@@ -414,7 +414,7 @@ function ShiftCard({
             <p className="text-sm font-medium truncate">
               {job.date ? format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d') : '—'}
               {conflict && (
-                <span className="ml-1.5 text-[10px] text-amber-500 font-normal">
+                <span className="ml-1.5 text-[10px] text-warning font-normal">
                   <AlertTriangle size={10} className="inline mr-0.5" />same date
                 </span>
               )}
@@ -504,7 +504,7 @@ function ShiftCard({
 
 function confidenceBadge(c: HoursMatchResult['confidence']) {
   if (c === 'high') return <span className="text-[10px] font-body px-1.5 py-0.5 rounded bg-success/20 text-success">🟢 High</span>;
-  if (c === 'medium') return <span className="text-[10px] font-body px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">🟡 Medium</span>;
+  if (c === 'medium') return <span className="text-[10px] font-body px-1.5 py-0.5 rounded bg-warning/20 text-warning">🟡 Medium</span>;
   if (c === 'low') return <span className="text-[10px] font-body px-1.5 py-0.5 rounded bg-destructive/20 text-destructive">🔴 Low</span>;
   return <span className="text-[10px] font-body px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">No match</span>;
 }
@@ -990,7 +990,7 @@ export default function NewGigPage() {
                       value={manual.startTime}
                       onChange={e => handleManualChange('startTime', e.target.value)}
                       placeholder="4:00 PM"
-                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-primary/40"
                     />
                   </div>
                   <div className="flex flex-col gap-1">
@@ -1001,7 +1001,7 @@ export default function NewGigPage() {
                       value={manual.hourlyRate}
                       onChange={e => handleManualChange('hourlyRate', e.target.value)}
                       placeholder="0.00"
-                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-primary/40"
                     />
                   </div>
                   <div className="flex flex-col gap-1">
@@ -1010,7 +1010,7 @@ export default function NewGigPage() {
                       value={manual.position}
                       onChange={e => handleManualChange('position', e.target.value)}
                       placeholder="e.g. A1, Followspot"
-                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-primary/40"
                     />
                   </div>
                   <div className="flex flex-col gap-1">
@@ -1019,7 +1019,7 @@ export default function NewGigPage() {
                       value={manual.name}
                       onChange={e => handleManualChange('name', e.target.value)}
                       placeholder="e.g. Olivia Rodrigo"
-                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-primary/40"
                     />
                   </div>
                   <div className="flex flex-col gap-1">
@@ -1028,7 +1028,7 @@ export default function NewGigPage() {
                       value={manual.venue}
                       onChange={e => handleManualChange('venue', e.target.value)}
                       placeholder="e.g. The Met"
-                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-primary/40"
                     />
                   </div>
                   <div className="flex flex-col gap-1">
@@ -1037,7 +1037,7 @@ export default function NewGigPage() {
                       value={manual.payrollCompany}
                       onChange={e => handleManualChange('payrollCompany', e.target.value)}
                       placeholder="e.g. AVTS"
-                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-amber-500/40"
+                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-primary/40"
                     />
                   </div>
                 </div>
@@ -1052,7 +1052,7 @@ export default function NewGigPage() {
                   <button
                     type="button"
                     onClick={() => setExtraDates(prev => [...prev, ''])}
-                    className="text-[11px] text-amber-400 hover:text-amber-300 transition-colors"
+                    className="text-[11px] text-primary hover:text-primary/80 transition-colors"
                   >
                     + Add another date
                   </button>
@@ -1065,7 +1065,7 @@ export default function NewGigPage() {
                           type="date"
                           value={d}
                           onChange={e => setExtraDates(prev => prev.map((v, vi) => vi === i ? e.target.value : v))}
-                          className="flex-1 h-9 rounded-md bg-black/40 border border-white/10 text-white/80 text-xs font-mono px-3 focus:outline-none focus:border-amber-500/40 [color-scheme:dark]"
+                          className="flex-1 h-9 rounded-md bg-black/40 border border-white/10 text-white/80 text-xs font-mono px-3 focus:outline-none focus:border-primary/40 [color-scheme:dark]"
                         />
                         <button
                           type="button"
@@ -1086,7 +1086,7 @@ export default function NewGigPage() {
                 onClick={handleManualSubmit}
                 disabled={!manual.date && extraDates.every(d => !d)}
                 size="sm"
-                className="w-full gap-1.5 bg-amber-500/90 hover:bg-amber-500 text-black border-0 font-medium mt-1"
+                className="w-full gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground border-0 font-medium mt-1"
               >
                 <Check size={13} /> Add shift{[manual.date, ...extraDates].filter(Boolean).length > 1 ? 's' : ''}
               </Button>
@@ -1110,7 +1110,7 @@ export default function NewGigPage() {
                 className={cn(
                   'w-full bg-black/40 backdrop-blur-sm border border-white/10 rounded-md',
                   'px-3 py-2.5 text-xs text-mono text-white/80 placeholder:text-white/25',
-                  'focus:outline-none focus:border-amber-500/40 focus:bg-black/50',
+                  'focus:outline-none focus:border-primary/40 focus:bg-black/50',
                   'resize-none transition-colors leading-relaxed',
                   isParsing && 'opacity-50 cursor-not-allowed',
                 )}
@@ -1121,7 +1121,7 @@ export default function NewGigPage() {
                   onClick={handleParse}
                   disabled={isParsing || !text.trim()}
                   size="sm"
-                  className="gap-1.5 bg-amber-500/90 hover:bg-amber-500 text-black border-0 font-medium"
+                  className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground border-0 font-medium"
                 >
                   {isParsing
                     ? <><Loader2 size={13} className="animate-spin" />{parseProgress || 'Parsing…'}</>
@@ -1174,9 +1174,9 @@ export default function NewGigPage() {
           </div>
 
           {selected.size >= 2 && (
-            <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 flex flex-col gap-2">
+            <div className="rounded-md border border-primary/30 bg-primary/5 p-3 flex flex-col gap-2">
               <div className="flex items-center justify-between">
-                <p className="text-[11px] text-mono uppercase tracking-wider text-amber-400">
+                <p className="text-[11px] text-mono uppercase tracking-wider text-primary">
                   Batch edit {selected.size} selected
                 </p>
                 <button
@@ -1291,7 +1291,7 @@ export default function NewGigPage() {
                 {result.conflicts.length > 0 && (
                   <div className="space-y-0.5">
                     {result.conflicts.map((c, ci) => (
-                      <p key={ci} className="text-[10px] text-amber-400 flex items-center gap-1">
+                      <p key={ci} className="text-[10px] text-warning flex items-center gap-1">
                         <AlertTriangle size={10} /> {c}
                       </p>
                     ))}
