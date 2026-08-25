@@ -30,7 +30,12 @@
     --destructive: 0 72% 55%;
     --destructive-foreground: 0 0% 98%;
 
-    --success: 76 92% 48%;
+    /* Deepened/saturated per request, one notch back from the darkest option
+       tried — that one measured ~2.9:1 text-on-background contrast (below
+       the 4.5:1 minimum for the small status text most usages are), this
+       one measures ~5.2:1. Foreground stays near-black — at this lightness
+       black text actually contrasts better against it than white does. */
+    --success: 76 92% 30%;
     --success-foreground: 0 0% 5%;
 
     /* Matched to the amber-500/blue-500 raw colors Income/BankStatementImport
