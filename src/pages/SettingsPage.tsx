@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useUserPrefs, TAB_LABELS, WORKER_PRESETS, type TabKey, type WorkerType } from '@/lib/UserPrefsContext';
 import { useData } from '@/lib/DataContext';
+import SpacePageWrapper from '@/components/SpacePageWrapper';
+import PageHeader from '@/components/PageHeader';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -166,11 +168,9 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="max-w-lg space-y-8">
-      <div>
-        <h1 className="text-xl font-bold font-display tracking-widest uppercase">Mode</h1>
-        <p className="text-xs text-muted-foreground mt-1">Customize which sections appear in your app</p>
-      </div>
+    <SpacePageWrapper>
+      <div className="max-w-lg space-y-8">
+        <PageHeader title="Mode" description="Customize which sections appear in your app" />
 
       {/* Worker profile */}
       <section>
@@ -394,6 +394,7 @@ export default function SettingsPage() {
           </AlertDialog>
         </div>
       </section>
-    </div>
+      </div>
+    </SpacePageWrapper>
   );
 }

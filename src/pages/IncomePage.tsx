@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useData } from '@/lib/DataContext';
+import SpacePageWrapper from '@/components/SpacePageWrapper';
 import PageHeader from '@/components/PageHeader';
 import IncomeStatementUpload from '@/components/IncomeStatementUpload';
 import { Button } from '@/components/ui/button';
@@ -222,7 +223,8 @@ export default function IncomePage() {
   const sorted = [...data.income].sort((a, b) => b.date.localeCompare(a.date));
 
   return (
-    <>
+    <SpacePageWrapper>
+      <div className="max-w-lg">
       <PageHeader title="Income" description={`total: $${total.toLocaleString()}`} />
 
       {/* Statement import */}
@@ -318,6 +320,7 @@ export default function IncomePage() {
           )}
         </DialogContent>
       </Dialog>
-    </>
+      </div>
+    </SpacePageWrapper>
   );
 }

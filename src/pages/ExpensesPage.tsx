@@ -233,6 +233,7 @@ export default function ExpensesPage() {
 
   return (
     <SpacePageWrapper title="Expenses" description={`total: $${total.toLocaleString()}`}>
+      <div className="max-w-lg">
       {/* Receipt import */}
       <div className="mb-4">
         <ExpenseReceiptUpload />
@@ -335,6 +336,7 @@ export default function ExpensesPage() {
           )}
         </DialogContent>
       </Dialog>
+      </div>
     </SpacePageWrapper>
   );
 }
