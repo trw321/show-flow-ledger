@@ -643,13 +643,14 @@ export default function IncomePage() {
                       )}>
                         {row.isPaid ? 'paid' : 'unpaid'}
                       </span>
-                      {/* Money bag paid toggle */}
+                      {/* Money bag paid toggle — greyscale until marked paid, then full color */}
                       <button
                         onClick={(e) => { e.stopPropagation(); handlePaidToggle(row); }}
                         disabled={isToggling}
                         className={cn(
-                          "w-6 h-6 rounded-full flex items-center justify-center text-sm transition-opacity",
-                          isToggling ? "opacity-40" : "opacity-80 hover:opacity-100"
+                          "w-6 h-6 rounded-full flex items-center justify-center text-sm transition-all",
+                          row.isPaid ? "grayscale-0 opacity-90" : "grayscale opacity-60 hover:opacity-90",
+                          isToggling && "opacity-40"
                         )}
                         title={row.isPaid ? 'Mark unpaid' : 'Mark paid'}
                       >

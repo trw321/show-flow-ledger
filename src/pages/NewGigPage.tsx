@@ -1141,7 +1141,7 @@ export default function NewGigPage() {
                     onClick={() => setManualOpen(true)}
                     size="sm"
                     variant="outline"
-                    className="gap-1.5 bg-black/40 border-white/10 text-white/80 hover:bg-black/60 hover:text-white"
+                    className="gap-1.5 bg-secondary border-border text-muted-foreground hover:bg-secondary/70 hover:text-foreground"
                   >
                     <PenLine size={13} /> Manual
                   </Button>
