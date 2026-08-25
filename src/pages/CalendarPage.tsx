@@ -6,10 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2 } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, differenceInCalendarDays } from 'date-fns';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast } from 'date-fns';
 import type { Job } from '@/lib/store';
 import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked } from '@/lib/payCalc';
-import { needsHours } from '@/lib/useNeedsHours';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -983,52 +982,6 @@ export default function CalendarPage() {
           )}
         </DialogContent>
       </Dialog>
-
-      {(() => {
-        // Not scoped to the currently-viewed month — a shift stays flagged
-        // here until it's logged or cancelled, however many months go by,
-        // so it can't silently roll off the page once the calendar advances.
-        const needsLog = data.jobs.filter(needsHours).sort((a, b) => a.date.localeCompare(b.date));
-        if (needsLog.length === 0) return null;
-        const groups: Record<string, Job[]> = {};
-        for (const job of needsLog) {
-          const key = job.jobNumber?.trim() || `${job.name}__${job.client}`;
-          if (!groups[key]) groups[key] = [];
-          groups[key].push(job);
-        }
-        return (
-          <div className="mt-6 flex flex-col gap-2">
-            <h2 className="text-[9px] font-body uppercase tracking-widest text-muted-foreground/50 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-accent inline-block" />
-              Ready to log
-            </h2>
-            <div className="flex flex-col gap-2">
-              {Object.entries(groups).map(([key, jobs]) => {
-                const first = jobs[0];
-                const last = jobs[jobs.length - 1];
-                const dateRange = jobs.length > 1 ? `${format(new Date(first.date + 'T12:00:00'), 'MMM d')} – ${format(new Date(last.date + 'T12:00:00'), 'MMM d')}` : format(new Date(first.date + 'T12:00:00'), 'MMM d');
-                const daysAgo = differenceInCalendarDays(new Date(), new Date(first.date + 'T12:00:00'));
-                const stale = daysAgo >= 7;
-                return (
-                  <div key={key} onClick={() => setSelectedDate(first.date)} className={cn("rounded-md border p-3 flex items-center gap-3 cursor-pointer active:opacity-70 transition-opacity", stale ? "border-destructive/40 bg-destructive/5" : "border-accent/20 bg-accent/5")}>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-sm truncate">{first.name}</p>
-                        {jobs.length > 1 && <span className="text-[10px] text-mono bg-accent/20 text-accent px-1.5 py-0.5 rounded-full shrink-0">{jobs.length}d</span>}
-                        {stale && <span className="text-[10px] text-mono bg-destructive/20 text-destructive px-1.5 py-0.5 rounded-full shrink-0">{daysAgo}d ago</span>}
-                      </div>
-                      <p className="text-xs text-muted-foreground">{first.client} · {dateRange}</p>
-                      {first.jobNumber && <p className="text-[10px] text-mono text-muted-foreground/60 mt-0.5">#{first.jobNumber}</p>}
-                    </div>
-                    <ChevronRight size={14} className="text-muted-foreground shrink-0" />
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })()}
-
 
       {(() => {
         const monthPrefix = format(currentDate, 'yyyy-MM');
