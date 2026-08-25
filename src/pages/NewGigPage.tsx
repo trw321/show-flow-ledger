@@ -1136,24 +1136,25 @@ export default function NewGigPage() {
                 >
                   <Camera size={13} /> Photo
                 </Button>
+                {step === 'input' && (
+                  <Button
+                    onClick={() => setManualOpen(true)}
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 bg-black/40 border-white/10 text-white/80 hover:bg-black/60 hover:text-white"
+                  >
+                    <PenLine size={13} /> Manual
+                  </Button>
+                )}
                 {step === 'review-jobs' && (
-                  <span className="text-[11px] text-white/40 text-mono">
+                  <span className="text-[11px] text-white/40 text-mono ml-auto">
                     {jobs.length} shift{jobs.length !== 1 ? 's' : ''} ready
                   </span>
                 )}
                 {step === 'review-hours' && (
-                  <span className="text-[11px] text-white/40 text-mono">
+                  <span className="text-[11px] text-white/40 text-mono ml-auto">
                     {hoursResults.length - hoursAccepted.size} of {hoursResults.length} left
                   </span>
-                )}
-                {step === 'input' && (
-                  <button
-                    type="button"
-                    onClick={() => setManualOpen(true)}
-                    className="ml-auto flex items-center gap-1 text-[11px] text-white/40 hover:text-white/70 transition-colors"
-                  >
-                    <PenLine size={11} /> Enter manually
-                  </button>
                 )}
               </div>
             </>

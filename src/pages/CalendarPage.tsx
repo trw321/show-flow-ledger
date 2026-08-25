@@ -578,7 +578,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function CalendarPage() {
-  const { data, updateJob, addIncome, deleteJob } = useData();
+  const { data, updateJob, deleteJob } = useData();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -653,31 +653,6 @@ export default function CalendarPage() {
     }
     return map;
   }, [data.jobs, jobPay]);
-
-  // Completed shifts with calculated pay that haven't been matched to a
-  // received payment yet — tap one to confirm the money came in.
-  const awaitingPayment = useMemo(() =>
-    data.jobs
-      .filter(j => (jobPay[j.id] ?? 0) > 0 && !paidJobIds.has(j.id))
-      .sort((a, b) => a.date.localeCompare(b.date)),
-    [data.jobs, jobPay, paidJobIds]
-  );
-
-  const handleMarkPaid = async (job: Job) => {
-    const amount = jobPay[job.id] ?? 0;
-    if (amount <= 0) return;
-    const confirmed = window.confirm(`Confirm the money for "${job.name}" (${job.client}) actually came in?\n\n$${amount.toLocaleString(undefined, { maximumFractionDigits: 0 })} will be logged as paid.`);
-    if (!confirmed) return;
-    await addIncome({
-      jobId: job.id,
-      client: job.client,
-      description: job.name,
-      amount,
-      date: format(new Date(), 'yyyy-MM-dd'),
-      status: 'paid',
-    });
-    toast.success(`Marked ${job.name} paid — $${amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}`);
-  };
 
   // Dates that are the 6th+ consecutive day worked for the same employer —
   // flagged regardless of whether "6th/7th day rule" is checked on the job,
@@ -1030,37 +1005,6 @@ export default function CalendarPage() {
         );
       })()}
 
-      {awaitingPayment.length > 0 && (
-        <div className="mt-6 flex flex-col gap-2">
-          <h2 className="text-[9px] font-body uppercase tracking-widest text-muted-foreground/50 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-warning inline-block" />
-            Awaiting Payment
-          </h2>
-          <div className="flex flex-col gap-2">
-            {awaitingPayment.map(job => {
-              const amount = jobPay[job.id] ?? 0;
-              return (
-                <button
-                  key={job.id}
-                  type="button"
-                  onClick={() => handleMarkPaid(job)}
-                  className="rounded-md border border-warning/25 bg-warning/5 p-3 flex items-center gap-3 text-left cursor-pointer active:opacity-70 transition-opacity"
-                >
-                  <span className="shrink-0 w-9 h-9 rounded-full bg-warning/15 flex items-center justify-center text-lg">💰</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate">{job.name}</p>
-                    <p className="text-xs text-muted-foreground">{job.client} · {format(new Date(job.date + 'T12:00:00'), 'MMM d')}</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-sm font-bold text-mono text-warning">${amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                    <p className="text-[9px] text-muted-foreground/60">tap to confirm</p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {(() => {
         const monthPrefix = format(currentDate, 'yyyy-MM');

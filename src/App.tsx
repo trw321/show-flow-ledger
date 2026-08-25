@@ -3,7 +3,8 @@ import { Toaster } from 'sonner';
 import { DataProvider } from '@/lib/DataContext';
 import AppLayout from '@/components/AppLayout';
 import Dashboard from '@/pages/Dashboard';
-import LogAndCalendarPage from '@/pages/LogAndCalendarPage';
+import NewGigPage from '@/pages/NewGigPage';
+import CalendarPage from '@/pages/CalendarPage';
 import ExpensesPage from '@/pages/ExpensesPage';
 import IncomePage from '@/pages/IncomePage';
 import PayOutsPage from '@/pages/PayOutsPage';
@@ -22,9 +23,9 @@ export default function App() {
           <Route path="/pattern-auth" element={<PatternAuthPage />} />
           <Route element={<AppLayout />}>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/new" element={<LogAndCalendarPage />} />
+            <Route path="/new" element={<NewGigPage />} />
             <Route path="/log" element={<Navigate to="/new" replace />} />
-            <Route path="/calendar" element={<Navigate to="/new" replace />} />
+            <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/expenses" element={<ExpensesPage />} />
             <Route path="/income" element={<IncomePage />} />
             <Route path="/payouts" element={<PayOutsPage />} />

@@ -154,7 +154,7 @@ export default function Dashboard() {
 
       {jobsNeedingHours.length > 0 && (
         <button
-          onClick={() => navigate(`/new?job=${jobsNeedingHours[0].id}`)}
+          onClick={() => navigate(`/calendar?job=${jobsNeedingHours[0].id}`)}
           className="relative z-10 w-full mb-4 flex items-center gap-3 rounded-md border border-accent/50 bg-accent/5 hover:border-accent/70 hover:bg-accent/10 px-4 py-4 text-left transition-colors"
         >
           <Zap size={20} className="text-accent shrink-0" />
@@ -219,7 +219,7 @@ export default function Dashboard() {
           </div>
         ) : (
           <button
-            onClick={() => navigate(`/new?job=${nextJob.id}`)}
+            onClick={() => navigate(`/calendar?job=${nextJob.id}`)}
             className="w-full rounded-md border border-white/10 bg-white/5 p-4 text-left hover:bg-white/10 active:opacity-80 transition-colors"
           >
             <div className="flex items-start justify-between gap-2">
