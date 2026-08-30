@@ -284,12 +284,17 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   return (
     <>
       <DialogHeader>
-        <div className="flex items-center gap-2">
-          <button onClick={onBack} className="text-muted-foreground hover:text-foreground transition-colors p-1 -ml-1 rounded-lg hover:bg-secondary">
+        <div className="flex items-start gap-2">
+          <button onClick={onBack} className="shrink-0 mt-0.5 text-muted-foreground hover:text-foreground transition-colors p-1 -ml-1 rounded-lg hover:bg-secondary">
             <ArrowLeft size={16} />
           </button>
-          <DialogTitle className="text-mono text-sm flex-1 truncate pr-1">{job.name}</DialogTitle>
-          <button onClick={handleDelete} className="mr-7 text-muted-foreground hover:text-destructive transition-colors p-1 rounded-lg hover:bg-destructive/10" aria-label="Delete shift">
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">
+              {format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d, yyyy')}
+            </p>
+            <DialogTitle className="text-mono text-sm truncate">{job.name}</DialogTitle>
+          </div>
+          <button onClick={handleDelete} className="shrink-0 mt-0.5 mr-7 text-muted-foreground hover:text-destructive transition-colors p-1 rounded-lg hover:bg-destructive/10" aria-label="Delete shift">
             <Trash2 size={15} />
           </button>
         </div>
@@ -322,6 +327,50 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
               <p className="text-[10px] text-mono text-muted-foreground">{startTime} → {endTime} = <span className="text-accent font-semibold">{calcHours(startTime, endTime).toFixed(1)}h</span></p>
             )}
           </div>
+
+          {/* Meal break — 2nd most important question after End Time, so it
+              lives right here instead of buried in Edit shift. */}
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground">Meal Break</label>
+            <div className="grid grid-cols-4 gap-1.5">
+              {([{ value: 0 as const, label: 'Zero' }, { value: 30 as const, label: '30m' }, { value: 45 as const, label: '45m' }, { value: 60 as const, label: '1hr' }]).map(({ value, label }) => {
+                const active = mealDuration === value;
+                return (
+                  <button key={label} type="button" onClick={() => setMealDuration(active ? undefined : value)} className={cn("rounded-md border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
+                    <p className={cn("text-sm font-bold text-mono", active && "text-primary")}>{label}</p>
+                  </button>
+                );
+              })}
+            </div>
+            {mealDuration !== undefined && mealDuration > 0 && (
+              <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                {[{ value: true, label: 'On the clock', sub: 'paid, no deduction' }, { value: false, label: 'Off the clock', sub: `${mealDuration}min deducted` }].map(({ value, label, sub }) => {
+                  const active = mealOnClock === value;
+                  return (
+                    <button key={label} type="button" onClick={() => setMealOnClock(value)} className={cn("rounded-md border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
+                      <p className={cn("text-xs font-bold", active && "text-primary")}>{label}</p>
+                      <p className="text-[9px] leading-tight mt-0.5 opacity-70">{sub}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {mealDuration === 0 && (
+              <div className="pt-0.5">
+                <label className="text-[10px] text-mono uppercase text-muted-foreground">Meal penalty units (1 unit = 1hr at straight rate)</label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  placeholder="0"
+                  value={mealPenalties}
+                  onChange={e => setMealPenalties(e.target.value)}
+                  className="h-9 text-sm text-mono mt-1"
+                />
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Hours Worked</label>
@@ -497,46 +546,6 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
                 );
               })}
             </div>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">Meal Break</label>
-            <div className="grid grid-cols-4 gap-1.5">
-              {([{ value: 0 as const, label: 'Zero' }, { value: 30 as const, label: '30m' }, { value: 45 as const, label: '45m' }, { value: 60 as const, label: '1hr' }]).map(({ value, label }) => {
-                const active = mealDuration === value;
-                return (
-                  <button key={label} type="button" onClick={() => setMealDuration(active ? undefined : value)} className={cn("rounded-md border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
-                    <p className={cn("text-sm font-bold text-mono", active && "text-primary")}>{label}</p>
-                  </button>
-                );
-              })}
-            </div>
-            {mealDuration !== undefined && mealDuration > 0 && (
-              <div className="grid grid-cols-2 gap-1.5 pt-0.5">
-                {[{ value: true, label: 'On the clock', sub: 'paid, no deduction' }, { value: false, label: 'Off the clock', sub: `${mealDuration}min deducted` }].map(({ value, label, sub }) => {
-                  const active = mealOnClock === value;
-                  return (
-                    <button key={label} type="button" onClick={() => setMealOnClock(value)} className={cn("rounded-md border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
-                      <p className={cn("text-xs font-bold", active && "text-primary")}>{label}</p>
-                      <p className="text-[9px] leading-tight mt-0.5 opacity-70">{sub}</p>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            {mealDuration === 0 && (
-              <div className="pt-0.5">
-                <label className="text-[10px] text-mono uppercase text-muted-foreground">Meal penalty units (1 unit = 1hr at straight rate)</label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  placeholder="0"
-                  value={mealPenalties}
-                  onChange={e => setMealPenalties(e.target.value)}
-                  className="h-9 text-sm text-mono mt-1"
-                />
-              </div>
-            )}
           </div>
         </div>
 
