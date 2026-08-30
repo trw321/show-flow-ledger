@@ -53,9 +53,10 @@ interface EmployerFormState {
   overtimeRule: Employer['overtimeRule'];
   threshold: string;
   nightPremiumEnabled: boolean;
+  unionDuesPercent: string;
 }
 
-const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '', nightPremiumEnabled: true };
+const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '', nightPremiumEnabled: true, unionDuesPercent: '' };
 
 function employerToForm(e: Employer): EmployerFormState {
   return {
@@ -65,6 +66,7 @@ function employerToForm(e: Employer): EmployerFormState {
     overtimeRule: e.overtimeRule,
     threshold: (e.overtimeRule === 'weekly' ? e.weeklyOvertimeThresholdHours : e.dailyOvertimeThresholdHours)?.toString() ?? '',
     nightPremiumEnabled: e.nightPremiumEnabled ?? true,
+    unionDuesPercent: e.unionDuesPercent?.toString() ?? '',
   };
 }
 
@@ -123,6 +125,15 @@ function EmployerForm({ initial, onSave, onCancel }: {
           onCheckedChange={v => setForm(f => ({ ...f, nightPremiumEnabled: v }))}
         />
       </div>
+      <Input
+        type="number"
+        step="0.1"
+        min="0"
+        placeholder="Union dues % (optional, e.g. 3.5)"
+        value={form.unionDuesPercent}
+        onChange={e => setForm(f => ({ ...f, unionDuesPercent: e.target.value }))}
+        className="h-8 text-xs"
+      />
       <div className="flex gap-2 justify-end pt-1">
         <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
         <Button size="sm" disabled={!form.name.trim()} onClick={() => onSave(form)}>Save</Button>
@@ -149,6 +160,7 @@ export default function SettingsPage() {
       doubletimeMultiplier: 2.0,
       nightPremiumEnabled: form.nightPremiumEnabled,
       nightPremiumMultiplier: 2.0,
+      unionDuesPercent: form.unionDuesPercent ? parseFloat(form.unionDuesPercent) : undefined,
     });
     setAddingEmployer(false);
   };
@@ -163,6 +175,7 @@ export default function SettingsPage() {
       dailyOvertimeThresholdHours: form.overtimeRule === 'daily' ? parseFloat(form.threshold || '8') : undefined,
       nightPremiumEnabled: form.nightPremiumEnabled,
       nightPremiumMultiplier: 2.0,
+      unionDuesPercent: form.unionDuesPercent ? parseFloat(form.unionDuesPercent) : undefined,
     });
     setEditingEmployerId(null);
   };

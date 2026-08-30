@@ -22,6 +22,7 @@ function jobGross(job: Job, allJobs: Job[], employers: Employer[]): number {
     dtMultiplier: employer?.doubletimeMultiplier,
     nightHours,
     nightMultiplier: employer?.nightPremiumMultiplier,
+    unionDuesPercent: employer?.unionDuesPercent,
   });
   const weeklyBonus = employer ? calculateWeeklyOvertimeBonus(job, allJobs, employer) : 0;
   const gross = totalPay + weeklyBonus;

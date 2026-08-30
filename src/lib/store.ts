@@ -95,6 +95,8 @@ export interface Employer {
   nightPremiumStartHour?: number; // 0-23, default 0 (midnight)
   nightPremiumEndHour?: number;   // 0-23, optional — undefined means "until end of shift"
   nightPremiumMultiplier?: number; // default 2.0
+  /** Percent of gross pay auto-deducted for this employer's union dues (e.g. 3.5 = 3.5%). Undefined/0 = no deduction. */
+  unionDuesPercent?: number;
   notes?: string;
   createdAt: string;
 }

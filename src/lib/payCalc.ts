@@ -17,6 +17,11 @@ export interface OvertimeOptions {
    */
   nightHours?: number;
   nightMultiplier?: number;
+  /** Union dues as a percent of this day's gross (base/OT/DT/night/meal-penalty
+   *  pay) — deducted here so every caller of calculateDayPay picks it up
+   *  automatically. Does NOT apply a second time to weekly-OT-bonus or
+   *  vacation-pay top-ups computed separately in calculateExpectedPay. */
+  unionDuesPercent?: number;
 }
 
 /**
@@ -104,6 +109,13 @@ export function calculateDayPay(
     const mpPay = mealPenalties * rate;
     pay += mpPay;
     breakdown.push(`${mealPenalties} meal penalty × $${rate.toFixed(2)} = $${mpPay.toFixed(2)}`);
+  }
+
+  const duesPercent = overtimeOptions?.unionDuesPercent ?? 0;
+  if (duesPercent > 0 && pay > 0) {
+    const dues = pay * (duesPercent / 100);
+    pay -= dues;
+    breakdown.push(`Union dues (${duesPercent}%): −$${dues.toFixed(2)}`);
   }
 
   if (minimumHours > 0 && actualHours < minimumHours) {
@@ -325,6 +337,7 @@ export function calculateExpectedPay(
     otMultiplier: employer?.overtimeMultiplier ?? 1.5,
     dtMultiplier: employer?.doubletimeMultiplier ?? 2.0,
     nightMultiplier: employer?.nightPremiumMultiplier ?? 2.0,
+    unionDuesPercent: employer?.unionDuesPercent,
   };
 
   // Group by date
