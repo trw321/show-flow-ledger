@@ -10,6 +10,7 @@ import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addM
 import type { Job } from '@/lib/store';
 import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, isOverdueUpcoming } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
+import { useSwipe } from '@/lib/useSwipe';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -745,6 +746,18 @@ export default function CalendarPage() {
   const selectedJob = selectedJobId ? data.jobs.find(j => j.id === selectedJobId) ?? null : null;
   const closeDialog = () => { setSelectedDate(null); setSelectedJobId(null); };
 
+  // Swipe left = tomorrow, right = yesterday — jumps straight into that day's
+  // job if there's exactly one, otherwise falls back to the day's job list.
+  const navigateDay = (deltaDays: number) => {
+    if (!selectedDate) return;
+    const next = addDays(new Date(selectedDate + 'T12:00:00'), deltaDays);
+    const nextKey = format(next, 'yyyy-MM-dd');
+    const nextJobs = jobsByDate[nextKey] || [];
+    setSelectedDate(nextKey);
+    setSelectedJobId(nextJobs.length === 1 ? nextJobs[0].id : null);
+  };
+  const daySwipe = useSwipe(() => navigateDay(-1), () => navigateDay(1));
+
   return (
     <SpacePageWrapper title="Calendar" description="Your month at a glance">
       <div className="flex items-center gap-2 mb-3">
@@ -922,7 +935,11 @@ export default function CalendarPage() {
       )}
 
       <Dialog open={!!selectedDate} onOpenChange={(o) => !o && closeDialog()}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto rounded-lg">
+        <DialogContent
+          className="max-w-md max-h-[85vh] overflow-y-auto rounded-lg"
+          onTouchStart={daySwipe.onTouchStart}
+          onTouchEnd={daySwipe.onTouchEnd}
+        >
           {!selectedJob ? (
             <>
               <DialogHeader>

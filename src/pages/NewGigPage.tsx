@@ -16,6 +16,7 @@ import {
   hourUpdateToEntry, matchEntries as matchHourEntries, calcHours,
   type HoursEntry, type MatchResult as HoursMatchResult, type SmartImportHourUpdate,
 } from '@/lib/hoursMatching';
+import { useSwipe } from '@/lib/useSwipe';
 
 interface ParsedJob {
   jobNumber?: string;
@@ -509,18 +510,6 @@ function confidenceBadge(c: HoursMatchResult['confidence']) {
   return <span className="text-[10px] font-body px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">No match</span>;
 }
 
-function useSwipeMonth(onPrev: () => void, onNext: () => void) {
-  const touchStartX = useRef<number | null>(null);
-  const onTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
-  const onTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX.current === null) return;
-    const diff = touchStartX.current - e.changedTouches[0].clientX;
-    if (Math.abs(diff) > 40) diff > 0 ? onNext() : onPrev();
-    touchStartX.current = null;
-  };
-  return { onTouchStart, onTouchEnd };
-}
-
 const EMPTY_MANUAL: ManualEntry = {
   client: '',
   name: '',
@@ -551,7 +540,7 @@ export default function NewGigPage() {
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
   const [hoursResults, setHoursResults] = useState<HoursMatchResult[]>([]);
   const [hoursAccepted, setHoursAccepted] = useState<Set<number>>(new Set());
-  const swipe = useSwipeMonth(
+  const swipe = useSwipe(
     () => setCalendarMonth(m => new Date(m.getFullYear(), m.getMonth() - 1)),
     () => setCalendarMonth(m => new Date(m.getFullYear(), m.getMonth() + 1)),
   );
