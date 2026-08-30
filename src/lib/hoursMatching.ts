@@ -44,6 +44,9 @@ export interface HoursEntry {
 }
 
 // Shape returned by smart-import's "hours" classification (supabase/functions/smart-import).
+// mealMinutes/mealOnClock carry the actual duration + paid-or-not directly —
+// this used to be a lossy YWA/NWA binary that couldn't represent something
+// like "1/2 hr off" (30 min, unpaid), which isn't either of those two codes.
 export interface SmartImportHourUpdate {
   date: string;
   startTime?: string;
@@ -52,7 +55,8 @@ export interface SmartImportHourUpdate {
   venue?: string;
   steward?: string;
   hourlyRate?: number;
-  mealType?: 'YWA' | 'NWA';
+  mealMinutes?: 0 | 30 | 45 | 60;
+  mealOnClock?: boolean;
   notes?: string;
 }
 
@@ -62,8 +66,8 @@ export function hourUpdateToEntry(u: SmartImportHourUpdate): HoursEntry {
     venue: u.venue,
     startTime: u.startTime,
     endTime: u.endTime,
-    mealDuration: u.mealType === 'YWA' ? 60 : u.mealType === 'NWA' ? 30 : undefined,
-    mealOnClock: u.mealType === 'YWA' ? false : u.mealType === 'NWA' ? true : undefined,
+    mealDuration: u.mealMinutes,
+    mealOnClock: u.mealOnClock,
     paid: false,
     position: u.steward,
     notes: u.notes,

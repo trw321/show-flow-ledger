@@ -138,11 +138,17 @@ WEEKLY SUMMARY FORMAT — a header line may set shared context ("employer X", "p
 For each entry, extract:
 - date: any date pattern (MM-DD, MM-DD-YY, M/D/YY, etc.) → YYYY-MM-DD. For bare month-day like "3-14" without year, use the year implied by context or the current year. "10-6-25"=2025-10-06
 - startTime / endTime: parse a time range like "10a-14:00", "8am-7p", "22:00-2:00am", "6:30-14:30" → "HH:MM AM/PM". Times after midnight (e.g. 2:00am after 22:00) are the end time on the same date entry.
-- mealType: "walk away", "WA", "YWA", "1MP" → "YWA"; "on the clock", "NWA" → "NWA"
+- SPLIT SHIFTS: a line with TWO time ranges for the same date joined by "and" (or "&", "then") — e.g. "9a-2p and 10:30p-3am" — is TWO separate entries on that date, not one. Output both as separate hourUpdates entries with the same date, sharing venue/steward/hourlyRate/mealMinutes/mealOnClock unless a range has its own override. Order them earliest-start-time first.
+- mealMinutes / mealOnClock — capture the ACTUAL duration and whether it's paid, don't force everything into a binary:
+  - "walk away", "WA", "YWA", "1MP" (no explicit duration) → mealMinutes=60, mealOnClock=false
+  - "NWA" (no explicit duration) → mealMinutes=30, mealOnClock=true
+  - Any explicit duration phrase overrides the codeword's default — "1/2 hr off", "30 min off", "30off" → mealMinutes=30, mealOnClock=false; "45 min off" → mealMinutes=45, mealOnClock=false; "1hr off"/"hour off" → mealMinutes=60, mealOnClock=false; "30 min on"/"30on" → mealMinutes=30, mealOnClock=true
+  - "no meal", "zero", "worked through" → mealMinutes=0
+  - Nothing meal-related mentioned → omit both fields entirely (don't guess)
 - hoursWorked:
   - Minimum call "(Nhr mini)" or "(Nmini)": compute actual hours from time range. If actual < N, use N as hoursWorked (before meal deduction). If actual ≥ N, use actual.
   - If "N+M" format (e.g. "8+2"): N regular + M overtime = N+M total, then apply meal deduction
-  - Meal deduction: YWA/1MP = -1hr, NWA = -0.5hr
+  - Meal deduction: subtract mealMinutes/60 hours when mealOnClock is false; no deduction when mealOnClock is true (an on-the-clock meal is paid, not deducted)
   - Overtime pay modifiers: "(1.5 after 5)" = time-and-a-half (1.5x pay rate) kicks in after 5 hours. Put in notes as "OT: 1.5x after 5h". Do NOT affect hoursWorked.
   - "?" anywhere in the entry = uncertain/needs verification → append "(verify)" to notes
 - venue: location/venue name (not a date, time, dollar amount, or emoji). Multi-word venues are common: "chase center backline", "bill graham civic center", "palace hotel", "moscone cesar"
@@ -162,8 +168,18 @@ EXAMPLE 2 — overnight minimum call:
 EXAMPLE 3 — walk away with N+M format:
   "moscone c Rein ratsep $55.72\n10-6-25\n8am = - (1hr walk away) 7p\n8+2\n445+ 167 = 612\n💰"
   → date=2025-10-06, venue="moscone c", steward="Rein ratsep", hourlyRate=55.72
-    startTime=08:00 AM, endTime=07:00 PM, mealType=YWA
-    hoursWorked = 8+2=10 minus 1hr YWA = 9.0`
+    startTime=08:00 AM, endTime=07:00 PM, mealMinutes=60, mealOnClock=false
+    hoursWorked = 8+2=10 minus 1hr walk away = 9.0
+
+EXAMPLE 4 — split shift, explicit 30-min-off meal (MUST produce 2 entries, earlier first):
+  "8.12.26 masonic 9a-2p and 10:30p-3am"
+  → Entry 1: date=2026-08-12, venue="masonic", startTime=09:00 AM, endTime=02:00 PM
+  → Entry 2: date=2026-08-12, venue="masonic", startTime=10:30 PM, endTime=03:00 AM
+
+EXAMPLE 5 — non-codeword meal phrasing:
+  "8.17.26 vivarium 1p-9:30p 1/2 hr off ?"
+  → date=2026-08-17, venue="vivarium", startTime=01:00 PM, endTime=09:30 PM,
+    mealMinutes=30, mealOnClock=false, notes="(verify)"`
           },
           { role: "user", content: userContent }
         ],
@@ -226,7 +242,8 @@ EXAMPLE 3 — walk away with N+M format:
                         venue: { type: "string" },
                         steward: { type: "string" },
                         hourlyRate: { type: "number" },
-                        mealType: { type: "string", enum: ["YWA", "NWA"] },
+                        mealMinutes: { type: "number", enum: [0, 30, 45, 60] },
+                        mealOnClock: { type: "boolean" },
                         notes: { type: "string" }
                       },
                       required: ["date"]
