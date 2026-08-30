@@ -25,13 +25,17 @@ serve(async (req) => {
     const systemPrompt = isTimesheet
       ? `You are a timesheet and work note parser for an AV technician. Analyze the uploaded image of handwritten notes, timesheets, call sheets, or schedules. Extract every work session/entry you can find. For each entry extract: date (YYYY-MM-DD), hours worked (as a number), client name, job/project name, description of work done, startTime (clock-in, e.g. "08:00 AM"), endTime (clock-out/wrap, e.g. "05:00 PM"), venue or location name, steward name if written, hourly rate if visible (default 0), and mealPenalties (number of meal penalties, default 0). IMPORTANT RULES: 1) A one-hour "walk away" (meal break, lunch break) is OFF THE CLOCK — subtract it from total hours. 2) A "meal penalty" or "MP" noted means the crew was not broken for a meal on time — count each as a meal penalty (each = 1 hour at straight rate, added to pay). If you see "MP" or "meal penalty" on the timesheet, set mealPenalties accordingly. These notes are often used to match against a pre-loaded job offer — pay attention to location, steward, and date as they are the key identifiers. ${jobsList} If you can't determine the date, use today's date ${new Date().toISOString().split("T")[0]}.`
       : isIncome
-      ? `You are a financial document parser specializing in bank statements and invoices. Extract all incoming payments/deposits/credits you can identify. For each transaction extract: client (who paid), description, amount (as a positive number), date (as YYYY-MM-DD), and invoiceNumber (if visible). If you can't determine the date, use today's date. Return ONLY valid JSON.`
+      ? `You are a financial document parser specializing in bank statements, invoices, and pay stub / payment notification emails. Extract all incoming payments/deposits/credits you can identify. For each transaction extract: client (who paid), description, amount (as a positive number), date (as YYYY-MM-DD), and invoiceNumber (if visible).
+
+PAYMENT NOTE DATE/HOURS BREAKDOWN — payroll payment notes and stubs often itemize the hours covered by that one payment per date, e.g. "8/16 8 ST 1 OT, 8/17 8 ST, 8/18 8 ST" (ST = straight/standard time, OT = overtime, DT = double time). When you see this pattern, extract a "breakdown" array on that transaction: one entry per date+hour-type pair found, with date (YYYY-MM-DD, inferring the year from the payment date if not given), hours (the number), and type ("ST", "OT", or "DT"). This is the single most useful signal for matching a payment to the exact shifts it covers, so extract it whenever present — do not skip it just because the transaction already has other fields filled in. If no such breakdown is visible, omit the field entirely.
+
+If you can't determine the date, use today's date. Return ONLY valid JSON.`
       : `You are a financial document parser specializing in bank statements and receipts. Extract all transactions/line items you can identify. For each transaction extract: description, amount (as a number), date (as YYYY-MM-DD), and category. Categories should be one of: Travel, Gear Rental, Consumables, Fuel, Meals, Lodging, Labor, Insurance, Software, Tools, Entertainment, Medical, Rent, IATSE Union Dues, Other. If you can't determine the category, use "Other". If you can't determine the date, use today's date. Return ONLY valid JSON.`;
 
     const userPrompt = isTimesheet
       ? "Extract all work sessions/time entries from this handwritten note, timesheet, call sheet, or schedule image. Calculate hours from any clock-in/clock-out times. Return structured time entries."
       : isIncome
-      ? "Extract all income/payment/deposit transactions from this bank statement or invoice image. Return a JSON array of objects with fields: client, description, amount, date, invoiceNumber."
+      ? "Extract all income/payment/deposit transactions from this bank statement, invoice, or pay stub/payment notification image. Return a JSON array of objects with fields: client, description, amount, date, invoiceNumber, and breakdown (per-date ST/OT/DT hours) if the payment note itemizes which dates/hours it covers."
       : "Extract all expense transactions from this bank statement or receipt image. Return a JSON array of objects with fields: description, amount, date, category.";
 
     const toolDef = isTimesheet
@@ -89,6 +93,20 @@ serve(async (req) => {
                       amount: { type: "number" },
                       date: { type: "string", description: "YYYY-MM-DD format" },
                       invoiceNumber: { type: "string" },
+                      breakdown: {
+                        type: "array",
+                        description: "Per-date hours breakdown from a payment note, e.g. '8/16 8 ST 1 OT' -> two entries for 2026-08-16. Omit if the payment note doesn't itemize dates/hours.",
+                        items: {
+                          type: "object",
+                          properties: {
+                            date: { type: "string", description: "YYYY-MM-DD format" },
+                            hours: { type: "number" },
+                            type: { type: "string", enum: ["ST", "OT", "DT"] },
+                          },
+                          required: ["date", "hours", "type"],
+                          additionalProperties: false,
+                        },
+                      },
                     },
                     required: ["client", "description", "amount", "date"],
                     additionalProperties: false,

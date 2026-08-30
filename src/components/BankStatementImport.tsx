@@ -60,12 +60,22 @@ async function pdfToImageDataUrl(file: File): Promise<{ dataUrl: string; truncat
   return { dataUrl: combined.toDataURL('image/png'), truncated: pdf.numPages > MAX_PDF_PAGES };
 }
 
+interface PayBreakdownEntry {
+  date: string; // YYYY-MM-DD
+  hours: number;
+  type: 'ST' | 'OT' | 'DT';
+}
+
 interface ParsedDeposit {
   description: string;
   amount: number;
   date: string;
   client?: string;
   invoiceNumber?: string;
+  // Per-date hours a payment note itemizes ("8/16 8 ST 1 OT, 8/17 8 ST...") —
+  // the strongest signal available, since it names the exact shift dates a
+  // payment covers instead of just a plausible amount/timing.
+  breakdown?: PayBreakdownEntry[];
 }
 
 export interface ReconciliationRowInfo {
@@ -82,17 +92,31 @@ interface MatchResult {
   score: number;
   confidence: 'high' | 'medium' | 'low';
   reasons: string[];
+  breakdownDateMatch: boolean;
 }
 
 interface DepositEntry {
   deposit: ParsedDeposit;
   matches: MatchResult[];
-  chosenRowKey: string | null;
+  // Multiple rows can be chosen for one deposit — a single payment often
+  // covers several one-day "Full project" shifts at once (that's exactly
+  // what a breakdown date match tells us).
+  chosenRowKeys: string[];
 }
 
 function scoreMatch(deposit: ParsedDeposit, row: ReconciliationRowInfo): MatchResult {
   let score = 0;
   const reasons: string[] = [];
+
+  // A payment-note date exactly matching this row's (single-day) period is
+  // about as strong a signal as reconciliation gets — the note is naming the
+  // actual shift, not just landing in a plausible amount/timing window.
+  const breakdownDateMatch = !!deposit.breakdown?.some(b => b.date === row.periodEnd);
+  if (breakdownDateMatch) {
+    score += 60;
+    const hrs = deposit.breakdown!.filter(b => b.date === row.periodEnd).map(b => `${b.hours} ${b.type}`).join(' + ');
+    reasons.push(`Date in payment breakdown (${hrs})`);
+  }
 
   // Amount proximity (most important signal)
   if (row.expectedPay > 0) {
@@ -136,7 +160,7 @@ function scoreMatch(deposit: ParsedDeposit, row: ReconciliationRowInfo): MatchRe
   const confidence: 'high' | 'medium' | 'low' =
     score >= 65 ? 'high' : score >= 35 ? 'medium' : 'low';
 
-  return { row, score, confidence, reasons };
+  return { row, score, confidence, reasons, breakdownDateMatch };
 }
 
 function buildEntries(deposits: ParsedDeposit[], rows: ReconciliationRowInfo[]): DepositEntry[] {
@@ -146,9 +170,15 @@ function buildEntries(deposits: ParsedDeposit[], rows: ReconciliationRowInfo[]):
       .filter(m => m.score > 0)
       .sort((a, b) => b.score - a.score);
 
+    // A payment-note breakdown naming exact dates beats a single top-score
+    // guess — auto-select every row it names (one payment often covers
+    // several one-day shifts at once).
+    const breakdownMatches = matches.filter(m => m.breakdownDateMatch);
     const top = matches[0];
-    const chosenRowKey = top?.confidence === 'high' ? top.row.key : null;
-    return { deposit, matches, chosenRowKey };
+    const chosenRowKeys = breakdownMatches.length > 0
+      ? breakdownMatches.map(m => m.row.key)
+      : top?.confidence === 'high' ? [top.row.key] : [];
+    return { deposit, matches, chosenRowKeys };
   });
 }
 
@@ -219,7 +249,7 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
 
       const matched = buildEntries(deposits, rows);
       setEntries(matched);
-      const autoMatched = matched.filter(e => e.chosenRowKey !== null).length;
+      const autoMatched = matched.filter(e => e.chosenRowKeys.length > 0).length;
       toast.success(`Found ${deposits.length} deposit(s) — ${autoMatched} auto-matched`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to parse statement');
@@ -228,8 +258,18 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
     }
   }, [rows]);
 
-  const setChoice = (depIdx: number, rowKey: string | null) => {
-    setEntries(prev => prev.map((e, i) => i === depIdx ? { ...e, chosenRowKey: rowKey } : e));
+  const toggleChoice = (depIdx: number, rowKey: string) => {
+    setEntries(prev => prev.map((e, i) => {
+      if (i !== depIdx) return e;
+      const chosenRowKeys = e.chosenRowKeys.includes(rowKey)
+        ? e.chosenRowKeys.filter(k => k !== rowKey)
+        : [...e.chosenRowKeys, rowKey];
+      return { ...e, chosenRowKeys };
+    }));
+  };
+
+  const clearChoice = (depIdx: number) => {
+    setEntries(prev => prev.map((e, i) => i === depIdx ? { ...e, chosenRowKeys: [] } : e));
   };
 
   const updateDeposit = (depIdx: number, field: keyof ParsedDeposit, value: string | number) => {
@@ -240,25 +280,51 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
         .map(row => scoreMatch(deposit, row))
         .filter(m => m.score > 0)
         .sort((a, b) => b.score - a.score);
-      const chosenStillValid = e.chosenRowKey && matches.some(m => m.row.key === e.chosenRowKey);
-      return { ...e, deposit, matches, chosenRowKey: chosenStillValid ? e.chosenRowKey : null };
+      const validKeys = new Set(matches.map(m => m.row.key));
+      const chosenRowKeys = e.chosenRowKeys.filter(k => validKeys.has(k));
+      return { ...e, deposit, matches, chosenRowKeys };
     }));
   };
 
   const confirmAll = () => {
+    let count = 0;
     for (const entry of entries) {
-      const row = entry.chosenRowKey ? rows.find(r => r.key === entry.chosenRowKey) : undefined;
-      onConfirm({
-        jobId: row?.jobId,
-        client: row?.client || entry.deposit.client || 'Unknown',
-        description: entry.deposit.description,
-        amount: entry.deposit.amount,
-        date: entry.deposit.date,
-        status: 'paid',
-        invoiceNumber: entry.deposit.invoiceNumber,
-      });
+      const chosenRows = entry.chosenRowKeys
+        .map(k => rows.find(r => r.key === k))
+        .filter((r): r is ReconciliationRowInfo => !!r);
+
+      if (chosenRows.length <= 1) {
+        const row = chosenRows[0];
+        onConfirm({
+          jobId: row?.jobId,
+          client: row?.client || entry.deposit.client || 'Unknown',
+          description: entry.deposit.description,
+          amount: entry.deposit.amount,
+          date: entry.deposit.date,
+          status: 'paid',
+          invoiceNumber: entry.deposit.invoiceNumber,
+        });
+        count++;
+      } else {
+        // One payment covering several shifts — split the deposit amount
+        // across them proportionally by each shift's expected pay share.
+        const totalExpected = chosenRows.reduce((sum, r) => sum + r.expectedPay, 0);
+        chosenRows.forEach(row => {
+          const share = totalExpected > 0 ? row.expectedPay / totalExpected : 1 / chosenRows.length;
+          onConfirm({
+            jobId: row.jobId,
+            client: row.client,
+            description: entry.deposit.description,
+            amount: Math.round(entry.deposit.amount * share * 100) / 100,
+            date: entry.deposit.date,
+            status: 'paid',
+            invoiceNumber: entry.deposit.invoiceNumber,
+          });
+          count++;
+        });
+      }
     }
-    toast.success(`Added ${entries.length} payment${entries.length !== 1 ? 's' : ''}`);
+    toast.success(`Added ${count} payment${count !== 1 ? 's' : ''}`);
     onClose();
   };
 
@@ -315,14 +381,14 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
               {entry.matches.length > 0 ? (
                 <div className="space-y-1">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">
-                    Match to pay period
+                    Match to pay period{entry.chosenRowKeys.length > 1 ? 's (multiple selectable — one payment can cover several shifts)' : ''}
                   </p>
                   {entry.matches.slice(0, 3).map(m => {
-                    const isChosen = entry.chosenRowKey === m.row.key;
+                    const isChosen = entry.chosenRowKeys.includes(m.row.key);
                     return (
                       <button
                         key={m.row.key}
-                        onClick={() => setChoice(i, isChosen ? null : m.row.key)}
+                        onClick={() => toggleChoice(i, m.row.key)}
                         className={`w-full text-left rounded px-3 py-2 text-xs border transition-colors ${
                           isChosen
                             ? 'border-primary bg-primary/10 text-foreground'
@@ -353,13 +419,18 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
                       </button>
                     );
                   })}
-                  {entry.chosenRowKey && (
+                  {entry.chosenRowKeys.length > 0 && (
                     <button
-                      onClick={() => setChoice(i, null)}
+                      onClick={() => clearChoice(i)}
                       className="text-[10px] text-muted-foreground hover:text-foreground ml-1 mt-0.5"
                     >
-                      Clear selection
+                      Clear selection{entry.chosenRowKeys.length > 1 ? ` (${entry.chosenRowKeys.length})` : ''}
                     </button>
+                  )}
+                  {entry.chosenRowKeys.length > 1 && (
+                    <p className="text-[10px] text-muted-foreground ml-1">
+                      Payment will be split across {entry.chosenRowKeys.length} shifts by expected-pay share
+                    </p>
                   )}
                 </div>
               ) : (
