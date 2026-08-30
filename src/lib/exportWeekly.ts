@@ -1,7 +1,7 @@
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import type { Job, Expense, Income, Employer } from './store';
-import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked } from './payCalc';
+import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, isOverdueUpcoming } from './payCalc';
 import { resolveEmployer } from './employerMatch';
 
 function jobGross(job: Job, allJobs: Job[], employers: Employer[]): number {
@@ -52,7 +52,7 @@ export function exportWeeklyToExcel(jobs: Job[], expenses: Expense[], income: In
       Client: j.client,
       Venue: j.venue ?? '',
       'Payroll Company': j.payrollCompany ?? '',
-      Status: j.status,
+      Status: isOverdueUpcoming(j) ? 'needs hours' : j.status,
       'Start Time': j.startTime ?? '',
       'End Time': j.endTime ?? '',
       'Hours Worked': effectiveHoursWorked(j) || '',

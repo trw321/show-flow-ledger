@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast } from 'date-fns';
 import type { Job } from '@/lib/store';
-import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked } from '@/lib/payCalc';
+import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, isOverdueUpcoming } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -27,13 +27,6 @@ const statusColors: Record<Job['status'], string> = {
   cancelled: 'bg-destructive/20 text-destructive border-destructive/30',
 };
 
-// status never auto-transitions off "upcoming"/"in-progress" as the date
-// passes — it only becomes "completed" once hours are logged. This flags
-// that gap for display, without changing the stored status itself.
-function isOverdueUpcoming(job: Job): boolean {
-  const todayStr = format(new Date(), 'yyyy-MM-dd');
-  return (job.status === 'upcoming' || job.status === 'in-progress') && job.date < todayStr && effectiveHoursWorked(job) === 0;
-}
 
 // A job counts as "paid" once a linked income record is marked paid —
 // distinct from just "completed" (worked, pay estimated but not yet received).

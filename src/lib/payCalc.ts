@@ -145,6 +145,17 @@ export function effectiveHoursWorked(job: Job): number {
   return Math.max(0, (e - s) / 60);
 }
 
+// status never auto-transitions off "upcoming"/"in-progress" as the date
+// passes — it only becomes "completed" once hours are logged. This flags
+// that gap wherever a job's status is displayed, without changing the
+// stored status itself. Shared so every status display (calendar, exports,
+// the shift dialog) agrees on what "overdue" means instead of only some of
+// them catching it.
+export function isOverdueUpcoming(job: Job): boolean {
+  const todayStr = new Date().toISOString().split('T')[0];
+  return (job.status === 'upcoming' || job.status === 'in-progress') && job.date < todayStr && effectiveHoursWorked(job) === 0;
+}
+
 /**
  * Hours of a shift [startTime, endTime) that fall at/after nightStartHour
  * (default midnight) — i.e. the hours actually worked past the one night-
