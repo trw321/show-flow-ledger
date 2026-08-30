@@ -35,7 +35,7 @@ export function useVoiceInput(onResult: (text: string) => void) {
 
 // ── Parsers ────────────────────────────────────────────────────────────────
 
-export function parseIncomeSpeech(text: string): { amount?: number; client?: string } {
+export function parseIncomeSpeech(text: string): { amount?: number; client?: string; date?: string } {
   const t = text.toLowerCase();
   // Amount: "$345", "345 dollars", "three hundred..." (Chrome usually converts to digits)
   const amtMatch = t.match(/\$\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*(?:dollars?|bucks?)/);
@@ -43,11 +43,25 @@ export function parseIncomeSpeech(text: string): { amount?: number; client?: str
     ? parseFloat(amtMatch[1] ?? amtMatch[2])
     : (() => { const m = t.match(/(\d+(?:\.\d+)?)/); return m ? parseFloat(m[1]) : undefined; })();
 
+  // Relative date words can land anywhere in the transcript (e.g. "from
+  // panitechnics yesterday") — pull them out and compute the actual date
+  // before parsing the client name, so they don't get swallowed into it.
+  let date: string | undefined;
+  let cleaned = t;
+  const dateWordMatch = t.match(/\b(yesterday|today|tomorrow)\b/);
+  if (dateWordMatch) {
+    const offset = dateWordMatch[1] === 'yesterday' ? -1 : dateWordMatch[1] === 'tomorrow' ? 1 : 0;
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    date = d.toISOString().split('T')[0];
+    cleaned = t.replace(dateWordMatch[0], '').trim();
+  }
+
   // Client: after "from"
-  const fromMatch = t.match(/from\s+([a-z][^,\n]+?)(?:\s+(?:today|on|for|this|at)\b|$)/i);
+  const fromMatch = cleaned.match(/from\s+([a-z][^,\n]+?)(?:\s+(?:on|for|this|at)\b|$)/i);
   const client = fromMatch ? fromMatch[1].trim() : undefined;
 
-  return { amount, client };
+  return { amount, client, date };
 }
 
 const CATEGORY_KEYWORDS: [string[], string][] = [

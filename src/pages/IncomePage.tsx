@@ -5,6 +5,7 @@ import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
 import IncomeStatementUpload from '@/components/IncomeStatementUpload';
 import BankStatementImport, { type ReconciliationRowInfo } from '@/components/BankStatementImport';
+import EmployerCombobox from '@/components/EmployerCombobox';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -246,6 +247,7 @@ function IncomeMadlib({ jobs, onAdd }: {
     const parsed = parseIncomeSpeech(text);
     if (parsed.amount) setAmount(parsed.amount.toString());
     if (parsed.client) setClient(parsed.client);
+    if (parsed.date) setDate(parsed.date);
     toast.success(`heard: "${text}"`);
   });
 
@@ -298,13 +300,13 @@ function IncomeMadlib({ jobs, onAdd }: {
           </div>
         </div>
         <span className="text-muted-foreground">from</span>
-        <div className="flex-1 min-w-[120px]">
+        <div className="flex-1 min-w-[140px]">
           <span className="text-[9px] text-muted-foreground/40 block">employer</span>
-          <input
+          <EmployerCombobox
             value={client}
-            onChange={e => setClient(e.target.value)}
+            onChange={setClient}
             placeholder="who paid you"
-            className={inputCls}
+            className="[&>input]:h-8 [&>input]:border-0 [&>input]:border-b [&>input]:border-border [&>input]:rounded-none [&>input]:bg-transparent [&>input]:px-1 [&>input]:text-sm [&>input]:text-mono"
           />
         </div>
         <span className="text-muted-foreground">on</span>
@@ -372,7 +374,11 @@ export default function IncomePage() {
   const editingInc = editId ? data.income.find(i => i.id === editId) : undefined;
   const jobs = data.jobs.map(j => ({ id: j.id, name: j.name }));
   const total = data.income.reduce((s, i) => s + i.amount, 0);
-  const sorted = [...data.income].sort((a, b) => b.date.localeCompare(a.date));
+  // Job-linked income already shows inside its Reconciliation row's
+  // "Payments received" detail — listing it again here duplicated the exact
+  // same dollar amount in two places. This list is only for income that
+  // isn't tied to a shift at all (manual entries, unmatched imports).
+  const sorted = [...data.income].filter(i => !i.jobId).sort((a, b) => b.date.localeCompare(a.date));
 
   const uniqueClients = useMemo(() => {
     const clients = new Set(data.jobs.map(j => j.client).filter(Boolean));
@@ -488,7 +494,12 @@ export default function IncomePage() {
 
   const importRows: ReconciliationRowInfo[] = useMemo(() =>
     reconciliation.map(r => ({
-      key: `${r.client}-${r.periodLabel}`,
+      // jobId included on purpose — periodLabel alone is "Full project" for
+      // every non-scheduled shift of the same client, so three separate
+      // one-day jobs collapsed onto one identical key. That made them
+      // indistinguishable in the match list (React couldn't tell the rows
+      // apart, and picking one silently "picked" all three at once).
+      key: `${r.client}-${r.periodLabel}-${r.jobId}`,
       jobId: r.jobId,
       client: r.client,
       periodLabel: r.periodLabel,

@@ -3,8 +3,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loader2, Check, X, FileImage } from 'lucide-react';
 import { toast } from 'sonner';
-import { differenceInDays, parseISO } from 'date-fns';
+import { differenceInDays, parseISO, format } from 'date-fns';
 import type { Income } from '@/lib/store';
+import { nameSimilarity } from '@/lib/employerMatch';
 
 // OpenAI's vision API only accepts real images, not PDF bytes directly, so a
 // PDF has to be rendered to an image client-side first. Renders up to the
@@ -101,17 +102,25 @@ function scoreMatch(deposit: ParsedDeposit, row: ReconciliationRowInfo): MatchRe
     else if (diff < 0.15) { score += 15; reasons.push('Amount within 15%'); }
   }
 
-  // Client name appears in deposit description
-  const descLower = deposit.description.toLowerCase();
+  // Client name appears in deposit description — word-by-word fuzzy
+  // comparison, not exact-substring, so a near-miss spelling ("Panotechnics"
+  // vs "Panitechnics") still counts instead of scoring zero just because
+  // neither string literally contains the other. Comparing a whole client
+  // name against the whole free-text description directly would also score
+  // poorly here (a 12-char name against a 30-char sentence looks "different"
+  // by pure edit distance even when the name is right there) — comparing
+  // word-to-word finds it.
   const clientWords = row.client.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-  if (clientWords.some(w => descLower.includes(w))) {
-    score += 30; reasons.push('Client name in description');
-  }
+  const descWords = deposit.description.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+  const bestWordSimilarity = clientWords.reduce((best, cw) =>
+    descWords.reduce((b, dw) => Math.max(b, nameSimilarity(cw, dw)), best), 0);
+  if (bestWordSimilarity >= 0.9) { score += 30; reasons.push('Client name in description'); }
+  else if (bestWordSimilarity >= 0.65) { score += 20; reasons.push('Client name closely matches description'); }
+
   if (deposit.client) {
-    const depClientLower = deposit.client.toLowerCase();
-    if (clientWords.some(w => depClientLower.includes(w))) {
-      score += 15; reasons.push('Client field match');
-    }
+    const clientSimilarity = nameSimilarity(row.client, deposit.client);
+    if (clientSimilarity >= 0.9) { score += 15; reasons.push('Client field match'); }
+    else if (clientSimilarity >= 0.65) { score += 10; reasons.push('Client field closely matches'); }
   }
 
   // Date: deposit should arrive after period end (payroll lag 1–35 days is normal)
@@ -321,7 +330,9 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
                         }`}
                       >
                         <div className="flex justify-between items-center gap-2">
-                          <span className="truncate">{m.row.client} · {m.row.periodLabel}</span>
+                          <span className="truncate">
+                            {m.row.client} · {m.row.periodLabel === 'Full project' ? format(parseISO(m.row.periodEnd), 'MMM d') : m.row.periodLabel}
+                          </span>
                           <div className="flex items-center gap-2 shrink-0">
                             <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
                               m.confidence === 'high'   ? 'bg-success/20 text-success' :
