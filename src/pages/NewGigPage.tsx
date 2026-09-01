@@ -126,7 +126,7 @@ function expandCBRecord(record: string): string[] {
 
   lineNotes = lineNotes.replace(/\r/g, '').replace(/\s+/g, ' ').trim();
   if (!/\bC\/?B\b/i.test(lineNotes)) return [record];
-  if (/\bNO\s+C\/?B\b/i.test(lineNotes)) return [record];
+  if (/\bNO[\s/-]*C\/?B\b/i.test(lineNotes)) return [record];
 
   const dtMatch = dateLine.match(/(\d{1,2})\/(\d{1,2})\/(\d{2})(?:\s+([^\t\n]*))/);
   if (!dtMatch) return [record];
@@ -264,7 +264,7 @@ function expandThruNotes(job: ParsedJob): ParsedJob[] {
   const notes = job.notes ?? '';
   const cbMatch = notes.match(/^(.*?)\s*\bC\/?B(?:'?[Ss])?\b[,\s]*/i);
   if (!cbMatch || !job.date) return [job];
-  if (/\bNO\s+C\/?B\b/i.test(notes)) return [job];
+  if (/\bNO[\s/-]*C\/?B\b/i.test(notes)) return [job];
 
   const prefix = cbMatch[1].trim();
   let cbContent = notes.slice(cbMatch[0].length).trim();
