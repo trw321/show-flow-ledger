@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '@/lib/DataContext';
-import SpacePageWrapper from '@/components/SpacePageWrapper';
-import FallingPlanets from '@/components/FallingPlanets';
+import LampPageWrapper from '@/components/LampPageWrapper';
 import StatCard from '@/components/StatCard';
+import NewGigPage from '@/pages/NewGigPage';
 import { ChevronDown, Download, Zap, Eye, Flame, Clock, DollarSign, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, isToday, differenceInCalendarDays } from 'date-fns';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
@@ -150,8 +150,8 @@ export default function Dashboard() {
   const totalUnpaidDue = awaitingPayment.reduce((s, { pay }) => s + pay, 0);
 
   return (
-    <SpacePageWrapper title="Dashboard" description="Welcome back" starCount={220}>
-      <FallingPlanets />
+    <LampPageWrapper title="Dashboard" description="Welcome back">
+      <NewGigPage />
 
       {jobsNeedingHours.length > 0 && (
         <button
@@ -327,6 +327,6 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-    </SpacePageWrapper>
+    </LampPageWrapper>
   );
 }

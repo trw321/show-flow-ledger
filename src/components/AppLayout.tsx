@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
-  ClipboardCheck,
   CalendarDays,
   Receipt,
   Settings,
@@ -23,13 +22,13 @@ interface NavItem {
   tab?: TabKey;
 }
 
-// Dashboard, Job Log, Calendar, and Settings are the core loop — always
-// shown. Expenses/Income/Pay Outs are the ones Settings' "Visible Sections"
-// panel actually controls. Pay is unlinked pending the Money Business
-// merge — the page and route still exist, just not in nav.
+// Dashboard (now including Job Log's intake) and Calendar are the core
+// loop, plus Settings — always shown. Expenses/Income/Pay Outs are the ones
+// Settings' "Visible Sections" panel actually controls. Pay is unlinked
+// pending the Money Business merge — the page and route still exist, just
+// not in nav.
 const ALL_NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', to: '/', icon: <LayoutDashboard size={18} /> },
-  { label: 'Job Log', to: '/new', icon: <ClipboardCheck size={18} /> },
   { label: 'Calendar', to: '/calendar', icon: <CalendarDays size={18} /> },
   { label: 'Expenses', to: '/expenses', icon: <Receipt size={18} />, tab: 'expenses' },
   { label: 'Income', to: '/income', icon: <TrendingUp size={18} />, tab: 'income' },
@@ -39,7 +38,6 @@ const ALL_NAV_ITEMS: NavItem[] = [
 
 const ALL_TAB_ITEMS: NavItem[] = [
   { label: 'Dashboard', to: '/', icon: <LayoutDashboard size={20} /> },
-  { label: 'Job Log', to: '/new', icon: <ClipboardCheck size={20} /> },
   { label: 'Calendar', to: '/calendar', icon: <CalendarDays size={20} /> },
   { label: 'Income', to: '/income', icon: <TrendingUp size={20} /> },
 ];

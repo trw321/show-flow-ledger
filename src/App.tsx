@@ -5,7 +5,6 @@ import { DataProvider } from '@/lib/DataContext';
 import LoadingScreen from '@/components/LoadingScreen';
 import AppLayout from '@/components/AppLayout';
 import Dashboard from '@/pages/Dashboard';
-import NewGigPage from '@/pages/NewGigPage';
 import CalendarPage from '@/pages/CalendarPage';
 import ExpensesPage from '@/pages/ExpensesPage';
 import IncomePage from '@/pages/IncomePage';
@@ -27,8 +26,8 @@ export default function App() {
           <Route path="/pattern-auth" element={<PatternAuthPage />} />
           <Route element={<AppLayout />}>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/new" element={<NewGigPage />} />
-            <Route path="/log" element={<Navigate to="/new" replace />} />
+            <Route path="/new" element={<Navigate to="/" replace />} />
+            <Route path="/log" element={<Navigate to="/" replace />} />
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/expenses" element={<ExpensesPage />} />
             <Route path="/income" element={<IncomePage />} />
