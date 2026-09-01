@@ -422,7 +422,7 @@ function ShiftCard({
             </p>
             <p className="text-xs text-muted-foreground truncate">
               {[
-                job.notes?.match(/\bC\/?B\b/i) ? '📞 Callback' : null,
+                job.notes?.match(/\bC\/?B\b/i) && !job.notes?.match(/\bNO[\s/-]*C\/?B\b/i) ? '📞 Callback' : null,
                 job.name,
                 job.client,
                 job.venue,
