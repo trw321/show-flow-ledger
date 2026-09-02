@@ -33,11 +33,14 @@ export default function LampPageWrapper({ title, description, action, children }
     <div className="relative rounded-lg border border-white/10 overflow-hidden bg-[#0a0806]">
       {/* Small corner accent, not a second hero — the intake box below already
           has its own vortex animation tied to real parsing state, so the
-          ambient lamp stays out of its way instead of overlapping it. */}
-      <div className="absolute inset-0 flex items-start justify-end pt-2 pr-2 pointer-events-none overflow-hidden opacity-60">
-        <LampBulb progress={progress} size={130} />
+          ambient lamp stays out of its way instead of overlapping it.
+          ambient={false} + generous padding: the soft oversized halo looks
+          broken when clipped by the card's rounded corner in a tight space,
+          so this shows just the bulb itself (still glows via its own
+          box-shadow), given enough room not to get cut off. */}
+      <div className="absolute inset-0 flex items-start justify-end pt-6 pr-6 pointer-events-none overflow-hidden">
+        <LampBulb progress={progress} size={110} ambient={false} />
       </div>
-      <div className="absolute inset-0 bg-gradient-to-bl from-transparent from-15% to-[#0a0806] pointer-events-none" />
       <div className="relative z-10 p-4 md:p-5">
         {title && (
           <div className="mb-4 md:mb-6">

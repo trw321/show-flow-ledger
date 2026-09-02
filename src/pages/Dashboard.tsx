@@ -281,23 +281,23 @@ export default function Dashboard() {
       </div>
       {/* ── By employer ────────────────────────────────────────────────────── */}
       {byEmployer.length > 0 && (
-        <div className="mb-6 rounded-md border border-border bg-card overflow-hidden">
+        <div className="mb-6 rounded-md border border-white/10 bg-white/5 overflow-hidden">
           <button
             onClick={() => setEmployerExpanded(e => !e)}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-secondary/30 transition-colors"
+            className="w-full px-4 py-3 flex items-center justify-between hover:bg-white/5 transition-colors"
           >
-            <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60">By employer</h2>
-            <ChevronDown size={14} className={`text-muted-foreground transition-transform ${employerExpanded ? 'rotate-180' : ''}`} />
+            <h2 className="text-[10px] font-body uppercase tracking-widest text-white/40">By employer</h2>
+            <ChevronDown size={14} className={`text-white/40 transition-transform ${employerExpanded ? 'rotate-180' : ''}`} />
           </button>
           {employerExpanded && (
-            <div className="divide-y divide-border/40 border-t border-border/50">
+            <div className="divide-y divide-white/10 border-t border-white/10">
               {byEmployer.map(({ client, hours, earned, jobs }) => (
                 <div key={client} className="flex items-center justify-between px-4 py-2.5">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{client}</p>
-                    <p className="text-[10px] font-body text-muted-foreground">{jobs} job{jobs !== 1 ? 's' : ''} · {hours.toFixed(1)}h</p>
+                    <p className="text-sm font-medium text-white/90 truncate">{client}</p>
+                    <p className="text-[10px] font-body text-white/40">{jobs} job{jobs !== 1 ? 's' : ''} · {hours.toFixed(1)}h</p>
                   </div>
-                  <p className="text-sm font-bold text-mono text-foreground shrink-0 ml-3">
+                  <p className="text-sm font-bold text-mono text-white shrink-0 ml-3">
                     ${earned.toLocaleString(undefined, { minimumFractionDigits: 0 })}
                   </p>
                 </div>
@@ -309,18 +309,18 @@ export default function Dashboard() {
 
       {/* Recent expenses — only if there are any */}
       {showExpenses && recentExpenses.length > 0 && (
-        <div className="mb-6 rounded-md border border-border bg-card p-4">
-          <h2 className="text-[10px] font-body mb-3 text-muted-foreground uppercase tracking-widest">Recent Expenses</h2>
+        <div className="mb-6 rounded-md border border-white/10 bg-white/5 p-4">
+          <h2 className="text-[10px] font-body mb-3 text-white/40 uppercase tracking-widest">Recent Expenses</h2>
           <div className="space-y-2">
             {recentExpenses.map(exp => (
-              <div key={exp.id} className="flex items-center justify-between rounded-md bg-secondary/50 px-3 py-2">
+              <div key={exp.id} className="flex items-center justify-between rounded-md bg-white/5 px-3 py-2">
                 <div>
-                  <p className="text-sm font-medium">{exp.description}</p>
-                  <p className="text-xs text-muted-foreground font-body">{exp.category}</p>
+                  <p className="text-sm font-medium text-white/90">{exp.description}</p>
+                  <p className="text-xs text-white/40 font-body">{exp.category}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-bold text-mono text-destructive">-${exp.amount.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground font-body">{format(new Date(exp.date), 'MMM d')}</p>
+                  <p className="text-xs text-white/40 font-body">{format(new Date(exp.date), 'MMM d')}</p>
                 </div>
               </div>
             ))}

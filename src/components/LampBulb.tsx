@@ -6,12 +6,16 @@ interface Props {
   progress: number;
   /** Bulb diameter in px. Defaults to the boot-screen's original size. */
   size?: number;
+  /** The soft oversized radial-gradient halo around the bulb — great with room
+   *  to breathe (full-screen boot), but gets clipped and looks broken when
+   *  the bulb sits in a small bounded space like a corner accent. Default true. */
+  ambient?: boolean;
 }
 
 // The bulb + glow + filament visual shared by the one-time boot LoadingScreen
 // and the looping LampBulb ambient background — same look, different callers
 // drive `progress` differently (a one-shot ramp to 100 vs. a breathing loop).
-export default function LampBulb({ progress, size = 140 }: Props) {
+export default function LampBulb({ progress, size = 140, ambient = true }: Props) {
   const color = getLampColor(progress);
   const filColor = getLampFilamentColor(progress);
   const glowSize = size * (60 + progress * 3) / 140;
@@ -21,19 +25,21 @@ export default function LampBulb({ progress, size = 140 }: Props) {
   return (
     <div className="relative flex flex-col items-center" style={{ width: size, height: size }}>
       {/* Ambient glow */}
-      <motion.div
-        className="absolute rounded-full"
-        style={{
-          width: glowSize * 2.5,
-          height: glowSize * 2.5,
-          left: '50%',
-          top: '50%',
-          x: '-50%',
-          y: '-50%',
-          background: `radial-gradient(circle, ${color}30 0%, ${color}10 40%, transparent 70%)`,
-          filter: `blur(${(20 + progress * 0.5) * scale}px)`,
-        }}
-      />
+      {ambient && (
+        <motion.div
+          className="absolute rounded-full"
+          style={{
+            width: glowSize * 2.5,
+            height: glowSize * 2.5,
+            left: '50%',
+            top: '50%',
+            x: '-50%',
+            y: '-50%',
+            background: `radial-gradient(circle, ${color}30 0%, ${color}10 40%, transparent 70%)`,
+            filter: `blur(${(20 + progress * 0.5) * scale}px)`,
+          }}
+        />
+      )}
 
       {/* LED bulb */}
       <motion.div
