@@ -676,9 +676,12 @@ export default function CalendarPage() {
   }, [data.jobs, jobPay]);
 
   // ── This Month / YTD summary (moved here from Dashboard) ────────────────
+  // "This Month" tracks whatever month you've navigated to (currentDate),
+  // not literally today's real month — it lives on the calendar you're
+  // actively browsing, so it should follow you when you page forward/back.
   const monthYtdStats = useMemo(() => {
-    const monthStart = startOfMonth(new Date());
-    const monthEnd = endOfMonth(new Date());
+    const monthStart = startOfMonth(currentDate);
+    const monthEnd = endOfMonth(currentDate);
     const monthJobs = data.jobs.filter(j => {
       try { return isWithinInterval(parseISO(j.date), { start: monthStart, end: monthEnd }); }
       catch { return false; }
@@ -689,7 +692,7 @@ export default function CalendarPage() {
       .filter(i => i.status === 'paid' && (() => { try { return isWithinInterval(parseISO(i.date), { start: monthStart, end: monthEnd }); } catch { return false; } })())
       .reduce((s, i) => s + i.amount, 0);
 
-    const yearPrefix = format(new Date(), 'yyyy');
+    const yearPrefix = format(currentDate, 'yyyy');
     const ytdJobs = data.jobs.filter(j => j.date.startsWith(yearPrefix));
     const ytdHours = ytdJobs.reduce((s, j) => s + effectiveHoursWorked(j), 0);
     const ytdExpected = ytdJobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers), 0);
@@ -698,10 +701,10 @@ export default function CalendarPage() {
       .reduce((s, i) => s + i.amount, 0);
 
     return {
-      month: { label: format(new Date(), 'MMM'), hours: monthHours, expected: monthExpected, paid: monthPaid, unpaid: Math.max(0, monthExpected - monthPaid) },
+      month: { label: format(currentDate, 'MMM'), hours: monthHours, expected: monthExpected, paid: monthPaid, unpaid: Math.max(0, monthExpected - monthPaid) },
       ytd: { label: yearPrefix, hours: ytdHours, expected: ytdExpected, paid: ytdPaid, unpaid: Math.max(0, ytdExpected - ytdPaid) },
     };
-  }, [data.jobs, data.income, data.employers]);
+  }, [data.jobs, data.income, data.employers, currentDate]);
 
   // Dates that are the 6th+ consecutive day worked for the same employer —
   // flagged regardless of whether "6th/7th day rule" is checked on the job,
@@ -823,54 +826,65 @@ export default function CalendarPage() {
 
       {viewMode === 'month' && (
         <>
-          <div className="grid grid-cols-7 mb-0.5">
-            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-              <div key={i} className="text-center text-[10px] text-muted-foreground text-mono py-1 font-medium">{d}</div>
-            ))}
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <div className="grid grid-cols-7 flex-1">
+              {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+                <div key={i} className="text-center text-[10px] text-muted-foreground text-mono py-1 font-medium">{d}</div>
+              ))}
+            </div>
+            <div className="w-14 shrink-0" />
           </div>
-          <div className="grid grid-cols-7">
-            {monthDays.map((day, i) => {
-              const dateKey = format(day, 'yyyy-MM-dd');
-              const dayJobs = jobsByDate[dateKey] || [];
-              const todayFlag = isSameDay(day, today);
-              const isCurrentMonth = isSameMonth(day, currentDate);
-              const hasJobs = dayJobs.length > 0;
-              const hasPay = !!payByDate[dateKey];
-              const sixthSeventhStreak = sixthSeventhDayDates[dateKey];
-              return (
-                <div
-                  key={i}
-                  onClick={() => hasJobs && setSelectedDate(dateKey)}
-                  title={sixthSeventhStreak ? `${sixthSeventhStreak}th consecutive day worked for this employer` : undefined}
-                  className={cn(
-                    "relative flex flex-col items-center py-1.5 transition-colors rounded-lg mx-0.5 mb-0.5",
-                    !isCurrentMonth && 'opacity-30',
-                    todayFlag && 'bg-primary/10',
-                    hasJobs && 'cursor-pointer active:bg-secondary/60',
-                    sixthSeventhStreak && 'bg-warning/20 ring-1 ring-warning/60'
-                  )}
-                >
-                  {sixthSeventhStreak > 0 && (
-                    <span className="absolute top-0 right-0.5 w-1.5 h-1.5 rounded-full bg-warning" />
-                  )}
-                  {todayFlag ? (
-                    <span className="relative w-6 h-6 flex items-center justify-center">
-                      <Star size={24} className="absolute text-primary fill-primary" />
-                      <span className="relative text-[11px] text-mono leading-none text-primary-foreground font-bold">{format(day, 'd')}</span>
-                    </span>
-                  ) : (
-                    <span className="text-[11px] text-mono leading-none w-6 h-6 flex items-center justify-center text-foreground">{format(day, 'd')}</span>
-                  )}
-                  {dayJobs.length > 0 && <span className="text-[7px] text-muted-foreground leading-tight text-center truncate max-w-[3rem] mt-0.5">{dayJobs[0].venue || dayJobs[0].client}</span>}
-                  <div className="flex gap-0.5 mt-0.5 h-2 items-center">
-                    {dayJobs.slice(0, 3).map((job, j) => <span key={j} className={cn("w-1.5 h-1.5 rounded-full", jobDotClass(job, paidJobIds))} />)}
-                    {dayJobs.length > 3 && <span className="text-[7px] text-muted-foreground text-mono">+{dayJobs.length - 3}</span>}
-                  </div>
-                  {hasPay && <span className="text-[8px] text-mono text-success font-semibold leading-none mt-0.5">${payByDate[dateKey] >= 1000 ? `${(payByDate[dateKey] / 1000).toFixed(1)}k` : payByDate[dateKey].toFixed(0)}</span>}
-                </div>
-              );
-            })}
-          </div>
+          {weeks.map((week, wi) => (
+            <div key={wi} className="flex items-center gap-1.5">
+              <div className="grid grid-cols-7 flex-1">
+                {week.map((day, i) => {
+                  const dateKey = format(day, 'yyyy-MM-dd');
+                  const dayJobs = jobsByDate[dateKey] || [];
+                  const todayFlag = isSameDay(day, today);
+                  const isCurrentMonth = isSameMonth(day, currentDate);
+                  const hasJobs = dayJobs.length > 0;
+                  const hasPay = !!payByDate[dateKey];
+                  const sixthSeventhStreak = sixthSeventhDayDates[dateKey];
+                  return (
+                    <div
+                      key={i}
+                      onClick={() => hasJobs && setSelectedDate(dateKey)}
+                      title={sixthSeventhStreak ? `${sixthSeventhStreak}th consecutive day worked for this employer` : undefined}
+                      className={cn(
+                        "relative flex flex-col items-center py-1.5 transition-colors rounded-lg mx-0.5 mb-0.5",
+                        !isCurrentMonth && 'opacity-30',
+                        todayFlag && 'bg-primary/10',
+                        hasJobs && 'cursor-pointer active:bg-secondary/60',
+                        sixthSeventhStreak && 'bg-warning/20 ring-1 ring-warning/60'
+                      )}
+                    >
+                      {sixthSeventhStreak > 0 && (
+                        <span className="absolute top-0 right-0.5 w-1.5 h-1.5 rounded-full bg-warning" />
+                      )}
+                      {todayFlag ? (
+                        <span className="relative w-6 h-6 flex items-center justify-center">
+                          <Star size={24} className="absolute text-primary fill-primary" />
+                          <span className="relative text-[11px] text-mono leading-none text-primary-foreground font-bold">{format(day, 'd')}</span>
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-mono leading-none w-6 h-6 flex items-center justify-center text-foreground">{format(day, 'd')}</span>
+                      )}
+                      {dayJobs.length > 0 && <span className="text-[7px] text-muted-foreground leading-tight text-center truncate max-w-[3rem] mt-0.5">{dayJobs[0].venue || dayJobs[0].client}</span>}
+                      <div className="flex gap-0.5 mt-0.5 h-2 items-center">
+                        {dayJobs.slice(0, 3).map((job, j) => <span key={j} className={cn("w-1.5 h-1.5 rounded-full", jobDotClass(job, paidJobIds))} />)}
+                        {dayJobs.length > 3 && <span className="text-[7px] text-muted-foreground text-mono">+{dayJobs.length - 3}</span>}
+                      </div>
+                      {hasPay && <span className="text-[8px] text-mono text-success font-semibold leading-none mt-0.5">${payByDate[dateKey] >= 1000 ? `${(payByDate[dateKey] / 1000).toFixed(1)}k` : payByDate[dateKey].toFixed(0)}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="w-14 shrink-0 flex flex-col items-end justify-center gap-0.5">
+                {weekStats[wi].hours > 0 ? <span className="text-[9px] text-mono text-muted-foreground">{weekStats[wi].hours.toFixed(1)}h</span> : <span className="text-[9px] text-mono text-muted-foreground/25">—</span>}
+                {weekStats[wi].pay > 0 && <span className="text-[9px] text-mono text-pink-400 font-semibold">${weekStats[wi].pay >= 1000 ? `${(weekStats[wi].pay / 1000).toFixed(1)}k` : weekStats[wi].pay.toFixed(0)}</span>}
+              </div>
+            </div>
+          ))}
           <div className="mt-4 space-y-1">
             <div className="flex items-center justify-between px-1 pb-1 border-b border-border/30">
               <span className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground/50">{format(currentDate, 'MMMM')}</span>
@@ -879,15 +893,6 @@ export default function CalendarPage() {
                 {monthStats.totalPay > 0 && <span className="text-[11px] text-mono font-bold text-success">${monthStats.totalPay >= 1000 ? `${(monthStats.totalPay / 1000).toFixed(1)}k` : monthStats.totalPay.toFixed(0)}</span>}
               </div>
             </div>
-            {weekStats.map((ws, i) => (
-              <div key={i} className="flex items-center justify-between px-1">
-                <span className="text-[9px] text-mono text-muted-foreground/40">{format(ws.weekStart, 'MMM d')}</span>
-                <div className="flex items-center gap-3">
-                  {ws.hours > 0 ? <span className="text-[10px] text-mono text-muted-foreground">{ws.hours.toFixed(1)}h</span> : <span className="text-[10px] text-mono text-muted-foreground/25">—</span>}
-                  {ws.pay > 0 && <span className="text-[10px] text-mono text-success">${ws.pay >= 1000 ? `${(ws.pay / 1000).toFixed(1)}k` : ws.pay.toFixed(0)}</span>}
-                </div>
-              </div>
-            ))}
           </div>
         </>
       )}
