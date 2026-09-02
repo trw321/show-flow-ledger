@@ -5,7 +5,7 @@ import SpacePageWrapper from '@/components/SpacePageWrapper';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast } from 'date-fns';
 import type { Job } from '@/lib/store';
 import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, isOverdueUpcoming } from '@/lib/payCalc';
@@ -90,6 +90,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   onDelete: () => void;
 }) {
   const { data, addJob, updateIncome } = useData();
+  const isCallback = !!job.notes?.match(/\bC\/?B\b/i) && !job.notes?.match(/\bNO[\s/-]*C\/?B\b/i);
   const [client, setClient] = useState(job.client ?? '');
   const [startTime, setStartTime] = useState(job.startTime ?? '');
   const [endTime, setEndTime] = useState(job.endTime ?? '');
@@ -283,8 +284,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
             <ArrowLeft size={16} />
           </button>
           <div className="flex-1 min-w-0">
-            <p className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">
-              {format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d, yyyy')}
+            <p className="text-[10px] font-body uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <span>{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d, yyyy')}</span>
+              {isCallback && <Phone size={11} className="text-destructive shrink-0" aria-label="Callback" />}
             </p>
             <DialogTitle className="text-mono text-sm truncate">{job.name}</DialogTitle>
           </div>

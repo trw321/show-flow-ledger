@@ -3,7 +3,7 @@ import { useState, useRef, useCallback, useMemo } from 'react';
 import { useData } from '@/lib/DataContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Upload, Loader2, Check, Plus, X, ChevronRight, ChevronDown, AlertTriangle, Trash2, Camera, PenLine } from 'lucide-react';
+import { Upload, Loader2, Check, Plus, X, ChevronRight, ChevronDown, AlertTriangle, Trash2, Camera, PenLine, Phone } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -395,6 +395,7 @@ function ShiftCard({
   onChange: (field: keyof ParsedJob, value: string | number | undefined) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const isCallback = !!job.notes?.match(/\bC\/?B\b/i) && !job.notes?.match(/\bNO[\s/-]*C\/?B\b/i);
 
   return (
     <div className={cn(
@@ -417,17 +418,18 @@ function ShiftCard({
           aria-expanded={expanded}
         >
           <div className="min-w-0">
-            <p className="text-sm font-medium truncate">
-              {job.date ? format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d') : '—'}
+            <p className="text-sm font-medium flex items-center gap-1.5">
+              <span className="truncate">{job.date ? format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d') : '—'}</span>
+              {isCallback && <Phone size={12} className="text-destructive shrink-0" aria-label="Callback" />}
               {conflict && (
-                <span className="ml-1.5 text-[10px] text-warning font-normal">
+                <span className="text-[10px] text-warning font-normal shrink-0">
                   <AlertTriangle size={10} className="inline mr-0.5" />same date
                 </span>
               )}
             </p>
             <p className="text-xs text-muted-foreground truncate">
               {[
-                job.notes?.match(/\bC\/?B\b/i) && !job.notes?.match(/\bNO[\s/-]*C\/?B\b/i) ? '📞 Callback' : null,
+                isCallback ? 'Callback' : null,
                 job.name,
                 job.client,
                 job.venue,
