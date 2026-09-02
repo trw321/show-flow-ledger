@@ -232,16 +232,21 @@ function expandCBRecord(record: string): string[] {
     }
     if (trailingNote) for (const e of cbEntries) if (!e.note) e.note = trailingNote;
   } else {
-    let timeOverride: string | undefined;
-    let note: string | undefined;
     const trailingDateM = cbContent.match(/^(.+)\s+(\d{1,2}\/\d{1,2})\s*$/);
     if (trailingDateM) {
       cbEntries.push({ date: parseMD(trailingDateM[2]), time: '', note: trailingDateM[1].trim() || undefined });
     } else {
       const tokM = cbContent.match(/^(@?\S+)\s*(.*)/);
-      if (tokM && isTimeToken(tokM[1])) { timeOverride = normTime(tokM[1]); note = tokM[2].trim() || undefined; }
-      else { note = cbContent || undefined; }
-      cbEntries.push({ date: new Date(parentDate), time: timeOverride, note });
+      if (tokM && isTimeToken(tokM[1])) {
+        // "CB 6PM" — a real second call later the same day, distinguishable
+        // from plain descriptive text by actually starting with a time.
+        cbEntries.push({ date: new Date(parentDate), time: normTime(tokM[1]), note: tokM[2].trim() || undefined });
+      }
+      // Neither a trailing date nor a leading time — e.g. "CB FOR OUT" or
+      // "CB FOR LOAD OUT" is describing what this same shift covers, not
+      // naming a second dated/timed call. Nothing to expand; falls through
+      // to the cbEntries.length === 0 check below and returns the record
+      // unchanged instead of fabricating a same-day duplicate.
     }
   }
 
