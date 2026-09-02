@@ -2,42 +2,14 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '@/lib/DataContext';
 import LampPageWrapper from '@/components/LampPageWrapper';
-import StatCard from '@/components/StatCard';
 import NewGigPage from '@/pages/NewGigPage';
-import { ChevronDown, Download, Zap, Eye, Flame, Clock, DollarSign, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, isToday, differenceInCalendarDays } from 'date-fns';
+import { ChevronDown, Download, Zap, Eye, Flame } from 'lucide-react';
+import { format, parseISO, isToday, differenceInCalendarDays } from 'date-fns';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
-import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked } from '@/lib/payCalc';
-import { resolveEmployer } from '@/lib/employerMatch';
+import { effectiveHoursWorked, jobGross } from '@/lib/payCalc';
 import { useNeedsHours } from '@/lib/useNeedsHours';
 import { getPayTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
-import type { Job, Employer } from '@/lib/store';
-
-function jobGross(job: Job, allJobs: Job[], employers: Employer[] = []): number {
-  const hours = effectiveHoursWorked(job);
-  if (!hours) return 0;
-  const rate = job.hourlyRate ?? 0;
-  const employer = resolveEmployer(job.client, employers);
-  const dayMult = getDayMultiplier(job.date, job.client, allJobs, job.has6th7thDayRule ?? false);
-  const rawNightHours = ((employer?.nightPremiumEnabled ?? true) && job.startTime && job.endTime)
-    ? calculateNightHours(job.startTime, job.endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour)
-    : 0;
-  const nightHours = resolveConfirmedNightHours(rawNightHours, job.nightPremiumConfirmed, job.nightPremiumActualHours);
-  const { totalPay } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock }, {
-    rule: employer?.overtimeRule ?? 'daily',
-    otThresholdHours: employer?.dailyOvertimeThresholdHours,
-    dtThresholdHours: employer?.dailyDoubletimeThresholdHours,
-    otMultiplier: employer?.overtimeMultiplier,
-    dtMultiplier: employer?.doubletimeMultiplier,
-    nightHours,
-    nightMultiplier: employer?.nightPremiumMultiplier,
-    unionDuesPercent: employer?.unionDuesPercent,
-  });
-  const weeklyBonus = employer ? calculateWeeklyOvertimeBonus(job, allJobs, employer) : 0;
-  const gross = totalPay + weeklyBonus;
-  return gross + (job.hasVacationPay ? gross * 0.08 : 0);
-}
 
 function ExportButton({ onClick }: { onClick: () => void }) {
   return (
@@ -61,31 +33,6 @@ export default function Dashboard() {
 
   const showIncome = prefs.tabs.income;
   const showExpenses = prefs.tabs.expenses;
-
-  // ── This month ────────────────────────────────────────────────────────────
-  const monthStart = startOfMonth(new Date());
-  const monthEnd = endOfMonth(new Date());
-
-  const thisMonthJobs = data.jobs.filter(j => {
-    try { return isWithinInterval(parseISO(j.date), { start: monthStart, end: monthEnd }); }
-    catch { return false; }
-  });
-
-  const thisMonthHours = thisMonthJobs.reduce((s, j) => s + effectiveHoursWorked(j), 0);
-  const thisMonthExpected = thisMonthJobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers), 0);
-  const thisMonthPaid = data.income
-    .filter(i => i.status === 'paid' && (() => { try { return isWithinInterval(parseISO(i.date), { start: monthStart, end: monthEnd }); } catch { return false; } })())
-    .reduce((s, i) => s + i.amount, 0);
-  const thisMonthUnpaid = Math.max(0, thisMonthExpected - thisMonthPaid);
-
-  // ── YTD ──────────────────────────────────────────────────────────────────
-  const yearPrefix = format(new Date(), 'yyyy');
-  const ytdJobs = data.jobs.filter(j => j.date.startsWith(yearPrefix));
-  const ytdHours = ytdJobs.reduce((s, j) => s + effectiveHoursWorked(j), 0);
-  const ytdExpected = ytdJobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers), 0);
-  const ytdPaid = data.income
-    .filter(i => i.status === 'paid' && i.date.startsWith(yearPrefix))
-    .reduce((s, i) => s + i.amount, 0);
 
   // ── By employer ───────────────────────────────────────────────────────────
   const byEmployer = useMemo(() => {
@@ -241,44 +188,6 @@ export default function Dashboard() {
         )}
       </div>
 
-    {/* ── Month + YTD side by side ──────────────────────────────────────── */}
-      <div className="mb-6">
-        <div className="grid grid-cols-2 gap-3">
-
-          {/* Left — This month */}
-          <div className="flex flex-col gap-2">
-            <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60">
-              {format(new Date(), 'MMM')}
-            </h2>
-            <StatCard label="Hours" value={thisMonthHours.toFixed(1)} icon={Clock} />
-            <StatCard label="Earned" value={`$${thisMonthExpected.toLocaleString(undefined, { minimumFractionDigits: 0 })}`} icon={DollarSign} variant="primary" />
-            <StatCard label="Paid" value={`$${thisMonthPaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}`} icon={CheckCircle2} variant="success" />
-            <StatCard
-              label="Unpaid"
-              value={thisMonthUnpaid > 0 ? `$${thisMonthUnpaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}` : '✓'}
-              icon={AlertTriangle}
-              variant={thisMonthUnpaid > 0 ? 'warning' : 'default'}
-            />
-          </div>
-
-          {/* Right — YTD */}
-          <div className="flex flex-col gap-2">
-            <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60">
-              {yearPrefix}
-            </h2>
-            <StatCard label="Hours" value={ytdHours.toFixed(1)} icon={Clock} />
-            <StatCard label="Earned" value={`$${ytdExpected.toLocaleString(undefined, { minimumFractionDigits: 0 })}`} icon={DollarSign} variant="primary" />
-            <StatCard label="Paid" value={`$${ytdPaid.toLocaleString(undefined, { minimumFractionDigits: 0 })}`} icon={CheckCircle2} variant="success" />
-            <StatCard
-              label="Unpaid"
-              value={ytdExpected - ytdPaid > 0 ? `$${Math.max(0, ytdExpected - ytdPaid).toLocaleString(undefined, { minimumFractionDigits: 0 })}` : '✓'}
-              icon={AlertTriangle}
-              variant={ytdExpected - ytdPaid > 0 ? 'warning' : 'default'}
-            />
-          </div>
-
-        </div>
-      </div>
       {/* ── By employer ────────────────────────────────────────────────────── */}
       {byEmployer.length > 0 && (
         <div className="mb-6 rounded-md border border-white/10 bg-white/5 overflow-hidden">

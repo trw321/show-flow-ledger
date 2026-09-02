@@ -1,5 +1,6 @@
 import type { Job, Employer } from './store';
 import { parseISO, differenceInCalendarDays, startOfDay, startOfWeek, endOfWeek } from 'date-fns';
+import { resolveEmployer } from './employerMatch';
 
 export interface OvertimeOptions {
   rule?: 'daily' | 'weekly' | 'none';
@@ -167,6 +168,39 @@ export function effectiveHoursWorked(job: Job): number {
 export function isOverdueUpcoming(job: Job): boolean {
   const todayStr = new Date().toISOString().split('T')[0];
   return (job.status === 'upcoming' || job.status === 'in-progress') && job.date < todayStr && effectiveHoursWorked(job) === 0;
+}
+
+/**
+ * A single job's expected gross pay (day multiplier, night premium, weekly
+ * OT bonus, union dues, vacation pay) — the one canonical version of a
+ * calculation that used to be copy-pasted separately in Dashboard,
+ * CalendarPage, and the Excel export, which made the union-dues feature
+ * require four separate edits to land everywhere. New callers should use
+ * this instead of adding a fifth local copy.
+ */
+export function jobGross(job: Job, allJobs: Job[], employers: Employer[] = []): number {
+  const hours = effectiveHoursWorked(job);
+  if (!hours) return 0;
+  const rate = job.hourlyRate ?? 0;
+  const employer = resolveEmployer(job.client, employers);
+  const dayMult = getDayMultiplier(job.date, job.client, allJobs, job.has6th7thDayRule ?? false);
+  const rawNightHours = ((employer?.nightPremiumEnabled ?? true) && job.startTime && job.endTime)
+    ? calculateNightHours(job.startTime, job.endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour)
+    : 0;
+  const nightHours = resolveConfirmedNightHours(rawNightHours, job.nightPremiumConfirmed, job.nightPremiumActualHours);
+  const { totalPay } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock }, {
+    rule: employer?.overtimeRule ?? 'daily',
+    otThresholdHours: employer?.dailyOvertimeThresholdHours,
+    dtThresholdHours: employer?.dailyDoubletimeThresholdHours,
+    otMultiplier: employer?.overtimeMultiplier,
+    dtMultiplier: employer?.doubletimeMultiplier,
+    nightHours,
+    nightMultiplier: employer?.nightPremiumMultiplier,
+    unionDuesPercent: employer?.unionDuesPercent,
+  });
+  const weeklyBonus = employer ? calculateWeeklyOvertimeBonus(job, allJobs, employer) : 0;
+  const gross = totalPay + weeklyBonus;
+  return gross + (job.hasVacationPay ? gross * 0.08 : 0);
 }
 
 /**

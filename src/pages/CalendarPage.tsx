@@ -5,14 +5,15 @@ import SpacePageWrapper from '@/components/SpacePageWrapper';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast } from 'date-fns';
+import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO } from 'date-fns';
 import type { Job } from '@/lib/store';
-import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, isOverdueUpcoming } from '@/lib/payCalc';
+import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, isOverdueUpcoming, jobGross } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { useSwipe } from '@/lib/useSwipe';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 
 const statusDot: Record<Job['status'], string> = {
   upcoming: 'bg-accent',
@@ -674,6 +675,34 @@ export default function CalendarPage() {
     return map;
   }, [data.jobs, jobPay]);
 
+  // ── This Month / YTD summary (moved here from Dashboard) ────────────────
+  const monthYtdStats = useMemo(() => {
+    const monthStart = startOfMonth(new Date());
+    const monthEnd = endOfMonth(new Date());
+    const monthJobs = data.jobs.filter(j => {
+      try { return isWithinInterval(parseISO(j.date), { start: monthStart, end: monthEnd }); }
+      catch { return false; }
+    });
+    const monthHours = monthJobs.reduce((s, j) => s + effectiveHoursWorked(j), 0);
+    const monthExpected = monthJobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers), 0);
+    const monthPaid = data.income
+      .filter(i => i.status === 'paid' && (() => { try { return isWithinInterval(parseISO(i.date), { start: monthStart, end: monthEnd }); } catch { return false; } })())
+      .reduce((s, i) => s + i.amount, 0);
+
+    const yearPrefix = format(new Date(), 'yyyy');
+    const ytdJobs = data.jobs.filter(j => j.date.startsWith(yearPrefix));
+    const ytdHours = ytdJobs.reduce((s, j) => s + effectiveHoursWorked(j), 0);
+    const ytdExpected = ytdJobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers), 0);
+    const ytdPaid = data.income
+      .filter(i => i.status === 'paid' && i.date.startsWith(yearPrefix))
+      .reduce((s, i) => s + i.amount, 0);
+
+    return {
+      month: { label: format(new Date(), 'MMM'), hours: monthHours, expected: monthExpected, paid: monthPaid, unpaid: Math.max(0, monthExpected - monthPaid) },
+      ytd: { label: yearPrefix, hours: ytdHours, expected: ytdExpected, paid: ytdPaid, unpaid: Math.max(0, ytdExpected - ytdPaid) },
+    };
+  }, [data.jobs, data.income, data.employers]);
+
   // Dates that are the 6th+ consecutive day worked for the same employer —
   // flagged regardless of whether "6th/7th day rule" is checked on the job,
   // so it's a heads-up to go verify the contract, not just a confirmation.
@@ -934,6 +963,43 @@ export default function CalendarPage() {
           </div>
         </>
       )}
+
+      {/* ── This Month / YTD (small) + Export ────────────────────────────── */}
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        {[monthYtdStats.month, monthYtdStats.ytd].map(period => (
+          <div key={period.label} className="rounded-md border border-border/40 bg-secondary/10 p-3">
+            <p className="text-[9px] font-body uppercase tracking-widest text-muted-foreground/50 mb-2">{period.label}</p>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Hours</span>
+                <span className="text-mono font-semibold">{period.hours.toFixed(1)}h</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Earned</span>
+                <span className="text-mono font-semibold text-primary">${period.expected.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Paid</span>
+                <span className="text-mono font-semibold text-success">${period.paid.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Unpaid</span>
+                <span className={cn("text-mono font-semibold", period.unpaid > 0 ? "text-warning" : "text-muted-foreground")}>
+                  {period.unpaid > 0 ? `$${period.unpaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '✓'}
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <button
+        onClick={() => exportWeeklyToExcel(data.jobs, data.expenses, data.income, data.employers)}
+        className="mt-2 w-full flex items-center justify-center gap-2 rounded-md border border-border/40 bg-secondary/10 hover:bg-secondary/20 py-2.5 px-4 text-xs font-semibold text-foreground transition-colors"
+      >
+        <Download size={14} />
+        Export to Excel
+      </button>
 
       <Dialog open={!!selectedDate} onOpenChange={(o) => !o && closeDialog()}>
         <DialogContent
