@@ -194,7 +194,7 @@ function expandCBRecord(record: string): string[] {
       // word ("AND") comes first, leaving a literal "THEN " still prefixed
       // on the remainder, which broke the date match below. Strip it too.
       const thenPart = thenMatch[2].trim().replace(/^(?:AND|THEN)\s+/i, '').replace(/\bAT\s+/gi, '@');
-      const parts = thenPart.split(/\s*,\s*/);
+      const parts = thenPart.split(/\s*(?:,|&)\s*/);
       let trailingTime: string | undefined;
       let trailingNote: string | undefined;
       const thenEntries: CBEntry[] = [];
@@ -218,7 +218,7 @@ function expandCBRecord(record: string): string[] {
       if (noteM) for (const e of cbEntries) e.note = noteM[0].trim();
     }
   } else if (hasLeadingDate) {
-    const parts = cbContent.split(/\s*,\s*/);
+    const parts = cbContent.split(/\s*(?:,|&)\s*/);
     let trailingNote = '';
     for (const part of parts) {
       const dm = part.match(/^(\d{1,2}\/\d{1,2})(.*)/);
@@ -306,7 +306,7 @@ function expandThruNotes(job: ParsedJob): ParsedJob[] {
   if (thenMatch) {
     const thenPart = thenMatch[2].trim().replace(/^(?:AND|THEN)\s+/i, '');
     let trailingNote: string | undefined;
-    for (const part of thenPart.split(/\s*,\s*/)) {
+    for (const part of thenPart.split(/\s*(?:,|&)\s*/)) {
       const dm = part.match(/^(\d{1,2}\/\d{1,2})(.*)/);
       if (!dm) { if (part.trim()) trailingNote = part.trim(); continue; }
       const d = parseMD(dm[1]);
