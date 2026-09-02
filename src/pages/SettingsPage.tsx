@@ -54,9 +54,10 @@ interface EmployerFormState {
   threshold: string;
   nightPremiumEnabled: boolean;
   unionDuesPercent: string;
+  unionLocal: string;
 }
 
-const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '', nightPremiumEnabled: true, unionDuesPercent: '' };
+const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '', nightPremiumEnabled: true, unionDuesPercent: '', unionLocal: '' };
 
 function employerToForm(e: Employer): EmployerFormState {
   return {
@@ -67,6 +68,7 @@ function employerToForm(e: Employer): EmployerFormState {
     threshold: (e.overtimeRule === 'weekly' ? e.weeklyOvertimeThresholdHours : e.dailyOvertimeThresholdHours)?.toString() ?? '',
     nightPremiumEnabled: e.nightPremiumEnabled ?? true,
     unionDuesPercent: e.unionDuesPercent?.toString() ?? '',
+    unionLocal: e.unionLocal ?? '',
   };
 }
 
@@ -125,15 +127,23 @@ function EmployerForm({ initial, onSave, onCancel }: {
           onCheckedChange={v => setForm(f => ({ ...f, nightPremiumEnabled: v }))}
         />
       </div>
-      <Input
-        type="number"
-        step="0.1"
-        min="0"
-        placeholder="Union dues % (optional, e.g. 3.5)"
-        value={form.unionDuesPercent}
-        onChange={e => setForm(f => ({ ...f, unionDuesPercent: e.target.value }))}
-        className="h-8 text-xs"
-      />
+      <div className="grid grid-cols-2 gap-2">
+        <Input
+          type="number"
+          step="0.1"
+          min="0"
+          placeholder="Union dues % (e.g. 3.5)"
+          value={form.unionDuesPercent}
+          onChange={e => setForm(f => ({ ...f, unionDuesPercent: e.target.value }))}
+          className="h-8 text-xs"
+        />
+        <Input
+          placeholder="IATSE local # (e.g. 16)"
+          value={form.unionLocal}
+          onChange={e => setForm(f => ({ ...f, unionLocal: e.target.value }))}
+          className="h-8 text-xs"
+        />
+      </div>
       <div className="flex gap-2 justify-end pt-1">
         <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
         <Button size="sm" disabled={!form.name.trim()} onClick={() => onSave(form)}>Save</Button>
@@ -161,6 +171,7 @@ export default function SettingsPage() {
       nightPremiumEnabled: form.nightPremiumEnabled,
       nightPremiumMultiplier: 2.0,
       unionDuesPercent: form.unionDuesPercent ? parseFloat(form.unionDuesPercent) : undefined,
+      unionLocal: form.unionLocal.trim() || undefined,
     });
     setAddingEmployer(false);
   };
@@ -176,6 +187,7 @@ export default function SettingsPage() {
       nightPremiumEnabled: form.nightPremiumEnabled,
       nightPremiumMultiplier: 2.0,
       unionDuesPercent: form.unionDuesPercent ? parseFloat(form.unionDuesPercent) : undefined,
+      unionLocal: form.unionLocal.trim() || undefined,
     });
     setEditingEmployerId(null);
   };

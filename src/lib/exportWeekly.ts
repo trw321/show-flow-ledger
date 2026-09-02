@@ -4,9 +4,15 @@ import type { Job, Expense, Income, Employer } from './store';
 import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, isOverdueUpcoming } from './payCalc';
 import { resolveEmployer } from './employerMatch';
 
-function jobGross(job: Job, allJobs: Job[], employers: Employer[]): number {
+interface JobPayDetails {
+  grossPay: number;
+  duesAmount: number;
+  premiumHours: number;
+}
+
+function jobPayDetails(job: Job, allJobs: Job[], employers: Employer[]): JobPayDetails {
   const hours = effectiveHoursWorked(job);
-  if (!hours) return 0;
+  if (!hours) return { grossPay: 0, duesAmount: 0, premiumHours: 0 };
   const rate = job.hourlyRate ?? 0;
   const employer = resolveEmployer(job.client, employers);
   const dayMult = getDayMultiplier(job.date, job.client, allJobs, job.has6th7thDayRule ?? false);
@@ -14,7 +20,7 @@ function jobGross(job: Job, allJobs: Job[], employers: Employer[]): number {
     ? calculateNightHours(job.startTime, job.endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour)
     : 0;
   const nightHours = resolveConfirmedNightHours(rawNightHours, job.nightPremiumConfirmed, job.nightPremiumActualHours);
-  const { totalPay } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock }, {
+  const { totalPay, duesAmount, nightHours: premiumHours } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock }, {
     rule: employer?.overtimeRule ?? 'daily',
     otThresholdHours: employer?.dailyOvertimeThresholdHours,
     dtThresholdHours: employer?.dailyDoubletimeThresholdHours,
@@ -26,7 +32,11 @@ function jobGross(job: Job, allJobs: Job[], employers: Employer[]): number {
   });
   const weeklyBonus = employer ? calculateWeeklyOvertimeBonus(job, allJobs, employer) : 0;
   const gross = totalPay + weeklyBonus;
-  return gross + (job.hasVacationPay ? gross * 0.08 : 0);
+  return {
+    grossPay: gross + (job.hasVacationPay ? gross * 0.08 : 0),
+    duesAmount,
+    premiumHours,
+  };
 }
 
 function downloadXLSX(rows: Record<string, string | number | undefined | null>[], fileName: string) {
@@ -42,82 +52,109 @@ function downloadXLSX(rows: Record<string, string | number | undefined | null>[]
 }
 
 export function exportWeeklyToExcel(jobs: Job[], expenses: Expense[], income: Income[], employers: Employer[] = []) {
+  // Paid income actually received against a job, summed — separate from the
+  // estimated/expected pay the calculator produces, so the two can be
+  // compared side by side instead of only ever showing one number.
+  const paidByJobId = new Map<string, number>();
+  for (const i of income) {
+    if (i.status === 'paid' && i.jobId) {
+      paidByJobId.set(i.jobId, (paidByJobId.get(i.jobId) ?? 0) + i.amount);
+    }
+  }
+
   // Build one flat row per job
   const jobRows = [...jobs]
     .sort((a, b) => a.date.localeCompare(b.date))
-    .map(j => ({
-      Type: 'Job',
-      Date: j.date,
-      'Job #': j.jobNumber ?? '',
-      Name: j.name,
-      Client: j.client,
-      Venue: j.venue ?? '',
-      'Payroll Company': j.payrollCompany ?? '',
-      Status: isOverdueUpcoming(j) ? 'needs hours' : j.status,
-      'Start Time': j.startTime ?? '',
-      'End Time': j.endTime ?? '',
-      'Hours Worked': effectiveHoursWorked(j) || '',
-      'Hourly Rate': j.hourlyRate ?? '',
-      'Min Hours': j.minimumHours ?? '',
-      'Gross Earnings': effectiveHoursWorked(j) ? jobGross(j, jobs, employers).toFixed(2) : '',
-      'Expense Amount': '',
-      'Expense Category': '',
-      'Income Amount': '',
-      'Income Client': '',
-      'Invoice #': '',
-      'Income Status': '',
-      Notes: j.notes ?? '',
-    }));
+    .map(j => {
+      const { grossPay, duesAmount, premiumHours } = jobPayDetails(j, jobs, employers);
+      const employer = resolveEmployer(j.client, employers);
+      const actualIncome = paidByJobId.get(j.id);
+      return {
+        Type: 'Job',
+        IATSE: employer?.unionLocal ?? '',
+        'Job #': j.jobNumber ?? '',
+        Project: j.name,
+        Date: j.date,
+        'Time In': j.startTime ?? '',
+        'Time Out': j.endTime ?? '',
+        MPs: j.mealPenalties ?? '',
+        'Premium Hours': premiumHours || '',
+        Client: j.client,
+        Venue: j.venue ?? '',
+        'Payroll Company': j.payrollCompany ?? '',
+        Rate: j.hourlyRate ?? '',
+        'Hours Worked': effectiveHoursWorked(j) || '',
+        'Estimated Pay': effectiveHoursWorked(j) ? grossPay.toFixed(2) : '',
+        'Actual Income': actualIncome !== undefined ? actualIncome.toFixed(2) : '',
+        Taxes: '',
+        Dues: duesAmount > 0 ? duesAmount.toFixed(2) : '',
+        Status: isOverdueUpcoming(j) ? 'needs hours' : j.status,
+        'Expense Amount': '',
+        'Expense Category': '',
+        'Invoice #': '',
+        'Income Status': '',
+        Notes: j.notes ?? '',
+      };
+    });
 
   // One row per expense
   const expenseRows = [...expenses]
     .sort((a, b) => a.date.localeCompare(b.date))
     .map(e => ({
       Type: 'Expense',
-      Date: e.date,
+      IATSE: '',
       'Job #': '',
-      Name: e.description,
+      Project: e.description,
+      Date: e.date,
+      'Time In': '',
+      'Time Out': '',
+      MPs: '',
+      'Premium Hours': '',
       Client: '',
       Venue: '',
       'Payroll Company': '',
-      Status: '',
-      'Start Time': '',
-      'End Time': '',
+      Rate: '',
       'Hours Worked': '',
-      'Hourly Rate': '',
-      'Min Hours': '',
-      'Gross Earnings': '',
+      'Estimated Pay': '',
+      'Actual Income': '',
+      Taxes: '',
+      Dues: '',
+      Status: '',
       'Expense Amount': e.amount.toFixed(2),
       'Expense Category': e.category,
-      'Income Amount': '',
-      'Income Client': '',
       'Invoice #': '',
       'Income Status': '',
       Notes: '',
     }));
 
-  // One row per income entry
+  // One row per income entry not already folded into a job row above
+  // (job-linked paid income is already reflected in that job's Actual
+  // Income column — repeating it here would double-count the same dollars).
   const incomeRows = [...income]
+    .filter(i => !i.jobId)
     .sort((a, b) => a.date.localeCompare(b.date))
     .map(i => ({
       Type: 'Income',
-      Date: i.date,
+      IATSE: '',
       'Job #': '',
-      Name: i.description || i.client,
-      Client: '',
+      Project: i.description || i.client,
+      Date: i.date,
+      'Time In': '',
+      'Time Out': '',
+      MPs: '',
+      'Premium Hours': '',
+      Client: i.client,
       Venue: '',
       'Payroll Company': '',
-      Status: '',
-      'Start Time': '',
-      'End Time': '',
+      Rate: '',
       'Hours Worked': '',
-      'Hourly Rate': '',
-      'Min Hours': '',
-      'Gross Earnings': '',
+      'Estimated Pay': '',
+      'Actual Income': i.amount.toFixed(2),
+      Taxes: '',
+      Dues: '',
+      Status: '',
       'Expense Amount': '',
       'Expense Category': '',
-      'Income Amount': i.amount.toFixed(2),
-      'Income Client': i.client,
       'Invoice #': i.invoiceNumber ?? '',
       'Income Status': i.status,
       Notes: '',

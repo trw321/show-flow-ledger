@@ -97,6 +97,8 @@ export interface Employer {
   nightPremiumMultiplier?: number; // default 2.0
   /** Percent of gross pay auto-deducted for this employer's union dues (e.g. 3.5 = 3.5%). Undefined/0 = no deduction. */
   unionDuesPercent?: number;
+  /** IATSE local number this employer's work falls under (e.g. "16", "8"). Free text — purely informational, shown in exports. */
+  unionLocal?: string;
   notes?: string;
   createdAt: string;
 }

@@ -43,7 +43,7 @@ export function calculateDayPay(
   dayMultiplier: number = 1,
   meal?: { duration?: 0 | 30 | 45 | 60; onClock?: boolean },
   overtimeOptions?: OvertimeOptions
-): { billableHours: number; totalPay: number; breakdown: string[] } {
+): { billableHours: number; totalPay: number; breakdown: string[]; duesAmount: number; nightHours: number } {
   const otRule = overtimeOptions?.rule ?? 'daily';
   const otThreshold = overtimeOptions?.otThresholdHours ?? 8;
   const dtThreshold = overtimeOptions?.dtThresholdHours ?? 12;
@@ -112,10 +112,11 @@ export function calculateDayPay(
   }
 
   const duesPercent = overtimeOptions?.unionDuesPercent ?? 0;
+  let duesAmount = 0;
   if (duesPercent > 0 && pay > 0) {
-    const dues = pay * (duesPercent / 100);
-    pay -= dues;
-    breakdown.push(`Union dues (${duesPercent}%): −$${dues.toFixed(2)}`);
+    duesAmount = pay * (duesPercent / 100);
+    pay -= duesAmount;
+    breakdown.push(`Union dues (${duesPercent}%): −$${duesAmount.toFixed(2)}`);
   }
 
   if (minimumHours > 0 && actualHours < minimumHours) {
@@ -126,7 +127,7 @@ export function calculateDayPay(
     breakdown.unshift(`Day multiplier: ${dayMultiplier}× (${dayMultiplier === 1.5 ? '6th day' : '7th day'})`);
   }
 
-  return { billableHours, totalPay: pay, breakdown };
+  return { billableHours, totalPay: pay, breakdown, duesAmount, nightHours };
 }
 
 function parseTimeToMinutes(t: string): number {
