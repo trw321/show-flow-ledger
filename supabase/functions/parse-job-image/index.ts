@@ -6,6 +6,23 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// The Responses API's strict tool schemas require every property to be
+// listed in `required`, so fields that are conceptually optional come back
+// as explicit `null` instead of just being omitted. Stripping nulls keeps
+// the JSON handed back to the client identical in shape to what Chat
+// Completions used to send, so no frontend code needs to change.
+function stripNulls<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(stripNulls) as unknown as T;
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v !== null) out[k] = stripNulls(v);
+    }
+    return out as T;
+  }
+  return value;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -14,24 +31,24 @@ serve(async (req) => {
   try {
     const { base64: imageBase64, mimeType } = await req.json();
 
-    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-    if (!OPENAI_API_KEY) {
-      throw new Error("OPENAI_API_KEY is not configured");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY is not configured");
     }
 
     const today = new Date().toISOString().split("T")[0];
 
     const response = await fetch(
-      "https://api.openai.com/v1/chat/completions",
+      "https://ai.gateway.lovable.dev/v1/responses",
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gpt-4o",
-          messages: [
+          model: "openai/gpt-6-astra",
+          input: [
             {
               role: "system",
               content: `You are a job history parser for an AV technician's bookkeeping app. Parse the image into structured job data. Today's date is ${today}.
@@ -71,13 +88,11 @@ Be flexible — the image may be a screenshot of a dispatch email, a schedule, a
               role: "user",
               content: [
                 {
-                  type: "image_url",
-                  image_url: {
-                    url: `data:${mimeType || "image/jpeg"};base64,${imageBase64}`,
-                  },
+                  type: "input_image",
+                  image_url: `data:${mimeType || "image/jpeg"};base64,${imageBase64}`,
                 },
                 {
-                  type: "text",
+                  type: "input_text",
                   text: "Extract all job information from this image.",
                 },
               ],
@@ -86,45 +101,42 @@ Be flexible — the image may be a screenshot of a dispatch email, a schedule, a
           tools: [
             {
               type: "function",
-              function: {
-                name: "create_jobs",
-                description: "Create parsed job entries from the image",
-                parameters: {
-                  type: "object",
-                  properties: {
-                    jobs: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          jobNumber: { type: "string", description: "Full job/dispatch number in YYYY-NNNN format (e.g. 2026-0496)" },
-                          date: { type: "string", description: "Date in YYYY-MM-DD format" },
-                          startTime: { type: "string", description: "Start/call time" },
-                          endTime: { type: "string", description: "End/wrap time" },
-                          name: { type: "string", description: "Event/show name" },
-                          client: { type: "string", description: "Production company" },
-                          payrollCompany: { type: "string", description: "Payroll agency" },
-                          venue: { type: "string", description: "Venue or location" },
-                          hourlyRate: { type: "number", description: "Hourly rate" },
-                          steward: { type: "string", description: "Steward or contact" },
-                          parkingCost: { type: "number", description: "Parking cost" },
-                          status: { type: "string", enum: ["upcoming", "in-progress", "completed", "cancelled"] },
-                          notes: { type: "string", description: "Additional notes" },
-                        },
-                        required: ["name", "client", "venue", "date", "status"],
+              name: "create_jobs",
+              description: "Create parsed job entries from the image",
+              strict: true,
+              parameters: {
+                type: "object",
+                properties: {
+                  jobs: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        jobNumber: { type: ["string", "null"], description: "Full job/dispatch number in YYYY-NNNN format (e.g. 2026-0496)" },
+                        date: { type: "string", description: "Date in YYYY-MM-DD format" },
+                        startTime: { type: ["string", "null"], description: "Start/call time" },
+                        endTime: { type: ["string", "null"], description: "End/wrap time" },
+                        name: { type: "string", description: "Event/show name" },
+                        client: { type: "string", description: "Production company" },
+                        payrollCompany: { type: ["string", "null"], description: "Payroll agency" },
+                        venue: { type: "string", description: "Venue or location" },
+                        hourlyRate: { type: ["number", "null"], description: "Hourly rate" },
+                        steward: { type: ["string", "null"], description: "Steward or contact" },
+                        parkingCost: { type: ["number", "null"], description: "Parking cost" },
+                        status: { type: "string", enum: ["upcoming", "in-progress", "completed", "cancelled"] },
+                        notes: { type: ["string", "null"], description: "Additional notes" },
                       },
+                      required: ["jobNumber", "date", "startTime", "endTime", "name", "client", "payrollCompany", "venue", "hourlyRate", "steward", "parkingCost", "status", "notes"],
+                      additionalProperties: false,
                     },
                   },
-                  required: ["jobs"],
-                  additionalProperties: false,
                 },
+                required: ["jobs"],
+                additionalProperties: false,
               },
             },
           ],
-          tool_choice: {
-            type: "function",
-            function: { name: "create_jobs" },
-          },
+          tool_choice: { type: "function", name: "create_jobs" },
         }),
       }
     );
@@ -146,13 +158,13 @@ Be flexible — the image may be a screenshot of a dispatch email, a schedule, a
     }
 
     const data = await response.json();
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+    const toolCall = data.output?.find((item: { type?: string }) => item.type === "function_call");
 
     if (!toolCall) {
       throw new Error("Failed to parse jobs from image");
     }
 
-    const parsed = JSON.parse(toolCall.function.arguments);
+    const parsed = stripNulls(JSON.parse(toolCall.arguments));
 
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

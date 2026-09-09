@@ -14,9 +14,9 @@ serve(async (req) => {
   try {
     const { text, jobs } = await req.json();
 
-    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-    if (!OPENAI_API_KEY) {
-      throw new Error("OPENAI_API_KEY is not configured");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY is not configured");
     }
 
     const today = new Date().toISOString().split("T")[0];
@@ -25,16 +25,16 @@ serve(async (req) => {
       : "No jobs available.";
 
     const response = await fetch(
-      "https://api.openai.com/v1/chat/completions",
+      "https://ai.gateway.lovable.dev/v1/responses",
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gpt-4o",
-          messages: [
+          model: "openai/gpt-6-astra",
+          input: [
             {
               role: "system",
               content: `You are a time entry parser for an AV technician's bookkeeping app. Parse spoken or typed input into structured job data. Today's date is ${today}. ${jobsList}
@@ -58,10 +58,10 @@ Match to available jobs if the description seems to reference one. Be generous w
           tools: [
             {
               type: "function",
-              function: {
-                name: "create_time_entry",
-                description: "Create a parsed job entry from the user's spoken input",
-                parameters: {
+              name: "create_time_entry",
+              description: "Create a parsed job entry from the user's spoken input",
+              strict: true,
+              parameters: {
                   type: "object",
                   properties: {
                     jobName: {
@@ -124,13 +124,9 @@ Match to available jobs if the description seems to reference one. Be generous w
                   ],
                   additionalProperties: false,
                 },
-              },
             },
           ],
-          tool_choice: {
-            type: "function",
-            function: { name: "create_time_entry" },
-          },
+          tool_choice: { type: "function", name: "create_time_entry" },
         }),
       }
     );

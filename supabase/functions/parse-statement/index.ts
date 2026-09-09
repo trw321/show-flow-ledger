@@ -5,12 +5,29 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// The Responses API's strict tool schemas require every property to be
+// listed in `required`, so fields that are conceptually optional come back
+// as explicit `null` instead of just being omitted. Stripping nulls keeps
+// the JSON handed back to the client identical in shape to what Chat
+// Completions used to send, so no frontend code needs to change.
+function stripNulls<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(stripNulls) as unknown as T;
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v !== null) out[k] = stripNulls(v);
+    }
+    return out as T;
+  }
+  return value;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-    if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const { imageBase64, mimeType, type = "expense", jobs } = await req.json();
     if (!imageBase64) throw new Error("No image provided");
@@ -41,126 +58,123 @@ If you can't determine the date, use today's date. Return ONLY valid JSON.`
     const toolDef = isTimesheet
       ? {
           type: "function" as const,
-          function: {
-            name: "extract_time_entries",
-            description: "Extract time/work entries from a timesheet, note, or schedule image",
-            parameters: {
-              type: "object",
-              properties: {
-                entries: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      date: { type: "string", description: "YYYY-MM-DD format" },
-                      hours: { type: "number", description: "Hours worked (after subtracting walk-away breaks)" },
-                      startTime: { type: "string", description: "Clock-in / call time in HH:MM AM/PM format, empty string if not found" },
-                      endTime: { type: "string", description: "Clock-out / wrap time in HH:MM AM/PM format, empty string if not found" },
-                      client: { type: "string", description: "Client or company name" },
-                      jobName: { type: "string", description: "Job or project name" },
-                      venue: { type: "string", description: "Location or venue name, empty string if not found" },
-                      steward: { type: "string", description: "Steward or supervisor name if written, empty string if not found" },
-                      description: { type: "string", description: "Description of work done" },
-                      rate: { type: "number", description: "Hourly rate if visible, 0 otherwise" },
-                      mealPenalties: { type: "number", description: "Number of meal penalties (MP), 0 if none" },
-                    },
-                    required: ["date", "hours", "client", "description"],
-                    additionalProperties: false,
+          name: "extract_time_entries",
+          description: "Extract time/work entries from a timesheet, note, or schedule image",
+          strict: true,
+          parameters: {
+            type: "object",
+            properties: {
+              entries: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    date: { type: "string", description: "YYYY-MM-DD format" },
+                    hours: { type: "number", description: "Hours worked (after subtracting walk-away breaks)" },
+                    startTime: { type: ["string", "null"], description: "Clock-in / call time in HH:MM AM/PM format, null if not found" },
+                    endTime: { type: ["string", "null"], description: "Clock-out / wrap time in HH:MM AM/PM format, null if not found" },
+                    client: { type: "string", description: "Client or company name" },
+                    jobName: { type: ["string", "null"], description: "Job or project name" },
+                    venue: { type: ["string", "null"], description: "Location or venue name, null if not found" },
+                    steward: { type: ["string", "null"], description: "Steward or supervisor name if written, null if not found" },
+                    description: { type: "string", description: "Description of work done" },
+                    rate: { type: ["number", "null"], description: "Hourly rate if visible, null otherwise" },
+                    mealPenalties: { type: ["number", "null"], description: "Number of meal penalties (MP), null if none" },
                   },
+                  required: ["date", "hours", "startTime", "endTime", "client", "jobName", "venue", "steward", "description", "rate", "mealPenalties"],
+                  additionalProperties: false,
                 },
               },
-              required: ["entries"],
-              additionalProperties: false,
             },
+            required: ["entries"],
+            additionalProperties: false,
           },
         }
       : isIncome
       ? {
           type: "function" as const,
-          function: {
-            name: "extract_income",
-            description: "Extract income/payment transactions from a bank statement or invoice",
-            parameters: {
-              type: "object",
-              properties: {
-                transactions: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      client: { type: "string" },
-                      description: { type: "string" },
-                      amount: { type: "number" },
-                      date: { type: "string", description: "YYYY-MM-DD format" },
-                      invoiceNumber: { type: "string" },
-                      breakdown: {
-                        type: "array",
-                        description: "Per-date hours breakdown from a payment note, e.g. '8/16 8 ST 1 OT' -> two entries for 2026-08-16. Omit if the payment note doesn't itemize dates/hours.",
-                        items: {
-                          type: "object",
-                          properties: {
-                            date: { type: "string", description: "YYYY-MM-DD format" },
-                            hours: { type: "number" },
-                            type: { type: "string", enum: ["ST", "OT", "DT"] },
-                          },
-                          required: ["date", "hours", "type"],
-                          additionalProperties: false,
+          name: "extract_income",
+          description: "Extract income/payment transactions from a bank statement or invoice",
+          strict: true,
+          parameters: {
+            type: "object",
+            properties: {
+              transactions: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    client: { type: "string" },
+                    description: { type: "string" },
+                    amount: { type: "number" },
+                    date: { type: "string", description: "YYYY-MM-DD format" },
+                    invoiceNumber: { type: ["string", "null"] },
+                    breakdown: {
+                      type: ["array", "null"],
+                      description: "Per-date hours breakdown from a payment note, e.g. '8/16 8 ST 1 OT' -> two entries for 2026-08-16. Null if the payment note doesn't itemize dates/hours.",
+                      items: {
+                        type: "object",
+                        properties: {
+                          date: { type: "string", description: "YYYY-MM-DD format" },
+                          hours: { type: "number" },
+                          type: { type: "string", enum: ["ST", "OT", "DT"] },
                         },
+                        required: ["date", "hours", "type"],
+                        additionalProperties: false,
                       },
                     },
-                    required: ["client", "description", "amount", "date"],
-                    additionalProperties: false,
                   },
+                  required: ["client", "description", "amount", "date", "invoiceNumber", "breakdown"],
+                  additionalProperties: false,
                 },
               },
-              required: ["transactions"],
-              additionalProperties: false,
             },
+            required: ["transactions"],
+            additionalProperties: false,
           },
         }
       : {
           type: "function" as const,
-          function: {
-            name: "extract_expenses",
-            description: "Extract expense transactions from a bank statement or receipt",
-            parameters: {
-              type: "object",
-              properties: {
-                transactions: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      description: { type: "string" },
-                      amount: { type: "number" },
-                      date: { type: "string", description: "YYYY-MM-DD format" },
-                      category: {
-                        type: "string",
-                        enum: ["Travel", "Gear Rental", "Consumables", "Fuel", "Meals", "Lodging", "Labor", "Insurance", "Software", "Tools", "Entertainment", "Medical", "Rent", "IATSE Union Dues", "Other"],
-                      },
+          name: "extract_expenses",
+          description: "Extract expense transactions from a bank statement or receipt",
+          strict: true,
+          parameters: {
+            type: "object",
+            properties: {
+              transactions: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    description: { type: "string" },
+                    amount: { type: "number" },
+                    date: { type: "string", description: "YYYY-MM-DD format" },
+                    category: {
+                      type: "string",
+                      enum: ["Travel", "Gear Rental", "Consumables", "Fuel", "Meals", "Lodging", "Labor", "Insurance", "Software", "Tools", "Entertainment", "Medical", "Rent", "IATSE Union Dues", "Other"],
                     },
-                    required: ["description", "amount", "date", "category"],
-                    additionalProperties: false,
                   },
+                  required: ["description", "amount", "date", "category"],
+                  additionalProperties: false,
                 },
               },
-              required: ["transactions"],
-              additionalProperties: false,
             },
+            required: ["transactions"],
+            additionalProperties: false,
           },
         };
 
     const toolName = isTimesheet ? "extract_time_entries" : isIncome ? "extract_income" : "extract_expenses";
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/responses", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o",
-        messages: [
+        model: "openai/gpt-6-astra",
+        input: [
           {
             role: "system",
             content: systemPrompt,
@@ -169,20 +183,18 @@ If you can't determine the date, use today's date. Return ONLY valid JSON.`
             role: "user",
             content: [
               {
-                type: "text",
+                type: "input_text",
                 text: userPrompt,
               },
               {
-                type: "image_url",
-                image_url: {
-                  url: `data:${mimeType || "image/jpeg"};base64,${imageBase64}`,
-                },
+                type: "input_image",
+                image_url: `data:${mimeType || "image/jpeg"};base64,${imageBase64}`,
               },
             ],
           },
         ],
         tools: [toolDef],
-        tool_choice: { type: "function", function: { name: toolName } },
+        tool_choice: { type: "function", name: toolName },
       }),
     });
 
@@ -209,10 +221,11 @@ If you can't determine the date, use today's date. Return ONLY valid JSON.`
     const data = await response.json();
     console.log("AI response:", JSON.stringify(data));
 
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+    const toolCall = data.output?.find((item: { type?: string }) => item.type === "function_call");
     if (!toolCall) {
-      // Fallback: try parsing content as JSON
-      const content = data.choices?.[0]?.message?.content;
+      // Fallback: try parsing any text output as JSON
+      const messageItem = data.output?.find((item: { type?: string }) => item.type === "message");
+      const content: string | undefined = messageItem?.content?.[0]?.text;
       if (content) {
         try {
           const parsed = JSON.parse(content);
@@ -231,7 +244,7 @@ If you can't determine the date, use today's date. Return ONLY valid JSON.`
       });
     }
 
-    const result = JSON.parse(toolCall.function.arguments);
+    const result = stripNulls(JSON.parse(toolCall.arguments));
     const responseBody = isTimesheet
       ? { entries: result.entries }
       : { transactions: result.transactions };

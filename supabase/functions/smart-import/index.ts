@@ -6,6 +6,26 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// The Responses API's strict tool schemas require every property to be
+// listed in `required`, so fields that are conceptually optional ("meal not
+// mentioned") come back as explicit `null` instead of just being omitted —
+// but the frontend checks `!== undefined` to mean "the AI actually found a
+// value," and null would incorrectly satisfy that check. Stripping nulls
+// here keeps the JSON handed back to the client identical in shape to what
+// Chat Completions used to send (omitted key, real undefined), so no
+// frontend code needs to change.
+function stripNulls<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(stripNulls) as unknown as T;
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v !== null) out[k] = stripNulls(v);
+    }
+    return out as T;
+  }
+  return value;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -13,8 +33,8 @@ serve(async (req) => {
 
   try {
     const { text, imageBase64, imageMimeType } = await req.json();
-    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-    if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const today = new Date().toISOString().split("T")[0];
 
@@ -26,22 +46,19 @@ serve(async (req) => {
     const userContent: unknown = imageBase64
       ? [
           {
-            type: "image_url",
-            image_url: {
-              url: `data:${imageMimeType || "image/jpeg"};base64,${imageBase64}`,
-              detail: "high"
-            }
+            type: "input_image",
+            image_url: `data:${imageMimeType || "image/jpeg"};base64,${imageBase64}`,
           },
-          { type: "text", text: "Parse this image according to the instructions above." }
+          { type: "input_text", text: "Parse this image according to the instructions above." }
         ]
       : text;
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/responses", {
       method: "POST",
-      headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "gpt-4o",
-        messages: [
+        model: "openai/gpt-6-astra",
+        input: [
           {
             role: "system",
             content: `You are a smart import assistant for an AV technician's bookkeeping app. Today's date is ${today}.
@@ -187,80 +204,82 @@ EXAMPLE 5 — non-codeword meal phrasing:
           },
           { role: "user", content: userContent }
         ],
-        max_tokens: 4000,
+        max_output_tokens: 4000,
         tools: [
           {
             type: "function",
-            function: {
-              name: "import_data",
-              description: "Return classified and parsed data",
-              parameters: {
-                type: "object",
-                properties: {
-                  type: { type: "string", enum: ["jobs", "income", "hours"] },
-                  jobs: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        jobNumber: { type: "string" },
-                        date: { type: "string" },
-                        startTime: { type: "string" },
-                        endTime: { type: "string" },
-                        name: { type: "string" },
-                        client: { type: "string" },
-                        payrollCompany: { type: "string" },
-                        venue: { type: "string" },
-                        hourlyRate: { type: "number" },
-                        steward: { type: "string" },
-                        parkingCost: { type: "number" },
-                        status: { type: "string", enum: ["upcoming", "in-progress", "completed", "cancelled"] },
-                        notes: { type: "string" }
-                      },
-                      required: ["name", "client", "venue", "date", "status"]
-                    }
-                  },
-                  income: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        client: { type: "string" },
-                        description: { type: "string" },
-                        amount: { type: "number" },
-                        date: { type: "string" },
-                        status: { type: "string", enum: ["pending", "paid", "overdue"] }
-                      },
-                      required: ["client", "description", "amount", "date", "status"]
-                    }
-                  },
-                  hourUpdates: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        date: { type: "string" },
-                        startTime: { type: "string" },
-                        endTime: { type: "string" },
-                        hoursWorked: { type: "number" },
-                        venue: { type: "string" },
-                        steward: { type: "string" },
-                        hourlyRate: { type: "number" },
-                        mealMinutes: { type: "number", enum: [0, 30, 45, 60] },
-                        mealOnClock: { type: "boolean" },
-                        notes: { type: "string" }
-                      },
-                      required: ["date"]
-                    }
+            name: "import_data",
+            description: "Return classified and parsed data",
+            strict: true,
+            parameters: {
+              type: "object",
+              properties: {
+                type: { type: "string", enum: ["jobs", "income", "hours"] },
+                jobs: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      jobNumber: { type: ["string", "null"] },
+                      date: { type: "string" },
+                      startTime: { type: ["string", "null"] },
+                      endTime: { type: ["string", "null"] },
+                      name: { type: "string" },
+                      client: { type: "string" },
+                      payrollCompany: { type: ["string", "null"] },
+                      venue: { type: "string" },
+                      hourlyRate: { type: ["number", "null"] },
+                      steward: { type: ["string", "null"] },
+                      parkingCost: { type: ["number", "null"] },
+                      status: { type: "string", enum: ["upcoming", "in-progress", "completed", "cancelled"] },
+                      notes: { type: ["string", "null"] }
+                    },
+                    required: ["jobNumber", "date", "startTime", "endTime", "name", "client", "payrollCompany", "venue", "hourlyRate", "steward", "parkingCost", "status", "notes"],
+                    additionalProperties: false
                   }
                 },
-                required: ["type"],
-                additionalProperties: false
-              }
+                income: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      client: { type: "string" },
+                      description: { type: "string" },
+                      amount: { type: "number" },
+                      date: { type: "string" },
+                      status: { type: "string", enum: ["pending", "paid", "overdue"] }
+                    },
+                    required: ["client", "description", "amount", "date", "status"],
+                    additionalProperties: false
+                  }
+                },
+                hourUpdates: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      date: { type: "string" },
+                      startTime: { type: ["string", "null"] },
+                      endTime: { type: ["string", "null"] },
+                      hoursWorked: { type: ["number", "null"] },
+                      venue: { type: ["string", "null"] },
+                      steward: { type: ["string", "null"] },
+                      hourlyRate: { type: ["number", "null"] },
+                      mealMinutes: { type: ["number", "null"], enum: [0, 30, 45, 60, null] },
+                      mealOnClock: { type: ["boolean", "null"] },
+                      notes: { type: ["string", "null"] }
+                    },
+                    required: ["date", "startTime", "endTime", "hoursWorked", "venue", "steward", "hourlyRate", "mealMinutes", "mealOnClock", "notes"],
+                    additionalProperties: false
+                  }
+                }
+              },
+              required: ["type", "jobs", "income", "hourUpdates"],
+              additionalProperties: false
             }
           }
         ],
-        tool_choice: { type: "function", function: { name: "import_data" } }
+        tool_choice: { type: "function", name: "import_data" }
       })
     });
 
@@ -271,10 +290,10 @@ EXAMPLE 5 — non-codeword meal phrasing:
     }
 
     const data = await response.json();
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+    const toolCall = data.output?.find((item: { type?: string }) => item.type === "function_call");
     if (!toolCall) throw new Error("Failed to classify and parse");
 
-    const parsed = JSON.parse(toolCall.function.arguments);
+    const parsed = stripNulls(JSON.parse(toolCall.arguments));
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
