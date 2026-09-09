@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DollarSign, Mic, MicOff, Trash2, Pencil, Clock, Scale, ChevronDown, ChevronUp, Upload, Check, X } from 'lucide-react';
-import { format, differenceInDays, addDays, endOfMonth, parseISO } from 'date-fns';
+import { format, differenceInDays, addDays, endOfMonth, parseISO, startOfWeek } from 'date-fns';
 import { calculateExpectedPay, effectiveHoursWorked } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import type { Income, Job } from '@/lib/store';
@@ -357,6 +357,245 @@ function IncomeMadlib({ jobs, onAdd }: {
   );
 }
 
+// ── Reconciliation row card (one job/period) ────────────────────────────────
+// Extracted so it can render both as a standalone card and nested inside a
+// collapsed employer/week group without duplicating this JSX.
+
+function ReconciliationRowCard({
+  row, isExpanded, isEditing, isToggling, editState, setEditState, paidJobIds, navigate,
+  onToggleExpand, onStartEdit, onCancelEdit, onSaveEdit, onPaidToggle, onShowImport,
+}: {
+  row: ReconciliationRow;
+  isExpanded: boolean;
+  isEditing: boolean;
+  isToggling: boolean;
+  editState: EditState;
+  setEditState: React.Dispatch<React.SetStateAction<EditState>>;
+  paidJobIds: Set<string>;
+  navigate: (path: string) => void;
+  onToggleExpand: () => void;
+  onStartEdit: () => void;
+  onCancelEdit: () => void;
+  onSaveEdit: () => void;
+  onPaidToggle: () => void;
+  onShowImport: () => void;
+}) {
+  const isMatch = Math.abs(row.difference) < 0.01;
+  const isOver = row.difference > 0;
+  // A multi-shift "project" row only needs SOME linked income to flip
+  // row.isPaid true — that made a payment covering just one odd day out of
+  // a whole project read as the whole thing being paid. This distinguishes
+  // "some money in, but short of the period's expected total" from a
+  // genuine full match.
+  const payStatus: 'unpaid' | 'partial' | 'full' =
+    row.actualPaid <= 0 ? 'unpaid' : row.actualPaid < row.expectedPay - 0.01 ? 'partial' : 'full';
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-3.5 hover:border-primary/20 transition-colors">
+      <div className="flex items-start gap-3">
+        {/* Main info — tap to expand */}
+        <div className="flex-1 min-w-0 cursor-pointer" onClick={onToggleExpand}>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-semibold text-sm">{row.client}</p>
+            <span className={cn(
+              "text-[9px] font-bold text-mono uppercase rounded-full px-2 py-0.5 border",
+              payStatus === 'full' ? "bg-success/15 text-success border-success/30"
+                : payStatus === 'partial' ? "bg-warning/15 text-warning border-warning/30"
+                : "bg-secondary text-muted-foreground border-border"
+            )}>
+              {payStatus === 'full' ? 'paid' : payStatus === 'partial' ? 'partial' : 'unpaid'}
+            </span>
+            {/* Money bag paid toggle — greyscale until any income exists, full color once some (or all) has come in */}
+            <button
+              onClick={(e) => { e.stopPropagation(); onPaidToggle(); }}
+              disabled={isToggling}
+              className={cn(
+                "w-6 h-6 rounded-full flex items-center justify-center text-sm transition-all",
+                payStatus !== 'unpaid' ? "grayscale-0 opacity-90" : "grayscale opacity-60 hover:opacity-90",
+                isToggling && "opacity-40"
+              )}
+              title={payStatus === 'unpaid' ? 'Mark paid' : payStatus === 'partial' ? 'Revert partial payment to pending' : 'Mark unpaid'}
+            >
+              💰
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {row.periodLabel}
+            {row.payrollCompany ? ` · via ${row.payrollCompany}` : ''}
+          </p>
+          <p className="text-[10px] text-mono text-muted-foreground mt-1">
+            {row.totalHours.toFixed(1)}h worked
+            {row.isPaid && row.actualPaid > 0 && ` · $${row.actualPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })} received`}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <div className="text-right">
+            <p className="text-sm font-bold text-mono">${row.expectedPay.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+            <p className={`text-[10px] text-mono font-bold ${isMatch ? 'text-success' : isOver ? 'text-primary' : 'text-destructive'}`}>
+              {isMatch ? '✓ match' : `${row.difference >= 0 ? '+' : ''}$${row.difference.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+            </p>
+          </div>
+          <button
+            onClick={() => isEditing ? onCancelEdit() : onStartEdit()}
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            title="Edit"
+          >
+            <Pencil size={13} />
+          </button>
+          <button
+            onClick={onToggleExpand}
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            title={isExpanded ? 'Collapse' : 'Expand'}
+          >
+            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+        </div>
+      </div>
+
+      {/* Inline edit form */}
+      {isEditing && (
+        <div className="-mx-3.5 mt-3 border-t border-border bg-muted/30 px-4 py-4">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-[10px] text-mono uppercase text-muted-foreground font-semibold tracking-wider">Edit details</h4>
+            <div className="flex gap-2">
+              <button onClick={onCancelEdit} className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1">
+                <X size={11} /> Cancel
+              </button>
+              <button onClick={onSaveEdit} className="text-[11px] text-success hover:text-success/80 flex items-center gap-1 font-medium">
+                <Check size={11} /> Save
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-mono uppercase text-muted-foreground">Client</label>
+              <Input value={editState.client} onChange={e => setEditState(p => ({ ...p, client: e.target.value }))} className="h-8 text-xs font-mono" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-mono uppercase text-muted-foreground">Payroll co.</label>
+              <Input value={editState.payrollCompany} onChange={e => setEditState(p => ({ ...p, payrollCompany: e.target.value }))} className="h-8 text-xs font-mono" placeholder="optional" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-mono uppercase text-muted-foreground">Rate ($/hr)</label>
+              <Input type="number" step="0.01" value={editState.hourlyRate} onChange={e => setEditState(p => ({ ...p, hourlyRate: e.target.value }))} className="h-8 text-xs font-mono" placeholder="0.00" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-mono uppercase text-muted-foreground">Pay schedule</label>
+              <Select value={editState.paySchedule} onValueChange={v => setEditState(p => ({ ...p, paySchedule: v }))}>
+                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="bi-weekly">Bi-weekly</SelectItem>
+                  <SelectItem value="semi-monthly">Semi-monthly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="per-project">Per project</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Expanded detail */}
+      {isExpanded && (
+        <div className="-mx-3.5 mt-3 border-t border-border bg-muted/20 px-4 py-4">
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <h4 className="text-[10px] text-mono uppercase text-muted-foreground mb-2 font-semibold tracking-wider">Jobs in this period</h4>
+              {row.timeEntryDetails.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No hours logged</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {row.timeEntryDetails.map((t, j) => {
+                    const jobForDate = row.jobs.find(job => job.date === t.date);
+                    const paid = jobForDate ? paidJobIds.has(jobForDate.id) : false;
+                    return (
+                      <button
+                        key={j}
+                        type="button"
+                        disabled={!jobForDate}
+                        onClick={(e) => { e.stopPropagation(); if (jobForDate) navigate(`/calendar?job=${jobForDate.id}`); }}
+                        title={jobForDate ? 'Open this shift to edit, delete, or mark paid' : undefined}
+                        className={cn(
+                          'w-full text-left rounded-lg border px-3 py-1.5 text-xs transition-colors',
+                          jobForDate && 'hover:border-primary/40 cursor-pointer',
+                          paid ? 'border-success/40 bg-success/10' : 'border-border bg-background text-muted-foreground'
+                        )}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className={paid ? 'text-foreground' : undefined}>{format(parseISO(t.date), 'MMM d')} — {t.hours}h</span>
+                          <span className={cn('text-mono font-medium', paid ? 'text-success' : 'text-foreground')}>${t.pay.toFixed(2)}</span>
+                        </div>
+                        {t.breakdown.length > 0 && (
+                          <div className="mt-1 space-y-0.5 pl-2 border-l border-border/60">
+                            {t.breakdown.map((line, k) => <p key={k}>{line}</p>)}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div>
+              <h4 className="text-[10px] text-mono uppercase text-muted-foreground mb-2 font-semibold tracking-wider">Payments received</h4>
+              {row.incomeDetails.length === 0 ? (
+                <div className="space-y-1.5">
+                  <p className="text-xs text-muted-foreground">No payments recorded</p>
+                  <button onClick={onShowImport} className="text-xs text-primary hover:underline">
+                    + Import bank statement / pay stub
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {row.incomeDetails.map((inc, j) => {
+                    const lagLabel = inc.lagStatus === 'early' ? 'early'
+                      : inc.lagStatus === 'on-time' ? `${inc.lagDays}d after period`
+                      : inc.lagStatus === 'late' ? `${inc.lagDays}d — late`
+                      : `${inc.lagDays}d — unusual`;
+                    const lagColor = inc.lagStatus === 'on-time' || inc.lagStatus === 'early'
+                      ? 'text-success' : inc.lagStatus === 'late' ? 'text-accent' : 'text-destructive';
+                    const payorDiffers = !namesMatch(inc.payorName, row.client);
+                    const isLateCheck = inc.paymentMethod === 'check' && (inc.lagStatus === 'late' || inc.lagStatus === 'unusual');
+                    return (
+                      <div key={j} className={`rounded px-3 py-1.5 text-xs space-y-0.5 ${isLateCheck ? 'bg-warning/5 border border-warning/20' : 'bg-background'}`}>
+                        <div className="flex justify-between items-center gap-2">
+                          <div className="min-w-0 truncate">
+                            <span>{format(parseISO(inc.date), 'MMM d')}</span>
+                            {inc.description && <span className="text-muted-foreground"> — {inc.description}</span>}
+                          </div>
+                          <span className="text-mono font-medium text-success shrink-0">+${inc.amount.toFixed(2)}</span>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {inc.paymentMethod && (
+                            <span className={`text-[10px] text-mono px-1.5 py-0.5 rounded border ${
+                              inc.paymentMethod === 'direct_deposit' ? 'bg-info/10 text-info border-info/20'
+                              : inc.paymentMethod === 'check' ? 'bg-warning/10 text-warning border-warning/20'
+                              : inc.paymentMethod === 'cash' ? 'bg-success/10 text-success border-success/20'
+                              : 'bg-secondary text-muted-foreground border-border'
+                            }`}>
+                              {inc.paymentMethod === 'direct_deposit' ? 'direct deposit' : inc.paymentMethod === 'check' ? '📮 check' : inc.paymentMethod}
+                            </span>
+                          )}
+                          {payorDiffers && (
+                            <span className="text-[10px] text-mono text-accent bg-accent/10 px-1.5 py-0.5 rounded">paid by {inc.payorName}</span>
+                          )}
+                          <span className={`text-[10px] text-mono ${lagColor}`}>{lagLabel}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function IncomePage() {
@@ -372,6 +611,12 @@ export default function IncomePage() {
   const [rainActive, setRainActive] = useState(false);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState>({ client: '', payrollCompany: '', hourlyRate: '', paySchedule: '' });
+  // An employer with lots of one-off gigs (e.g. many single-day Panitechnics
+  // shifts) got a separate top-level card per shift, which crowded the page
+  // fast. Rows for the same client landing in the same calendar week
+  // collapse into one group, expandable to reveal the individual cards —
+  // a client/week with just one row skips the group wrapper entirely.
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const editingInc = editId ? data.income.find(i => i.id === editId) : undefined;
   const jobs = data.jobs.map(j => ({ id: j.id, name: j.name }));
@@ -508,6 +753,29 @@ export default function IncomePage() {
   const totalExpected = reconciliation.reduce((s, r) => s + r.expectedPay, 0);
   const totalActual = reconciliation.reduce((s, r) => s + r.actualPaid, 0);
   const totalDiff = totalActual - totalExpected;
+
+  const reconciliationGroups = useMemo(() => {
+    const groups: Record<string, { client: string; weekStart: string; rows: ReconciliationRow[] }> = {};
+    const order: string[] = [];
+    for (const row of reconciliation) {
+      const weekStart = format(startOfWeek(parseISO(row.periodEnd), { weekStartsOn: 0 }), 'yyyy-MM-dd');
+      const key = `${row.client}__${weekStart}`;
+      if (!groups[key]) { groups[key] = { client: row.client, weekStart, rows: [] }; order.push(key); }
+      groups[key].rows.push(row);
+    }
+    return order.map(key => {
+      const g = groups[key];
+      const rows = [...g.rows].sort((a, b) => a.periodEnd.localeCompare(b.periodEnd));
+      return {
+        key,
+        client: g.client,
+        weekStart: g.weekStart,
+        rows,
+        totalExpected: rows.reduce((s, r) => s + r.expectedPay, 0),
+        totalActual: rows.reduce((s, r) => s + r.actualPaid, 0),
+      };
+    });
+  }, [reconciliation]);
 
   const importRows: ReconciliationRowInfo[] = useMemo(() =>
     reconciliation.map(r => ({
@@ -649,213 +917,73 @@ export default function IncomePage() {
         <EmptyState icon={Scale} title="No data to reconcile" description="Add jobs with hours worked to see pay tracking." />
       ) : (
         <div className="flex flex-col gap-3 mb-8">
-          {reconciliation.map((row) => {
-            const key = `${row.client}-${row.periodLabel}`;
-            const isExpanded = expandedRow === key;
-            const isMatch = Math.abs(row.difference) < 0.01;
-            const isOver = row.difference > 0;
-            const isToggling = togglingKey === key;
-            const isEditing = editingKey === key;
+          {reconciliationGroups.map(group => {
+            const rowProps = (row: ReconciliationRow) => {
+              const key = `${row.client}-${row.periodLabel}`;
+              return {
+                key,
+                row,
+                isExpanded: expandedRow === key,
+                isEditing: editingKey === key,
+                isToggling: togglingKey === key,
+                editState,
+                setEditState,
+                paidJobIds,
+                navigate,
+                onToggleExpand: () => setExpandedRow(expandedRow === key ? null : key),
+                onStartEdit: () => startEdit(row, key),
+                onCancelEdit: () => setEditingKey(null),
+                onSaveEdit: () => saveEdit(row),
+                onPaidToggle: () => handlePaidToggle(row),
+                onShowImport: () => setShowImport(true),
+              };
+            };
+
+            if (group.rows.length === 1) {
+              return <ReconciliationRowCard {...rowProps(group.rows[0])} />;
+            }
+
+            const groupExpanded = expandedGroups.has(group.key);
+            const groupDiff = group.totalActual - group.totalExpected;
+            const groupMatch = Math.abs(groupDiff) < 0.01;
+            const groupPaidCount = group.rows.filter(r => r.actualPaid > 0).length;
 
             return (
-              <div key={key} className="rounded-2xl border border-border bg-card p-3.5 hover:border-primary/20 transition-colors">
-
-                <div className="flex items-start gap-3">
-                  {/* Main info — tap to expand */}
-                  <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setExpandedRow(isExpanded ? null : key)}>
+              <div key={group.key} className="rounded-2xl border border-border/60 bg-secondary/10 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setExpandedGroups(prev => {
+                    const next = new Set(prev);
+                    next.has(group.key) ? next.delete(group.key) : next.add(group.key);
+                    return next;
+                  })}
+                  className="w-full flex items-center gap-3 p-3.5 text-left hover:bg-secondary/20 transition-colors"
+                >
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-sm">{row.client}</p>
-                      <span className={cn(
-                        "text-[9px] font-bold text-mono uppercase rounded-full px-2 py-0.5 border",
-                        row.isPaid ? "bg-success/15 text-success border-success/30" : "bg-secondary text-muted-foreground border-border"
-                      )}>
-                        {row.isPaid ? 'paid' : 'unpaid'}
+                      <p className="font-semibold text-sm">{group.client}</p>
+                      <span className="text-[9px] font-bold text-mono uppercase rounded-full px-2 py-0.5 border bg-secondary text-muted-foreground border-border">
+                        {group.rows.length} shifts
                       </span>
-                      {/* Money bag paid toggle — greyscale until marked paid, then full color */}
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handlePaidToggle(row); }}
-                        disabled={isToggling}
-                        className={cn(
-                          "w-6 h-6 rounded-full flex items-center justify-center text-sm transition-all",
-                          row.isPaid ? "grayscale-0 opacity-90" : "grayscale opacity-60 hover:opacity-90",
-                          isToggling && "opacity-40"
-                        )}
-                        title={row.isPaid ? 'Mark unpaid' : 'Mark paid'}
-                      >
-                        💰
-                      </button>
+                      {groupPaidCount > 0 && groupPaidCount < group.rows.length && (
+                        <span className="text-[9px] font-bold text-mono uppercase rounded-full px-2 py-0.5 border bg-warning/15 text-warning border-warning/30">
+                          {groupPaidCount}/{group.rows.length} paid
+                        </span>
+                      )}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {row.periodLabel}
-                      {row.payrollCompany ? ` · via ${row.payrollCompany}` : ''}
-                    </p>
-                    <p className="text-[10px] text-mono text-muted-foreground mt-1">
-                      {row.totalHours.toFixed(1)}h worked
-                      {row.isPaid && row.actualPaid > 0 && ` · $${row.actualPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })} received`}
+                    <p className="text-xs text-muted-foreground mt-0.5">week of {format(parseISO(group.weekStart), 'MMM d')}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-bold text-mono">${group.totalExpected.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                    <p className={`text-[10px] text-mono font-bold ${groupMatch ? 'text-success' : groupDiff > 0 ? 'text-primary' : 'text-destructive'}`}>
+                      {groupMatch ? '✓ match' : `${groupDiff >= 0 ? '+' : ''}$${groupDiff.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                     </p>
                   </div>
-
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-mono">${row.expectedPay.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                      <p className={`text-[10px] text-mono font-bold ${isMatch ? 'text-success' : isOver ? 'text-primary' : 'text-destructive'}`}>
-                        {isMatch ? '✓ match' : `${row.difference >= 0 ? '+' : ''}$${row.difference.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => isEditing ? setEditingKey(null) : startEdit(row, key)}
-                      className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-                      title="Edit"
-                    >
-                      <Pencil size={13} />
-                    </button>
-                    <button
-                      onClick={() => setExpandedRow(isExpanded ? null : key)}
-                      className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-                      title={isExpanded ? 'Collapse' : 'Expand'}
-                    >
-                      {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Inline edit form */}
-                {isEditing && (
-                  <div className="-mx-3.5 mt-3 border-t border-border bg-muted/30 px-4 py-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-[10px] text-mono uppercase text-muted-foreground font-semibold tracking-wider">Edit details</h4>
-                      <div className="flex gap-2">
-                        <button onClick={() => setEditingKey(null)} className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1">
-                          <X size={11} /> Cancel
-                        </button>
-                        <button onClick={() => saveEdit(row)} className="text-[11px] text-success hover:text-success/80 flex items-center gap-1 font-medium">
-                          <Check size={11} /> Save
-                        </button>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[10px] text-mono uppercase text-muted-foreground">Client</label>
-                        <Input value={editState.client} onChange={e => setEditState(p => ({ ...p, client: e.target.value }))} className="h-8 text-xs font-mono" />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[10px] text-mono uppercase text-muted-foreground">Payroll co.</label>
-                        <Input value={editState.payrollCompany} onChange={e => setEditState(p => ({ ...p, payrollCompany: e.target.value }))} className="h-8 text-xs font-mono" placeholder="optional" />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[10px] text-mono uppercase text-muted-foreground">Rate ($/hr)</label>
-                        <Input type="number" step="0.01" value={editState.hourlyRate} onChange={e => setEditState(p => ({ ...p, hourlyRate: e.target.value }))} className="h-8 text-xs font-mono" placeholder="0.00" />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[10px] text-mono uppercase text-muted-foreground">Pay schedule</label>
-                        <Select value={editState.paySchedule} onValueChange={v => setEditState(p => ({ ...p, paySchedule: v }))}>
-                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="weekly">Weekly</SelectItem>
-                            <SelectItem value="bi-weekly">Bi-weekly</SelectItem>
-                            <SelectItem value="semi-monthly">Semi-monthly</SelectItem>
-                            <SelectItem value="monthly">Monthly</SelectItem>
-                            <SelectItem value="per-project">Per project</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Expanded detail */}
-                {isExpanded && (
-                  <div className="-mx-3.5 mt-3 border-t border-border bg-muted/20 px-4 py-4">
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div>
-                        <h4 className="text-[10px] text-mono uppercase text-muted-foreground mb-2 font-semibold tracking-wider">Jobs in this period</h4>
-                        {row.timeEntryDetails.length === 0 ? (
-                          <p className="text-xs text-muted-foreground">No hours logged</p>
-                        ) : (
-                          <div className="space-y-1.5">
-                            {row.timeEntryDetails.map((t, j) => {
-                              const jobForDate = row.jobs.find(job => job.date === t.date);
-                              const paid = jobForDate ? paidJobIds.has(jobForDate.id) : false;
-                              return (
-                                <button
-                                  key={j}
-                                  type="button"
-                                  disabled={!jobForDate}
-                                  onClick={(e) => { e.stopPropagation(); if (jobForDate) navigate(`/calendar?job=${jobForDate.id}`); }}
-                                  title={jobForDate ? 'Open this shift to edit, delete, or mark paid' : undefined}
-                                  className={cn(
-                                    'w-full text-left rounded-lg border px-3 py-1.5 text-xs transition-colors',
-                                    jobForDate && 'hover:border-primary/40 cursor-pointer',
-                                    paid ? 'border-success/40 bg-success/10' : 'border-border bg-background text-muted-foreground'
-                                  )}
-                                >
-                                  <div className="flex justify-between items-center">
-                                    <span className={paid ? 'text-foreground' : undefined}>{format(parseISO(t.date), 'MMM d')} — {t.hours}h</span>
-                                    <span className={cn('text-mono font-medium', paid ? 'text-success' : 'text-foreground')}>${t.pay.toFixed(2)}</span>
-                                  </div>
-                                  {t.breakdown.length > 0 && (
-                                    <div className="mt-1 space-y-0.5 pl-2 border-l border-border/60">
-                                      {t.breakdown.map((line, k) => <p key={k}>{line}</p>)}
-                                    </div>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                      <div>
-                        <h4 className="text-[10px] text-mono uppercase text-muted-foreground mb-2 font-semibold tracking-wider">Payments received</h4>
-                        {row.incomeDetails.length === 0 ? (
-                          <div className="space-y-1.5">
-                            <p className="text-xs text-muted-foreground">No payments recorded</p>
-                            <button onClick={() => setShowImport(true)} className="text-xs text-primary hover:underline">
-                              + Import bank statement / pay stub
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="space-y-1">
-                            {row.incomeDetails.map((inc, j) => {
-                              const lagLabel = inc.lagStatus === 'early' ? 'early'
-                                : inc.lagStatus === 'on-time' ? `${inc.lagDays}d after period`
-                                : inc.lagStatus === 'late' ? `${inc.lagDays}d — late`
-                                : `${inc.lagDays}d — unusual`;
-                              const lagColor = inc.lagStatus === 'on-time' || inc.lagStatus === 'early'
-                                ? 'text-success' : inc.lagStatus === 'late' ? 'text-accent' : 'text-destructive';
-                              const payorDiffers = !namesMatch(inc.payorName, row.client);
-                              const isLateCheck = inc.paymentMethod === 'check' && (inc.lagStatus === 'late' || inc.lagStatus === 'unusual');
-                              return (
-                                <div key={j} className={`rounded px-3 py-1.5 text-xs space-y-0.5 ${isLateCheck ? 'bg-warning/5 border border-warning/20' : 'bg-background'}`}>
-                                  <div className="flex justify-between items-center gap-2">
-                                    <div className="min-w-0 truncate">
-                                      <span>{format(parseISO(inc.date), 'MMM d')}</span>
-                                      {inc.description && <span className="text-muted-foreground"> — {inc.description}</span>}
-                                    </div>
-                                    <span className="text-mono font-medium text-success shrink-0">+${inc.amount.toFixed(2)}</span>
-                                  </div>
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    {inc.paymentMethod && (
-                                      <span className={`text-[10px] text-mono px-1.5 py-0.5 rounded border ${
-                                        inc.paymentMethod === 'direct_deposit' ? 'bg-info/10 text-info border-info/20'
-                                        : inc.paymentMethod === 'check' ? 'bg-warning/10 text-warning border-warning/20'
-                                        : inc.paymentMethod === 'cash' ? 'bg-success/10 text-success border-success/20'
-                                        : 'bg-secondary text-muted-foreground border-border'
-                                      }`}>
-                                        {inc.paymentMethod === 'direct_deposit' ? 'direct deposit' : inc.paymentMethod === 'check' ? '📮 check' : inc.paymentMethod}
-                                      </span>
-                                    )}
-                                    {payorDiffers && (
-                                      <span className="text-[10px] text-mono text-accent bg-accent/10 px-1.5 py-0.5 rounded">paid by {inc.payorName}</span>
-                                    )}
-                                    <span className={`text-[10px] text-mono ${lagColor}`}>{lagLabel}</span>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                  {groupExpanded ? <ChevronUp size={16} className="text-muted-foreground shrink-0" /> : <ChevronDown size={16} className="text-muted-foreground shrink-0" />}
+                </button>
+                {groupExpanded && (
+                  <div className="flex flex-col gap-2 px-3 pb-3">
+                    {group.rows.map(row => <ReconciliationRowCard {...rowProps(row)} />)}
                   </div>
                 )}
               </div>
