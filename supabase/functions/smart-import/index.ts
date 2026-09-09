@@ -79,6 +79,10 @@ FIELD MAPPINGS (both layouts):
   Rate / RATE card→hourlyRate (strip $) | Steward / STEWARD card→steward
   Skill+Job Notes+Contract+Dress Code→notes | 2-digit year "3/17/26"=2026-03-17
 
+  payrollCompany is a company name (PAYROLL, AGENCY, STAFFING, INC, LLC) — NEVER a short
+  dress-code abbreviation. Dress Code codes like NWB, YWA, NWA, WC, BOB, ALL BLACK always go
+  in notes, never payrollCompany, regardless of which column position they land in.
+
 LINE NOTES:
 - Standalone time + CB present → time is endTime for parent
 - Standalone time only, no CB → split shift (two jobs, same date, different start times)

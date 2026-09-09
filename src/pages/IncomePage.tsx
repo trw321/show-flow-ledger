@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useData } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
 import PageHeader from '@/components/PageHeader';
@@ -360,6 +361,7 @@ function IncomeMadlib({ jobs, onAdd }: {
 
 export default function IncomePage() {
   const { data, addIncome, updateIncome, deleteIncome, updateJob } = useData();
+  const navigate = useNavigate();
   const [editId, setEditId] = useState<string | null>(null);
 
   // Reconciliation state (ported from the retired Pay page)
@@ -418,12 +420,27 @@ export default function IncomePage() {
       productions[key].push(job);
     }
 
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+
     for (const prodJobs of Object.values(productions)) {
       const referenceJob = prodJobs[0];
       const periods = getPayPeriods(referenceJob);
 
       for (const period of periods) {
-        const periodJobs = prodJobs.filter(j => effectiveHoursWorked(j) > 0);
+        const periodJobs = prodJobs.filter(j => {
+          if (effectiveHoursWorked(j) <= 0) return false;
+          // A dispatch offer often already states a call time and an
+          // anticipated wrap time before the shift has even happened —
+          // effectiveHoursWorked derives hours from those clock times when
+          // no explicit hoursWorked is set, which made an upcoming shift
+          // look "worked" and show up here to be reconciled before it was
+          // actually worked. An explicit hoursWorked is a real confirmation
+          // (logged after the fact) and counts regardless of date; clock
+          // times alone only count once the shift's date has passed, since
+          // hours worked can easily differ from what was originally offered.
+          if (j.hoursWorked) return true;
+          return j.date < todayStr;
+        });
         const paymentWindow = addDays(period.end, 90);
 
         const periodIncome = data.income.filter(i => {
@@ -760,10 +777,15 @@ export default function IncomePage() {
                               const jobForDate = row.jobs.find(job => job.date === t.date);
                               const paid = jobForDate ? paidJobIds.has(jobForDate.id) : false;
                               return (
-                                <div
+                                <button
                                   key={j}
+                                  type="button"
+                                  disabled={!jobForDate}
+                                  onClick={(e) => { e.stopPropagation(); if (jobForDate) navigate(`/calendar?job=${jobForDate.id}`); }}
+                                  title={jobForDate ? 'Open this shift to edit, delete, or mark paid' : undefined}
                                   className={cn(
-                                    'rounded-lg border px-3 py-1.5 text-xs transition-colors',
+                                    'w-full text-left rounded-lg border px-3 py-1.5 text-xs transition-colors',
+                                    jobForDate && 'hover:border-primary/40 cursor-pointer',
                                     paid ? 'border-success/40 bg-success/10' : 'border-border bg-background text-muted-foreground'
                                   )}
                                 >
@@ -776,7 +798,7 @@ export default function IncomePage() {
                                       {t.breakdown.map((line, k) => <p key={k}>{line}</p>)}
                                     </div>
                                   )}
-                                </div>
+                                </button>
                               );
                             })}
                           </div>

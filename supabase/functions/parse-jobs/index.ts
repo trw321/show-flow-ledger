@@ -59,6 +59,11 @@ FIELD MAPPINGS:
 - Steward → steward
 - Skill + Job Notes + Contract + Dress Code + any Line Notes text → combine into notes
 
+payrollCompany is a company name (contains words like PAYROLL, AGENCY, STAFFING, INC, LLC) —
+it is NEVER a short dress-code abbreviation. The Dress Code field near the end (after Rate,
+before Steward) holds codes like NWB, YWA, NWA, WC, BOB, ALL BLACK — these always belong in
+notes, never in payrollCompany, no matter which column position they appear to land in.
+
 LINE NOTES — two special cases only:
 1. Standalone time with no other info → split shift: output TWO jobs on the same date.
    Job 1: startTime from Start Date line. Job 2: startTime = the standalone time.

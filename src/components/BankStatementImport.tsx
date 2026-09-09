@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { differenceInDays, parseISO, format } from 'date-fns';
 import type { Income } from '@/lib/store';
 import { nameSimilarity } from '@/lib/employerMatch';
+import { resizeImageToBase64 } from '@/lib/imageResize';
 
 // OpenAI's vision API only accepts real images, not PDF bytes directly, so a
 // PDF has to be rendered to an image client-side first. Renders up to the
@@ -203,25 +204,32 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
 
     try {
       let dataUrl: string;
+      let base64: string;
       let mimeType: string;
 
       if (isPdf) {
         const { dataUrl: rendered, truncated } = await pdfToImageDataUrl(file);
         if (truncated) toast.warning(`Only the first ${MAX_PDF_PAGES} pages were analyzed`);
         dataUrl = rendered;
+        base64 = dataUrl.split(',')[1];
         mimeType = 'image/png';
       } else {
+        // A full-resolution phone photo (often 3000px+, several MB) makes
+        // the AI request slow and can trip payload/processing limits
+        // outright — downscale before sending, but keep the original for
+        // the on-screen preview thumbnail.
+        const resized = await resizeImageToBase64(file);
+        base64 = resized.base64;
+        mimeType = resized.mimeType;
         dataUrl = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result as string);
           reader.onerror = reject;
           reader.readAsDataURL(file);
         });
-        mimeType = file.type;
       }
 
       setPreview(dataUrl);
-      const base64 = dataUrl.split(',')[1];
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;

@@ -6,6 +6,7 @@ import { Upload, Loader2, Check, X, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import type { Job } from '@/lib/store';
+import { resizeImageToBase64 } from '@/lib/imageResize';
 
 interface ParsedIncome {
   client: string;
@@ -91,20 +92,16 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
     reader.onload = () => setPreview(reader.result as string);
     reader.readAsDataURL(file);
 
-    const buffer = await file.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-    let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-    const base64 = btoa(binary);
-
     try {
+      const { base64, mimeType } = await resizeImageToBase64(file);
+
       const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-statement`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ imageBase64: base64, mimeType: file.type, type: 'income' }),
+        body: JSON.stringify({ imageBase64: base64, mimeType, type: 'income' }),
       });
 
       if (!resp.ok) {
