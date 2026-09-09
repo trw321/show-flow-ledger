@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { callToolWithGateway, GatewayError } from "../_shared/lovable-ai.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,27 +15,9 @@ serve(async (req) => {
   try {
     const { text } = await req.json();
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
-
     const today = new Date().toISOString().split("T")[0];
 
-    const response = await fetch(
-      "https://ai.gateway.lovable.dev/v1/responses",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "openai/gpt-6-astra",
-          input: [
-            {
-              role: "system",
-              content: `You are a job history parser for an AV technician's bookkeeping app. Today's date is ${today}.
+    const systemPrompt = `You are a job history parser for an AV technician's bookkeeping app. Today's date is ${today}.
 
 Each block of text you receive is a single pre-expanded job record — output exactly one job per block.
 
@@ -71,76 +54,56 @@ LINE NOTES — two special cases only:
    Put the descriptive text in notes.
 
 Normalize all times to "HH:MM AM/PM" (e.g. "0800"→"08:00 AM", "1030PM"→"10:30 PM").
-Status: "upcoming" for future dates, "completed" for past dates.`,
-            },
-            { role: "user", content: text },
-          ],
-          tools: [
-            {
-              type: "function",
-              name: "create_jobs",
-              description: "Create parsed job entries from pasted text",
-              strict: true,
-              parameters: {
-                type: "object",
-                properties: {
-                  jobs: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        jobNumber: { type: ["string", "null"], description: "Full job/dispatch number in YYYY-NNNN format (e.g. 2026-0496)" },
-                        date: { type: "string", description: "Date in YYYY-MM-DD format" },
-                        startTime: { type: ["string", "null"], description: "Start/call time e.g. 08:00 AM" },
-                        endTime: { type: ["string", "null"], description: "End/wrap time e.g. 05:00 PM" },
-                        name: { type: "string", description: "Event/show name" },
-                        client: { type: "string", description: "Production company or project name" },
-                        payrollCompany: { type: ["string", "null"], description: "Payroll agency name" },
-                        venue: { type: "string", description: "Venue or location" },
-                        hourlyRate: { type: ["number", "null"], description: "Hourly rate" },
-                        steward: { type: ["string", "null"], description: "Steward or contact person" },
-                        parkingCost: { type: ["number", "null"], description: "Parking cost if mentioned" },
-                        status: { type: "string", enum: ["upcoming", "in-progress", "completed", "cancelled"] },
-                        notes: { type: ["string", "null"], description: "Additional notes" },
-                      },
-                      required: ["jobNumber", "date", "startTime", "endTime", "name", "client", "payrollCompany", "venue", "hourlyRate", "steward", "parkingCost", "status", "notes"],
-                      additionalProperties: false,
-                    },
-                  },
-                },
-                required: ["jobs"],
-                additionalProperties: false,
+Status: "upcoming" for future dates, "completed" for past dates.`;
+
+    const parsed = await callToolWithGateway(systemPrompt, text, {
+      name: "create_jobs",
+      description: "Create parsed job entries from pasted text",
+      parameters: {
+        type: "object",
+        properties: {
+          jobs: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                jobNumber: { type: ["string", "null"], description: "Full job/dispatch number in YYYY-NNNN format (e.g. 2026-0496)" },
+                date: { type: "string", description: "Date in YYYY-MM-DD format" },
+                startTime: { type: ["string", "null"], description: "Start/call time e.g. 08:00 AM" },
+                endTime: { type: ["string", "null"], description: "End/wrap time e.g. 05:00 PM" },
+                name: { type: "string", description: "Event/show name" },
+                client: { type: "string", description: "Production company or project name" },
+                payrollCompany: { type: ["string", "null"], description: "Payroll agency name" },
+                venue: { type: "string", description: "Venue or location" },
+                hourlyRate: { type: ["number", "null"], description: "Hourly rate" },
+                steward: { type: ["string", "null"], description: "Steward or contact person" },
+                parkingCost: { type: ["number", "null"], description: "Parking cost if mentioned" },
+                status: { type: "string", enum: ["upcoming", "in-progress", "completed", "cancelled"] },
+                notes: { type: ["string", "null"], description: "Additional notes" },
               },
+              required: ["jobNumber", "date", "startTime", "endTime", "name", "client", "payrollCompany", "venue", "hourlyRate", "steward", "parkingCost", "status", "notes"],
+              additionalProperties: false,
             },
-          ],
-          tool_choice: { type: "function", name: "create_jobs" },
-        }),
-      }
-    );
+          },
+        },
+        required: ["jobs"],
+        additionalProperties: false,
+      },
+    });
 
-    if (!response.ok) {
-      const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
-      throw new Error("AI gateway error");
-    }
-
-    const data = await response.json();
-    const toolCall = data.output?.find((item: { type?: string }) => item.type === "function_call");
-
-    if (!toolCall) {
+    if (!parsed.jobs) {
       throw new Error("Failed to parse jobs");
     }
-
-    const parsed = JSON.parse(toolCall.arguments);
 
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
     console.error("parse-jobs error:", err);
+    const status = err instanceof GatewayError ? err.status : 500;
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
