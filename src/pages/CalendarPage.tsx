@@ -5,9 +5,9 @@ import SpacePageWrapper from '@/components/SpacePageWrapper';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO } from 'date-fns';
-import type { Job } from '@/lib/store';
+import type { Job, CalendarEvent } from '@/lib/store';
 import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, isOverdueUpcoming, jobGross } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { useSwipe } from '@/lib/useSwipe';
@@ -595,10 +595,64 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   );
 }
 
+// ── Non-work event form (add or edit) ───────────────────────────────────────
+// Deliberately lightweight next to JobDetailView — an event is just a
+// personal commitment you want visible on the calendar, not something with
+// pay/hours/employer logic attached.
+
+function EventForm({ initial, onSave, onCancel }: {
+  initial: Partial<CalendarEvent> & { date: string };
+  onSave: (event: Omit<CalendarEvent, 'id' | 'createdAt'>) => void;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = useState(initial.title ?? '');
+  const [date, setDate] = useState(initial.date);
+  const [startTime, setStartTime] = useState(initial.startTime ?? '');
+  const [endTime, setEndTime] = useState(initial.endTime ?? '');
+  const [location, setLocation] = useState(initial.location ?? '');
+  const [notes, setNotes] = useState(initial.notes ?? '');
+
+  return (
+    <div className="rounded-md border border-primary/30 bg-primary/5 p-3 space-y-2">
+      <Input
+        placeholder="What's the plan?"
+        value={title}
+        onChange={e => setTitle(e.target.value)}
+        className="h-8 text-sm"
+        autoFocus
+      />
+      <div className="grid grid-cols-3 gap-2">
+        <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="h-8 text-xs col-span-1" />
+        <Input placeholder="Start (opt.)" value={startTime} onChange={e => setStartTime(e.target.value)} className="h-8 text-xs" />
+        <Input placeholder="End (opt.)" value={endTime} onChange={e => setEndTime(e.target.value)} className="h-8 text-xs" />
+      </div>
+      <Input placeholder="Location (optional)" value={location} onChange={e => setLocation(e.target.value)} className="h-8 text-xs" />
+      <Input placeholder="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} className="h-8 text-xs" />
+      <div className="flex gap-2 justify-end pt-1">
+        <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
+        <Button
+          size="sm"
+          disabled={!title.trim() || !date}
+          onClick={() => onSave({
+            title: title.trim(),
+            date,
+            startTime: startTime.trim() || undefined,
+            endTime: endTime.trim() || undefined,
+            location: location.trim() || undefined,
+            notes: notes.trim() || undefined,
+          })}
+        >
+          <Check size={13} className="mr-1" /> Save
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function CalendarPage() {
-  const { data, updateJob, deleteJob } = useData();
+  const { data, updateJob, deleteJob, addEvent, updateEvent, deleteEvent } = useData();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -606,6 +660,8 @@ export default function CalendarPage() {
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [expandedGroupKey, setExpandedGroupKey] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
+  const [addingEventDate, setAddingEventDate] = useState<string | null>(null);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
 
   // Deep-link from Dashboard's hero cards (?job=<id>) straight into that
   // shift's detail view instead of making the user hunt for it on the grid.
@@ -625,6 +681,12 @@ export default function CalendarPage() {
     data.jobs.forEach(job => { if (!map[job.date]) map[job.date] = []; map[job.date].push(job); });
     return map;
   }, [data.jobs]);
+
+  const eventsByDate = useMemo(() => {
+    const map: Record<string, CalendarEvent[]> = {};
+    data.events.forEach(ev => { if (!map[ev.date]) map[ev.date] = []; map[ev.date].push(ev); });
+    return map;
+  }, [data.events]);
 
   const paidJobIds = useMemo(() => {
     const set = new Set<string>();
@@ -778,7 +840,8 @@ export default function CalendarPage() {
   const today = new Date();
   const selectedJobs = selectedDate ? (jobsByDate[selectedDate] || []) : [];
   const selectedJob = selectedJobId ? data.jobs.find(j => j.id === selectedJobId) ?? null : null;
-  const closeDialog = () => { setSelectedDate(null); setSelectedJobId(null); };
+  const selectedEvents = selectedDate ? (eventsByDate[selectedDate] || []) : [];
+  const closeDialog = () => { setSelectedDate(null); setSelectedJobId(null); setAddingEventDate(null); setEditingEventId(null); };
 
   // Swipe left = tomorrow, right = yesterday — jumps straight into that day's
   // job if there's exactly one, otherwise falls back to the day's job list.
@@ -841,21 +904,23 @@ export default function CalendarPage() {
                 {week.map((day, i) => {
                   const dateKey = format(day, 'yyyy-MM-dd');
                   const dayJobs = jobsByDate[dateKey] || [];
+                  const dayEvents = eventsByDate[dateKey] || [];
                   const todayFlag = isSameDay(day, today);
                   const isCurrentMonth = isSameMonth(day, currentDate);
                   const hasJobs = dayJobs.length > 0;
+                  const hasEvents = dayEvents.length > 0;
                   const hasPay = !!payByDate[dateKey];
                   const sixthSeventhStreak = sixthSeventhDayDates[dateKey];
                   return (
                     <div
                       key={i}
-                      onClick={() => hasJobs && setSelectedDate(dateKey)}
+                      onClick={() => (hasJobs || hasEvents) && setSelectedDate(dateKey)}
                       title={sixthSeventhStreak ? `${sixthSeventhStreak}th consecutive day worked for this employer` : undefined}
                       className={cn(
                         "relative flex flex-col items-center py-1.5 transition-colors rounded-lg mx-0.5 mb-0.5",
                         !isCurrentMonth && 'opacity-30',
                         todayFlag && 'bg-primary/10',
-                        hasJobs && 'cursor-pointer active:bg-secondary/60',
+                        (hasJobs || hasEvents) && 'cursor-pointer active:bg-secondary/60',
                         sixthSeventhStreak && 'bg-warning/20 ring-1 ring-warning/60'
                       )}
                     >
@@ -874,6 +939,7 @@ export default function CalendarPage() {
                       <div className="flex gap-0.5 mt-0.5 h-2 items-center">
                         {dayJobs.slice(0, 3).map((job, j) => <span key={j} className={cn("w-1.5 h-1.5 rounded-full", jobDotClass(job, paidJobIds))} />)}
                         {dayJobs.length > 3 && <span className="text-[7px] text-muted-foreground text-mono">+{dayJobs.length - 3}</span>}
+                        {hasEvents && <span className="w-1.5 h-1.5 rounded-full bg-info" title="Personal event" />}
                       </div>
                       {hasPay && <span className="text-[8px] text-mono text-success font-semibold leading-none mt-0.5">${payByDate[dateKey] >= 1000 ? `${(payByDate[dateKey] / 1000).toFixed(1)}k` : payByDate[dateKey].toFixed(0)}</span>}
                     </div>
@@ -1061,6 +1127,59 @@ export default function CalendarPage() {
                     <span className="text-muted-foreground">Estimated pay</span>
                     <span className="font-bold text-success">${payByDate[selectedDate!].toLocaleString()}</span>
                   </div>
+                )}
+
+                {/* ── Personal events ─────────────────────────────────────── */}
+                {(selectedEvents.length > 0 || addingEventDate === selectedDate) && (
+                  <div className="pt-2 border-t border-border space-y-2">
+                    <p className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Plans</p>
+                    {selectedEvents.map(ev => (
+                      editingEventId === ev.id ? (
+                        <EventForm
+                          key={ev.id}
+                          initial={ev}
+                          onCancel={() => setEditingEventId(null)}
+                          onSave={async (updates) => { await updateEvent(ev.id, updates); setEditingEventId(null); toast.success('Event updated'); }}
+                        />
+                      ) : (
+                        <div key={ev.id} className="rounded-md border border-info/30 bg-info/5 p-3 space-y-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="font-medium text-sm">{ev.title}</p>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button onClick={() => setEditingEventId(ev.id)} className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors" aria-label="Edit event">
+                                <Pencil size={12} />
+                              </button>
+                              <button onClick={async () => { await deleteEvent(ev.id); toast.success('Event removed'); }} className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors" aria-label="Delete event">
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          </div>
+                          {(ev.startTime || ev.location) && (
+                            <div className="flex items-center gap-3 text-xs text-mono text-muted-foreground">
+                              {ev.startTime && <span>{ev.startTime}{ev.endTime ? ` – ${ev.endTime}` : ''}</span>}
+                              {ev.location && <span className="flex items-center gap-0.5"><MapPin size={10} />{ev.location}</span>}
+                            </div>
+                          )}
+                          {ev.notes && <p className="text-xs text-muted-foreground">{ev.notes}</p>}
+                        </div>
+                      )
+                    ))}
+                    {addingEventDate === selectedDate && (
+                      <EventForm
+                        initial={{ date: selectedDate! }}
+                        onCancel={() => setAddingEventDate(null)}
+                        onSave={async (event) => { await addEvent(event); setAddingEventDate(null); toast.success('Event added'); }}
+                      />
+                    )}
+                  </div>
+                )}
+                {addingEventDate !== selectedDate && (
+                  <button
+                    onClick={() => setAddingEventDate(selectedDate)}
+                    className="w-full flex items-center justify-center gap-1.5 rounded-md border border-dashed border-border py-2 text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+                  >
+                    <Plus size={13} /> Add a plan for this day
+                  </button>
                 )}
               </div>
             </>

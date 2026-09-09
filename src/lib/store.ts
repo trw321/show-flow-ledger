@@ -105,18 +105,34 @@ export interface Employer {
   createdAt: string;
 }
 
+// A non-work calendar entry — a personal commitment or plan you want visible
+// alongside shifts, so a last-minute gig offer can be weighed against what's
+// already on the calendar (including where it is), not just whether you're
+// free on paper.
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  date: string;
+  startTime?: string;
+  endTime?: string;
+  location?: string;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface AppData {
   jobs: Job[];
   expenses: Expense[];
   income: Income[];
   equipment: Equipment[];
   employers: Employer[];
+  events: CalendarEvent[];
 }
 
 // ── localStorage persistence ────────────────────────────────────────────────
 
 const CACHE_KEY = 'av-bookkeeper-data';
-const defaultData: AppData = { jobs: [], expenses: [], income: [], equipment: [], employers: [] };
+const defaultData: AppData = { jobs: [], expenses: [], income: [], equipment: [], employers: [], events: [] };
 
 // Old jobs may still carry the retired mealType ('YWA'/'NWA') field instead of
 // mealDuration/mealOnClock. Convert on load so historical deduction behavior
@@ -251,6 +267,22 @@ export function useAppData(_userId: string | null) {
     update(prev => ({ ...prev, employers: prev.employers.filter(e => e.id !== id) }));
   }, []);
 
+  // ── Calendar events (non-work) ───────────────────────────────────────────
+
+  const addEvent = useCallback(async (event: Omit<CalendarEvent, 'id' | 'createdAt'>) => {
+    const newEvent: CalendarEvent = { ...event, id: uid(), createdAt: new Date().toISOString() };
+    update(prev => ({ ...prev, events: [newEvent, ...prev.events] }));
+    return newEvent;
+  }, []);
+
+  const updateEvent = useCallback(async (id: string, updates: Partial<CalendarEvent>) => {
+    update(prev => ({ ...prev, events: prev.events.map(e => e.id === id ? { ...e, ...updates } : e) }));
+  }, []);
+
+  const deleteEvent = useCallback(async (id: string) => {
+    update(prev => ({ ...prev, events: prev.events.filter(e => e.id !== id) }));
+  }, []);
+
   return {
     data,
     loading: false,
@@ -259,5 +291,6 @@ export function useAppData(_userId: string | null) {
     addIncome, updateIncome, deleteIncome,
     addEquipment, updateEquipment, deleteEquipment,
     addEmployer, updateEmployer, deleteEmployer,
+    addEvent, updateEvent, deleteEvent,
   };
 }
