@@ -233,7 +233,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   const rate = parseFloat(hourlyRate) || 0;
   const mealPenaltyUnits = parseFloat(mealPenalties) || 0;
   const payPreview = rate > 0 && billableHours > 0
-    ? calculateDayPay(actualHours, rate, minHours, mealDuration === 0 ? mealPenaltyUnits : (job.mealPenalties ?? 0), 1, { duration: mealDuration, onClock: mealOnClock }, { nightHours, nightMultiplier: employer?.nightPremiumMultiplier, unionDuesPercent: employer?.unionDuesPercent })
+    ? calculateDayPay(actualHours, rate, minHours, mealDuration === 0 ? mealPenaltyUnits : (job.mealPenalties ?? 0), 1, { duration: mealDuration, onClock: mealOnClock }, { nightHours, nightMultiplier: employer?.nightPremiumMultiplier, unionDuesPercent: employer?.unionDuesPercent, estimatedTaxPercent: employer?.estimatedTaxPercent })
     : null;
 
   const handleSave = () => {
@@ -657,6 +657,7 @@ export default function CalendarPage() {
         nightHours,
         nightMultiplier: employer?.nightPremiumMultiplier,
         unionDuesPercent: employer?.unionDuesPercent,
+        estimatedTaxPercent: employer?.estimatedTaxPercent,
       });
       let pay = result.totalPay;
       if (employer) pay += calculateWeeklyOvertimeBonus(job, data.jobs, employer);

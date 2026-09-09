@@ -55,9 +55,10 @@ interface EmployerFormState {
   nightPremiumEnabled: boolean;
   unionDuesPercent: string;
   unionLocal: string;
+  estimatedTaxPercent: string;
 }
 
-const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '', nightPremiumEnabled: true, unionDuesPercent: '', unionLocal: '' };
+const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '', nightPremiumEnabled: true, unionDuesPercent: '', unionLocal: '', estimatedTaxPercent: '' };
 
 function employerToForm(e: Employer): EmployerFormState {
   return {
@@ -69,6 +70,7 @@ function employerToForm(e: Employer): EmployerFormState {
     nightPremiumEnabled: e.nightPremiumEnabled ?? true,
     unionDuesPercent: e.unionDuesPercent?.toString() ?? '',
     unionLocal: e.unionLocal ?? '',
+    estimatedTaxPercent: e.estimatedTaxPercent?.toString() ?? '',
   };
 }
 
@@ -143,6 +145,16 @@ function EmployerForm({ initial, onSave, onCancel }: {
           onChange={e => setForm(f => ({ ...f, unionLocal: e.target.value }))}
           className="h-8 text-xs"
         />
+        <Input
+          type="number"
+          step="0.1"
+          min="0"
+          placeholder="Est. tax % (e.g. 20)"
+          value={form.estimatedTaxPercent}
+          onChange={e => setForm(f => ({ ...f, estimatedTaxPercent: e.target.value }))}
+          className="h-8 text-xs"
+          title="Rough estimate only — leave blank for 1099/self-employed work with no withholding"
+        />
       </div>
       <div className="flex gap-2 justify-end pt-1">
         <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
@@ -172,6 +184,7 @@ export default function SettingsPage() {
       nightPremiumMultiplier: 2.0,
       unionDuesPercent: form.unionDuesPercent ? parseFloat(form.unionDuesPercent) : undefined,
       unionLocal: form.unionLocal.trim() || undefined,
+      estimatedTaxPercent: form.estimatedTaxPercent ? parseFloat(form.estimatedTaxPercent) : undefined,
     });
     setAddingEmployer(false);
   };
@@ -188,6 +201,7 @@ export default function SettingsPage() {
       nightPremiumMultiplier: 2.0,
       unionDuesPercent: form.unionDuesPercent ? parseFloat(form.unionDuesPercent) : undefined,
       unionLocal: form.unionLocal.trim() || undefined,
+      estimatedTaxPercent: form.estimatedTaxPercent ? parseFloat(form.estimatedTaxPercent) : undefined,
     });
     setEditingEmployerId(null);
   };

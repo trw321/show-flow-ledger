@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import { useData } from '@/lib/DataContext';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Upload, Loader2, Check, X, Link2 } from 'lucide-react';
+import { Upload, Loader2, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import type { Job } from '@/lib/store';
@@ -257,18 +257,25 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
                         {txn.description && <p className="text-xs text-muted-foreground mt-0.5">{txn.description}</p>}
                         <p className="text-[10px] text-mono text-muted-foreground mt-1">paid {txn.date}</p>
 
-                        {/* Linked job suggestion */}
+                        {/* Linked job match — deliberately loud (this is the whole point of
+                            the feature: confirming the AI actually found the right shift) */}
                         {linked ? (
-                          <div className="mt-1.5 flex items-center gap-1.5 rounded-lg bg-primary/8 border border-primary/20 px-2 py-1">
-                            <Link2 size={10} className="text-primary shrink-0" />
-                            <span className="text-[10px] text-primary font-medium text-mono">
-                              likely from: {linked.name}
-                              {linked.payrollCompany ? ` · ${linked.payrollCompany}` : ''}
-                              {' · '}work week of {format(new Date(linked.date + 'T12:00:00'), 'MMM d')}
-                            </span>
+                          <div className="mt-2 flex items-center gap-2 rounded-lg bg-success/10 border-2 border-success/40 px-3 py-2">
+                            <Check size={16} className="text-success shrink-0" strokeWidth={3} />
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-bold text-success uppercase tracking-wide">Matched to shift</p>
+                              <p className="text-xs text-success font-medium truncate">
+                                {linked.name}
+                                {linked.payrollCompany ? ` · ${linked.payrollCompany}` : ''}
+                                {' · '}week of {format(new Date(linked.date + 'T12:00:00'), 'MMM d')}
+                              </p>
+                            </div>
                           </div>
                         ) : (
-                          <p className="text-[10px] text-muted-foreground/40 mt-1.5 italic">no matching job found — link manually after import</p>
+                          <div className="mt-2 flex items-center gap-2 rounded-lg bg-warning/10 border-2 border-warning/40 px-3 py-2">
+                            <X size={16} className="text-warning shrink-0" strokeWidth={3} />
+                            <p className="text-xs text-warning font-medium">No matching shift found — link manually after import</p>
+                          </div>
                         )}
                       </div>
                     </div>

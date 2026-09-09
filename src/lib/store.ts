@@ -99,6 +99,8 @@ export interface Employer {
   unionDuesPercent?: number;
   /** IATSE local number this employer's work falls under (e.g. "16", "8"). Free text — purely informational, shown in exports. */
   unionLocal?: string;
+  /** Estimated tax withholding as a percent of gross pay, auto-deducted like union dues. A rough estimate, not real withholding math — leave unset for 1099/self-employed work with no withholding. */
+  estimatedTaxPercent?: number;
   notes?: string;
   createdAt: string;
 }

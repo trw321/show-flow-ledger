@@ -23,6 +23,13 @@ export interface OvertimeOptions {
    *  automatically. Does NOT apply a second time to weekly-OT-bonus or
    *  vacation-pay top-ups computed separately in calculateExpectedPay. */
   unionDuesPercent?: number;
+  /** Estimated tax withholding as a percent of this day's gross, deducted
+   *  after union dues (same base-and-order pattern) — this is a rough
+   *  estimate only, not a real withholding calculation (that depends on
+   *  filing status, state, YTD earnings, etc.), but it gets "expected pay"
+   *  closer to what an actual W2 deposit looks like for reconciliation.
+   *  1099/self-employed workers with no withholding should leave this unset. */
+  estimatedTaxPercent?: number;
 }
 
 /**
@@ -44,7 +51,7 @@ export function calculateDayPay(
   dayMultiplier: number = 1,
   meal?: { duration?: 0 | 30 | 45 | 60; onClock?: boolean },
   overtimeOptions?: OvertimeOptions
-): { billableHours: number; totalPay: number; breakdown: string[]; duesAmount: number; nightHours: number } {
+): { billableHours: number; totalPay: number; breakdown: string[]; duesAmount: number; taxAmount: number; nightHours: number } {
   const otRule = overtimeOptions?.rule ?? 'daily';
   const otThreshold = overtimeOptions?.otThresholdHours ?? 8;
   const dtThreshold = overtimeOptions?.dtThresholdHours ?? 12;
@@ -120,6 +127,14 @@ export function calculateDayPay(
     breakdown.push(`Union dues (${duesPercent}%): −$${duesAmount.toFixed(2)}`);
   }
 
+  const taxPercent = overtimeOptions?.estimatedTaxPercent ?? 0;
+  let taxAmount = 0;
+  if (taxPercent > 0 && pay > 0) {
+    taxAmount = pay * (taxPercent / 100);
+    pay -= taxAmount;
+    breakdown.push(`Est. taxes (${taxPercent}%): −$${taxAmount.toFixed(2)}`);
+  }
+
   if (minimumHours > 0 && actualHours < minimumHours) {
     breakdown.unshift(`${actualHours}h worked → ${minimumHours}h minimum applied`);
   }
@@ -128,7 +143,7 @@ export function calculateDayPay(
     breakdown.unshift(`Day multiplier: ${dayMultiplier}× (${dayMultiplier === 1.5 ? '6th day' : '7th day'})`);
   }
 
-  return { billableHours, totalPay: pay, breakdown, duesAmount, nightHours };
+  return { billableHours, totalPay: pay, breakdown, duesAmount, taxAmount, nightHours };
 }
 
 function parseTimeToMinutes(t: string): number {
@@ -197,6 +212,7 @@ export function jobGross(job: Job, allJobs: Job[], employers: Employer[] = []): 
     nightHours,
     nightMultiplier: employer?.nightPremiumMultiplier,
     unionDuesPercent: employer?.unionDuesPercent,
+    estimatedTaxPercent: employer?.estimatedTaxPercent,
   });
   const weeklyBonus = employer ? calculateWeeklyOvertimeBonus(job, allJobs, employer) : 0;
   const gross = totalPay + weeklyBonus;
@@ -373,6 +389,7 @@ export function calculateExpectedPay(
     dtMultiplier: employer?.doubletimeMultiplier ?? 2.0,
     nightMultiplier: employer?.nightPremiumMultiplier ?? 2.0,
     unionDuesPercent: employer?.unionDuesPercent,
+    estimatedTaxPercent: employer?.estimatedTaxPercent,
   };
 
   // Group by date
