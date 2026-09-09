@@ -40,6 +40,9 @@ CLASSIFICATION:
 - "jobs": dispatch/work schedule with job numbers (YYYY-NNNN), employer names, dates
 - "income": bank statement, pay stub, or payment records (dollar amounts + dates)
 - "hours": scratch notes for logging hours (date + time range + venue)
+- "events": a NON-WORK personal schedule — a gym class calendar, recurring class/appointment
+  schedule, a month-long printed calendar, a list of personal plans/appointments. No job
+  numbers, no dollar amounts tied to pay, no employer/client framing.
 
 ═══════════════════════════════
 IF "jobs":
@@ -171,7 +174,27 @@ EXAMPLE 4 — split shift, explicit 30-min-off meal (MUST produce 2 entries, ear
 EXAMPLE 5 — non-codeword meal phrasing:
   "8.17.26 vivarium 1p-9:30p 1/2 hr off ?"
   → date=2026-08-17, venue="vivarium", startTime=01:00 PM, endTime=09:30 PM,
-    mealMinutes=30, mealOnClock=false, notes="(verify)"`;
+    mealMinutes=30, mealOnClock=false, notes="(verify)"
+
+═══════════════════════════════
+IF "events":
+═══════════════════════════════
+Extract every personal (non-work) entry you can find — one output entry per date it occurs on.
+A recurring weekly class schedule ("Spin — Mon/Wed/Fri 6:00 AM") must be expanded into one entry
+per actual calendar date within whatever date range is shown (a month calendar, a printed
+schedule's date range, etc.) — never leave a recurrence unexpanded as a single entry.
+
+For each entry extract:
+- title: the name of the class/activity/appointment
+- date: YYYY-MM-DD, inferring the year from context (today's date above) if not shown
+- startTime / endTime: "HH:MM AM/PM" if a time is shown, omit endTime if not given
+- location: room/venue/address if shown
+- notes: instructor name, anything else relevant
+
+EXAMPLE — recurring gym schedule (month calendar, MUST expand every occurrence):
+  "Spin with Alex — Mon/Wed/Fri 6:00 AM, month of March 2026"
+  → One entry per Mon/Wed/Fri in March 2026: title="Spin with Alex", startTime=06:00 AM,
+    notes="Instructor: Alex", one entry per date (e.g. 2026-03-02, 2026-03-04, 2026-03-06, ...)`;
 
     const parsed = await callToolWithGateway(systemPrompt, userContent, {
       name: "import_data",
@@ -179,7 +202,7 @@ EXAMPLE 5 — non-codeword meal phrasing:
       parameters: {
         type: "object",
         properties: {
-          type: { type: "string", enum: ["jobs", "income", "hours"] },
+          type: { type: "string", enum: ["jobs", "income", "hours", "events"] },
           jobs: {
             type: "array",
             items: {
@@ -237,9 +260,25 @@ EXAMPLE 5 — non-codeword meal phrasing:
               required: ["date", "startTime", "endTime", "hoursWorked", "venue", "steward", "hourlyRate", "mealMinutes", "mealOnClock", "notes"],
               additionalProperties: false
             }
+          },
+          events: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                title: { type: "string" },
+                date: { type: "string" },
+                startTime: { type: ["string", "null"] },
+                endTime: { type: ["string", "null"] },
+                location: { type: ["string", "null"] },
+                notes: { type: ["string", "null"] }
+              },
+              required: ["title", "date", "startTime", "endTime", "location", "notes"],
+              additionalProperties: false
+            }
           }
         },
-        required: ["type", "jobs", "income", "hourUpdates"],
+        required: ["type", "jobs", "income", "hourUpdates", "events"],
         additionalProperties: false
       }
     });

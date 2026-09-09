@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { getJobDedupKey, findLikelyDuplicate } from '@/lib/jobDedup';
-import type { Job } from '@/lib/store';
+import type { Job, CalendarEvent } from '@/lib/store';
 import VortexCanvas from '@/components/VortexCanvas';
 import EmployerCombobox from '@/components/EmployerCombobox';
 import { useCelebration } from '@/components/Celebration';
@@ -33,7 +33,8 @@ interface ManualEntry {
 }
 
 type VortexPhase = 'idle' | 'pulling' | 'vortex' | 'flash' | 'settling';
-type Step = 'input' | 'review-jobs' | 'review-hours';
+type Step = 'input' | 'review-jobs' | 'review-hours' | 'review-events';
+type ParsedEvent = Omit<CalendarEvent, 'id' | 'createdAt'>;
 
 async function callAPI(url: string, key: string, body: object): Promise<Response> {
   return fetch(url, {
@@ -189,7 +190,7 @@ const EMPTY_MANUAL: ManualEntry = {
 };
 
 export default function NewGigPage() {
-  const { data, addJob, updateJob: updateExistingJob, addIncome } = useData();
+  const { data, addJob, updateJob: updateExistingJob, addIncome, addEvent } = useData();
   const { fire: fireCelebration, Burst } = useCelebration();
 
   const [text, setText] = useState('');
@@ -207,6 +208,9 @@ export default function NewGigPage() {
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
   const [hoursResults, setHoursResults] = useState<HoursMatchResult[]>([]);
   const [hoursAccepted, setHoursAccepted] = useState<Set<number>>(new Set());
+  const [events, setEvents] = useState<ParsedEvent[]>([]);
+  const [selectedEvents, setSelectedEvents] = useState<Set<number>>(new Set());
+  const [isImportingEvents, setIsImportingEvents] = useState(false);
   const swipe = useSwipe(
     () => setCalendarMonth(m => new Date(m.getFullYear(), m.getMonth() - 1)),
     () => setCalendarMonth(m => new Date(m.getFullYear(), m.getMonth() + 1)),
@@ -310,6 +314,43 @@ export default function NewGigPage() {
     toast.success(`Found ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}`);
   };
 
+  // Applies the events branch of a smart-import result: a non-work personal
+  // schedule (gym classes, appointments, a printed month calendar) — drops
+  // into its own review-and-select list, same shape as the jobs review but
+  // creating CalendarEvent records instead of Job records.
+  const finishEventsParse = (parsedEvents: ParsedEvent[]) => {
+    if (parsedEvents.length === 0) {
+      toast.error('No events found — check the pasted text');
+      setVortexPhase('pulling');
+      return;
+    }
+    const sorted = [...parsedEvents].sort((a, b) => a.date.localeCompare(b.date));
+    setEvents(sorted);
+    setSelectedEvents(new Set(sorted.map((_, i) => i)));
+    setVortexPhase('flash');
+    setTimeout(() => {
+      setVortexPhase('settling');
+      setStep('review-events');
+      setTimeout(() => setVortexPhase('idle'), 1200);
+    }, 400);
+    toast.success(`Found ${sorted.length} event${sorted.length === 1 ? '' : 's'}`);
+  };
+
+  const handleImportEvents = async () => {
+    const toImport = events.filter((_, i) => selectedEvents.has(i));
+    if (toImport.length === 0) { toast.error('Select at least one event'); return; }
+    setIsImportingEvents(true);
+    let imported = 0;
+    for (const ev of toImport) {
+      try { await addEvent(ev); imported++; }
+      catch { /* skip failures, report the count below */ }
+    }
+    setIsImportingEvents(false);
+    if (imported > 0) fireCelebration();
+    toast.success(`Added ${imported} event${imported !== 1 ? 's' : ''}`);
+    setEvents([]); setSelectedEvents(new Set()); setText(''); setStep('input'); setVortexPhase('idle');
+  };
+
   const handleParse = async () => {
     if (!text.trim()) { toast.error('Paste dispatch text first'); return; }
     setIsParsing(true);
@@ -344,6 +385,7 @@ export default function NewGigPage() {
       const result = await resp.json();
 
       if (result.type === 'hours') finishHoursParse(result.hourUpdates || []);
+      else if (result.type === 'events') finishEventsParse(result.events || []);
       else if (result.type === 'income') {
         toast.info('That looks like a payment record, not a shift — check it under Pay instead.');
         setVortexPhase('pulling');
@@ -462,6 +504,7 @@ export default function NewGigPage() {
     setText(''); setJobs([]); setSelected(new Set()); setStep('input');
     setVortexPhase('idle'); setManualOpen(false); setManual(EMPTY_MANUAL); setExtraDates([]);
     setHoursResults([]); setHoursAccepted(new Set());
+    setEvents([]); setSelectedEvents(new Set());
   };
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -503,6 +546,7 @@ export default function NewGigPage() {
       }
 
       if (result.type === 'hours') finishHoursParse(result.hourUpdates || []);
+      else if (result.type === 'events') finishEventsParse(result.events || []);
       else if (result.type === 'income') {
         toast.info('That looks like a payment record, not a shift — check it under Pay instead.');
         setVortexPhase('idle');
@@ -556,7 +600,7 @@ export default function NewGigPage() {
     return map;
   }, [jobs, data.jobs]);
 
-  const hasContent = text.trim().length > 0 || step === 'review-jobs' || step === 'review-hours';
+  const hasContent = text.trim().length > 0 || step === 'review-jobs' || step === 'review-hours' || step === 'review-events';
   const manualHasContent = Object.values(manual).some(v => v.trim() !== '');
 
   return (
@@ -761,7 +805,7 @@ export default function NewGigPage() {
                 placeholder={
                   step !== 'input'
                     ? 'Paste more to add it…'
-                    : 'Paste a dispatch offer, hours note, email, or text here…'
+                    : 'Paste a dispatch offer, hours note, personal schedule, or text here…'
                 }
                 className={cn(
                   'w-full bg-black/40 backdrop-blur-sm border border-white/10 rounded-md',
@@ -810,6 +854,11 @@ export default function NewGigPage() {
                 {step === 'review-hours' && (
                   <span className="text-[11px] text-white/40 text-mono ml-auto">
                     {hoursResults.length - hoursAccepted.size} of {hoursResults.length} left
+                  </span>
+                )}
+                {step === 'review-events' && (
+                  <span className="text-[11px] text-white/40 text-mono ml-auto">
+                    {events.length} event{events.length !== 1 ? 's' : ''} ready
                   </span>
                 )}
               </div>
@@ -969,6 +1018,57 @@ export default function NewGigPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {step === 'review-events' && events.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs text-mono uppercase tracking-wider text-muted-foreground">Review plans</h2>
+            <button
+              onClick={() => setSelectedEvents(selectedEvents.size === events.length ? new Set() : new Set(events.map((_, i) => i)))}
+              className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {selectedEvents.size === events.length ? 'Deselect all' : 'Select all'}
+            </button>
+          </div>
+          <div className="flex flex-col gap-2">
+            {events.map((ev, i) => {
+              const isSelected = selectedEvents.has(i);
+              return (
+                <div
+                  key={i}
+                  className={cn(
+                    'rounded-md border transition-colors overflow-hidden p-3',
+                    isSelected ? 'border-info/40 bg-info/5' : 'border-border bg-card opacity-50'
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => setSelectedEvents(prev => { const next = new Set(prev); next.has(i) ? next.delete(i) : next.add(i); return next; })}
+                      className="rounded border-border shrink-0"
+                      aria-label={`Select event on ${ev.date}`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{ev.title}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {format(new Date(ev.date + 'T12:00:00'), 'EEE, MMM d')}
+                        {ev.startTime ? ` · ${ev.startTime}${ev.endTime ? ` – ${ev.endTime}` : ''}` : ''}
+                        {ev.location ? ` · ${ev.location}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <Button onClick={handleImportEvents} disabled={isImportingEvents || selectedEvents.size === 0} className="w-full gap-1.5">
+            {isImportingEvents
+              ? <><Loader2 size={14} className="animate-spin" />Saving…</>
+              : <><Check size={14} />Save {selectedEvents.size} event{selectedEvents.size !== 1 ? 's' : ''}</>}
+          </Button>
         </div>
       )}
 

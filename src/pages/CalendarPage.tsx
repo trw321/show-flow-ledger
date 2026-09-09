@@ -914,13 +914,12 @@ export default function CalendarPage() {
                   return (
                     <div
                       key={i}
-                      onClick={() => (hasJobs || hasEvents) && setSelectedDate(dateKey)}
-                      title={sixthSeventhStreak ? `${sixthSeventhStreak}th consecutive day worked for this employer` : undefined}
+                      onClick={() => setSelectedDate(dateKey)}
+                      title={sixthSeventhStreak ? `${sixthSeventhStreak}th consecutive day worked for this employer` : "Tap to add a plan or view this day"}
                       className={cn(
-                        "relative flex flex-col items-center py-1.5 transition-colors rounded-lg mx-0.5 mb-0.5",
+                        "relative flex flex-col items-center py-1.5 transition-colors rounded-lg mx-0.5 mb-0.5 cursor-pointer active:bg-secondary/60 hover:bg-secondary/30",
                         !isCurrentMonth && 'opacity-30',
                         todayFlag && 'bg-primary/10',
-                        (hasJobs || hasEvents) && 'cursor-pointer active:bg-secondary/60',
                         sixthSeventhStreak && 'bg-warning/20 ring-1 ring-warning/60'
                       )}
                     >
