@@ -371,7 +371,10 @@ export default function NewGigPage() {
           const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-jobs`, supabaseKey, {
             text: batches[b].join('\n\n'),
           });
-          if (!resp.ok) { console.error(`batch ${b + 1} failed`); continue; }
+          if (!resp.ok) {
+            const errMsg = await resp.json().then(d => d.error).catch(() => null);
+            throw new Error(errMsg || `Batch ${b + 1} of ${batches.length} failed to parse`);
+          }
           const d = await resp.json();
           allJobs.push(...(d.jobs || []));
         }
