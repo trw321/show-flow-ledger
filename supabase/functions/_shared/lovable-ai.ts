@@ -1,9 +1,9 @@
-// Shared Lovable AI Gateway helper (Responses API, /v1/responses).
-// Mechanical replacement for direct OpenAI /v1/chat/completions calls:
-// same prompts, same tool schemas (made strict-compatible), one forced tool call out.
+// Shared OpenAI helper (Chat Completions API, /v1/chat/completions).
+// Direct OpenAI implementation behind the same interface the Lovable AI
+// Gateway version used, so callers don't need to change.
 
-const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/responses";
-export const GATEWAY_MODEL = "openai/gpt-6-astra";
+const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+export const GATEWAY_MODEL = "gpt-4o";
 
 export type UserPart =
   | { type: "input_text"; text: string }
@@ -40,112 +40,68 @@ export function stripNulls<T>(value: T): T {
   return value;
 }
 
+function toChatContentPart(part: UserPart): Record<string, unknown> {
+  if (part.type === "input_text") return { type: "text", text: part.text };
+  return { type: "image_url", image_url: { url: part.image_url, detail: part.detail ?? "auto" } };
+}
+
 /**
- * Calls the gateway Responses API with a single forced function tool and returns
- * the parsed tool arguments. Always streams (required for reasoning models),
- * consuming the SSE stream server-side.
+ * Calls OpenAI's Chat Completions API with a single forced function tool and
+ * returns the parsed tool arguments.
  */
 export async function callToolWithGateway(
   systemPrompt: string,
   userContent: string | UserPart[],
   tool: GatewayToolDef,
-  opts: { runId?: string } = {},
+  _opts: { runId?: string } = {},
 ): Promise<Record<string, unknown>> {
-  const apiKey = Deno.env.get("LOVABLE_API_KEY");
-  if (!apiKey) throw new Error("LOVABLE_API_KEY is not configured");
+  const apiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!apiKey) throw new Error("OPENAI_API_KEY is not configured");
 
-  const userParts: UserPart[] =
-    typeof userContent === "string" ? [{ type: "input_text", text: userContent }] : userContent;
+  const userMessageContent =
+    typeof userContent === "string" ? userContent : userContent.map(toChatContentPart);
 
-  const res = await fetch(GATEWAY_URL, {
+  const res = await fetch(OPENAI_URL, {
     method: "POST",
     headers: {
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
-      "Lovable-API-Key": apiKey,
-      "X-Lovable-AIG-SDK": "fetch",
-      ...(opts.runId ? { "X-Lovable-AIG-Run-ID": opts.runId } : {}),
     },
     body: JSON.stringify({
       model: GATEWAY_MODEL,
-      stream: true,
-      store: false,
-      reasoning: { effort: "low", summary: "auto" },
-      input: [
-        { role: "system", content: [{ type: "input_text", text: systemPrompt }] },
-        { role: "user", content: userParts },
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessageContent },
       ],
       tools: [
         {
           type: "function",
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.parameters,
-          strict: true,
+          function: {
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.parameters,
+            strict: true,
+          },
         },
       ],
-      tool_choice: { type: "function", name: tool.name },
+      tool_choice: { type: "function", function: { name: tool.name } },
     }),
   });
 
-  if (!res.ok || !res.body) {
+  if (!res.ok) {
     const t = await res.text();
-    console.error("AI gateway error:", res.status, t);
-    throw new GatewayError(res.status, "AI gateway error");
+    console.error("OpenAI API error:", res.status, t);
+    throw new GatewayError(res.status, "OpenAI API error");
   }
 
-  // Read the SSE stream, accumulating the forced tool call's arguments.
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let argsDelta = "";
-  let finalArgs: string | null = null;
-
-  const handleEvent = (payload: string) => {
-    if (payload === "[DONE]") return;
-    let evt: Record<string, unknown>;
-    try {
-      evt = JSON.parse(payload);
-    } catch {
-      return;
-    }
-    const type = evt.type as string | undefined;
-    if (type === "response.function_call_arguments.delta" && typeof evt.delta === "string") {
-      argsDelta += evt.delta;
-    } else if (type === "response.function_call_arguments.done" && typeof evt.arguments === "string") {
-      finalArgs = evt.arguments;
-    } else if (type === "response.completed" || type === "response.incomplete") {
-      const output = (evt.response as { output?: Array<Record<string, unknown>> } | undefined)?.output ?? [];
-      const call = output.find((item) => item.type === "function_call");
-      if (call && typeof call.arguments === "string") finalArgs = call.arguments;
-    } else if (type === "error") {
-      console.error("AI gateway stream error:", payload);
-    }
-  };
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const chunks = buffer.split("\n\n");
-    buffer = chunks.pop() ?? "";
-    for (const chunk of chunks) {
-      for (const line of chunk.split("\n")) {
-        if (line.startsWith("data:")) handleEvent(line.slice(5).trim());
-      }
-    }
-  }
-  if (buffer.trim()) {
-    for (const line of buffer.split("\n")) {
-      if (line.startsWith("data:")) handleEvent(line.slice(5).trim());
-    }
-  }
-
-  const raw = finalArgs ?? (argsDelta ? argsDelta : null);
+  const data = await res.json();
+  const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+  const raw = toolCall?.function?.arguments;
   if (!raw) return {};
   try {
     return stripNulls(JSON.parse(raw)) as Record<string, unknown>;
   } catch (e) {
-    console.error("Failed to parse tool arguments:", e, raw.slice(0, 500));
+    console.error("Failed to parse tool arguments:", e, String(raw).slice(0, 500));
     return {};
   }
 }
