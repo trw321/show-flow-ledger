@@ -209,7 +209,7 @@ export default function SettingsPage() {
   return (
     <SpacePageWrapper>
       <div className="max-w-lg mx-auto space-y-8">
-        <PageHeader title="Mode" description="Customize which sections appear in your app" />
+        <PageHeader title="Mode" description="Customize which sections appear in your app" showDot={false} />
 
       {/* Worker profile */}
       <section>

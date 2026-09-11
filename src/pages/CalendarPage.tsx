@@ -14,6 +14,7 @@ import { useSwipe } from '@/lib/useSwipe';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
+import EventIntake from '@/components/EventIntake';
 
 const statusDot: Record<Job['status'], string> = {
   upcoming: 'bg-accent',
@@ -856,7 +857,18 @@ export default function CalendarPage() {
   const daySwipe = useSwipe(() => navigateDay(-1), () => navigateDay(1));
 
   return (
-    <SpacePageWrapper title="Calendar" description="Your month at a glance">
+    <SpacePageWrapper
+      title="Calendar"
+      description="Your month at a glance"
+      action={
+        <button
+          onClick={() => { const t = format(today, 'yyyy-MM-dd'); setSelectedDate(t); setAddingEventDate(t); }}
+          className="flex items-center gap-1.5 rounded-md border border-info/40 bg-info/10 hover:bg-info/20 text-info px-3 py-1.5 text-xs font-medium transition-colors"
+        >
+          <Plus size={13} /> Add a plan
+        </button>
+      }
+    >
       <div className="flex items-center gap-2 mb-3">
         <div className="flex flex-1 bg-secondary/30 rounded-lg p-0.5">
           <button onClick={() => setViewMode('month')} className={cn("flex-1 text-[10px] text-mono font-medium py-1 px-3 rounded-md transition-colors", viewMode === 'month' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>Month</button>
@@ -1164,10 +1176,14 @@ export default function CalendarPage() {
                       )
                     ))}
                     {addingEventDate === selectedDate && (
-                      <EventForm
-                        initial={{ date: selectedDate! }}
+                      <EventIntake
+                        date={selectedDate!}
                         onCancel={() => setAddingEventDate(null)}
-                        onSave={async (event) => { await addEvent(event); setAddingEventDate(null); toast.success('Event added'); }}
+                        onSaveMany={async (events) => {
+                          for (const ev of events) await addEvent(ev);
+                          setAddingEventDate(null);
+                          toast.success(`Added ${events.length} plan${events.length !== 1 ? 's' : ''}`);
+                        }}
                       />
                     )}
                   </div>
