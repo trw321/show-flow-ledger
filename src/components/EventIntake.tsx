@@ -286,14 +286,14 @@ export default function EventIntake({ date, onCancel, onSaveMany }: Props) {
         placeholder="Paste a schedule, class times, or plans here…"
         className="w-full rounded-md bg-background/40 border border-border text-xs px-3 py-2 focus:outline-none focus:border-primary/40 resize-none placeholder:text-muted-foreground/50"
       />
-      <div className="flex gap-2 justify-between">
-        <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2 justify-between">
+        <div className="flex flex-wrap gap-2">
           <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
           <Button variant="outline" size="sm" onClick={() => setMode('manual')} className="gap-1.5">
             <PenLine size={13} /> Manual
           </Button>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" disabled={isParsing} onClick={() => fileInputRef.current?.click()} className="gap-1.5">
             <Camera size={13} /> Photo
           </Button>

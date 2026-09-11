@@ -662,6 +662,7 @@ export default function CalendarPage() {
   const [expandedGroupKey, setExpandedGroupKey] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const [addingEventDate, setAddingEventDate] = useState<string | null>(null);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
 
   // Deep-link from Dashboard's hero cards (?job=<id>) straight into that
@@ -862,7 +863,7 @@ export default function CalendarPage() {
       description="Your month at a glance"
       action={
         <button
-          onClick={() => { const t = format(today, 'yyyy-MM-dd'); setSelectedDate(t); setAddingEventDate(t); }}
+          onClick={() => setQuickAddOpen(true)}
           className="flex items-center gap-1.5 rounded-md border border-info/40 bg-info/10 hover:bg-info/20 text-info px-3 py-1.5 text-xs font-medium transition-colors"
         >
           <Plus size={13} /> Add a plan
@@ -1207,6 +1208,26 @@ export default function CalendarPage() {
               onDelete={async () => { await deleteJob(selectedJob.id); closeDialog(); toast.success('Shift deleted'); }}
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Standalone quick-add — no swipe handlers, no existing-jobs list,
+          just the intake box, so a stray touch can't get read as a day-swipe
+          and steal the tap. */}
+      <Dialog open={quickAddOpen} onOpenChange={setQuickAddOpen}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto rounded-lg">
+          <DialogHeader>
+            <DialogTitle className="text-mono text-sm">Add a plan</DialogTitle>
+          </DialogHeader>
+          <EventIntake
+            date={format(today, 'yyyy-MM-dd')}
+            onCancel={() => setQuickAddOpen(false)}
+            onSaveMany={async (events) => {
+              for (const ev of events) await addEvent(ev);
+              setQuickAddOpen(false);
+              toast.success(`Added ${events.length} plan${events.length !== 1 ? 's' : ''}`);
+            }}
+          />
         </DialogContent>
       </Dialog>
 
