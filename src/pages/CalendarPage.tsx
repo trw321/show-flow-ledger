@@ -9,7 +9,7 @@ import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
   AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
-import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO } from 'date-fns';
 import type { Job, CalendarEvent } from '@/lib/store';
 import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross } from '@/lib/payCalc';
@@ -97,7 +97,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   onDuplicated: (count: number) => void;
   onDelete: () => void;
 }) {
-  const { data, addJob, updateIncome } = useData();
+  const { data, addJob, updateJob: updateJobDirect, updateIncome } = useData();
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
   const isCallback = !!job.notes?.match(/\bC\/?B\b/i) && !job.notes?.match(/\bNO[\s/-]*C\/?B\b/i);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [client, setClient] = useState(job.client ?? '');
@@ -113,6 +115,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   const [nightPremiumConfirmed, setNightPremiumConfirmed] = useState(job.nightPremiumConfirmed ?? true);
   const [nightPremiumActualHours, setNightPremiumActualHours] = useState(job.nightPremiumActualHours?.toString() ?? '');
   const [payStub, setPayStub] = useState(job.payStub ?? '');
+  const [stubParsed, setStubParsed] = useState(job.stubParsed);
+  const [parsingStub, setParsingStub] = useState(false);
   const [editing, setEditing] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   const [dupDates, setDupDates] = useState<string[]>(['']);
@@ -136,6 +140,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
     setNightPremiumConfirmed(job.nightPremiumConfirmed ?? true);
     setNightPremiumActualHours(job.nightPremiumActualHours?.toString() ?? '');
     setPayStub(job.payStub ?? '');
+    setStubParsed(job.stubParsed);
     setDuplicating(false);
     setDupDates(['']);
   };
@@ -156,7 +161,36 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) { toast.error('File too large (max 5MB)'); return; }
     const reader = new FileReader();
-    reader.onload = () => setPayStub(reader.result as string);
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      setPayStub(dataUrl);
+      // Attachment is saved either way; parsing only runs for actual images
+      // (PDFs aren't something the vision model can read reliably here).
+      if (!file.type.startsWith('image/')) {
+        updateJobDirect(job.id, { payStub: dataUrl });
+        return;
+      }
+      setParsingStub(true);
+      try {
+        const base64 = dataUrl.split(',')[1];
+        const resp = await fetch(`${supabaseUrl}/functions/v1/parse-statement`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${supabaseKey}` },
+          body: JSON.stringify({ imageBase64: base64, mimeType: file.type, type: 'paystub' }),
+        });
+        if (!resp.ok) throw new Error((await resp.json()).error || 'Failed to read pay stub');
+        const { paystub } = await resp.json();
+        setStubParsed(paystub);
+        await updateJobDirect(job.id, { payStub: dataUrl, stubParsed: paystub });
+        toast.success('Pay stub read — net $' + (paystub.netPay ?? '?'));
+      } catch (err) {
+        // Attachment already saved above; parsing failure isn't fatal to the upload.
+        await updateJobDirect(job.id, { payStub: dataUrl });
+        toast.error(err instanceof Error ? err.message : 'Could not read the pay stub — saved as attachment only');
+      } finally {
+        setParsingStub(false);
+      }
+    };
     reader.readAsDataURL(file);
     if (stubInputRef.current) stubInputRef.current.value = '';
   };
@@ -487,26 +521,46 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
             "shrink-0 w-8 h-8 rounded-lg flex items-center justify-center",
             payStub ? "bg-success/20 text-success" : "bg-secondary text-muted-foreground"
           )}>
-            <Receipt size={15} />
+            {parsingStub ? <Loader2 size={15} className="animate-spin" /> : <Receipt size={15} />}
           </div>
           <span className="flex-1 min-w-0">
-            <span className="text-xs font-medium block">{payStub ? 'Pay stub uploaded' : 'No pay stub uploaded'}</span>
+            <span className="text-xs font-medium block">
+              {parsingStub ? 'Reading pay stub…' : payStub ? 'Pay stub uploaded' : 'No pay stub uploaded'}
+            </span>
             <span className="text-[10px] text-muted-foreground block">
-              {payStub ? 'Tap to replace' : 'Attach the stub/check when it arrives to verify pay later'}
+              {parsingStub ? 'Extracting hours, pay, dues, tax…' : payStub ? 'Tap to replace' : 'Attach the stub/check when it arrives to verify pay later'}
             </span>
           </span>
-          {payStub && (
+          {payStub && !parsingStub && (
             <button
               type="button"
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPayStub(''); }}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPayStub(''); setStubParsed(undefined); updateJobDirect(job.id, { payStub: undefined, stubParsed: undefined }); }}
               className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
               aria-label="Remove pay stub"
             >
               <X size={14} />
             </button>
           )}
-          <input ref={stubInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleStubUpload} />
+          <input ref={stubInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleStubUpload} disabled={parsingStub} />
         </label>
+
+        {stubParsed && (
+          <div className="rounded-md border border-success/30 bg-success/5 p-3 space-y-1">
+            <p className="text-[9px] text-mono font-bold tracking-widest uppercase text-success/70">Pay Stub Read</p>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-mono">
+              {stubParsed.employer && <div className="col-span-2 text-muted-foreground truncate">{stubParsed.employer}</div>}
+              {(stubParsed.payPeriodStart || stubParsed.payPeriodEnd) && (
+                <div className="col-span-2 text-muted-foreground">{stubParsed.payPeriodStart ?? '?'} → {stubParsed.payPeriodEnd ?? '?'}</div>
+              )}
+              {stubParsed.totalHours != null && <div>Hours <span className="text-foreground font-semibold">{stubParsed.totalHours}</span></div>}
+              {stubParsed.grossPay != null && <div>Gross <span className="text-foreground font-semibold">${stubParsed.grossPay.toLocaleString()}</span></div>}
+              {stubParsed.duesAmount != null && <div>Dues <span className="text-foreground font-semibold">${stubParsed.duesAmount.toLocaleString()}</span></div>}
+              {stubParsed.taxAmount != null && <div>Tax <span className="text-foreground font-semibold">${stubParsed.taxAmount.toLocaleString()}</span></div>}
+              {stubParsed.vacationAmount != null && <div>Vacation <span className="text-foreground font-semibold">${stubParsed.vacationAmount.toLocaleString()}</span></div>}
+              {stubParsed.netPay != null && <div className="text-success">Net <span className="font-bold">${stubParsed.netPay.toLocaleString()}</span></div>}
+            </div>
+          </div>
+        )}
 
         {editing && (
         <>

@@ -36,6 +36,21 @@ export interface Job {
   attachments?: string[];
   /** Data URI of the uploaded pay stub/check image for this job — lets you flag which jobs still need a stub logged, and eventually compare the stub's actual breakdown against the calculated pay. */
   payStub?: string;
+  /** Structured breakdown AI-extracted from payStub (image uploads only, not PDF) — used to compare the stub's actual gross/dues/tax/vacation/net against the calculated estimate for this shift. Undefined if no stub uploaded yet, or the upload was a PDF/parsing failed (payStub attachment still saved either way). */
+  stubParsed?: {
+    employer?: string;
+    payPeriodStart?: string;
+    payPeriodEnd?: string;
+    totalHours?: number;
+    hoursBreakdown?: { date: string; hours: number; type: 'ST' | 'OT' | 'DT' }[];
+    hourlyRate?: number;
+    grossPay?: number;
+    duesAmount?: number;
+    taxAmount?: number;
+    vacationAmount?: number;
+    otherDeductions?: number;
+    netPay?: number;
+  };
   notes: string;
   createdAt: string;
 }
