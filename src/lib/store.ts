@@ -101,6 +101,8 @@ export interface Employer {
   unionLocal?: string;
   /** Estimated tax withholding as a percent of gross pay, auto-deducted like union dues. A rough estimate, not real withholding math — leave unset for 1099/self-employed work with no withholding. */
   estimatedTaxPercent?: number;
+  /** Vacation/fringe pay as a percent of gross earnings, added on top (e.g. 6 = 6%) — common IATSE benefit. Undefined/0 = not paid. */
+  vacationPercent?: number;
   notes?: string;
   createdAt: string;
 }

@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DollarSign, Mic, MicOff, Trash2, Pencil, Clock, Scale, ChevronDown, ChevronUp, Upload, Check, X } from 'lucide-react';
 import { format, differenceInDays, addDays, endOfMonth, parseISO, startOfWeek } from 'date-fns';
-import { calculateExpectedPay, effectiveHoursWorked } from '@/lib/payCalc';
+import { calculateExpectedPay, effectiveHoursWorked, netHoursWorked } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import type { Income, Job } from '@/lib/store';
 import { cn } from '@/lib/utils';
@@ -703,7 +703,7 @@ export default function IncomePage() {
         });
 
         const paidIncome = periodIncome.filter(i => i.status === 'paid');
-        const totalHours = periodJobs.reduce((s, j) => s + effectiveHoursWorked(j), 0);
+        const totalHours = periodJobs.reduce((s, j) => s + netHoursWorked(j), 0);
         const employer = resolveEmployer(referenceJob.client, data.employers);
         const payResult = calculateExpectedPay(periodJobs, referenceJob, data.jobs, employer);
         const expectedPay = payResult.total;

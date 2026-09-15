@@ -7,7 +7,7 @@ import { ChevronDown, Download, Zap, Eye, Flame } from 'lucide-react';
 import { format, parseISO, isToday, differenceInCalendarDays } from 'date-fns';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
-import { effectiveHoursWorked, jobGross } from '@/lib/payCalc';
+import { netHoursWorked, jobGross } from '@/lib/payCalc';
 import { useNeedsHours } from '@/lib/useNeedsHours';
 import { getPayTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
 
@@ -40,7 +40,7 @@ export default function Dashboard() {
     for (const job of data.jobs) {
       const key = job.client || 'Unknown';
       if (!map[key]) map[key] = { hours: 0, earned: 0, jobs: 0 };
-      map[key].hours += effectiveHoursWorked(job);
+      map[key].hours += netHoursWorked(job);
       map[key].earned += jobGross(job, data.jobs, data.employers);
       map[key].jobs += 1;
     }
@@ -65,7 +65,7 @@ export default function Dashboard() {
 
   const totalIncome = data.income.reduce((s, i) => s + i.amount, 0);
   const totalExpenses = data.expenses.reduce((s, e) => s + e.amount, 0);
-  const totalHours = data.jobs.reduce((s, j) => s + effectiveHoursWorked(j), 0);
+  const totalHours = data.jobs.reduce((s, j) => s + netHoursWorked(j), 0);
   const netProfit = totalIncome - totalExpenses;
   const displayTotal = showExpenses ? netProfit : totalIncome;
 

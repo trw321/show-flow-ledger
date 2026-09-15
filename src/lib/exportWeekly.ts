@@ -1,7 +1,7 @@
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import type { Job, Expense, Income, Employer } from './store';
-import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, isOverdueUpcoming } from './payCalc';
+import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming } from './payCalc';
 import { resolveEmployer } from './employerMatch';
 
 interface JobPayDetails {
@@ -34,8 +34,9 @@ function jobPayDetails(job: Job, allJobs: Job[], employers: Employer[]): JobPayD
   });
   const weeklyBonus = employer ? calculateWeeklyOvertimeBonus(job, allJobs, employer) : 0;
   const gross = totalPay + weeklyBonus;
+  const vacationPercent = employer?.vacationPercent ?? 0;
   return {
-    grossPay: gross + (job.hasVacationPay ? gross * 0.08 : 0),
+    grossPay: gross + (vacationPercent > 0 ? gross * (vacationPercent / 100) : 0),
     duesAmount,
     taxAmount,
     premiumHours,
@@ -86,7 +87,7 @@ export function exportWeeklyToExcel(jobs: Job[], expenses: Expense[], income: In
         Venue: j.venue ?? '',
         'Payroll Company': j.payrollCompany ?? '',
         Rate: j.hourlyRate ?? '',
-        'Hours Worked': effectiveHoursWorked(j) || '',
+        'Hours Worked': netHoursWorked(j) || '',
         'Estimated Pay': effectiveHoursWorked(j) ? grossPay.toFixed(2) : '',
         'Actual Income': actualIncome !== undefined ? actualIncome.toFixed(2) : '',
         Taxes: taxAmount > 0 ? taxAmount.toFixed(2) : '',

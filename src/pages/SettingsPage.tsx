@@ -56,9 +56,10 @@ interface EmployerFormState {
   unionDuesPercent: string;
   unionLocal: string;
   estimatedTaxPercent: string;
+  vacationPercent: string;
 }
 
-const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '', nightPremiumEnabled: true, unionDuesPercent: '', unionLocal: '', estimatedTaxPercent: '' };
+const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '', nightPremiumEnabled: true, unionDuesPercent: '', unionLocal: '', estimatedTaxPercent: '', vacationPercent: '' };
 
 function employerToForm(e: Employer): EmployerFormState {
   return {
@@ -71,6 +72,7 @@ function employerToForm(e: Employer): EmployerFormState {
     unionDuesPercent: e.unionDuesPercent?.toString() ?? '',
     unionLocal: e.unionLocal ?? '',
     estimatedTaxPercent: e.estimatedTaxPercent?.toString() ?? '',
+    vacationPercent: e.vacationPercent?.toString() ?? '',
   };
 }
 
@@ -155,6 +157,16 @@ function EmployerForm({ initial, onSave, onCancel }: {
           className="h-8 text-xs"
           title="Rough estimate only — leave blank for 1099/self-employed work with no withholding"
         />
+        <Input
+          type="number"
+          step="0.1"
+          min="0"
+          placeholder="Vacation % (e.g. 6)"
+          value={form.vacationPercent}
+          onChange={e => setForm(f => ({ ...f, vacationPercent: e.target.value }))}
+          className="h-8 text-xs"
+          title="Vacation/fringe pay added on top of gross — leave blank if this employer doesn't pay it"
+        />
       </div>
       <div className="flex gap-2 justify-end pt-1">
         <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
@@ -185,6 +197,7 @@ export default function SettingsPage() {
       unionDuesPercent: form.unionDuesPercent ? parseFloat(form.unionDuesPercent) : undefined,
       unionLocal: form.unionLocal.trim() || undefined,
       estimatedTaxPercent: form.estimatedTaxPercent ? parseFloat(form.estimatedTaxPercent) : undefined,
+      vacationPercent: form.vacationPercent ? parseFloat(form.vacationPercent) : undefined,
     });
     setAddingEmployer(false);
   };
@@ -202,6 +215,7 @@ export default function SettingsPage() {
       unionDuesPercent: form.unionDuesPercent ? parseFloat(form.unionDuesPercent) : undefined,
       unionLocal: form.unionLocal.trim() || undefined,
       estimatedTaxPercent: form.estimatedTaxPercent ? parseFloat(form.estimatedTaxPercent) : undefined,
+      vacationPercent: form.vacationPercent ? parseFloat(form.vacationPercent) : undefined,
     });
     setEditingEmployerId(null);
   };

@@ -5,10 +5,14 @@ import SpacePageWrapper from '@/components/SpacePageWrapper';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
+  AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
 import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO } from 'date-fns';
 import type { Job, CalendarEvent } from '@/lib/store';
-import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, isOverdueUpcoming, jobGross } from '@/lib/payCalc';
+import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { useSwipe } from '@/lib/useSwipe';
 import { cn } from '@/lib/utils';
@@ -93,6 +97,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
 }) {
   const { data, addJob, updateIncome } = useData();
   const isCallback = !!job.notes?.match(/\bC\/?B\b/i) && !job.notes?.match(/\bNO[\s/-]*C\/?B\b/i);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [client, setClient] = useState(job.client ?? '');
   const [startTime, setStartTime] = useState(job.startTime ?? '');
   const [endTime, setEndTime] = useState(job.endTime ?? '');
@@ -154,10 +159,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
     if (stubInputRef.current) stubInputRef.current.value = '';
   };
 
-  const handleDelete = () => {
-    const confirmed = window.confirm(`Delete "${job.name}" on ${format(new Date(job.date + 'T12:00:00'), 'MMM d, yyyy')}?\n\nThis cannot be undone.`);
-    if (confirmed) onDelete();
-  };
+  const handleDelete = () => setConfirmingDelete(true);
 
   const paidIncomeForJob = data.income.filter(i => i.jobId === job.id && i.status === 'paid');
 
@@ -297,6 +299,25 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
           </button>
         </div>
       </DialogHeader>
+      <AlertDialog open={confirmingDelete} onOpenChange={setConfirmingDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this shift?</AlertDialogTitle>
+            <AlertDialogDescription>
+              "{job.name}" on {format(new Date(job.date + 'T12:00:00'), 'MMM d, yyyy')} will be permanently deleted. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={onDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <div className="space-y-4">
         <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold text-mono uppercase tracking-wider border", isOverdueUpcoming(job) ? "bg-warning/20 text-warning border-warning/30" : statusColors[job.status])}>
           {isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
@@ -356,15 +377,25 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
             {mealDuration === 0 && (
               <div className="pt-0.5">
                 <label className="text-[10px] text-mono uppercase text-muted-foreground">Meal penalty units (1 unit = 1hr at straight rate)</label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  placeholder="0"
-                  value={mealPenalties}
-                  onChange={e => setMealPenalties(e.target.value)}
-                  className="h-9 text-sm text-mono mt-1"
-                />
+                <div className="flex items-center gap-3 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => setMealPenalties(String(Math.max(0, (parseFloat(mealPenalties) || 0) - 1)))}
+                    className="w-9 h-9 shrink-0 rounded-full border border-border bg-secondary/20 text-foreground text-lg font-bold flex items-center justify-center hover:border-primary/40 transition-colors active:scale-95"
+                    aria-label="Decrease meal penalty units"
+                  >
+                    −
+                  </button>
+                  <span className="w-8 text-center text-lg font-bold text-mono text-primary">{parseFloat(mealPenalties) || 0}</span>
+                  <button
+                    type="button"
+                    onClick={() => setMealPenalties(String((parseFloat(mealPenalties) || 0) + 1))}
+                    className="w-9 h-9 shrink-0 rounded-full border border-border bg-secondary/20 text-foreground text-lg font-bold flex items-center justify-center hover:border-primary/40 transition-colors active:scale-95"
+                    aria-label="Increase meal penalty units"
+                  >
+                    +
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -700,31 +731,14 @@ export default function CalendarPage() {
 
   // Per-job expected pay — the single source of truth behind the calendar's
   // day/week/month totals below AND the "Awaiting payment" list, so they can
-  // never drift out of sync with each other.
+  // never drift out of sync with each other. Delegates to jobGross (dues,
+  // taxes, weekly OT bonus, vacation pay and all) instead of re-deriving the
+  // same math locally — a previous local copy here left vacation pay out of
+  // these totals while the per-job display included it, so the two disagreed.
   const jobPay = useMemo(() => {
     const map: Record<string, number> = {};
     for (const job of data.jobs) {
-      const hours = effectiveHoursWorked(job);
-      if (hours <= 0) continue;
-      const rate = job.hourlyRate || 0;
-      const employer = resolveEmployer(job.client, data.employers);
-      const multiplier = getDayMultiplier(job.date, job.client, data.jobs, job.has6th7thDayRule || false);
-      const nightHours = ((employer?.nightPremiumEnabled ?? true) && job.nightPremiumConfirmed !== false && job.startTime && job.endTime)
-        ? calculateNightHours(job.startTime, job.endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour)
-        : 0;
-      const result = calculateDayPay(hours, rate, job.minimumHours || 0, job.mealPenalties || 0, multiplier, { duration: job.mealDuration, onClock: job.mealOnClock }, {
-        rule: employer?.overtimeRule ?? 'daily',
-        otThresholdHours: employer?.dailyOvertimeThresholdHours,
-        dtThresholdHours: employer?.dailyDoubletimeThresholdHours,
-        otMultiplier: employer?.overtimeMultiplier,
-        dtMultiplier: employer?.doubletimeMultiplier,
-        nightHours,
-        nightMultiplier: employer?.nightPremiumMultiplier,
-        unionDuesPercent: employer?.unionDuesPercent,
-        estimatedTaxPercent: employer?.estimatedTaxPercent,
-      });
-      let pay = result.totalPay;
-      if (employer) pay += calculateWeeklyOvertimeBonus(job, data.jobs, employer);
+      const pay = jobGross(job, data.jobs, data.employers);
       if (pay > 0) map[job.id] = pay;
     }
     return map;
@@ -751,7 +765,7 @@ export default function CalendarPage() {
       try { return isWithinInterval(parseISO(j.date), { start: monthStart, end: monthEnd }); }
       catch { return false; }
     });
-    const monthHours = monthJobs.reduce((s, j) => s + effectiveHoursWorked(j), 0);
+    const monthHours = monthJobs.reduce((s, j) => s + netHoursWorked(j), 0);
     const monthExpected = monthJobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers), 0);
     const monthPaid = data.income
       .filter(i => i.status === 'paid' && (() => { try { return isWithinInterval(parseISO(i.date), { start: monthStart, end: monthEnd }); } catch { return false; } })())
@@ -759,7 +773,7 @@ export default function CalendarPage() {
 
     const yearPrefix = format(currentDate, 'yyyy');
     const ytdJobs = data.jobs.filter(j => j.date.startsWith(yearPrefix));
-    const ytdHours = ytdJobs.reduce((s, j) => s + effectiveHoursWorked(j), 0);
+    const ytdHours = ytdJobs.reduce((s, j) => s + netHoursWorked(j), 0);
     const ytdExpected = ytdJobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers), 0);
     const ytdPaid = data.income
       .filter(i => i.status === 'paid' && i.date.startsWith(yearPrefix))
@@ -809,7 +823,7 @@ export default function CalendarPage() {
       if (!isSameMonth(day, currentDate)) return;
       const key = format(day, 'yyyy-MM-dd');
       jobCount += (jobsByDate[key] || []).length;
-      hours += (jobsByDate[key] || []).reduce((s, j) => s + effectiveHoursWorked(j), 0);
+      hours += (jobsByDate[key] || []).reduce((s, j) => s + netHoursWorked(j), 0);
       pay += payByDate[key] || 0;
     });
     return { hours, pay, jobCount, weekStart: week[0] };
@@ -821,7 +835,7 @@ export default function CalendarPage() {
     for (const [date, jobs] of Object.entries(jobsByDate)) {
       if (!date.startsWith(prefix)) continue;
       totalJobs += jobs.length;
-      totalHours += jobs.reduce((s, j) => s + effectiveHoursWorked(j), 0);
+      totalHours += jobs.reduce((s, j) => s + netHoursWorked(j), 0);
       totalPay += payByDate[date] || 0;
     }
     return { totalHours, totalPay, totalJobs };
@@ -833,7 +847,7 @@ export default function CalendarPage() {
     for (const [date, jobs] of Object.entries(jobsByDate)) {
       if (!date.startsWith(prefix)) continue;
       totalJobs += jobs.length;
-      totalHours += jobs.reduce((s, j) => s + effectiveHoursWorked(j), 0);
+      totalHours += jobs.reduce((s, j) => s + netHoursWorked(j), 0);
       totalPay += payByDate[date] || 0;
     }
     return { totalJobs, totalHours, totalPay };
@@ -1110,8 +1124,8 @@ export default function CalendarPage() {
                   </div>
                 )}
                 {selectedJobs.map(job => {
-                  const hours = effectiveHoursWorked(job);
-                  const earned = hours * (job.hourlyRate ?? 0);
+                  const hours = netHoursWorked(job);
+                  const earned = jobGross(job, data.jobs, data.employers);
                   const paid = paidJobIds.has(job.id);
                   const overdue = isOverdueUpcoming(job);
                   return (
@@ -1250,8 +1264,8 @@ export default function CalendarPage() {
             <div className="flex flex-col gap-1.5">
               {Object.entries(loggedGroups).map(([key, jobs]) => {
                 const first = jobs[0];
-                const totalHours = jobs.reduce((s, j) => s + effectiveHoursWorked(j), 0);
-                const totalEarned = jobs.reduce((s, j) => s + effectiveHoursWorked(j) * (j.hourlyRate ?? 0), 0);
+                const totalHours = jobs.reduce((s, j) => s + netHoursWorked(j), 0);
+                const totalEarned = jobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers), 0);
                 const last = jobs[jobs.length - 1];
                 const dateRange = jobs.length > 1 ? `${format(new Date(last.date + 'T12:00:00'), 'MMM d')} – ${format(new Date(first.date + 'T12:00:00'), 'MMM d')}` : format(new Date(first.date + 'T12:00:00'), 'MMM d');
                 const isGroup = jobs.length > 1;
@@ -1294,7 +1308,7 @@ export default function CalendarPage() {
                           >
                             <span className="text-xs text-mono">{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}</span>
                             <span className="flex items-center gap-1.5 text-[11px] text-mono text-muted-foreground">
-                              {effectiveHoursWorked(job) > 0 ? `${effectiveHoursWorked(job)}h` : isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
+                              {netHoursWorked(job) > 0 ? `${netHoursWorked(job)}h` : isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
                               {job.startTime && !job.endTime && <span className="text-warning"> · no end time</span>}
                               {effectiveHoursWorked(job) > 0 && (
                                 <Receipt size={10} className={job.payStub ? 'text-success opacity-80' : 'opacity-25'} aria-label={job.payStub ? 'Pay stub uploaded' : 'No pay stub'} />

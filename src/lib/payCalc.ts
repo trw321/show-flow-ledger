@@ -174,6 +174,21 @@ export function effectiveHoursWorked(job: Job): number {
   return Math.max(0, (e - s) / 60);
 }
 
+/**
+ * "Hours worked" as it should read anywhere it's shown as a standalone
+ * number (Dashboard totals, job badges, exports) — effectiveHoursWorked()
+ * minus an off-the-clock meal break, mirroring the deduction calculateDayPay
+ * already applies internally for pay math. job.hoursWorked itself stays the
+ * raw clocked span (unchanged, still what calculateDayPay/jobGross take as
+ * input) — this is a display-only derivative, not a second place the
+ * deduction gets applied to pay.
+ */
+export function netHoursWorked(job: Job): number {
+  const raw = effectiveHoursWorked(job);
+  const mealDeduction = (job.mealDuration && !job.mealOnClock) ? job.mealDuration / 60 : 0;
+  return Math.max(0, raw - mealDeduction);
+}
+
 // status never auto-transitions off "upcoming"/"in-progress" as the date
 // passes — it only becomes "completed" once hours are logged. This flags
 // that gap wherever a job's status is displayed, without changing the
@@ -216,7 +231,8 @@ export function jobGross(job: Job, allJobs: Job[], employers: Employer[] = []): 
   });
   const weeklyBonus = employer ? calculateWeeklyOvertimeBonus(job, allJobs, employer) : 0;
   const gross = totalPay + weeklyBonus;
-  return gross + (job.hasVacationPay ? gross * 0.08 : 0);
+  const vacationPercent = employer?.vacationPercent ?? 0;
+  return gross + (vacationPercent > 0 ? gross * (vacationPercent / 100) : 0);
 }
 
 /**
@@ -428,15 +444,16 @@ export function calculateExpectedPay(
     }
   }
 
-  // Vacation pay: 8% of gross earnings (common union benefit)
-  if (referenceJob.hasVacationPay && total > 0) {
-    const vacPay = total * 0.08;
+  // Vacation pay: configurable per-employer percent of gross earnings
+  const vacationPercent = employer?.vacationPercent ?? 0;
+  if (vacationPercent > 0 && total > 0) {
+    const vacPay = total * (vacationPercent / 100);
     total += vacPay;
     details.push({
       date: '',
       hours: 0,
       pay: vacPay,
-      breakdown: [`Vacation pay (8% of gross) = $${vacPay.toFixed(2)}`],
+      breakdown: [`Vacation pay (${vacationPercent}% of gross) = $${vacPay.toFixed(2)}`],
     });
   }
 
