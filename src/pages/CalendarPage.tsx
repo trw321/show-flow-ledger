@@ -240,6 +240,13 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   const payPreview = rate > 0 && billableHours > 0
     ? calculateDayPay(actualHours, rate, minHours, mealPenaltyUnits, 1, { duration: mealDuration, onClock: mealOnClock }, { nightHours, nightMultiplier: employer?.nightPremiumMultiplier, unionDuesPercent: employer?.unionDuesPercent, estimatedTaxPercent: employer?.estimatedTaxPercent })
     : null;
+  // calculateDayPay's own breakdown stops at dues/tax — vacation is applied
+  // on top of that (same as jobGross/jobPayBreakdown), so it needs its own
+  // line here or this "paperwork" total silently disagrees with the net
+  // figure shown everywhere else in the app.
+  const vacationPercent = employer?.vacationPercent ?? 0;
+  const vacationAmount = payPreview && vacationPercent > 0 ? payPreview.totalPay * (vacationPercent / 100) : 0;
+  const payPreviewTotal = (payPreview?.totalPay ?? 0) + vacationAmount;
 
   const handleSave = () => {
     const updates: Partial<Job> = {};
@@ -446,14 +453,17 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
           <div className={cn("rounded-md border p-3 space-y-1.5", minimumApplied ? "border-accent/40 bg-accent/5" : "border-success/30 bg-success/5")}>
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">{minimumApplied ? `Worked ${actualHours}h — paid for ${billableHours}h minimum` : `Worked ${actualHours}h`}</span>
-              <span className="font-bold text-sm text-mono text-success">${payPreview.totalPay.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+              <span className="font-bold text-sm text-mono text-success">${payPreviewTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
             </div>
             {minimumApplied && <p className="text-[10px] text-accent font-medium">{minHours}h minimum call — contract guarantees payment for {minHours}h</p>}
-            {payPreview.breakdown.length > 0 && (
+            {(payPreview.breakdown.length > 0 || vacationAmount > 0) && (
               <div className="pt-1 space-y-0.5 border-t border-border/40 mt-1">
                 {payPreview.breakdown.map((line, i) => (
                   <p key={i} className="text-[10px] text-mono text-muted-foreground">{line}</p>
                 ))}
+                {vacationAmount > 0 && (
+                  <p className="text-[10px] text-mono text-muted-foreground">Vacation pay ({vacationPercent}%): +${vacationAmount.toFixed(2)}</p>
+                )}
               </div>
             )}
           </div>
