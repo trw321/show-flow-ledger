@@ -117,6 +117,13 @@
     font-family: var(--font-mono);
     letter-spacing: 0.05em;
   }
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
   .funky-gradient {
     background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--info)), hsl(var(--accent)));
   }

@@ -19,6 +19,8 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import EventIntake from '@/components/EventIntake';
+import ScrollWheel from '@/components/ScrollWheel';
+import NewGigPage from '@/pages/NewGigPage';
 
 const statusDot: Record<Job['status'], string> = {
   upcoming: 'bg-accent',
@@ -236,7 +238,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   const rate = parseFloat(hourlyRate) || 0;
   const mealPenaltyUnits = parseFloat(mealPenalties) || 0;
   const payPreview = rate > 0 && billableHours > 0
-    ? calculateDayPay(actualHours, rate, minHours, mealDuration === 0 ? mealPenaltyUnits : (job.mealPenalties ?? 0), 1, { duration: mealDuration, onClock: mealOnClock }, { nightHours, nightMultiplier: employer?.nightPremiumMultiplier, unionDuesPercent: employer?.unionDuesPercent, estimatedTaxPercent: employer?.estimatedTaxPercent })
+    ? calculateDayPay(actualHours, rate, minHours, mealPenaltyUnits, 1, { duration: mealDuration, onClock: mealOnClock }, { nightHours, nightMultiplier: employer?.nightPremiumMultiplier, unionDuesPercent: employer?.unionDuesPercent, estimatedTaxPercent: employer?.estimatedTaxPercent })
     : null;
 
   const handleSave = () => {
@@ -252,7 +254,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
     if (mealDuration !== (job.mealDuration ?? undefined)) updates.mealDuration = mealDuration;
     if (mealDuration && mealOnClock !== (job.mealOnClock ?? false)) updates.mealOnClock = mealOnClock;
     const parsedPenalties = parseFloat(mealPenalties);
-    if (mealDuration === 0 && !isNaN(parsedPenalties) && parsedPenalties !== (job.mealPenalties ?? 0)) updates.mealPenalties = parsedPenalties > 0 ? parsedPenalties : undefined;
+    if (!isNaN(parsedPenalties) && parsedPenalties !== (job.mealPenalties ?? 0)) updates.mealPenalties = parsedPenalties > 0 ? parsedPenalties : undefined;
     if (rawNightHours > 0) {
       if (nightPremiumConfirmed !== (job.nightPremiumConfirmed ?? true)) updates.nightPremiumConfirmed = nightPremiumConfirmed;
       const nextActualHours = nightPremiumConfirmed ? undefined : validNightActualHours;
@@ -275,7 +277,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
     payrollCompany !== (job.payrollCompany ?? '') ||
     mealDuration !== (job.mealDuration ?? undefined) ||
     (!!mealDuration && mealOnClock !== (job.mealOnClock ?? false)) ||
-    (mealDuration === 0 && mealPenalties !== (job.mealPenalties?.toString() ?? '')) ||
+    (mealPenalties !== (job.mealPenalties?.toString() ?? '')) ||
     (rawNightHours > 0 && nightPremiumConfirmed !== (job.nightPremiumConfirmed ?? true)) ||
     nightActualHoursChanged ||
     payStub !== (job.payStub ?? '');
@@ -334,6 +336,15 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
             {actualHours === 0 ? 'Log Hours' : 'Hours & Pay'}
           </p>
           <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Start Time</label>
+            <Input
+              value={startTime}
+              onChange={e => setStartTime(e.target.value)}
+              placeholder="e.g. 08:00 AM"
+              className="h-10 text-base text-mono"
+            />
+          </div>
+          <div className="space-y-1">
             <label className="text-xs text-muted-foreground">End Time</label>
             <Input
               autoFocus={actualHours === 0}
@@ -348,11 +359,14 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
           </div>
 
           {/* Meal break — 2nd most important question after End Time, so it
-              lives right here instead of buried in Edit shift. */}
+              lives right here instead of buried in Edit shift. Break duration
+              and meal-penalty units are independent now: you can take a
+              partial break AND still be owed a penalty for it running late,
+              so picking one no longer hides the other. */}
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">Meal Break</label>
             <div className="grid grid-cols-4 gap-1.5">
-              {([{ value: 0 as const, label: 'Zero' }, { value: 30 as const, label: '30m' }, { value: 45 as const, label: '45m' }, { value: 60 as const, label: '1hr' }]).map(({ value, label }) => {
+              {([{ value: 0 as const, label: 'MP' }, { value: 30 as const, label: '30m' }, { value: 45 as const, label: '45m' }, { value: 60 as const, label: '1hr' }]).map(({ value, label }) => {
                 const active = mealDuration === value;
                 return (
                   <button key={label} type="button" onClick={() => setMealDuration(active ? undefined : value)} className={cn("rounded-md border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
@@ -374,30 +388,15 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
                 })}
               </div>
             )}
-            {mealDuration === 0 && (
-              <div className="pt-0.5">
-                <label className="text-[10px] text-mono uppercase text-muted-foreground">Meal penalty units (1 unit = 1hr at straight rate)</label>
-                <div className="flex items-center gap-3 mt-1">
-                  <button
-                    type="button"
-                    onClick={() => setMealPenalties(String(Math.max(0, (parseFloat(mealPenalties) || 0) - 1)))}
-                    className="w-9 h-9 shrink-0 rounded-full border border-border bg-secondary/20 text-foreground text-lg font-bold flex items-center justify-center hover:border-primary/40 transition-colors active:scale-95"
-                    aria-label="Decrease meal penalty units"
-                  >
-                    −
-                  </button>
-                  <span className="w-8 text-center text-lg font-bold text-mono text-primary">{parseFloat(mealPenalties) || 0}</span>
-                  <button
-                    type="button"
-                    onClick={() => setMealPenalties(String((parseFloat(mealPenalties) || 0) + 1))}
-                    className="w-9 h-9 shrink-0 rounded-full border border-border bg-secondary/20 text-foreground text-lg font-bold flex items-center justify-center hover:border-primary/40 transition-colors active:scale-95"
-                    aria-label="Increase meal penalty units"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-            )}
+            <div className="pt-0.5">
+              <label className="text-[10px] text-mono uppercase text-muted-foreground">Meal penalty (MP) units — 1 unit = 1hr at straight rate</label>
+              <ScrollWheel
+                values={Array.from({ length: 10 }, (_, i) => i)}
+                value={parseFloat(mealPenalties) || 0}
+                onChange={v => setMealPenalties(String(v))}
+                className="mt-1 w-20"
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
@@ -555,10 +554,6 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
             <Input value={client} onChange={e => setClient(e.target.value)} placeholder="e.g. Live Nation" className="h-9 text-sm" />
           </div>
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Start Time</label>
-            <Input value={startTime} onChange={e => setStartTime(e.target.value)} placeholder="e.g. 08:00 AM" className="h-9 text-sm text-mono" />
-          </div>
-          <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Employer / Payroll Company</label>
             <Input value={payrollCompany} onChange={e => setPayrollCompany(e.target.value)} placeholder="e.g. Nolan AV, Live Nation" className="h-9 text-sm" />
           </div>
@@ -694,6 +689,7 @@ export default function CalendarPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [addingEventDate, setAddingEventDate] = useState<string | null>(null);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickAddShiftOpen, setQuickAddShiftOpen] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
 
   // Deep-link from Dashboard's hero cards (?job=<id>) straight into that
@@ -876,12 +872,20 @@ export default function CalendarPage() {
       title="Calendar"
       description="Your month at a glance"
       action={
-        <button
-          onClick={() => setQuickAddOpen(true)}
-          className="flex items-center gap-1.5 rounded-md border border-info/40 bg-info/10 hover:bg-info/20 text-info px-3 py-1.5 text-xs font-medium transition-colors"
-        >
-          <Plus size={13} /> Add a plan
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setQuickAddShiftOpen(true)}
+            className="flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary px-3 py-1.5 text-xs font-medium transition-colors"
+          >
+            <Plus size={13} /> Add a shift
+          </button>
+          <button
+            onClick={() => setQuickAddOpen(true)}
+            className="flex items-center gap-1.5 rounded-md border border-info/40 bg-info/10 hover:bg-info/20 text-info px-3 py-1.5 text-xs font-medium transition-colors"
+          >
+            <Plus size={13} /> Add a plan
+          </button>
+        </div>
       }
     >
       <div className="flex items-center gap-2 mb-3">
@@ -965,7 +969,7 @@ export default function CalendarPage() {
                       <div className="flex gap-0.5 mt-0.5 h-2 items-center">
                         {dayJobs.slice(0, 3).map((job, j) => <span key={j} className={cn("w-1.5 h-1.5 rounded-full", jobDotClass(job, paidJobIds))} />)}
                         {dayJobs.length > 3 && <span className="text-[7px] text-muted-foreground text-mono">+{dayJobs.length - 3}</span>}
-                        {hasEvents && <span className="w-1.5 h-1.5 rounded-full bg-info" title="Personal event" />}
+                        {hasEvents && <span className="w-1.5 h-1.5 rounded-full bg-black border border-white" title="Personal event" />}
                       </div>
                       {hasPay && <span className="text-[8px] text-mono text-success font-semibold leading-none mt-0.5">${payByDate[dateKey] >= 1000 ? `${(payByDate[dateKey] / 1000).toFixed(1)}k` : payByDate[dateKey].toFixed(0)}</span>}
                     </div>
@@ -1242,6 +1246,18 @@ export default function CalendarPage() {
               toast.success(`Added ${events.length} plan${events.length !== 1 ? 's' : ''}`);
             }}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Reuses the exact same Job Log intake (paste/photo/manual + parse
+          review) that lives on the Dashboard, rather than a second copy of
+          that flow — same component, just also reachable from here. */}
+      <Dialog open={quickAddShiftOpen} onOpenChange={setQuickAddShiftOpen}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto rounded-lg">
+          <DialogHeader>
+            <DialogTitle className="text-mono text-sm">Add a shift</DialogTitle>
+          </DialogHeader>
+          <NewGigPage />
         </DialogContent>
       </Dialog>
 

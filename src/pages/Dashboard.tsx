@@ -29,8 +29,8 @@ function money(n: number): string {
 // for: something to scan across, not another set of tiles.
 function PaySummaryTable({ rows }: { rows: PeriodStat[] }) {
   return (
-    <div className="mb-6 rounded-md border border-white/10 overflow-hidden">
-      <table className="w-full text-xs">
+    <div className="mb-6 rounded-md border border-white/10 overflow-x-auto">
+      <table className="w-full text-xs min-w-[420px]">
         <thead>
           <tr className="bg-white/5 text-white/50 text-[10px] uppercase tracking-wider">
             <th className="text-left font-medium py-2 px-3">Period</th>
@@ -43,11 +43,11 @@ function PaySummaryTable({ rows }: { rows: PeriodStat[] }) {
         <tbody className="divide-y divide-white/10">
           {rows.map(row => (
             <tr key={row.label} className="text-mono">
-              <td className="py-2 px-3 text-white/80 font-medium">{row.label}</td>
-              <td className="py-2 px-3 text-right text-white/70">{money(row.gross)}</td>
-              <td className="py-2 px-3 text-right text-success font-semibold">{money(row.net)}</td>
-              <td className="py-2 px-3 text-right text-white/70">{row.hours > 0 ? row.hours.toFixed(1) : '—'}</td>
-              <td className="py-2 px-3 text-right text-white/70">{row.shifts || '—'}</td>
+              <td className="py-2 px-3 text-white/80 font-medium whitespace-nowrap">{row.label}</td>
+              <td className="py-2 px-3 text-right text-white/70 whitespace-nowrap">{money(row.gross)}</td>
+              <td className="py-2 px-3 text-right text-success font-semibold whitespace-nowrap">{money(row.net)}</td>
+              <td className="py-2 px-3 text-right text-white/70 whitespace-nowrap">{row.hours > 0 ? row.hours.toFixed(1) : '—'}</td>
+              <td className="py-2 px-3 text-right text-white/70 whitespace-nowrap">{row.shifts || '—'}</td>
             </tr>
           ))}
         </tbody>
