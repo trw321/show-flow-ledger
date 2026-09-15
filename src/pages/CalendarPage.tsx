@@ -823,18 +823,6 @@ export default function CalendarPage() {
     return result;
   }, [monthDays]);
 
-  const weekStats = useMemo(() => weeks.map(week => {
-    let hours = 0, pay = 0, jobCount = 0;
-    week.forEach(day => {
-      if (!isSameMonth(day, currentDate)) return;
-      const key = format(day, 'yyyy-MM-dd');
-      jobCount += (jobsByDate[key] || []).length;
-      hours += (jobsByDate[key] || []).reduce((s, j) => s + netHoursWorked(j), 0);
-      pay += payByDate[key] || 0;
-    });
-    return { hours, pay, jobCount, weekStart: week[0] };
-  }), [weeks, jobsByDate, payByDate, currentDate]);
-
   const monthStats = useMemo(() => {
     const prefix = format(currentDate, 'yyyy-MM');
     let totalHours = 0, totalPay = 0, totalJobs = 0;
@@ -887,7 +875,7 @@ export default function CalendarPage() {
             onClick={() => setQuickAddShiftOpen(true)}
             className="flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary px-3 py-1.5 text-xs font-medium transition-colors"
           >
-            <Plus size={13} /> Add a shift
+            <Plus size={13} /> if you want work..make a plan
           </button>
           <button
             onClick={() => setQuickAddOpen(true)}
@@ -937,11 +925,9 @@ export default function CalendarPage() {
                 <div key={i} className="text-center text-[10px] text-muted-foreground text-mono py-1 font-medium">{d}</div>
               ))}
             </div>
-            <div className="w-14 shrink-0" />
           </div>
           {weeks.map((week, wi) => (
-            <div key={wi} className="flex items-center gap-1.5">
-              <div className="grid grid-cols-7 flex-1">
+            <div key={wi} className="grid grid-cols-7">
                 {week.map((day, i) => {
                   const dateKey = format(day, 'yyyy-MM-dd');
                   const dayJobs = jobsByDate[dateKey] || [];
@@ -985,11 +971,6 @@ export default function CalendarPage() {
                     </div>
                   );
                 })}
-              </div>
-              <div className="w-14 shrink-0 flex flex-col items-end justify-center gap-0.5">
-                {weekStats[wi].hours > 0 ? <span className="text-[9px] text-mono text-muted-foreground">{weekStats[wi].hours.toFixed(1)}h</span> : <span className="text-[9px] text-mono text-muted-foreground/25">—</span>}
-                {weekStats[wi].pay > 0 && <span className="text-[9px] text-mono text-pink-400 font-semibold">${weekStats[wi].pay >= 1000 ? `${(weekStats[wi].pay / 1000).toFixed(1)}k` : weekStats[wi].pay.toFixed(0)}</span>}
-              </div>
             </div>
           ))}
           <div className="mt-4 space-y-1">
@@ -1118,6 +1099,7 @@ export default function CalendarPage() {
           className="max-w-md max-h-[85vh] overflow-y-auto rounded-lg"
           onTouchStart={daySwipe.onTouchStart}
           onTouchEnd={daySwipe.onTouchEnd}
+          onOpenAutoFocus={e => e.preventDefault()}
         >
           {!selectedJob ? (
             <>
@@ -1243,7 +1225,10 @@ export default function CalendarPage() {
           just the intake box, so a stray touch can't get read as a day-swipe
           and steal the tap. */}
       <Dialog open={quickAddOpen} onOpenChange={setQuickAddOpen}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto rounded-lg">
+        <DialogContent
+          className="max-w-md max-h-[85vh] overflow-y-auto rounded-lg"
+          onOpenAutoFocus={e => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle className="text-mono text-sm">Add a plan</DialogTitle>
           </DialogHeader>
@@ -1263,7 +1248,10 @@ export default function CalendarPage() {
           review) that lives on the Dashboard, rather than a second copy of
           that flow — same component, just also reachable from here. */}
       <Dialog open={quickAddShiftOpen} onOpenChange={setQuickAddShiftOpen}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto rounded-lg">
+        <DialogContent
+          className="max-w-md max-h-[85vh] overflow-y-auto rounded-lg"
+          onOpenAutoFocus={e => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle className="text-mono text-sm">Add a shift</DialogTitle>
           </DialogHeader>
