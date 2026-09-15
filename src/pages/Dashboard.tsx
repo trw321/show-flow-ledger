@@ -8,7 +8,8 @@ import { format, parseISO, isToday, differenceInCalendarDays, startOfWeek, endOf
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { netHoursWorked, jobGross, jobPayBreakdown } from '@/lib/payCalc';
-import type { Job } from '@/lib/store';
+import type { Job, Employer } from '@/lib/store';
+import ScrollWheel from '@/components/ScrollWheel';
 import { useNeedsHours } from '@/lib/useNeedsHours';
 import { getPayTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
 
@@ -24,10 +25,33 @@ function money(n: number): string {
   return n === 0 ? '—' : `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 // "Excel sheet" style summary — one row per period, one column per stat.
-// Kept as a plain table (not cards) since that's specifically what was asked
-// for: something to scan across, not another set of tiles.
-function PaySummaryTable({ rows }: { rows: PeriodStat[] }) {
+// Kept as a plain table (not cards), all rows always visible — the browse
+// row below it is the only interactive/wheel-driven part, so picking a past
+// month never hides the fixed Today/Week/Month/Year rows above it.
+function PaySummaryTable({ rows, jobs, employers }: { rows: PeriodStat[]; jobs: Job[]; employers: Employer[] }) {
+  const now = new Date();
+  const [browseMonth, setBrowseMonth] = useState(now.getMonth());
+  const [browseYear, setBrowseYear] = useState(now.getFullYear());
+
+  const browseStat = useMemo(() => {
+    let gross = 0, net = 0, hours = 0, shifts = 0;
+    for (const job of jobs) {
+      let d: Date;
+      try { d = parseISO(job.date); } catch { continue; }
+      if (d.getFullYear() !== browseYear || d.getMonth() !== browseMonth) continue;
+      const h = netHoursWorked(job);
+      if (h <= 0) continue;
+      const { gross: g, net: n } = jobPayBreakdown(job, jobs, employers);
+      gross += g; net += n; hours += h; shifts += 1;
+    }
+    return { gross, net, hours, shifts };
+  }, [jobs, employers, browseMonth, browseYear]);
+
+  const years = Array.from({ length: 6 }, (_, i) => now.getFullYear() - 4 + i);
+
   return (
     <div className="mb-6 rounded-md border border-white/10 overflow-x-auto">
       <table className="w-full text-xs min-w-[420px]">
@@ -50,6 +74,18 @@ function PaySummaryTable({ rows }: { rows: PeriodStat[] }) {
               <td className="py-2 px-3 text-right text-white/70 whitespace-nowrap">{row.shifts || '—'}</td>
             </tr>
           ))}
+          <tr className="text-mono bg-white/[0.03]">
+            <td className="py-2 px-3">
+              <div className="flex items-center gap-1">
+                <ScrollWheel values={MONTH_NAMES} value={MONTH_NAMES[browseMonth]} onChange={v => setBrowseMonth(MONTH_NAMES.indexOf(v as string))} className="w-12" />
+                <ScrollWheel values={years} value={browseYear} onChange={v => setBrowseYear(v as number)} className="w-16" />
+              </div>
+            </td>
+            <td className="py-2 px-3 text-right text-white/70 whitespace-nowrap">{money(browseStat.gross)}</td>
+            <td className="py-2 px-3 text-right text-success font-semibold whitespace-nowrap">{money(browseStat.net)}</td>
+            <td className="py-2 px-3 text-right text-white/70 whitespace-nowrap">{browseStat.hours > 0 ? browseStat.hours.toFixed(1) : '—'}</td>
+            <td className="py-2 px-3 text-right text-white/70 whitespace-nowrap">{browseStat.shifts || '—'}</td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -232,7 +268,7 @@ export default function Dashboard() {
         <span className="text-xs text-white/40 font-body ml-auto">{totalHours.toFixed(1)}h logged</span>
       </div>
 
-      <PaySummaryTable rows={paySummaryRows} />
+      <PaySummaryTable rows={paySummaryRows} jobs={data.jobs} employers={data.employers} />
 
       <ExportButton onClick={() => exportWeeklyToExcel(data.jobs, showExpenses ? data.expenses : [], showIncome ? data.income : [], data.employers)} />
 
