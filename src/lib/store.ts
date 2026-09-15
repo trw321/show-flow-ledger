@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import { toast } from 'sonner';
 import { isDuplicateJob } from './jobDedup';
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
@@ -175,8 +176,21 @@ function loadCache(): AppData {
   }
 }
 
-function saveCache(data: AppData) {
-  localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+function saveCache(data: AppData): boolean {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+    return true;
+  } catch (err) {
+    // This runs inside a React state updater, so throwing here aborts the
+    // update and takes the entire app down through the error boundary —
+    // whose only offered escape is "Reset all data". Storage being full must
+    // never cost the user their whole ledger.
+    console.error('[store] could not persist app data', err);
+    queueMicrotask(() => toast.error(
+      "Out of storage — that change wasn't saved. Remove a pay stub photo or receipt to free up space."
+    ));
+    return false;
+  }
 }
 
 function uid(): string {
@@ -200,8 +214,11 @@ export function useAppData(_userId: string | null) {
     setData(prev => {
       dataRef.current = prev;
       const next = updater(prev);
+      // Keep what's on screen identical to what actually made it to disk.
+      // Accepting the change in memory after a failed write is what makes
+      // hours look saved, then come back blank on the next open.
+      if (!saveCache(next)) return prev;
       dataRef.current = next;
-      saveCache(next);
       return next;
     });
   };

@@ -43,8 +43,22 @@ export function findLikelyDuplicate<T extends Partial<JobIdentity>>(
   incoming: Partial<JobIdentity>,
   existing: T[]
 ): T | undefined {
-  const jobNumber = normalize(incoming.jobNumber);
   const date = normalize(incoming.date);
-  if (!jobNumber || !date) return undefined;
-  return existing.find(ex => normalize(ex.jobNumber) === jobNumber && normalize(ex.date) === date);
+  if (!date) return undefined;
+
+  const jobNumber = normalize(incoming.jobNumber);
+  if (jobNumber) {
+    const match = existing.find(ex => normalize(ex.jobNumber) === jobNumber && normalize(ex.date) === date);
+    if (match) return match;
+  }
+
+  // Most dispatch text has no job number at all, so the check above never
+  // fires for the majority of shifts. Fall back to same date + same client —
+  // two parses of the same gig on the same day almost always mean the same
+  // shift, even if start-time formatting drifted between extractions.
+  const client = normalize(incoming.client);
+  if (client) {
+    return existing.find(ex => normalize(ex.date) === date && normalize(ex.client) === client);
+  }
+  return undefined;
 }

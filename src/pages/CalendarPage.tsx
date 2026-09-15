@@ -17,6 +17,7 @@ import { resolveEmployer } from '@/lib/employerMatch';
 import { useSwipe } from '@/lib/useSwipe';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { resizeImageForStorage, readFileAsDataUrl } from '@/lib/imageResize';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import EventIntake from '@/components/EventIntake';
 import ScrollWheel from '@/components/ScrollWheel';
@@ -156,27 +157,43 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
     setEditing(false);
   };
 
-  const handleStubUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleStubUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    if (stubInputRef.current) stubInputRef.current.value = '';
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { toast.error('File too large (max 5MB)'); return; }
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result as string;
+
+    const isImage = file.type.startsWith('image/');
+    // PDFs can't be downscaled here, so they go into storage at full size —
+    // and storage is a single ~5MB budget shared with every other record.
+    if (!isImage && file.size > 1024 * 1024) {
+      toast.error('PDF too large (max 1MB) — take a photo of the stub instead, those get compressed automatically');
+      return;
+    }
+
+    setParsingStub(true);
+    try {
+      // Phone photos are 3-8MB raw; compressing here is what keeps a stub from
+      // consuming the entire localStorage budget on its own.
+      let dataUrl: string;
+      try {
+        dataUrl = isImage ? await resizeImageForStorage(file) : await readFileAsDataUrl(file);
+      } catch {
+        dataUrl = await readFileAsDataUrl(file);
+      }
       setPayStub(dataUrl);
-      // Attachment is saved either way; parsing only runs for actual images
-      // (PDFs aren't something the vision model can read reliably here).
-      if (!file.type.startsWith('image/')) {
-        updateJobDirect(job.id, { payStub: dataUrl });
+
+      // Parsing only runs for actual images (PDFs aren't something the vision
+      // model can read reliably here).
+      if (!isImage) {
+        await updateJobDirect(job.id, { payStub: dataUrl });
         return;
       }
-      setParsingStub(true);
+
       try {
-        const base64 = dataUrl.split(',')[1];
         const resp = await fetch(`${supabaseUrl}/functions/v1/parse-statement`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${supabaseKey}` },
-          body: JSON.stringify({ imageBase64: base64, mimeType: file.type, type: 'paystub' }),
+          body: JSON.stringify({ imageBase64: dataUrl.split(',')[1], mimeType: 'image/jpeg', type: 'paystub' }),
         });
         if (!resp.ok) throw new Error((await resp.json()).error || 'Failed to read pay stub');
         const { paystub } = await resp.json();
@@ -184,15 +201,13 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
         await updateJobDirect(job.id, { payStub: dataUrl, stubParsed: paystub });
         toast.success('Pay stub read — net $' + (paystub.netPay ?? '?'));
       } catch (err) {
-        // Attachment already saved above; parsing failure isn't fatal to the upload.
+        // Attachment is still worth keeping; parsing failure isn't fatal.
         await updateJobDirect(job.id, { payStub: dataUrl });
         toast.error(err instanceof Error ? err.message : 'Could not read the pay stub — saved as attachment only');
-      } finally {
-        setParsingStub(false);
       }
-    };
-    reader.readAsDataURL(file);
-    if (stubInputRef.current) stubInputRef.current.value = '';
+    } finally {
+      setParsingStub(false);
+    }
   };
 
   const handleDelete = () => setConfirmingDelete(true);

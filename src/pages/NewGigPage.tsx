@@ -112,7 +112,7 @@ function ShiftCard({
         <div className="mx-3 mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-2.5 py-2 text-[11px] text-destructive flex items-start gap-1.5">
           <AlertTriangle size={12} className="shrink-0 mt-0.5" />
           <span>
-            Possible duplicate — you already have <span className="font-medium">"{existingMatch.name}"</span> for job #{existingMatch.jobNumber} on this date. Uncheck this one to skip it, or leave it checked if it's really a separate call.
+            Possible duplicate — you already have <span className="font-medium">"{existingMatch.name}"</span>{existingMatch.jobNumber ? ` for job #${existingMatch.jobNumber}` : ''} on this date. Uncheck this one to skip it, or leave it checked if it's really a separate call.
           </span>
         </div>
       )}
