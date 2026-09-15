@@ -201,16 +201,17 @@ export function isOverdueUpcoming(job: Job): boolean {
 }
 
 /**
- * A single job's expected gross pay (day multiplier, night premium, weekly
- * OT bonus, union dues, vacation pay) — the one canonical version of a
- * calculation that used to be copy-pasted separately in Dashboard,
- * CalendarPage, and the Excel export, which made the union-dues feature
- * require four separate edits to land everywhere. New callers should use
- * this instead of adding a fifth local copy.
+ * A single job's gross pay (base + OT/DT + night premium + meal penalties +
+ * weekly OT bonus, before dues/tax/vacation) and net pay (after union dues
+ * and estimated tax are deducted, vacation pay added on top) — the one
+ * canonical version of this calculation that used to be copy-pasted
+ * separately in Dashboard, CalendarPage, and the Excel export, which made
+ * the union-dues feature require four separate edits to land everywhere.
+ * New callers should use this instead of adding a fifth local copy.
  */
-export function jobGross(job: Job, allJobs: Job[], employers: Employer[] = []): number {
+export function jobPayBreakdown(job: Job, allJobs: Job[], employers: Employer[] = []): { gross: number; net: number } {
   const hours = effectiveHoursWorked(job);
-  if (!hours) return 0;
+  if (!hours) return { gross: 0, net: 0 };
   const rate = job.hourlyRate ?? 0;
   const employer = resolveEmployer(job.client, employers);
   const dayMult = getDayMultiplier(job.date, job.client, allJobs, job.has6th7thDayRule ?? false);
@@ -218,7 +219,7 @@ export function jobGross(job: Job, allJobs: Job[], employers: Employer[] = []): 
     ? calculateNightHours(job.startTime, job.endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour)
     : 0;
   const nightHours = resolveConfirmedNightHours(rawNightHours, job.nightPremiumConfirmed, job.nightPremiumActualHours);
-  const { totalPay } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock }, {
+  const { totalPay, duesAmount, taxAmount } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock }, {
     rule: employer?.overtimeRule ?? 'daily',
     otThresholdHours: employer?.dailyOvertimeThresholdHours,
     dtThresholdHours: employer?.dailyDoubletimeThresholdHours,
@@ -230,9 +231,17 @@ export function jobGross(job: Job, allJobs: Job[], employers: Employer[] = []): 
     estimatedTaxPercent: employer?.estimatedTaxPercent,
   });
   const weeklyBonus = employer ? calculateWeeklyOvertimeBonus(job, allJobs, employer) : 0;
-  const gross = totalPay + weeklyBonus;
+  // totalPay already has dues+tax deducted — add them back to get gross-before-deductions.
+  const gross = totalPay + duesAmount + taxAmount + weeklyBonus;
+  const netBeforeVacation = totalPay + weeklyBonus;
   const vacationPercent = employer?.vacationPercent ?? 0;
-  return gross + (vacationPercent > 0 ? gross * (vacationPercent / 100) : 0);
+  const net = netBeforeVacation + (vacationPercent > 0 ? netBeforeVacation * (vacationPercent / 100) : 0);
+  return { gross, net };
+}
+
+/** Net pay only — see jobPayBreakdown for gross+net together. */
+export function jobGross(job: Job, allJobs: Job[], employers: Employer[] = []): number {
+  return jobPayBreakdown(job, allJobs, employers).net;
 }
 
 /**

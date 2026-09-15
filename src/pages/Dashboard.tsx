@@ -4,12 +4,57 @@ import { useData } from '@/lib/DataContext';
 import LampPageWrapper from '@/components/LampPageWrapper';
 import NewGigPage from '@/pages/NewGigPage';
 import { ChevronDown, Download, Zap, Eye, Flame } from 'lucide-react';
-import { format, parseISO, isToday, differenceInCalendarDays } from 'date-fns';
+import { format, parseISO, isToday, differenceInCalendarDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
-import { netHoursWorked, jobGross } from '@/lib/payCalc';
+import { netHoursWorked, jobGross, jobPayBreakdown } from '@/lib/payCalc';
+import type { Job } from '@/lib/store';
 import { useNeedsHours } from '@/lib/useNeedsHours';
 import { getPayTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
+
+interface PeriodStat {
+  label: string;
+  gross: number;
+  net: number;
+  hours: number;
+  shifts: number;
+}
+
+function money(n: number): string {
+  return n === 0 ? '—' : `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+}
+
+// "Excel sheet" style summary — one row per period, one column per stat.
+// Kept as a plain table (not cards) since that's specifically what was asked
+// for: something to scan across, not another set of tiles.
+function PaySummaryTable({ rows }: { rows: PeriodStat[] }) {
+  return (
+    <div className="mb-6 rounded-md border border-white/10 overflow-hidden">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="bg-white/5 text-white/50 text-[10px] uppercase tracking-wider">
+            <th className="text-left font-medium py-2 px-3">Period</th>
+            <th className="text-right font-medium py-2 px-3">Gross</th>
+            <th className="text-right font-medium py-2 px-3">Net</th>
+            <th className="text-right font-medium py-2 px-3">Hours</th>
+            <th className="text-right font-medium py-2 px-3">Shifts</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-white/10">
+          {rows.map(row => (
+            <tr key={row.label} className="text-mono">
+              <td className="py-2 px-3 text-white/80 font-medium">{row.label}</td>
+              <td className="py-2 px-3 text-right text-white/70">{money(row.gross)}</td>
+              <td className="py-2 px-3 text-right text-success font-semibold">{money(row.net)}</td>
+              <td className="py-2 px-3 text-right text-white/70">{row.hours > 0 ? row.hours.toFixed(1) : '—'}</td>
+              <td className="py-2 px-3 text-right text-white/70">{row.shifts || '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 function ExportButton({ onClick }: { onClick: () => void }) {
   return (
@@ -33,6 +78,41 @@ export default function Dashboard() {
 
   const showIncome = prefs.tabs.income;
   const showExpenses = prefs.tabs.expenses;
+
+  // ── Pay summary (Today / Week / Month / Year) ───────────────────────────────
+  const paySummaryRows = useMemo(() => {
+    const now = new Date();
+    const ranges: { label: string; test: (j: Job) => boolean }[] = [
+      { label: 'Today', test: j => j.date === format(now, 'yyyy-MM-dd') },
+      {
+        label: 'This Week',
+        test: j => {
+          try { return isWithinInterval(parseISO(j.date), { start: startOfWeek(now), end: endOfWeek(now) }); }
+          catch { return false; }
+        },
+      },
+      {
+        label: 'This Month',
+        test: j => {
+          try { return isWithinInterval(parseISO(j.date), { start: startOfMonth(now), end: endOfMonth(now) }); }
+          catch { return false; }
+        },
+      },
+      { label: 'This Year', test: j => j.date.startsWith(format(now, 'yyyy')) },
+    ];
+
+    return ranges.map(({ label, test }): PeriodStat => {
+      const jobs = data.jobs.filter(test);
+      let gross = 0, net = 0, hours = 0, shifts = 0;
+      for (const job of jobs) {
+        const h = netHoursWorked(job);
+        if (h <= 0) continue;
+        const { gross: g, net: n } = jobPayBreakdown(job, data.jobs, data.employers);
+        gross += g; net += n; hours += h; shifts += 1;
+      }
+      return { label, gross, net, hours, shifts };
+    });
+  }, [data.jobs, data.employers]);
 
   // ── By employer ───────────────────────────────────────────────────────────
   const byEmployer = useMemo(() => {
@@ -151,6 +231,8 @@ export default function Dashboard() {
         </span>
         <span className="text-xs text-white/40 font-body ml-auto">{totalHours.toFixed(1)}h logged</span>
       </div>
+
+      <PaySummaryTable rows={paySummaryRows} />
 
       <ExportButton onClick={() => exportWeeklyToExcel(data.jobs, showExpenses ? data.expenses : [], showIncome ? data.income : [], data.employers)} />
 
