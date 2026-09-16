@@ -4,7 +4,7 @@ import { useData } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
   AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
@@ -330,8 +330,13 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
 
   const actualHours = parseFloat(hoursWorked) || 0;
   const minHours = parseFloat(minimumHours) || 0;
-  const billableHours = Math.max(actualHours, minHours);
-  const minimumApplied = minHours > 0 && actualHours < minHours && actualHours > 0;
+  // Mirrors calculateDayPay: an off-the-clock meal comes out of the hours
+  // before the minimum-call floor applies. Without this the on/off toggle
+  // changed the pay but every hours figure on screen stayed put.
+  const mealDeductionHours = (mealDuration && !mealOnClock) ? mealDuration / 60 : 0;
+  const paidHours = Math.max(0, actualHours - mealDeductionHours);
+  const billableHours = Math.max(paidHours, minHours);
+  const minimumApplied = minHours > 0 && paidHours < minHours && paidHours > 0;
   const rate = parseFloat(hourlyRate) || 0;
   const mealPenaltyUnits = parseFloat(mealPenalties) || 0;
   const payPreview = rate > 0 && billableHours > 0
@@ -389,20 +394,30 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   return (
     <>
       <DialogHeader>
-        <div className="flex items-start gap-2">
-          <button onClick={onBack} className="shrink-0 mt-0.5 text-muted-foreground hover:text-foreground transition-colors p-1 -ml-1 rounded-lg hover:bg-secondary">
-            <ArrowLeft size={16} />
+        {/* One toolbar row: back on the left, destructive and close on the
+            right, all the same size on the same baseline. Previously back and
+            delete sat in the title row while the close button was absolutely
+            positioned 8px higher, so the three never lined up. */}
+        <div className="flex items-center gap-1 -mx-1.5 -mt-1.5">
+          <button onClick={onBack} aria-label="Back" className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-2 rounded-lg hover:bg-secondary">
+            <ArrowLeft size={18} />
           </button>
-          <div className="flex-1 min-w-0">
-            <p className="text-[10px] font-body uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <span>{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d, yyyy')}</span>
-              {isCallback && <Phone size={11} className="text-destructive shrink-0" aria-label="Callback" />}
-            </p>
-            <DialogTitle className="text-mono text-sm truncate">{job.name}</DialogTitle>
-          </div>
-          <button onClick={handleDelete} className="shrink-0 mt-0.5 mr-7 text-muted-foreground hover:text-destructive transition-colors p-1 rounded-lg hover:bg-destructive/10" aria-label="Delete shift">
-            <Trash2 size={15} />
+          <span className="flex-1" />
+          <button onClick={handleDelete} aria-label="Delete shift" className="shrink-0 text-muted-foreground hover:text-destructive transition-colors p-2 rounded-lg hover:bg-destructive/10">
+            <Trash2 size={18} />
           </button>
+          <DialogClose asChild>
+            <button aria-label="Close" className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-2 rounded-lg hover:bg-secondary">
+              <X size={18} />
+            </button>
+          </DialogClose>
+        </div>
+        <div className="min-w-0">
+          <p className="text-[10px] font-body uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <span>{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d, yyyy')}</span>
+            {isCallback && <Phone size={11} className="text-destructive shrink-0" aria-label="Callback" />}
+          </p>
+          <DialogTitle className="text-mono text-sm truncate">{job.name}</DialogTitle>
         </div>
       </DialogHeader>
       <AlertDialog open={confirmingDelete} onOpenChange={setConfirmingDelete}>
@@ -494,6 +509,20 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
                 })}
               </div>
             )}
+            {/* The toggle's whole effect is on hours paid, so show that here
+                rather than only deep in the pay breakdown. */}
+            {actualHours > 0 && mealDuration !== undefined && mealDuration > 0 && (
+              <p className="text-[11px] text-mono pt-0.5">
+                {mealDeductionHours > 0 ? (
+                  <><span className="text-muted-foreground line-through">{actualHours}h</span>{' '}
+                    <span className="text-accent font-semibold">{paidHours}h paid</span>{' '}
+                    <span className="text-muted-foreground">({mealDuration}min off the clock)</span></>
+                ) : (
+                  <><span className="text-accent font-semibold">{actualHours}h paid</span>{' '}
+                    <span className="text-muted-foreground">(meal stays on the clock)</span></>
+                )}
+              </p>
+            )}
             <div className="pt-0.5">
               <label className="text-[10px] text-mono uppercase text-muted-foreground">Meal penalty (MP) units — 1 unit = 1hr at straight rate</label>
               <ScrollWheel
@@ -545,13 +574,13 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
           {job.venue && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Venue</span><span className="font-medium text-xs">{job.venue}</span></div>}
           {job.jobNumber && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Job #</span><span className="font-medium text-xs text-mono">{job.jobNumber}</span></div>}
           {(startTime || job.startTime) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Start</span><span className="font-medium text-xs text-mono">{startTime || job.startTime}{endTime ? ` – ${endTime}` : ''}</span></div>}
-          {actualHours > 0 && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Hours Worked</span><span className="font-medium text-xs text-mono">{actualHours}h</span></div>}
+          {actualHours > 0 && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Hours Worked</span><span className="font-medium text-xs text-mono">{mealDeductionHours > 0 ? <><span className="text-muted-foreground/60 line-through">{actualHours}h</span> {paidHours}h</> : `${actualHours}h`}</span></div>}
           {rate > 0 && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Rate</span><span className="font-medium text-xs text-mono">${rate}/hr</span></div>}
         </div>
         {payPreview && (
           <div className={cn("rounded-md border p-3 space-y-1.5", minimumApplied ? "border-accent/40 bg-accent/5" : "border-success/30 bg-success/5")}>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">{minimumApplied ? `Worked ${actualHours}h — paid for ${billableHours}h minimum` : `Worked ${actualHours}h`}</span>
+              <span className="text-xs text-muted-foreground">{minimumApplied ? `Worked ${actualHours}h — paid for ${billableHours}h minimum` : mealDeductionHours > 0 ? `Worked ${actualHours}h — ${mealDuration}min meal = ${paidHours}h paid` : `Worked ${actualHours}h`}</span>
               <span className="font-bold text-sm text-mono text-success">${payPreviewTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
             </div>
             {minimumApplied && <p className="text-[10px] text-accent font-medium">{minHours}h minimum call — contract guarantees payment for {minHours}h</p>}
@@ -1216,6 +1245,9 @@ export default function CalendarPage() {
       <Dialog open={!!selectedDate} onOpenChange={(o) => !o && closeDialog()}>
         <DialogContent
           className="max-w-md max-h-[85vh] overflow-y-auto rounded-lg"
+          // The shift view supplies its own aligned toolbar; the day list still
+          // needs the default close button.
+          hideClose={!!selectedJob}
           onTouchStart={daySwipe.onTouchStart}
           onTouchEnd={daySwipe.onTouchEnd}
           onOpenAutoFocus={e => e.preventDefault()}
@@ -1422,9 +1454,11 @@ export default function CalendarPage() {
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
-                          <p className="text-[10px] text-mono uppercase tracking-widest text-white/40">{dateRange}</p>
-                          <p className="text-[15px] font-semibold leading-snug truncate mt-0.5">{first.name}</p>
-                          <p className="text-[11px] text-white/45 truncate">{first.client}</p>
+                          {/* Date leads — it's how a shift gets identified,
+                              and it keeps the card reading like a card. */}
+                          <p className="text-[17px] font-bold text-mono tracking-tight leading-none text-white">{dateRange}</p>
+                          <p className="text-[13px] text-white/75 leading-snug truncate mt-1">{first.name}</p>
+                          <p className="text-[11px] text-white/40 truncate">{first.client}</p>
                         </div>
                         {/* Pay is the reason this list gets opened, so it's the
                             one thing sized to be read without stopping. */}
