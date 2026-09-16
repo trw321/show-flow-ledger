@@ -10,6 +10,7 @@ import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { netHoursWorked, jobGross, jobPayBreakdown } from '@/lib/payCalc';
 import type { Job, Employer } from '@/lib/store';
 import ScrollWheel from '@/components/ScrollWheel';
+import { cn } from '@/lib/utils';
 import { useNeedsHours } from '@/lib/useNeedsHours';
 import { getPayTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
 
@@ -88,6 +89,73 @@ function PaySummaryTable({ rows, jobs, employers }: { rows: PeriodStat[]; jobs: 
           </tr>
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// A rack meter reading the month: one column per day, lit from the bottom.
+// The colour ladder is the pay ladder — straight time green, overtime amber,
+// double time in the red — so a heavy week looks like a hot channel.
+const METER_SEGMENTS = 7;
+const OT_HOURS = 8;
+const DT_HOURS = 12;
+
+function HoursMeter({ jobs }: { jobs: Job[] }) {
+  const monthPrefix = format(new Date(), 'yyyy-MM');
+  const daysInMonth = endOfMonth(new Date()).getDate();
+  const today = new Date().getDate();
+
+  const byDay = useMemo(() => {
+    const out: number[] = Array(daysInMonth).fill(0);
+    jobs.forEach(j => {
+      if (!j.date.startsWith(monthPrefix)) return;
+      const d = parseInt(j.date.slice(8, 10), 10);
+      if (d >= 1 && d <= daysInMonth) out[d - 1] += netHoursWorked(j);
+    });
+    return out;
+  }, [jobs, monthPrefix, daysInMonth]);
+
+  const peak = Math.max(DT_HOURS, ...byDay);
+  const worked = byDay.filter(h => h > 0).length;
+  if (worked === 0) return null;
+
+  return (
+    <div className="mb-6 rounded-md border border-white/10 bg-black/30 p-3">
+      <div className="flex items-baseline justify-between mb-2">
+        <p className="text-[9px] text-mono uppercase tracking-widest text-white/40">Month Levels</p>
+        <p className="text-[9px] text-mono text-white/30">{worked} day{worked !== 1 ? 's' : ''} · peak {Math.round(peak)}h</p>
+      </div>
+      <div className="flex items-stretch gap-[2px] h-14" role="img" aria-label={`Hours per day this month, peak ${Math.round(peak)} hours`}>
+        {byDay.map((hours, i) => {
+          const lit = hours > 0 ? Math.max(1, Math.round((hours / peak) * METER_SEGMENTS)) : 0;
+          return (
+            <div key={i} className="flex-1 h-full flex flex-col-reverse gap-[2px] min-w-0">
+              {Array.from({ length: METER_SEGMENTS }, (_, s) => {
+                const hoursAtSegment = ((s + 1) / METER_SEGMENTS) * peak;
+                const on = s < lit;
+                return (
+                  <div
+                    key={s}
+                    className={cn(
+                      'flex-1 rounded-[1px]',
+                      !on ? 'bg-white/[0.04]'
+                        : hoursAtSegment > DT_HOURS ? 'bg-destructive'
+                        : hoursAtSegment > OT_HOURS ? 'bg-warning'
+                        : 'bg-success',
+                      on && i + 1 === today && 'ring-1 ring-white/40',
+                    )}
+                  />
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-2 flex items-center gap-3 text-[9px] text-mono text-white/35">
+        <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-[1px] bg-success inline-block" />ST</span>
+        <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-[1px] bg-warning inline-block" />OT 8h+</span>
+        <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-[1px] bg-destructive inline-block" />DT 12h+</span>
+      </div>
     </div>
   );
 }
@@ -268,6 +336,7 @@ export default function Dashboard() {
         <span className="text-xs text-white/40 font-body ml-auto">{totalHours.toFixed(1)}h logged</span>
       </div>
 
+      <HoursMeter jobs={data.jobs} />
       <PaySummaryTable rows={paySummaryRows} jobs={data.jobs} employers={data.employers} />
 
       <ExportButton onClick={() => exportWeeklyToExcel(data.jobs, showExpenses ? data.expenses : [], showIncome ? data.income : [], data.employers)} />
