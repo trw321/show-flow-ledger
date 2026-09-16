@@ -9,7 +9,7 @@ import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
   AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
-import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO } from 'date-fns';
 import type { Job, CalendarEvent } from '@/lib/store';
 import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross } from '@/lib/payCalc';
@@ -44,6 +44,16 @@ function jobDotClass(job: Job, paidJobIds: Set<string>): string {
   if (paidJobIds.has(job.id)) return 'bg-success';
   if (isOverdueUpcoming(job)) return 'bg-warning';
   return statusDot[job.status];
+}
+
+// Card wash behind a shift — same status meaning as the dot, just readable
+// from across the list instead of a 6px dot.
+function cardTintClass(job: Job, paidJobIds: Set<string>): string {
+  if (paidJobIds.has(job.id)) return 'from-success/20 via-success/[0.06] to-transparent';
+  if (isOverdueUpcoming(job)) return 'from-warning/20 via-warning/[0.06] to-transparent';
+  if (job.status === 'completed') return 'from-primary/20 via-primary/[0.06] to-transparent';
+  if (job.status === 'cancelled') return 'from-white/10 via-white/[0.03] to-transparent';
+  return 'from-accent/20 via-accent/[0.06] to-transparent';
 }
 
 const statusLabel: Record<Job['status'], string> = {
@@ -1384,7 +1394,7 @@ export default function CalendarPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
               This month's shifts
             </h2>
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-2.5">
               {Object.entries(loggedGroups).map(([key, jobs]) => {
                 const first = jobs[0];
                 const totalHours = jobs.reduce((s, j) => s + netHoursWorked(j), 0);
@@ -1394,32 +1404,53 @@ export default function CalendarPage() {
                 const isGroup = jobs.length > 1;
                 const expanded = expandedGroupKey === key;
                 const openJob = (job: Job) => { setSelectedDate(job.date); setSelectedJobId(job.id); };
-                const subtitle = totalHours > 0
-                  ? `${dateRange} · ${totalHours}h${totalEarned > 0 ? ` · $${totalEarned.toLocaleString()}` : ''}`
-                  : `${dateRange} · ${statusLabel[first.status]}${first.startTime ? ` · ${first.startTime}` : ''}`;
                 return (
-                  <div key={key} className="rounded-md border border-primary/25 bg-primary/5 overflow-hidden">
+                  <div key={key} className="relative overflow-hidden rounded-xl border border-white/10 bg-[#0b0910] shadow-lg shadow-black/50">
+                    {/* Graphic background fill so a shift reads as its own card
+                        rather than another flat row — tint carries the status,
+                        the bolt is a watermark, both behind the content. */}
+                    <div aria-hidden className={cn("pointer-events-none absolute inset-0 bg-gradient-to-br", cardTintClass(first, paidJobIds))} />
+                    <Zap
+                      aria-hidden
+                      size={96}
+                      className="pointer-events-none absolute -right-4 -top-5 rotate-12 text-white/[0.04]"
+                      strokeWidth={1.5}
+                    />
                     <div
                       onClick={() => isGroup ? setExpandedGroupKey(expanded ? null : key) : openJob(first)}
-                      className="p-2.5 flex items-center gap-2 opacity-70 cursor-pointer active:opacity-50 transition-opacity"
+                      className="relative p-3 cursor-pointer active:opacity-80 transition-opacity"
                     >
-                      <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", jobDotClass(first, paidJobIds))} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm truncate">{first.name} <span className="text-muted-foreground">· {first.client}</span></p>
-                          {isGroup && <span className="text-[10px] text-mono bg-success/20 text-success px-1.5 py-0.5 rounded-full shrink-0">{jobs.length}d</span>}
-                          {!isGroup && totalHours > 0 && (
-                            <Receipt size={11} className={cn('shrink-0', first.payStub ? 'text-success opacity-80' : 'opacity-25')} aria-label={first.payStub ? 'Pay stub uploaded' : 'No pay stub'} />
-                          )}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] text-mono uppercase tracking-widest text-white/40">{dateRange}</p>
+                          <p className="text-[15px] font-semibold leading-snug truncate mt-0.5">{first.name}</p>
+                          <p className="text-[11px] text-white/45 truncate">{first.client}</p>
                         </div>
-                        <p className="text-[11px] text-mono text-muted-foreground">{subtitle}</p>
-                        {first.jobNumber && <p className="text-[10px] text-mono text-muted-foreground/50">#{first.jobNumber}</p>}
+                        {/* Pay is the reason this list gets opened, so it's the
+                            one thing sized to be read without stopping. */}
+                        <div className="shrink-0 text-right">
+                          {totalEarned > 0 ? (
+                            <p className="text-lg font-bold text-mono text-success leading-none">${Math.round(totalEarned).toLocaleString()}</p>
+                          ) : (
+                            <p className="text-[11px] text-mono text-white/35 leading-none">{statusLabel[first.status]}</p>
+                          )}
+                          {totalHours > 0 && <p className="text-[10px] text-mono text-white/40 mt-1.5">{totalHours}h</p>}
+                        </div>
                       </div>
-                      {isGroup && (
-                        expanded
-                          ? <ChevronDown size={14} className="text-muted-foreground shrink-0" />
-                          : <ChevronRight size={14} className="text-muted-foreground shrink-0" />
-                      )}
+                      <div className="mt-2.5 flex items-center gap-1.5">
+                        <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", jobDotClass(first, paidJobIds))} />
+                        {isGroup && <span className="text-[10px] text-mono bg-white/10 text-white/70 px-1.5 py-0.5 rounded-full">{jobs.length} days</span>}
+                        {first.jobNumber && <span className="text-[10px] text-mono text-white/30">#{first.jobNumber}</span>}
+                        <span className="flex-1" />
+                        {totalHours > 0 && (
+                          <Receipt size={12} className={cn('shrink-0', first.payStub ? 'text-success' : 'text-white/20')} aria-label={first.payStub ? 'Pay stub uploaded' : 'No pay stub'} />
+                        )}
+                        {isGroup && (
+                          expanded
+                            ? <ChevronDown size={14} className="text-white/40 shrink-0" />
+                            : <ChevronRight size={14} className="text-white/40 shrink-0" />
+                        )}
+                      </div>
                     </div>
                     {isGroup && expanded && (
                       <div className="border-t border-primary/20 divide-y divide-primary/10">
