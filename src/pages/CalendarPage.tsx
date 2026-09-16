@@ -17,6 +17,7 @@ import { resolveEmployer } from '@/lib/employerMatch';
 import { useSwipe } from '@/lib/useSwipe';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { matchStubToShifts, type MatchConfidence } from '@/lib/stubMatching';
 import { resizeImageForStorage, readFileAsDataUrl } from '@/lib/imageResize';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import EventIntake from '@/components/EventIntake';
@@ -55,6 +56,12 @@ function cardTintClass(job: Job, paidJobIds: Set<string>): string {
   if (job.status === 'cancelled') return 'from-white/10 via-white/[0.03] to-transparent';
   return 'from-accent/20 via-accent/[0.06] to-transparent';
 }
+
+const CONFIDENCE_STYLES: Record<MatchConfidence, { box: string; pill: string }> = {
+  high: { box: 'border-success/30 bg-success/5', pill: 'bg-success/20 text-success' },
+  medium: { box: 'border-warning/30 bg-warning/5', pill: 'bg-warning/20 text-warning' },
+  low: { box: 'border-destructive/30 bg-destructive/5', pill: 'bg-destructive/20 text-destructive' },
+};
 
 const statusLabel: Record<Job['status'], string> = {
   upcoming: 'Upcoming',
@@ -349,6 +356,11 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   const vacationPercent = employer?.vacationPercent ?? 0;
   const vacationAmount = payPreview && vacationPercent > 0 ? payPreview.totalPay * (vacationPercent / 100) : 0;
   const payPreviewTotal = (payPreview?.totalPay ?? 0) + vacationAmount;
+
+  const stubMatch = useMemo(
+    () => (stubParsed ? matchStubToShifts(stubParsed, data.jobs) : null),
+    [stubParsed, data.jobs],
+  );
 
   const handleSave = () => {
     const updates: Partial<Job> = {};
@@ -652,6 +664,35 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
               {stubParsed.taxAmount != null && <div>Tax <span className="text-foreground font-semibold">${stubParsed.taxAmount.toLocaleString()}</span></div>}
               {stubParsed.vacationAmount != null && <div>Vacation <span className="text-foreground font-semibold">${stubParsed.vacationAmount.toLocaleString()}</span></div>}
               {stubParsed.netPay != null && <div className="text-success">Net <span className="font-bold">${stubParsed.netPay.toLocaleString()}</span></div>}
+            </div>
+          </div>
+        )}
+
+        {/* One check usually covers a whole period, so the stub is reconciled
+            against every shift it spans — not just the one it's attached to. */}
+        {stubMatch && (
+          <div className={cn("rounded-md border p-3 space-y-2", CONFIDENCE_STYLES[stubMatch.confidence].box)}>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[9px] text-mono font-bold tracking-widest uppercase text-muted-foreground/70">Covers</p>
+              <span className={cn("text-[9px] text-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full", CONFIDENCE_STYLES[stubMatch.confidence].pill)}>
+                {stubMatch.confidence} confidence
+              </span>
+            </div>
+            <div className="space-y-1">
+              {stubMatch.jobs.map(j => (
+                <div key={j.id} className="flex items-center justify-between gap-2 text-[11px] text-mono">
+                  <span className={cn("truncate", j.id === job.id ? "text-foreground font-semibold" : "text-muted-foreground")}>
+                    {format(new Date(j.date + 'T12:00:00'), 'EEE, MMM d')}
+                    {j.id === job.id && <span className="text-accent"> · this shift</span>}
+                  </span>
+                  <span className="shrink-0 text-muted-foreground">{netHoursWorked(j)}h</span>
+                </div>
+              ))}
+            </div>
+            <div className="pt-1 border-t border-border/40 space-y-0.5">
+              {stubMatch.reasons.map((r, i) => (
+                <p key={i} className="text-[10px] text-mono text-muted-foreground">{r}</p>
+              ))}
             </div>
           </div>
         )}
