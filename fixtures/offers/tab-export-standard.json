@@ -1,0 +1,17 @@
+{
+  "name": "dispatch tab export — standard single shift",
+  "note": "Synthetic, built from the column order documented in parse-jobs. Replace with a real offer when you have one.",
+  "input": "2026-0929\n3/17/26 08:00\n\tAudio Tech\tGSW Arena LLC\tWest Coast Payroll Services\tChase Center\tWarriors vs Lakers\tSan Francisco\tLoad in through dock B\tIATSE Local 16\t$52.75\tALL BLACK\tMike Torres",
+  "expect": [
+    {
+      "jobNumber": "2026-0929",
+      "date": "2026-03-17",
+      "startTime": "08:00 AM",
+      "client": "GSW Arena LLC",
+      "payrollCompany": "West Coast Payroll Services",
+      "name": "Warriors vs Lakers",
+      "hourlyRate": 52.75,
+      "steward": "Mike Torres"
+    }
+  ]
+}
