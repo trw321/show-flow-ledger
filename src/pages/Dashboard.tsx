@@ -54,37 +54,37 @@ function PaySummaryTable({ rows, jobs, employers }: { rows: PeriodStat[]; jobs: 
 
   return (
     <div className="mb-6 rounded-md border border-white/10 overflow-x-auto">
-      <table className="w-full text-xs min-w-[420px]">
+      <table className="w-full text-xs">
         <thead>
           <tr className="bg-white/5 text-white/50 text-[10px] uppercase tracking-wider">
-            <th className="text-left font-medium py-2 px-3">Period</th>
-            <th className="text-right font-medium py-2 px-3">Gross</th>
-            <th className="text-right font-medium py-2 px-3">Net</th>
-            <th className="text-right font-medium py-2 px-3">Hours</th>
-            <th className="text-right font-medium py-2 px-3">Shifts</th>
+            <th className="text-left font-medium py-2 px-1.5">Period</th>
+            <th className="text-right font-medium py-2 px-1.5">Gross</th>
+            <th className="text-right font-medium py-2 px-1.5">Net</th>
+            <th className="text-right font-medium py-2 px-1.5">Hours</th>
+            <th className="text-right font-medium py-2 px-1.5">Shifts</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-white/10">
           {rows.map(row => (
             <tr key={row.label} className="text-mono">
-              <td className="py-2 px-3 text-white/80 font-medium whitespace-nowrap">{row.label}</td>
-              <td className="py-2 px-3 text-right text-white/70 whitespace-nowrap">{money(row.gross)}</td>
-              <td className="py-2 px-3 text-right text-success font-semibold whitespace-nowrap">{money(row.net)}</td>
-              <td className="py-2 px-3 text-right text-white/70 whitespace-nowrap">{row.hours > 0 ? row.hours.toFixed(1) : '—'}</td>
-              <td className="py-2 px-3 text-right text-white/70 whitespace-nowrap">{row.shifts || '—'}</td>
+              <td className="py-2 px-1.5 text-white/80 font-medium whitespace-nowrap">{row.label}</td>
+              <td className="py-2 px-1.5 text-right text-white/70 whitespace-nowrap">{money(row.gross)}</td>
+              <td className="py-2 px-1.5 text-right text-success font-semibold whitespace-nowrap">{money(row.net)}</td>
+              <td className="py-2 px-1.5 text-right text-white/70 whitespace-nowrap">{row.hours > 0 ? row.hours.toFixed(1) : '—'}</td>
+              <td className="py-2 px-1.5 text-right text-white/70 whitespace-nowrap">{row.shifts || '—'}</td>
             </tr>
           ))}
           <tr className="text-mono bg-white/[0.03]">
-            <td className="py-2 px-3">
+            <td className="py-2 px-1.5">
               <div className="flex items-center gap-1">
-                <ScrollWheel values={MONTH_NAMES} value={MONTH_NAMES[browseMonth]} onChange={v => setBrowseMonth(MONTH_NAMES.indexOf(v as string))} className="w-12" />
-                <ScrollWheel values={years} value={browseYear} onChange={v => setBrowseYear(v as number)} className="w-16" />
+                <ScrollWheel values={MONTH_NAMES} value={MONTH_NAMES[browseMonth]} onChange={v => setBrowseMonth(MONTH_NAMES.indexOf(v as string))} className="w-11" />
+                <ScrollWheel values={years} value={browseYear} onChange={v => setBrowseYear(v as number)} className="w-14" />
               </div>
             </td>
-            <td className="py-2 px-3 text-right text-white/70 whitespace-nowrap">{money(browseStat.gross)}</td>
-            <td className="py-2 px-3 text-right text-success font-semibold whitespace-nowrap">{money(browseStat.net)}</td>
-            <td className="py-2 px-3 text-right text-white/70 whitespace-nowrap">{browseStat.hours > 0 ? browseStat.hours.toFixed(1) : '—'}</td>
-            <td className="py-2 px-3 text-right text-white/70 whitespace-nowrap">{browseStat.shifts || '—'}</td>
+            <td className="py-2 px-1.5 text-right text-white/70 whitespace-nowrap">{money(browseStat.gross)}</td>
+            <td className="py-2 px-1.5 text-right text-success font-semibold whitespace-nowrap">{money(browseStat.net)}</td>
+            <td className="py-2 px-1.5 text-right text-white/70 whitespace-nowrap">{browseStat.hours > 0 ? browseStat.hours.toFixed(1) : '—'}</td>
+            <td className="py-2 px-1.5 text-right text-white/70 whitespace-nowrap">{browseStat.shifts || '—'}</td>
           </tr>
         </tbody>
       </table>
