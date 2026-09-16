@@ -1,0 +1,11 @@
+{
+  "name": "tab export — CB THRU date range plus a later date",
+  "note": "Real offer. One record means four shifts: 9/21, the CB THRU 9/22-9/23, and 9/28.",
+  "input": "2026-2956\t\n9/21/26 08:00 AM\n\nCRANE - CB THRU 9/23 AND THEN 9/28\tT ELEC X\tBLACKPOINT PRODUCTION INC.\tBLACKPOINT PRODUCTION INC.\tPIER 80\tPORTOLA FEST 2026\tENTER END OF CESAR CHAVEZ ST. (PARK ON PIER 80) TELL SECURITY YOUR IATSE L16\tHARD TOED SHOES REQUIRED -PERSONAL HARD HAT AND HIGH VIZ RECOMMENDED - BRING TWO FORMS OF ID OR PASSPORT , WILL BE WORKING OUT DOORS,\tPORTOLA FEST 2023-2026\t$52.48\tWC\tJOSHUA BOYNE",
+  "expect": [
+    { "jobNumber": "2026-2956", "date": "2026-09-21", "startTime": "08:00 AM", "client": "BLACKPOINT PRODUCTION INC.", "venue": "PIER 80", "name": "PORTOLA FEST 2026", "hourlyRate": 52.48, "steward": "JOSHUA BOYNE" },
+    { "date": "2026-09-22", "venue": "PIER 80", "hourlyRate": 52.48 },
+    { "date": "2026-09-23", "venue": "PIER 80", "hourlyRate": 52.48 },
+    { "date": "2026-09-28", "venue": "PIER 80", "hourlyRate": 52.48 }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "tab export — CB 10P same-day split shift, no steward column",
+  "note": "Real offer. Two shifts on one date, and the record ends at dress code with no steward.",
+  "input": "2026-2917\t\n9/19/26 09:00 AM\n\nCB 10P FOR LOAD OUT\tT STAGEHAND\tBLACKPOINT PRODUCTION INC.\tBLACKPOINT PRODUCTION INC.\tFROST AMPHITHEATER\tSTANFORD-BRANDI CARLILE\t551 MEMORIAL WAY, STANFORD, PARK IN GALVAS LOT, STREET PARK WILL BE TOWED\tBRING TWO FORMS OF ID OR PASSPORT. HARD TOED SHOES REQUIRED.\tSTANFORD 2026-2028\t$57.39\tNWB",
+  "expect": [
+    { "jobNumber": "2026-2917", "date": "2026-09-19", "startTime": "09:00 AM", "client": "BLACKPOINT PRODUCTION INC.", "venue": "FROST AMPHITHEATER", "name": "STANFORD-BRANDI CARLILE", "hourlyRate": 57.39, "steward": null },
+    { "date": "2026-09-19", "startTime": "10:00 PM", "venue": "FROST AMPHITHEATER", "hourlyRate": 57.39 }
+  ]
+}

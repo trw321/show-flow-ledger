@@ -19,7 +19,14 @@ serve(async (req) => {
 
     const systemPrompt = `You are a job history parser for an AV technician's bookkeeping app. Today's date is ${today}.
 
-Each block of text you receive is a single pre-expanded job record — output exactly one job per block.
+Blocks are separated by a blank line. Count them, then output exactly that many jobs, in the same
+order. One block in, one job out — always.
+
+NEVER MERGE OR DEDUPLICATE BLOCKS. Two blocks are frequently near-identical, differing only in the
+call time and a few words of note — that is a split shift or a callback (two separate calls, often
+the same day, sometimes the same job number) and it must produce TWO jobs. Repeated job numbers,
+dates, venues and rates across blocks are expected and are never a reason to collapse them into one.
+If you receive 2 blocks you must return 2 jobs, even if they look like duplicates of each other.
 
 ════════════════════════════════════════
 DATA FORMAT:
@@ -36,7 +43,11 @@ FIELD MAPPINGS:
 - Start Date line → date (YYYY-MM-DD) AND startTime. 2-digit year "3/17/26" = 2026-03-17. NEVER use today's date.
 - Employer → client
 - Payroll Co. → payrollCompany
-- Job Site + Location → venue (combine both)
+- Job Site → venue. The NAME of the place only — "PIER 80", "FROST AMPHITHEATER", "CHASE CENTER".
+- Location → notes, never venue. Despite its name this column holds street addresses, gate/entrance
+  directions and parking instructions ("ENTER END OF CESAR CHAVEZ ST. (PARK ON PIER 80)", "551 MEMORIAL
+  WAY, PARK IN GALVAS LOT, STREET PARK WILL BE TOWED"). Keep the venue a name you could read off a
+  marquee; anything telling you how to get in or where to park belongs in notes.
 - Show → name
 - Rate → hourlyRate (strip $, e.g. $55.72 → 55.72)
 - Steward → steward

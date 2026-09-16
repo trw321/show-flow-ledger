@@ -1,0 +1,9 @@
+{
+  "name": "informal — text from a steward, heavy abbreviation",
+  "note": "No job number, so this takes the smart-import path. Tests abbreviations: Amph, 9a/10p, CB, LO, NWB. The CB is a same-day callback, so this is two shifts.",
+  "input": "hey you free thurs 9/24? Frost Amph, Brandi Carlile, call 9a, $57.39/hr, CB 10p for LO. NWB. lmk",
+  "expect": [
+    { "date": "2026-09-24", "startTime": "09:00 AM", "hourlyRate": 57.39 },
+    { "date": "2026-09-24", "startTime": "10:00 PM", "hourlyRate": 57.39 }
+  ]
+}

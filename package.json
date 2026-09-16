@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "eval:parser": "node scripts/eval-parser.mjs"
+    "eval:parser": "vite-node scripts/eval-parser.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
