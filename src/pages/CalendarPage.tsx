@@ -64,10 +64,48 @@ function parseTimeToMins(t: string): number {
   return h * 60 + min;
 }
 
+const hasMeridiem = (t: string) => /[ap]\.?m?\.?\s*$/i.test(t.trim());
+
+// "8" to "5" means 8am-5pm, not 8am-5am. A bare hour carries no AM/PM, and
+// reading it literally turns an ordinary day into a 21-hour overnight. Pick
+// whichever reading gives the shorter shift — that keeps real overnight calls
+// (10pm -> 6) working, since there the literal reading is already the shorter.
+function resolveEndMins(startMins: number, end: string): number {
+  const base = parseTimeToMins(end);
+  if (isNaN(base)) return NaN;
+  if (hasMeridiem(end)) return base;
+  const hour = parseInt(end.trim().match(/\d{1,2}/)?.[0] ?? '', 10);
+  if (isNaN(hour) || hour > 12) return base; // 24-hour clock is unambiguous
+  const alt = hour === 12 ? (base + 12 * 60) % (24 * 60) : base + 12 * 60;
+  const span = (mins: number) => {
+    const d = mins - startMins;
+    return d <= 0 ? d + 24 * 60 : d;
+  };
+  return span(alt) < span(base) ? alt % (24 * 60) : base;
+}
+
+// Store what we actually assumed, so the rest of the app (pay calc, matching,
+// dedup) reads the same time the dialog showed — and so the user can see the
+// guess and correct it, instead of a bare "5" silently meaning 5am.
+function normalizeTyped(t: string): string {
+  if (!t.trim()) return t;
+  const mins = parseTimeToMins(t);
+  return isNaN(mins) ? t : minutesToTimeStr(mins);
+}
+
+function resolveTypedEnd(start: string, end: string): string {
+  if (!end.trim()) return end;
+  const s = parseTimeToMins(start);
+  if (isNaN(s)) return normalizeTyped(end);
+  const e = resolveEndMins(s, end);
+  return isNaN(e) ? end : minutesToTimeStr(e);
+}
+
 function calcHours(start: string, end: string): number {
-  let s = parseTimeToMins(start);
-  let e = parseTimeToMins(end);
-  if (isNaN(s) || isNaN(e)) return 0;
+  const s = parseTimeToMins(start);
+  if (isNaN(s)) return 0;
+  let e = resolveEndMins(s, end);
+  if (isNaN(e)) return 0;
   if (e <= s) e += 24 * 60;
   return Math.max(0, (e - s) / 60);
 }
@@ -395,6 +433,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
             <label className="text-xs text-muted-foreground">Start Time</label>
             <Input
               value={startTime}
+              onBlur={() => setStartTime(normalizeTyped(startTime))}
               onChange={e => setStartTime(e.target.value)}
               placeholder="e.g. 08:00 AM"
               className="h-10 text-base text-mono"
@@ -405,6 +444,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
             <Input
               autoFocus={actualHours === 0}
               value={endTime}
+              onBlur={() => handleEndTimeChange(resolveTypedEnd(startTime, endTime))}
               onChange={e => handleEndTimeChange(e.target.value)}
               placeholder="e.g. 18:00 or 6:00 PM"
               className="h-10 text-base text-mono"
