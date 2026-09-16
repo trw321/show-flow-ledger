@@ -1,4 +1,6 @@
 import VortexCanvas from '@/components/VortexCanvas';
+import BreathingLamp from '@/components/BreathingLamp';
+import { cn } from '@/lib/utils';
 
 interface Props {
   // Omit when the page renders its own header (e.g. Settings' bespoke <h1>,
@@ -18,13 +20,16 @@ export default function SpacePageWrapper({ title, description, action, children,
       </div>
       <div className="absolute inset-0 haze-fog" />
       <div className="relative z-10 p-4 md:p-5">
-        {title && (
-          <div className="mb-4 md:mb-6">
-            <h1 className="text-xs text-mono uppercase tracking-widest text-white/60 font-medium">{title}</h1>
+        {/* Header row always renders so the lamp has reserved space even on
+            pages that supply their own <h1> (Income, Settings). */}
+        <div className={cn('flex items-start justify-between gap-3', title ? 'mb-4 md:mb-6' : 'mb-2')}>
+          <div className="min-w-0 flex-1">
+            {title && <h1 className="text-xs text-mono uppercase tracking-widest text-white/60 font-medium">{title}</h1>}
             {description && <p className="text-[11px] text-white/40 font-body mt-0.5">{description}</p>}
             {action && <div className="mt-2 flex flex-wrap gap-2">{action}</div>}
           </div>
-        )}
+          <BreathingLamp />
+        </div>
         {children}
       </div>
     </div>
