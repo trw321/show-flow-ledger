@@ -31,24 +31,21 @@ export default function LampPageWrapper({ title, description, action, children }
 
   return (
     <div className="relative rounded-lg border border-white/10 overflow-hidden bg-[#0a0806]">
-      {/* Small corner accent, not a second hero — the intake box below already
-          has its own vortex animation tied to real parsing state, so the
-          ambient lamp stays out of its way instead of overlapping it.
-          ambient={false} + generous padding: the soft oversized halo looks
-          broken when clipped by the card's rounded corner in a tight space,
-          so this shows just the bulb itself (still glows via its own
-          box-shadow), given enough room not to get cut off. */}
-      <div className="absolute inset-0 flex items-start justify-end pt-6 pr-6 pointer-events-none overflow-hidden">
-        <LampBulb progress={progress} size={110} ambient={false} />
-      </div>
       <div className="relative z-10 p-4 md:p-5">
-        {title && (
-          <div className="mb-4 md:mb-6">
-            <h1 className="text-xs text-mono uppercase tracking-widest text-white/60 font-medium">{title}</h1>
+        {/* The lamp sits in the header row rather than floating behind the
+            page. Absolutely positioned, nothing reserved space for it, so the
+            first child rendered straight over its lower half and left a
+            bisected arc. As a flex item it always gets room to be seen whole. */}
+        <div className="mb-4 md:mb-6 flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            {title && <h1 className="text-xs text-mono uppercase tracking-widest text-white/60 font-medium">{title}</h1>}
             {description && <p className="text-[11px] text-white/40 font-body mt-0.5">{description}</p>}
             {action && <div className="mt-2 flex flex-wrap gap-2">{action}</div>}
           </div>
-        )}
+          <div className="shrink-0 -mt-1 pointer-events-none">
+            <LampBulb progress={progress} size={78} ambient={false} />
+          </div>
+        </div>
         {children}
       </div>
     </div>
