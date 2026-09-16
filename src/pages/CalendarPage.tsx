@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useData } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
@@ -18,6 +18,7 @@ import { useSwipe } from '@/lib/useSwipe';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { matchStubToShifts, type MatchConfidence } from '@/lib/stubMatching';
+import { compareStubToShifts, disagreements, type RowStatus } from '@/lib/stubComparison';
 import { resizeImageForStorage, readFileAsDataUrl } from '@/lib/imageResize';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import EventIntake from '@/components/EventIntake';
@@ -61,6 +62,13 @@ const CONFIDENCE_STYLES: Record<MatchConfidence, { box: string; pill: string }> 
   high: { box: 'border-success/30 bg-success/5', pill: 'bg-success/20 text-success' },
   medium: { box: 'border-warning/30 bg-warning/5', pill: 'bg-warning/20 text-warning' },
   low: { box: 'border-destructive/30 bg-destructive/5', pill: 'bg-destructive/20 text-destructive' },
+};
+
+const ROW_STATUS_STYLES: Record<RowStatus, string> = {
+  match: 'text-success',
+  close: 'text-warning',
+  off: 'text-destructive',
+  missing: 'text-muted-foreground/40',
 };
 
 const statusLabel: Record<Job['status'], string> = {
@@ -361,6 +369,12 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
     () => (stubParsed ? matchStubToShifts(stubParsed, data.jobs) : null),
     [stubParsed, data.jobs],
   );
+
+  const stubComparison = useMemo(
+    () => (stubParsed && stubMatch ? compareStubToShifts(stubParsed, stubMatch.jobs, data.jobs, data.employers) : null),
+    [stubParsed, stubMatch, data.jobs, data.employers],
+  );
+  const stubDisagreements = useMemo(() => (stubComparison ? disagreements(stubComparison) : []), [stubComparison]);
 
   const handleSave = () => {
     const updates: Partial<Job> = {};
@@ -694,6 +708,39 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
                 <p key={i} className="text-[10px] text-mono text-muted-foreground">{r}</p>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Side by side, because a total only tells you something is wrong —
+            this shows which line it is. */}
+        {stubComparison && (
+          <div className="rounded-md border border-border bg-secondary/10 p-3 space-y-2">
+            <p className="text-[9px] text-mono font-bold tracking-widest uppercase text-muted-foreground/70">Stub vs Calculated</p>
+            <div className="grid grid-cols-[1fr_auto_auto] gap-x-2 gap-y-1 items-baseline text-[11px] text-mono">
+              <span className="text-[9px] uppercase tracking-wider text-muted-foreground/50" />
+              <span className="text-[9px] uppercase tracking-wider text-muted-foreground/50 text-right">Stub</span>
+              <span className="text-[9px] uppercase tracking-wider text-muted-foreground/50 text-right">Calculated</span>
+              {stubComparison.map(r => (
+                <Fragment key={r.key}>
+                  <span className="text-muted-foreground">{r.label}</span>
+                  <span className={cn('text-right font-semibold', ROW_STATUS_STYLES[r.status])}>
+                    {r.stub == null ? '—' : r.money ? `$${r.stub.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : `${r.stub}h`}
+                  </span>
+                  <span className="text-right text-muted-foreground">
+                    {r.calculated === 0 && r.key === 'rate' ? '—' : r.money ? `$${r.calculated.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : `${r.calculated}h`}
+                  </span>
+                </Fragment>
+              ))}
+            </div>
+            {stubDisagreements.length > 0 ? (
+              <p className="text-[10px] text-mono text-warning pt-1 border-t border-border/40">
+                {stubDisagreements.length} line{stubDisagreements.length !== 1 ? 's' : ''} disagree: {stubDisagreements.map(r => r.label.toLowerCase()).join(', ')}
+              </p>
+            ) : (
+              <p className="text-[10px] text-mono text-success pt-1 border-t border-border/40">
+                Every stated line agrees with the calculation
+              </p>
+            )}
           </div>
         )}
 

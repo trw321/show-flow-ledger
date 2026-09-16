@@ -209,9 +209,9 @@ export function isOverdueUpcoming(job: Job): boolean {
  * the union-dues feature require four separate edits to land everywhere.
  * New callers should use this instead of adding a fifth local copy.
  */
-export function jobPayBreakdown(job: Job, allJobs: Job[], employers: Employer[] = []): { gross: number; net: number } {
+export function jobPayBreakdown(job: Job, allJobs: Job[], employers: Employer[] = []): { gross: number; net: number; dues: number; tax: number; vacation: number } {
   const hours = effectiveHoursWorked(job);
-  if (!hours) return { gross: 0, net: 0 };
+  if (!hours) return { gross: 0, net: 0, dues: 0, tax: 0, vacation: 0 };
   const rate = job.hourlyRate ?? 0;
   const employer = resolveEmployer(job.client, employers);
   const dayMult = getDayMultiplier(job.date, job.client, allJobs, job.has6th7thDayRule ?? false);
@@ -235,8 +235,11 @@ export function jobPayBreakdown(job: Job, allJobs: Job[], employers: Employer[] 
   const gross = totalPay + duesAmount + taxAmount + weeklyBonus;
   const netBeforeVacation = totalPay + weeklyBonus;
   const vacationPercent = employer?.vacationPercent ?? 0;
-  const net = netBeforeVacation + (vacationPercent > 0 ? netBeforeVacation * (vacationPercent / 100) : 0);
-  return { gross, net };
+  const vacation = vacationPercent > 0 ? netBeforeVacation * (vacationPercent / 100) : 0;
+  const net = netBeforeVacation + vacation;
+  // Deductions come back out individually so a pay stub can be reconciled
+  // line by line, not just on the totals.
+  return { gross, net, dues: duesAmount, tax: taxAmount, vacation };
 }
 
 /** Net pay only — see jobPayBreakdown for gross+net together. */
