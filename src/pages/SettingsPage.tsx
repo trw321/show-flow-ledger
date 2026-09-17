@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useAuth } from '@/lib/AuthContext';
+import { backupToCloud, lastBackupAt } from '@/lib/cloudSync';
 import { useUserPrefs, TAB_LABELS, WORKER_PRESETS, type TabKey, type WorkerType } from '@/lib/UserPrefsContext';
 import { useData } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
@@ -183,7 +185,24 @@ function EmployerForm({ initial, onSave, onCancel }: {
 // which is worth saying plainly rather than leaving the user to find out.
 function AccountSection() {
   const { user, loading, signOut } = useAuth();
+  const { data } = useData();
   const navigate = useNavigate();
+  const [backingUp, setBackingUp] = useState(false);
+  const [lastBackup, setLastBackup] = useState(lastBackupAt);
+
+  const runBackup = async () => {
+    if (!user) return;
+    setBackingUp(true);
+    try {
+      const result = await backupToCloud(data, user.id);
+      if (!result.ok) { toast.error(`Backup failed — ${result.error}`); return; }
+      const total = Object.values(result.counts).reduce((a, b) => a + b, 0);
+      setLastBackup(lastBackupAt());
+      toast.success(`Backed up ${total} record${total === 1 ? '' : 's'}`);
+    } finally {
+      setBackingUp(false);
+    }
+  };
 
   if (loading) return null;
 
@@ -200,7 +219,16 @@ function AccountSection() {
           </div>
           <p className="text-[11px] text-mono text-muted-foreground break-all">{user.email}</p>
           <p className="text-[11px] text-muted-foreground">
-            Cloud backup isn't switched on yet — your data still lives only in this browser.
+            {lastBackup
+              ? `Last backed up ${new Date(lastBackup).toLocaleString()}.`
+              : 'Not backed up yet — this copies everything on this device to your account.'}
+          </p>
+          <Button size="sm" className="w-full" disabled={backingUp} onClick={runBackup}>
+            {backingUp ? 'Backing up…' : 'Back up now'}
+          </Button>
+          <p className="text-[10px] text-muted-foreground/70">
+            One-way for now: this device stays the original, the cloud keeps a copy. Restoring
+            onto another device comes next.
           </p>
           <button
             onClick={signOut}
