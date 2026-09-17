@@ -3,12 +3,12 @@ import { useState, useRef, useCallback, useMemo } from 'react';
 import { useData } from '@/lib/DataContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Upload, Loader2, Check, Plus, X, ChevronRight, ChevronDown, AlertTriangle, Trash2, Camera, PenLine, Phone } from 'lucide-react';
+import { Upload, Loader2, Check, Plus, X, ChevronRight, ChevronDown, AlertTriangle, Trash2, Camera, PenLine, Phone, ChevronsUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { getJobDedupKey, findLikelyDuplicate } from '@/lib/jobDedup';
-import { PARSER_MODELS, REASONING_EFFORTS, supportsReasoning, loadParserChoice, saveParserChoice, type ReasoningEffort } from '@/lib/parserModels';
+import { PARSER_MODELS, REASONING_EFFORTS, supportsReasoning, loadParserChoice, saveParserChoice, nextLevel, type ReasoningEffort } from '@/lib/parserModels';
 import type { Job, CalendarEvent } from '@/lib/store';
 import VortexCanvas from '@/components/VortexCanvas';
 import EmployerCombobox from '@/components/EmployerCombobox';
@@ -196,6 +196,7 @@ export default function NewGigPage() {
 
   const [text, setText] = useState('');
   const [isParsing, setIsParsing] = useState(false);
+  const [hasParsed, setHasParsed] = useState(false);
   const [parserModel, setParserModel] = useState(() => loadParserChoice().model);
   const [parserEffort, setParserEffort] = useState<ReasoningEffort>(() => loadParserChoice().effort);
   const [parseProgress, setParseProgress] = useState('');
@@ -354,9 +355,14 @@ export default function NewGigPage() {
     setEvents([]); setSelectedEvents(new Set()); setText(''); setStep('input'); setVortexPhase('idle');
   };
 
-  const handleParse = async () => {
+  // Levelling up has to pass the new setting in rather than rely on state,
+  // which React hasn't committed yet when the retry fires.
+  const handleParse = async (override?: { model: string; effort: ReasoningEffort }) => {
     if (!text.trim()) { toast.error('Paste dispatch text first'); return; }
+    const useModel = override?.model ?? parserModel;
+    const useEffort = override?.effort ?? parserEffort;
     setIsParsing(true);
+    setHasParsed(true);
     setVortexPhase('vortex');
     setParseProgress('');
 
@@ -373,8 +379,8 @@ export default function NewGigPage() {
           setParseProgress(`Parsing ${b + 1} of ${batches.length}…`);
           const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-jobs`, supabaseKey, {
             text: batches[b].join('\n\n'),
-            model: parserModel,
-            reasoningEffort: parserEffort,
+            model: useModel,
+            reasoningEffort: useEffort,
           });
           if (!resp.ok) {
             const errMsg = await resp.json().then(d => d.error).catch(() => null);
@@ -388,7 +394,7 @@ export default function NewGigPage() {
       }
 
       setParseProgress('Classifying…');
-      const resp = await callAPI(`${supabaseUrl}/functions/v1/smart-import`, supabaseKey, { text, model: parserModel, reasoningEffort: parserEffort });
+      const resp = await callAPI(`${supabaseUrl}/functions/v1/smart-import`, supabaseKey, { text, model: useModel, reasoningEffort: useEffort });
       if (!resp.ok) throw new Error((await resp.json()).error || 'Failed to parse');
       const result = await resp.json();
 
@@ -588,6 +594,8 @@ export default function NewGigPage() {
     toast.success(`Updated ${selected.size} shift${selected.size !== 1 ? 's' : ''}`);
     setBatchEdit({ client: '', payrollCompany: '', venue: '', hourlyRate: '' });
   };
+
+  const upLevel = useMemo(() => nextLevel(parserModel, parserEffort), [parserModel, parserEffort]);
 
   const conflictDates = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -826,7 +834,7 @@ export default function NewGigPage() {
               />
               <div className="flex items-center gap-2 flex-wrap">
                 <Button
-                  onClick={handleParse}
+                  onClick={() => handleParse()}
                   disabled={isParsing || !text.trim()}
                   size="sm"
                   className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground border-0 font-medium"
@@ -894,6 +902,25 @@ export default function NewGigPage() {
                   >
                     {REASONING_EFFORTS.map(e => <option key={e.id} value={e.id}>Thinking: {e.label}</option>)}
                   </select>
+                )}
+                {/* One tap to retry harder when an offer came back wrong,
+                    instead of guessing which dropdown to touch. */}
+                {hasParsed && text.trim() && !isParsing && (
+                  upLevel ? (
+                    <button
+                      onClick={() => {
+                        setParserModel(upLevel.model);
+                        setParserEffort(upLevel.effort);
+                        saveParserChoice(upLevel.model, upLevel.effort);
+                        handleParse({ model: upLevel.model, effort: upLevel.effort });
+                      }}
+                      className="flex items-center gap-1 rounded-md border border-accent/40 bg-accent/10 hover:bg-accent/20 text-accent px-2 py-1 text-[10px] font-medium text-mono transition-colors"
+                    >
+                      <ChevronsUp size={12} /> Level up → {upLevel.label}
+                    </button>
+                  ) : (
+                    <span className="text-[10px] text-white/30 text-mono">Top level — nothing higher to try</span>
+                  )
                 )}
                 <span className="text-[10px] text-white/25 text-mono">
                   {PARSER_MODELS.find(m => m.id === parserModel)?.note}

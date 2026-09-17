@@ -129,7 +129,9 @@ export async function callToolWithGateway(
 
   const model = opts.model ?? GATEWAY_MODEL;
   const isReasoningModel = /^gpt-5/.test(model);
-  const effort = opts.reasoningEffort ?? (isReasoningModel ? "none" : undefined);
+  // Only reasoning models accept reasoning_effort at all — sending it to gpt-4o
+  // is a hard API error, so a UI that always supplies one must not leak it here.
+  const effort = isReasoningModel ? (opts.reasoningEffort ?? "none") : undefined;
 
   // gpt-5.x refuses function tools on /v1/chat/completions unless reasoning is
   // off, so actually thinking before answering has to go through /v1/responses.

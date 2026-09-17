@@ -1111,13 +1111,13 @@ export default function CalendarPage() {
             onClick={() => setQuickAddShiftOpen(true)}
             className="flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary px-3 py-1.5 text-xs font-medium transition-colors"
           >
-            <Plus size={13} /> if you want work..make a plan
+            <Plus size={13} /> if you want work (add an offer)
           </button>
           <button
             onClick={() => setQuickAddOpen(true)}
             className="flex items-center gap-1.5 rounded-md border border-info/40 bg-info/10 hover:bg-info/20 text-info px-3 py-1.5 text-xs font-medium transition-colors"
           >
-            <Plus size={13} /> Add a plan
+            <Plus size={13} /> make a plan
           </button>
         </div>
       }
@@ -1443,7 +1443,7 @@ export default function CalendarPage() {
                     onClick={() => setAddingEventDate(selectedDate)}
                     className="w-full flex items-center justify-center gap-1.5 rounded-md border border-dashed border-border py-2 text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
                   >
-                    <Plus size={13} /> Add a plan for this day
+                    <Plus size={13} /> make a plan for this day
                   </button>
                 )}
               </div>
@@ -1469,7 +1469,7 @@ export default function CalendarPage() {
           onOpenAutoFocus={e => e.preventDefault()}
         >
           <DialogHeader>
-            <DialogTitle className="text-mono text-sm">Add a plan</DialogTitle>
+            <DialogTitle className="text-mono text-sm">Make a plan</DialogTitle>
           </DialogHeader>
           <EventIntake
             date={format(today, 'yyyy-MM-dd')}
@@ -1492,7 +1492,7 @@ export default function CalendarPage() {
           onOpenAutoFocus={e => e.preventDefault()}
         >
           <DialogHeader>
-            <DialogTitle className="text-mono text-sm">Add a shift</DialogTitle>
+            <DialogTitle className="text-mono text-sm">Add an offer</DialogTitle>
           </DialogHeader>
           <NewGigPage />
         </DialogContent>

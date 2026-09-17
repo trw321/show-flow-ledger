@@ -37,6 +37,37 @@ export type ReasoningEffort = typeof REASONING_EFFORTS[number]['id'];
 export const DEFAULT_MODEL = 'gpt-4o';
 export const DEFAULT_EFFORT: ReasoningEffort = 'none';
 
+/**
+ * The "level up" ladder. When an offer comes back wrong, the next rung is a
+ * model or a thinking budget that tries harder — so a bad parse is one tap to
+ * retry rather than a guess about which dropdown to touch.
+ * Ordered cheapest/fastest first.
+ */
+export interface ParserLevel {
+  model: string;
+  effort: ReasoningEffort;
+  label: string;
+}
+
+export const PARSER_LEVELS: ParserLevel[] = [
+  { model: 'gpt-4o', effort: 'none', label: 'GPT-4o' },
+  { model: 'gpt-5.6-sol', effort: 'none', label: 'Sol' },
+  { model: 'gpt-5.6-sol', effort: 'low', label: 'Sol · thinking low' },
+  { model: 'gpt-5.6-sol', effort: 'medium', label: 'Sol · thinking medium' },
+  { model: 'gpt-5.6-sol', effort: 'high', label: 'Sol · thinking high' },
+];
+
+/** Where the current settings sit on the ladder — -1 when off it entirely
+ *  (a hand-picked combination), which still levels up to the first rung. */
+export const levelIndexOf = (model: string, effort: ReasoningEffort): number =>
+  PARSER_LEVELS.findIndex(l => l.model === model && l.effort === effort);
+
+export function nextLevel(model: string, effort: ReasoningEffort): ParserLevel | null {
+  const i = levelIndexOf(model, effort);
+  if (i === -1) return PARSER_LEVELS[0];
+  return PARSER_LEVELS[i + 1] ?? null;
+}
+
 const MODEL_KEY = 'showflow-parser-model';
 const EFFORT_KEY = 'showflow-parser-effort';
 

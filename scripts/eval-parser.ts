@@ -24,6 +24,7 @@ const only = args.find(a => a.startsWith('--only='))?.split('=')[1];
 const runs = Number(args.find(a => a.startsWith('--runs='))?.split('=')[1] ?? 1);
 const verbose = args.includes('--verbose');
 const model = args.find(a => a.startsWith('--model='))?.split('=')[1];
+const effort = args.find(a => a.startsWith('--effort='))?.split('=')[1];
 
 const readEnv = (file: string): Record<string, string> => {
   const path = join(root, file);
@@ -64,12 +65,12 @@ async function parseOffer(text: string): Promise<ParsedJob[]> {
     const jobs: ParsedJob[] = [];
     for (let i = 0; i < expanded.length; i += 5) {
       const batch = expanded.slice(i, i + 5).join('\n\n');
-      jobs.push(...((await callFn('parse-jobs', { text: batch, model })).jobs ?? []));
+      jobs.push(...((await callFn('parse-jobs', { text: batch, model, reasoningEffort: effort })).jobs ?? []));
     }
     return expandThruNotesForBatch(jobs);
   }
   // Informal text (a steward's message, an email) is classified first.
-  const result = await callFn('smart-import', { text });
+  const result = await callFn('smart-import', { text, model, reasoningEffort: effort });
   return result.type === 'jobs' || !result.type ? (result.jobs ?? []) : [];
 }
 
