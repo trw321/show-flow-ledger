@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { callToolWithGateway, GatewayError, type UserPart } from "../_shared/lovable-ai.ts";
+import { callToolWithGateway, GatewayError, type UserPart, PARSER_MODELS, type ReasoningEffort } from "../_shared/lovable-ai.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,7 +13,10 @@ serve(async (req) => {
   }
 
   try {
-    const { text, imageBase64, imageMimeType } = await req.json();
+    const { text, imageBase64, imageMimeType, model, reasoningEffort } = await req.json();
+
+    const chosenModel = model && (PARSER_MODELS as readonly string[]).includes(model) ? model : undefined;
+    const chosenEffort = ["none","low","medium","high"].includes(reasoningEffort) ? reasoningEffort : undefined;
 
     const today = new Date().toISOString().split("T")[0];
 
@@ -281,7 +284,7 @@ EXAMPLE — recurring gym schedule (month calendar, MUST expand every occurrence
         required: ["type", "jobs", "income", "hourUpdates", "events"],
         additionalProperties: false
       }
-    });
+    }, { model: chosenModel, reasoningEffort: chosenEffort as ReasoningEffort | undefined });
 
     if (!parsed.type) throw new Error("Failed to classify and parse");
 

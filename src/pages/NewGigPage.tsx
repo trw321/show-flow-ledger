@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { getJobDedupKey, findLikelyDuplicate } from '@/lib/jobDedup';
+import { PARSER_MODELS, REASONING_EFFORTS, supportsReasoning, loadParserChoice, saveParserChoice, type ReasoningEffort } from '@/lib/parserModels';
 import type { Job, CalendarEvent } from '@/lib/store';
 import VortexCanvas from '@/components/VortexCanvas';
 import EmployerCombobox from '@/components/EmployerCombobox';
@@ -195,6 +196,8 @@ export default function NewGigPage() {
 
   const [text, setText] = useState('');
   const [isParsing, setIsParsing] = useState(false);
+  const [parserModel, setParserModel] = useState(() => loadParserChoice().model);
+  const [parserEffort, setParserEffort] = useState<ReasoningEffort>(() => loadParserChoice().effort);
   const [parseProgress, setParseProgress] = useState('');
   const [jobs, setJobs] = useState<ParsedJob[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -370,6 +373,8 @@ export default function NewGigPage() {
           setParseProgress(`Parsing ${b + 1} of ${batches.length}…`);
           const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-jobs`, supabaseKey, {
             text: batches[b].join('\n\n'),
+            model: parserModel,
+            reasoningEffort: parserEffort,
           });
           if (!resp.ok) {
             const errMsg = await resp.json().then(d => d.error).catch(() => null);
@@ -383,7 +388,7 @@ export default function NewGigPage() {
       }
 
       setParseProgress('Classifying…');
-      const resp = await callAPI(`${supabaseUrl}/functions/v1/smart-import`, supabaseKey, { text });
+      const resp = await callAPI(`${supabaseUrl}/functions/v1/smart-import`, supabaseKey, { text, model: parserModel, reasoningEffort: parserEffort });
       if (!resp.ok) throw new Error((await resp.json()).error || 'Failed to parse');
       const result = await resp.json();
 
@@ -864,6 +869,35 @@ export default function NewGigPage() {
                     {events.length} event{events.length !== 1 ? 's' : ''} ready
                   </span>
                 )}
+              </div>
+
+              {/* Which model reads the offer. Only the models that can actually
+                  return a strict tool call are listed — most of the ~130 the
+                  API exposes are speech or image models. */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <select
+                  value={parserModel}
+                  onChange={e => { setParserModel(e.target.value); saveParserChoice(e.target.value, parserEffort); }}
+                  disabled={isParsing}
+                  aria-label="Parsing model"
+                  className="bg-black/40 border border-white/10 rounded-md px-2 py-1 text-[10px] text-mono text-white/60 focus:outline-none focus:border-primary/40 disabled:opacity-50"
+                >
+                  {PARSER_MODELS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                </select>
+                {supportsReasoning(parserModel) && (
+                  <select
+                    value={parserEffort}
+                    onChange={e => { const v = e.target.value as ReasoningEffort; setParserEffort(v); saveParserChoice(parserModel, v); }}
+                    disabled={isParsing}
+                    aria-label="Reasoning effort"
+                    className="bg-black/40 border border-white/10 rounded-md px-2 py-1 text-[10px] text-mono text-white/60 focus:outline-none focus:border-primary/40 disabled:opacity-50"
+                  >
+                    {REASONING_EFFORTS.map(e => <option key={e.id} value={e.id}>Thinking: {e.label}</option>)}
+                  </select>
+                )}
+                <span className="text-[10px] text-white/25 text-mono">
+                  {PARSER_MODELS.find(m => m.id === parserModel)?.note}
+                </span>
               </div>
             </>
           )}
