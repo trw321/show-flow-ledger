@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import PatternLock from '@/components/PatternLock';
 import { Button } from '@/components/ui/button';
@@ -65,7 +66,12 @@ function generateRecoveryPhrase(): string {
 
 type Screen = 'unlock' | 'setup-name' | 'setup-draw' | 'setup-confirm' | 'setup-phrase' | 'recovery';
 
-export default function PatternAuthPage({ onUnlocked }: { onUnlocked: () => void }) {
+// onUnlocked is optional so the page works as its own route: App renders it
+// without props, and unlocking used to call undefined at the moment of
+// success. Standalone, unlocking just enters the app.
+export default function PatternAuthPage({ onUnlocked }: { onUnlocked?: () => void }) {
+  const navigate = useNavigate();
+  const finishUnlock = onUnlocked ?? (() => navigate('/'));
   const isSetup = hasPattern();
   const [screen, setScreen] = useState<Screen>(isSetup ? 'unlock' : 'setup-name');
   const [username, setUsername] = useState('');
@@ -80,7 +86,7 @@ export default function PatternAuthPage({ onUnlocked }: { onUnlocked: () => void
 
   // Pattern is validated locally — no Supabase required to open the app.
   // DataContext handles Supabase sign-in silently in the background.
-  const unlock = () => { onUnlocked(); };
+  const unlock = () => { finishUnlock(); };
 
   // ── Unlock ───────────────────────────────────────────────────────────────
   const handleUnlock = async (pattern: number[]) => {

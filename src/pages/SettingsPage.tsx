@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { Briefcase, FileText, Crown, SlidersHorizontal, Trash2, Plus, Pencil, X, CloudOff, CloudUpload } from 'lucide-react';
+import { Briefcase, FileText, Crown, SlidersHorizontal, Trash2, Plus, Pencil, X, CloudOff, CloudUpload, ChevronRight } from 'lucide-react';
 import { clearAllData } from '@/lib/store';
 import type { Employer } from '@/lib/store';
 import {
@@ -256,6 +256,20 @@ function AccountSection() {
           </button>
         </div>
       )}
+
+      {/* Separate from the account on purpose: the pattern is a local lock on
+          this device and never talks to the server, so it works with or
+          without an account and is unaffected by any of the above. */}
+      <button
+        onClick={() => navigate('/pattern-auth')}
+        className="mt-2 w-full flex items-center justify-between gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-left hover:border-primary/40 transition-colors"
+      >
+        <span>
+          <span className="text-xs font-medium block">Pattern lock</span>
+          <span className="text-[10px] text-muted-foreground">Unlock by drawing — stays on this device, no account needed</span>
+        </span>
+        <ChevronRight size={14} className="text-muted-foreground shrink-0" />
+      </button>
     </section>
   );
 }
