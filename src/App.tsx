@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { DataProvider } from '@/lib/DataContext';
+import { AuthProvider } from '@/lib/AuthContext';
 import LoadingScreen from '@/components/LoadingScreen';
 import AppLayout from '@/components/AppLayout';
 import Dashboard from '@/pages/Dashboard';
@@ -18,6 +19,10 @@ export default function App() {
   const [booting, setBooting] = useState(true);
 
   return (
+    // Auth wraps the app but gates nothing: signing in is optional and only
+    // turns on backup. AuthProvider renders children immediately, so an
+    // unauthenticated session behaves exactly as before.
+    <AuthProvider>
     <DataProvider>
       {booting && <LoadingScreen onComplete={() => setBooting(false)} />}
       <BrowserRouter>
@@ -40,5 +45,6 @@ export default function App() {
       </BrowserRouter>
       <Toaster richColors position="top-center" />
     </DataProvider>
+    </AuthProvider>
   );
 }

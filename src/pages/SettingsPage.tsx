@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/lib/AuthContext';
 import { useUserPrefs, TAB_LABELS, WORKER_PRESETS, type TabKey, type WorkerType } from '@/lib/UserPrefsContext';
 import { useData } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
@@ -8,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { Briefcase, FileText, Crown, SlidersHorizontal, Trash2, Plus, Pencil, X } from 'lucide-react';
+import { Briefcase, FileText, Crown, SlidersHorizontal, Trash2, Plus, Pencil, X, CloudOff, CloudUpload } from 'lucide-react';
 import { clearAllData } from '@/lib/store';
 import type { Employer } from '@/lib/store';
 import {
@@ -176,6 +178,60 @@ function EmployerForm({ initial, onSave, onCancel }: {
   );
 }
 
+// Signing in is optional and changes nothing about how the app works — it
+// only turns on cloud backup. Until then everything lives in this browser,
+// which is worth saying plainly rather than leaving the user to find out.
+function AccountSection() {
+  const { user, loading, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  if (loading) return null;
+
+  return (
+    <section>
+      <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/60 uppercase mb-3">
+        Backup
+      </p>
+      {user ? (
+        <div className="rounded-2xl border border-success/30 bg-success/5 p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <CloudUpload size={16} className="text-success shrink-0" />
+            <p className="text-sm font-semibold">Signed in</p>
+          </div>
+          <p className="text-[11px] text-mono text-muted-foreground break-all">{user.email}</p>
+          <p className="text-[11px] text-muted-foreground">
+            Cloud backup isn't switched on yet — your data still lives only in this browser.
+          </p>
+          <button
+            onClick={signOut}
+            className="text-[11px] text-mono text-muted-foreground hover:text-destructive transition-colors underline"
+          >
+            Sign out
+          </button>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-border bg-card p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <CloudOff size={16} className="text-muted-foreground shrink-0" />
+            <p className="text-sm font-semibold">Not backed up</p>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Everything you've logged lives only in this browser. Clearing your browser data or
+            switching phones would lose it. An account keeps a copy and lets you use the app on
+            more than one device.
+          </p>
+          <button
+            onClick={() => navigate('/auth')}
+            className="w-full rounded-xl border border-primary/40 bg-primary/10 text-primary py-2 text-xs font-medium hover:bg-primary/20 transition-colors"
+          >
+            Create an account or sign in
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function SettingsPage() {
   const { prefs, setWorkerType, setTabEnabled } = useUserPrefs();
   const { data, addEmployer, updateEmployer, deleteEmployer } = useData();
@@ -224,6 +280,8 @@ export default function SettingsPage() {
     <SpacePageWrapper>
       <div className="max-w-lg mx-auto space-y-8">
         <PageHeader title="Mode" description="Customize which sections appear in your app" showDot={false} />
+
+      <AccountSection />
 
       {/* Worker profile */}
       <section>
