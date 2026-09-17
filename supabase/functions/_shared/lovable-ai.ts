@@ -53,10 +53,15 @@ export async function callToolWithGateway(
   systemPrompt: string,
   userContent: string | UserPart[],
   tool: GatewayToolDef,
-  _opts: { runId?: string } = {},
+  opts: { runId?: string; model?: string } = {},
 ): Promise<Record<string, unknown>> {
   const apiKey = Deno.env.get("OPENAI_API_KEY");
   if (!apiKey) throw new Error("OPENAI_API_KEY is not configured");
+
+  const model = opts.model ?? GATEWAY_MODEL;
+  // gpt-5.x refuses function tools on /v1/chat/completions unless reasoning is
+  // switched off; the reasoning path needs /v1/responses instead.
+  const needsEffortNone = /^gpt-5/.test(model);
 
   const userMessageContent =
     typeof userContent === "string" ? userContent : userContent.map(toChatContentPart);
@@ -68,7 +73,8 @@ export async function callToolWithGateway(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: GATEWAY_MODEL,
+      model,
+      ...(needsEffortNone ? { reasoning_effort: "none" } : {}),
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userMessageContent },

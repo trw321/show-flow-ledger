@@ -23,6 +23,7 @@ const args = process.argv.slice(2);
 const only = args.find(a => a.startsWith('--only='))?.split('=')[1];
 const runs = Number(args.find(a => a.startsWith('--runs='))?.split('=')[1] ?? 1);
 const verbose = args.includes('--verbose');
+const model = args.find(a => a.startsWith('--model='))?.split('=')[1];
 
 const readEnv = (file: string): Record<string, string> => {
   const path = join(root, file);
@@ -63,7 +64,7 @@ async function parseOffer(text: string): Promise<ParsedJob[]> {
     const jobs: ParsedJob[] = [];
     for (let i = 0; i < expanded.length; i += 5) {
       const batch = expanded.slice(i, i + 5).join('\n\n');
-      jobs.push(...((await callFn('parse-jobs', { text: batch })).jobs ?? []));
+      jobs.push(...((await callFn('parse-jobs', { text: batch, model })).jobs ?? []));
     }
     return expandThruNotesForBatch(jobs);
   }
@@ -118,6 +119,7 @@ for (const r of results) {
 
 const passed = results.filter(r => !r.error && r.countOk && r.bad.length === 0).length;
 console.log(`\n${'='.repeat(52)}`);
+console.log(`Model:    ${model ?? "(deployed default)"}`);
 console.log(`Fixtures: ${passed}/${results.length} fully correct`);
 console.log(`Fields:   ${okFields}/${totalFields} correct` + (totalFields ? ` (${Math.round((okFields / totalFields) * 100)}%)` : ''));
 if (failuresByField.size > 0) {

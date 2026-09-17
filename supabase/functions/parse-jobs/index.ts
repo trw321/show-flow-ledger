@@ -13,7 +13,15 @@ serve(async (req) => {
   }
 
   try {
-    const { text } = await req.json();
+    const { text, model } = await req.json();
+
+    // Safelisted so the endpoint can be benchmarked against newer models
+    // without becoming an open proxy to arbitrary model names.
+    const ALLOWED_MODELS = new Set([
+      "gpt-4o", "gpt-4.1", "gpt-5", "gpt-5.4", "gpt-5.5",
+      "gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.6-terra",
+    ]);
+    const chosenModel = model && ALLOWED_MODELS.has(model) ? model : undefined;
 
     const today = new Date().toISOString().split("T")[0];
 
@@ -100,7 +108,7 @@ Status: "upcoming" for future dates, "completed" for past dates.`;
         required: ["jobs"],
         additionalProperties: false,
       },
-    });
+    }, { model: chosenModel });
 
     if (!parsed.jobs) {
       throw new Error("Failed to parse jobs");
