@@ -18,6 +18,7 @@ import { useSwipe } from '@/lib/useSwipe';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { matchStubToShifts, type MatchConfidence } from '@/lib/stubMatching';
+import { learnFromStubs, dismissSuggestion, type Suggestion } from '@/lib/stubLearning';
 import { compareStubToShifts, disagreements, type RowStatus } from '@/lib/stubComparison';
 import { resizeImageForStorage, readFileAsDataUrl } from '@/lib/imageResize';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
@@ -161,7 +162,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   onDuplicated: (count: number) => void;
   onDelete: () => void;
 }) {
-  const { data, addJob, updateJob: updateJobDirect, updateIncome } = useData();
+  const { data, addJob, updateJob: updateJobDirect, updateIncome, updateEmployer } = useData();
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
   const isCallback = !!job.notes?.match(/\bC\/?B\b/i) && !job.notes?.match(/\bNO[\s/-]*C\/?B\b/i);
@@ -375,6 +376,43 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
     [stubParsed, stubMatch, data.jobs, data.employers],
   );
   const stubDisagreements = useMemo(() => (stubComparison ? disagreements(stubComparison) : []), [stubComparison]);
+
+  const stubSuggestions = useMemo(
+    () => (stubParsed ? learnFromStubs(data.jobs, data.employers) : []),
+    [stubParsed, data.jobs, data.employers],
+  );
+
+  // A stub is evidence of what was actually paid, so accepting a line records
+  // the real figure and keeps the old one alongside it.
+  const acceptStubValue = (field: NonNullable<Job['stubCorrections']>[number]['field'], was: number, now: number) => {
+    const corrections = [
+      ...(job.stubCorrections ?? []).filter(c => c.field !== field),
+      { field, was, now, at: new Date().toISOString() },
+    ];
+    const updates: Partial<Job> = { stubCorrections: corrections };
+    // Hours and rate are the job's own facts, so the correction is applied;
+    // the deduction lines are employer settings and go through a suggestion.
+    if (field === 'hours') { updates.hoursWorked = now; setHoursWorked(now.toString()); }
+    if (field === 'rate') { updates.hourlyRate = now; setHourlyRate(now.toString()); }
+    updateJobDirect(job.id, updates);
+    toast.success(`Recorded ${field} as ${now}`);
+  };
+
+  const applySuggestion = async (s: Suggestion) => {
+    await updateEmployer(s.employerId, {
+      [s.field]: s.suggested,
+      dismissedSuggestions: (data.employers.find(e => e.id === s.employerId)?.dismissedSuggestions ?? [])
+        .filter(d => d.field !== s.field),
+    });
+    toast.success(`${s.label} set to ${s.suggested}% for ${s.employerName}`);
+  };
+
+  const dismissSuggestionFor = async (s: Suggestion) => {
+    const employerRecord = data.employers.find(e => e.id === s.employerId);
+    if (!employerRecord) return;
+    await updateEmployer(s.employerId, { dismissedSuggestions: dismissSuggestion(employerRecord, s.field) });
+    toast('Skipped — I\'ll ask again after the next stub');
+  };
 
   const handleSave = () => {
     const updates: Partial<Job> = {};
@@ -720,27 +758,98 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
               <span className="text-[9px] uppercase tracking-wider text-muted-foreground/50" />
               <span className="text-[9px] uppercase tracking-wider text-muted-foreground/50 text-right">Stub</span>
               <span className="text-[9px] uppercase tracking-wider text-muted-foreground/50 text-right">Calculated</span>
-              {stubComparison.map(r => (
-                <Fragment key={r.key}>
-                  <span className="text-muted-foreground">{r.label}</span>
-                  <span className={cn('text-right font-semibold', ROW_STATUS_STYLES[r.status])}>
-                    {r.stub == null ? '—' : r.money ? `$${r.stub.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : `${r.stub}h`}
-                  </span>
-                  <span className="text-right text-muted-foreground">
-                    {r.calculated === 0 && r.key === 'rate' ? '—' : r.money ? `$${r.calculated.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : `${r.calculated}h`}
-                  </span>
-                </Fragment>
-              ))}
+              {stubComparison.map(r => {
+                const fixed = (job.stubCorrections ?? []).find(c => c.field === r.key);
+                const fmt = (n: number) => (r.money ? `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : `${n}h`);
+                return (
+                  <Fragment key={r.key}>
+                    <span className="text-muted-foreground">{r.label}</span>
+                    <span className={cn('text-right font-semibold', ROW_STATUS_STYLES[r.status])}>
+                      {r.stub == null ? '—' : fmt(r.stub)}
+                    </span>
+                    <span className="text-right">
+                      {/* Once accepted, what it used to say stays visible struck
+                          through — a correction you can see, not a silent edit. */}
+                      {fixed ? (
+                        <>
+                          <span className="text-destructive line-through mr-1">{fmt(fixed.was)}</span>
+                          <span className="text-success font-semibold">{fmt(fixed.now)}</span>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          {r.calculated === 0 && r.key === 'rate' ? '—' : fmt(r.calculated)}
+                        </span>
+                      )}
+                    </span>
+                  </Fragment>
+                );
+              })}
             </div>
             {stubDisagreements.length > 0 ? (
-              <p className="text-[10px] text-mono text-warning pt-1 border-t border-border/40">
-                {stubDisagreements.length} line{stubDisagreements.length !== 1 ? 's' : ''} disagree: {stubDisagreements.map(r => r.label.toLowerCase()).join(', ')}
-              </p>
+              <div className="pt-1 border-t border-border/40 space-y-1.5">
+                <p className="text-[10px] text-mono text-warning">
+                  {stubDisagreements.length} line{stubDisagreements.length !== 1 ? 's' : ''} disagree: {stubDisagreements.map(r => r.label.toLowerCase()).join(', ')}
+                </p>
+                {/* The stub is what you were actually paid, so accepting it
+                    records the real figure rather than the estimate. */}
+                {stubDisagreements.filter(r => !(job.stubCorrections ?? []).some(c => c.field === r.key)).map(r => (
+                  <button
+                    key={r.key}
+                    type="button"
+                    onClick={() => acceptStubValue(r.key, r.calculated, r.stub!)}
+                    className="w-full flex items-center justify-between gap-2 rounded-md border border-border bg-secondary/20 px-2 py-1.5 text-[10px] text-mono hover:border-success/40 hover:bg-success/5 transition-colors"
+                  >
+                    <span className="text-muted-foreground">Use stub's {r.label.toLowerCase()}</span>
+                    <span className="text-success font-semibold shrink-0">
+                      {r.money ? `$${r.stub!.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : `${r.stub}h`}
+                    </span>
+                  </button>
+                ))}
+              </div>
             ) : (
               <p className="text-[10px] text-mono text-success pt-1 border-t border-border/40">
                 Every stated line agrees with the calculation
               </p>
             )}
+          </div>
+        )}
+
+        {/* Phase 5: what the stubs imply this employer's rates really are. */}
+        {stubSuggestions.length > 0 && (
+          <div className="rounded-md border border-accent/30 bg-accent/5 p-3 space-y-2">
+            <p className="text-[9px] text-mono font-bold tracking-widest uppercase text-accent/80">
+              Learned from your stubs
+            </p>
+            {stubSuggestions.map(s => (
+              <div key={s.field} className="space-y-1.5">
+                <p className="text-[11px]">
+                  <span className="font-semibold">{s.label}</span> looks like{' '}
+                  <span className="text-mono text-success font-bold">{s.suggested}%</span>
+                  {s.current != null && <> , not <span className="text-mono line-through text-destructive">{s.current}%</span></>}
+                </p>
+                <p className="text-[10px] text-mono text-muted-foreground">
+                  {s.sampleCount === 1
+                    ? `From 1 stub (${s.evidence[0]}) — worth a look, not conclusive`
+                    : `${s.sampleCount} stubs agree (${s.evidence.join(', ')}) — strong signal`}
+                </p>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => applySuggestion(s)}
+                    className="flex-1 rounded-md border border-success/40 bg-success/10 text-success px-2 py-1 text-[10px] font-medium hover:bg-success/20 transition-colors"
+                  >
+                    Update to {s.suggested}%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => dismissSuggestionFor(s)}
+                    className="rounded-md border border-border bg-secondary/20 text-muted-foreground px-2 py-1 text-[10px] hover:text-foreground transition-colors"
+                  >
+                    Not now
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
 

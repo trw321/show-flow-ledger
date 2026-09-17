@@ -52,6 +52,15 @@ export interface Job {
     otherDeductions?: number;
     netPay?: number;
   };
+  /** Figures the user accepted from a pay stub over what the app calculated.
+   *  Kept so the change stays visible after the fact, and so the settings
+   *  learner has a record of what the payroll system actually did. */
+  stubCorrections?: {
+    field: 'hours' | 'rate' | 'gross' | 'dues' | 'tax' | 'vacation' | 'net';
+    was: number;
+    now: number;
+    at: string;
+  }[];
   notes: string;
   createdAt: string;
 }
@@ -119,6 +128,10 @@ export interface Employer {
   estimatedTaxPercent?: number;
   /** Vacation/fringe pay as a percent of gross earnings, added on top (e.g. 6 = 6%) — common IATSE benefit. Undefined/0 = not paid. */
   vacationPercent?: number;
+  /** Settings suggestions the user turned down. A dismissal skips the next
+   *  occurrence and then asks again, so a rejected suggestion isn't nagging
+   *  but also isn't gone forever if the stubs keep disagreeing. */
+  dismissedSuggestions?: { field: string; skipsRemaining: number; dismissedAt: string }[];
   notes?: string;
   createdAt: string;
 }
