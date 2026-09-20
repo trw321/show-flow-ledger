@@ -22,7 +22,14 @@ const setLastBackupAt = (iso: string) => {
 };
 
 // Postgres rejects '' where it wants a date, and undefined where it wants null.
+// Only ever use this for a NULLABLE column: an explicit null overrides a
+// column's DEFAULT, so sending one to a NOT NULL column fails the constraint
+// even though the column has a perfectly good default. Those use orDefault.
 const orNull = <T>(v: T | undefined | '') => (v === undefined || v === '' ? null : v);
+
+/** For NOT NULL columns — supplies the value the database would have defaulted
+ *  to, rather than a null that would be rejected. */
+const orDefault = <T>(v: T | undefined | null, fallback: T): T => (v ?? fallback);
 
 const jobRow = (j: Job, userId: string) => ({
   id: j.id,
@@ -45,7 +52,7 @@ const jobRow = (j: Job, userId: string) => ({
   steward: orNull(j.steward),
   parking_cost: orNull(j.parkingCost),
   hours_worked: orNull(j.hoursWorked),
-  meal_penalties: orNull(j.mealPenalties),
+  meal_penalties: orDefault(j.mealPenalties, 0),
   meal_duration: orNull(j.mealDuration),
   meal_on_clock: orNull(j.mealOnClock),
   night_premium_confirmed: orNull(j.nightPremiumConfirmed),
@@ -74,7 +81,7 @@ const equipmentRow = (q: Equipment, userId: string) => ({
   id: q.id, user_id: userId, name: q.name, category: q.category,
   serial_number: orNull(q.serialNumber), purchase_date: orNull(q.purchaseDate),
   value: orNull(q.value), status: q.status, assigned_job_id: orNull(q.assignedJobId),
-  notes: orNull(q.notes), created_at: q.createdAt,
+  notes: orDefault(q.notes, ''), created_at: q.createdAt,
 });
 
 const employerRow = (e: Employer, userId: string) => ({

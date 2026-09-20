@@ -82,6 +82,40 @@ describe('buildRows', () => {
     expect(row.hourly_rate).toBe(0);
   });
 
+  // An explicit null overrides a column's DEFAULT, so a NOT NULL column with a
+  // perfectly good default still fails the constraint. This is what broke the
+  // first real backup: every job was rejected on meal_penalties.
+  it('never sends null to a NOT NULL column', () => {
+    const NOT_NULL: Record<string, string[]> = {
+      jobs: ['name', 'client', 'venue', 'date', 'status', 'has_6th_7th_day_rule', 'has_vacation_pay', 'meal_penalties', 'notes', 'created_at'],
+      expenses: ['category', 'description', 'amount', 'date', 'created_at'],
+      income: ['client', 'description', 'amount', 'date', 'status', 'created_at'],
+      equipment: ['name', 'category', 'status', 'notes', 'created_at'],
+    };
+    // Everything optional left unset, and required strings left empty — the
+    // shape most likely to produce a stray null.
+    const data: Partial<AppData> = {
+      jobs: [{ id: 'j1', name: 'S', client: '', venue: '', date: '2026-09-10', status: 'upcoming', notes: '', createdAt: '2026-01-01' }],
+      expenses: [{ id: 'x1', category: '', description: '', amount: 0, date: '2026-09-10', createdAt: '2026-01-01' }],
+      income: [{ id: 'i1', client: '', description: '', amount: 0, date: '2026-09-10', status: 'pending', createdAt: '2026-01-01' }],
+      equipment: [{ id: 'q1', name: 'Mic', category: '', status: 'available', notes: '', createdAt: '2026-01-01' }],
+    };
+    for (const [table, rows] of buildRows({ ...empty, ...data }, USER)) {
+      for (const row of rows) {
+        for (const col of NOT_NULL[table] ?? []) {
+          expect(row[col], `${table}.${col} must not be null`).not.toBeNull();
+        }
+      }
+    }
+  });
+
+  it('defaults meal penalties to zero rather than nulling them', () => {
+    const [row] = rowsFor({
+      jobs: [{ id: 'j1', name: 'S', client: 'C', venue: 'V', date: '2026-09-10', status: 'completed', notes: '', createdAt: '2026-01-01' }],
+    }, 'jobs');
+    expect(row.meal_penalties).toBe(0);
+  });
+
   it('preserves the local id so a second backup updates rather than duplicates', () => {
     const data = { jobs: [{ id: 'stable-id', name: 'S', client: 'C', venue: 'V', date: '2026-09-10', status: 'completed' as const, notes: '', createdAt: '2026-01-01' }] };
     expect(rowsFor(data, 'jobs')[0].id).toBe('stable-id');
