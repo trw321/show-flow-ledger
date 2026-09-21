@@ -9,7 +9,7 @@ import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
   AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
-import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO } from 'date-fns';
 import type { Job, CalendarEvent } from '@/lib/store';
 import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross } from '@/lib/payCalc';
@@ -19,6 +19,8 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { matchStubToShifts, type MatchConfidence } from '@/lib/stubMatching';
 import { learnFromStubs, dismissSuggestion, type Suggestion } from '@/lib/stubLearning';
+import { uploadStub, stubViewUrl, deleteStub } from '@/lib/stubStorage';
+import { useAuth } from '@/lib/AuthContext';
 import { compareStubToShifts, disagreements, type RowStatus } from '@/lib/stubComparison';
 import { resizeImageForStorage, readFileAsDataUrl } from '@/lib/imageResize';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
@@ -163,6 +165,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   onDelete: () => void;
 }) {
   const { data, addJob, updateJob: updateJobDirect, updateIncome, updateEmployer } = useData();
+  const { user } = useAuth();
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
   const isCallback = !!job.notes?.match(/\bC\/?B\b/i) && !job.notes?.match(/\bNO[\s/-]*C\/?B\b/i);
@@ -182,6 +185,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   const [payStub, setPayStub] = useState(job.payStub ?? '');
   const [stubParsed, setStubParsed] = useState(job.stubParsed);
   const [parsingStub, setParsingStub] = useState(false);
+  const [viewingStub, setViewingStub] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   const [dupDates, setDupDates] = useState<string[]>(['']);
@@ -246,10 +250,18 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
       }
       setPayStub(dataUrl);
 
+      // Signed in, the image goes to object storage and the job keeps a
+      // reference — a stub costs ~330KB inline, against a ~5MB budget shared
+      // with the whole ledger. A failed upload falls back to inline rather
+      // than losing the stub.
+      const stored = user ? await uploadStub(dataUrl, user.id, job.id) : null;
+      const stubValue = stored ?? dataUrl;
+      if (stored) setPayStub(stored);
+
       // Parsing only runs for actual images (PDFs aren't something the vision
       // model can read reliably here).
       if (!isImage) {
-        await updateJobDirect(job.id, { payStub: dataUrl });
+        await updateJobDirect(job.id, { payStub: stubValue });
         return;
       }
 
@@ -262,11 +274,11 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
         if (!resp.ok) throw new Error((await resp.json()).error || 'Failed to read pay stub');
         const { paystub } = await resp.json();
         setStubParsed(paystub);
-        await updateJobDirect(job.id, { payStub: dataUrl, stubParsed: paystub });
+        await updateJobDirect(job.id, { payStub: stubValue, stubParsed: paystub });
         toast.success('Pay stub read — net $' + (paystub.netPay ?? '?'));
       } catch (err) {
         // Attachment is still worth keeping; parsing failure isn't fatal.
-        await updateJobDirect(job.id, { payStub: dataUrl });
+        await updateJobDirect(job.id, { payStub: stubValue });
         toast.error(err instanceof Error ? err.message : 'Could not read the pay stub — saved as attachment only');
       }
     } finally {
@@ -692,7 +704,27 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
           {payStub && !parsingStub && (
             <button
               type="button"
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPayStub(''); setStubParsed(undefined); updateJobDirect(job.id, { payStub: undefined, stubParsed: undefined }); }}
+              onClick={async (e) => {
+                e.preventDefault(); e.stopPropagation();
+                const url = await stubViewUrl(payStub);
+                if (!url) { toast.error("Couldn't open that stub"); return; }
+                setViewingStub(url);
+              }}
+              className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              aria-label="View pay stub"
+            >
+              <Eye size={14} />
+            </button>
+          )}
+          {payStub && !parsingStub && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault(); e.stopPropagation();
+                deleteStub(payStub);
+                setPayStub(''); setStubParsed(undefined);
+                updateJobDirect(job.id, { payStub: undefined, stubParsed: undefined });
+              }}
               className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
               aria-label="Remove pay stub"
             >
@@ -701,6 +733,19 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
           )}
           <input ref={stubInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleStubUpload} disabled={parsingStub} />
         </label>
+
+        {/* Storing a stub nobody can look at is just a boolean with a storage
+            bill — the point of keeping it is being able to check it later. */}
+        <Dialog open={!!viewingStub} onOpenChange={o => !o && setViewingStub(null)}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="text-mono text-sm">Pay stub</DialogTitle>
+            </DialogHeader>
+            {viewingStub && (
+              <img src={viewingStub} alt="Pay stub" className="w-full rounded-md border border-border" />
+            )}
+          </DialogContent>
+        </Dialog>
 
         {stubParsed && (
           <div className="rounded-md border border-success/30 bg-success/5 p-3 space-y-1">
