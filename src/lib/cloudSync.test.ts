@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildRows } from './cloudSync';
+import { buildRows, fromRows } from './cloudSync';
 import type { AppData } from './store';
 
 const USER = 'user-1';
@@ -120,5 +120,71 @@ describe('buildRows', () => {
     const data = { jobs: [{ id: 'stable-id', name: 'S', client: 'C', venue: 'V', date: '2026-09-10', status: 'completed' as const, notes: '', createdAt: '2026-01-01' }] };
     expect(rowsFor(data, 'jobs')[0].id).toBe('stable-id');
     expect(rowsFor(data, 'jobs')[0].id).toBe('stable-id');
+  });
+});
+
+// Backing up and restoring must return the same ledger. The risk is the
+// restore direction: a null left in place reads as a real value, and a job
+// with hourlyRate: null calculates differently from one with none at all.
+describe('backup → restore round trip', () => {
+  const full: AppData = {
+    jobs: [
+      { id: 'j1', name: 'Warriors Game', client: 'GSW Arena LLC', venue: 'Chase Center',
+        date: '2026-09-10', startTime: '08:00 AM', endTime: '05:00 PM', status: 'completed',
+        hoursWorked: 9, hourlyRate: 52.75, mealDuration: 60, mealOnClock: false, mealPenalties: 2,
+        notes: 'dock B', createdAt: '2026-01-01',
+        stubCorrections: [{ field: 'gross', was: 1200, now: 1150, at: '2026-09-16' }],
+        stubParsed: { employer: 'GSW', totalHours: 24, grossPay: 1266 } },
+      // nothing optional set — the shape most likely to come back with nulls
+      { id: 'j2', name: 'Bare', client: 'C', venue: 'V', date: '2026-09-21',
+        status: 'upcoming', notes: '', createdAt: '2026-01-01' },
+    ],
+    expenses: [{ id: 'x1', jobId: 'j1', category: 'Parking', description: 'Garage', amount: 45, date: '2026-09-10', createdAt: '2026-01-01' }],
+    income: [{ id: 'i1', jobId: 'j1', client: 'GSW', description: 'Check', amount: 612, date: '2026-09-13', status: 'paid', createdAt: '2026-01-01' }],
+    equipment: [{ id: 'q1', name: 'SM58', category: '', status: 'available', notes: '', createdAt: '2026-01-01' }],
+    employers: [{ id: 'e1', name: 'GSW Arena LLC', overtimeRule: 'daily', unionDuesPercent: 3.5, createdAt: '2026-01-01',
+                  dismissedSuggestions: [{ field: 'estimatedTaxPercent', skipsRemaining: 1, dismissedAt: '2026-09-16' }] }],
+    events: [{ id: 'v1', title: 'Dentist', date: '2026-09-15', createdAt: '2026-01-01' }],
+  };
+
+  const roundTrip = (data: AppData): AppData =>
+    fromRows(Object.fromEntries(buildRows(data, 'user-1')));
+
+  it('returns every record', () => {
+    const back = roundTrip(full);
+    expect(back.jobs).toHaveLength(2);
+    expect(back.expenses).toHaveLength(1);
+    expect(back.income).toHaveLength(1);
+    expect(back.equipment).toHaveLength(1);
+    expect(back.employers).toHaveLength(1);
+    expect(back.events).toHaveLength(1);
+  });
+
+  it('keeps a fully populated job identical', () => {
+    const back = roundTrip(full).jobs.find(j => j.id === 'j1')!;
+    for (const key of Object.keys(full.jobs[0]) as (keyof typeof full.jobs[0])[]) {
+      expect(back[key], `job.${key}`).toEqual(full.jobs[0][key]);
+    }
+  });
+
+  it('brings unset fields back as undefined, never null', () => {
+    const bare = roundTrip(full).jobs.find(j => j.id === 'j2')!;
+    expect(bare.hourlyRate).toBeUndefined();
+    expect(bare.hoursWorked).toBeUndefined();
+    expect(bare.startTime).toBeUndefined();
+    expect(bare.stubParsed).toBeUndefined();
+    expect(Object.values(bare).every(v => v !== null)).toBe(true);
+  });
+
+  it('keeps the phase 4 corrections and phase 5 dismissals through both directions', () => {
+    const back = roundTrip(full);
+    expect(back.jobs[0].stubCorrections).toEqual(full.jobs[0].stubCorrections);
+    expect(back.employers[0].dismissedSuggestions).toEqual(full.employers[0].dismissedSuggestions);
+  });
+
+  it('keeps false and zero rather than dropping them', () => {
+    const back = roundTrip(full).jobs.find(j => j.id === 'j1')!;
+    expect(back.mealOnClock).toBe(false);
+    expect(back.mealPenalties).toBe(2);
   });
 });

@@ -330,9 +330,17 @@ export function useAppData(_userId: string | null) {
     update(prev => ({ ...prev, events: prev.events.filter(e => e.id !== id) }));
   }, []);
 
+  // Used by a cloud restore. Goes through update() like everything else, so a
+  // restore that can't fit in storage fails the same visible way a save does
+  // rather than half-applying.
+  const replaceAllData = useCallback(async (next: AppData) => {
+    update(() => next);
+  }, []);
+
   return {
     data,
     loading: false,
+    replaceAllData,
     addJob, updateJob, deleteJob,
     addExpense, updateExpense, deleteExpense,
     addIncome, updateIncome, deleteIncome,

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/AuthContext';
-import { backupToCloud, lastBackupAt } from '@/lib/cloudSync';
+import { backupToCloud, fetchFromCloud, lastBackupAt, type RestoreResult } from '@/lib/cloudSync';
 import { useUserPrefs, TAB_LABELS, WORKER_PRESETS, type TabKey, type WorkerType } from '@/lib/UserPrefsContext';
 import { useData } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
@@ -185,10 +185,13 @@ function EmployerForm({ initial, onSave, onCancel }: {
 // which is worth saying plainly rather than leaving the user to find out.
 function AccountSection() {
   const { user, loading, signOut } = useAuth();
-  const { data } = useData();
+  const { data, replaceAllData } = useData();
   const navigate = useNavigate();
   const [backingUp, setBackingUp] = useState(false);
   const [lastBackup, setLastBackup] = useState(lastBackupAt);
+  const [restoring, setRestoring] = useState(false);
+  const [pendingRestore, setPendingRestore] = useState<RestoreResult | null>(null);
+  const localTotal = data.jobs.length + data.expenses.length + data.income.length + data.equipment.length + data.employers.length + (data.events?.length ?? 0);
 
   const runBackup = async () => {
     if (!user) return;
@@ -202,6 +205,30 @@ function AccountSection() {
     } finally {
       setBackingUp(false);
     }
+  };
+
+  // Fetch first, then ask — the confirmation can only be honest about what's
+  // in the backup if it has actually looked.
+  const startRestore = async () => {
+    if (!user) return;
+    setRestoring(true);
+    try {
+      const result = await fetchFromCloud();
+      if (!result.ok) { toast.error(`Couldn't read the backup — ${result.error}`); return; }
+      const total = Object.values(result.counts ?? {}).reduce((a, b) => a + b, 0);
+      if (total === 0) { toast.info('That account has no backup yet — try Back up now first'); return; }
+      setPendingRestore(result);
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  const confirmRestore = async () => {
+    if (!pendingRestore?.data) return;
+    await replaceAllData(pendingRestore.data);
+    const total = Object.values(pendingRestore.counts ?? {}).reduce((a, b) => a + b, 0);
+    setPendingRestore(null);
+    toast.success(`Restored ${total} record${total === 1 ? '' : 's'} from the cloud`);
   };
 
   if (loading) return null;
@@ -223,13 +250,57 @@ function AccountSection() {
               ? `Last backed up ${new Date(lastBackup).toLocaleString()}.`
               : 'Not backed up yet — this copies everything on this device to your account.'}
           </p>
-          <Button size="sm" className="w-full" disabled={backingUp} onClick={runBackup}>
+          <Button size="sm" className="w-full" disabled={backingUp || restoring} onClick={runBackup}>
             {backingUp ? 'Backing up…' : 'Back up now'}
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full"
+            disabled={backingUp || restoring}
+            onClick={startRestore}
+          >
+            {restoring ? 'Checking backup…' : 'Restore from backup'}
+          </Button>
           <p className="text-[10px] text-muted-foreground/70">
-            One-way for now: this device stays the original, the cloud keeps a copy. Restoring
-            onto another device comes next.
+            Back up copies this device to the cloud. Restore pulls the cloud copy down — use it
+            on a new phone, or if something here went wrong.
           </p>
+
+          {/* A restore replaces what's on the device, so it says exactly what it
+              is about to do rather than just asking "are you sure?". */}
+          <AlertDialog open={!!pendingRestore} onOpenChange={o => !o && setPendingRestore(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Replace this device with the backup?</AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-2">
+                    <p>
+                      The backup holds{' '}
+                      <span className="font-semibold text-foreground">
+                        {pendingRestore ? Object.values(pendingRestore.counts ?? {}).reduce((a, b) => a + b, 0) : 0} records
+                      </span>{' '}
+                      ({pendingRestore?.counts?.jobs ?? 0} shifts).
+                    </p>
+                    <p>
+                      This device currently has{' '}
+                      <span className="font-semibold text-foreground">{localTotal} records</span>{' '}
+                      ({data.jobs.length} shifts). They will be replaced.
+                    </p>
+                    {localTotal > 0 && (
+                      <p className="text-warning">
+                        Anything here that was never backed up will be lost. Back up first if you're unsure.
+                      </p>
+                    )}
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={confirmRestore}>Replace and restore</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <button
             onClick={signOut}
             className="text-[11px] text-mono text-muted-foreground hover:text-destructive transition-colors underline"
