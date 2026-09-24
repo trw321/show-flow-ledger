@@ -60,6 +60,31 @@ export interface SmartImportHourUpdate {
   notes?: string;
 }
 
+/**
+ * The raw clocked span for an imported hours note.
+ *
+ * smart-import returns hoursWorked ALREADY net of an off-the-clock meal —
+ * "8am to 5pm, 1hr walk away" comes back as hoursWorked 8 with mealMinutes 60
+ * and mealOnClock false. The app's own end-time path stores the RAW span (9),
+ * and calculateDayPay subtracts the meal itself, so passing the model's number
+ * through unchanged makes the hour come out twice and underpays the shift.
+ *
+ * Both sides are reconciled here, at the import boundary, so everything
+ * downstream can keep treating job.hoursWorked as the raw span:
+ *  - both clock times present: the span between them is ground truth, and it
+ *    already covers a run that happens to return a gross number instead.
+ *  - no clock times: add back the meal the model deducted.
+ */
+function rawClockedHours(u: SmartImportHourUpdate): number | undefined {
+  if (u.startTime && u.endTime) {
+    const span = calcHours(u.startTime, u.endTime);
+    if (span > 0) return span;
+  }
+  if (u.hoursWorked === undefined) return undefined;
+  const offClockMeal = u.mealMinutes && !u.mealOnClock ? u.mealMinutes / 60 : 0;
+  return u.hoursWorked + offClockMeal;
+}
+
 export function hourUpdateToEntry(u: SmartImportHourUpdate): HoursEntry {
   return {
     date: u.date,
@@ -71,7 +96,7 @@ export function hourUpdateToEntry(u: SmartImportHourUpdate): HoursEntry {
     paid: false,
     position: u.steward,
     notes: u.notes,
-    hoursWorked: u.hoursWorked,
+    hoursWorked: rawClockedHours(u),
     hourlyRate: u.hourlyRate,
   };
 }

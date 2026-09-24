@@ -614,6 +614,14 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Hours Worked</label>
               <Input type="number" min="0" step="0.5" value={hoursWorked} onChange={e => handleHoursWorkedChange(e.target.value)} placeholder="e.g. 8" className="h-9 text-sm text-mono" />
+              {/* The box holds the clocked span, because that is what gets saved and
+                  what calculateDayPay expects — but the number that matters when you
+                  are looking at it is the hours you actually worked, so show that too. */}
+              {mealDeductionHours > 0 && actualHours > 0 && (
+                <p className="text-[10px] text-mono text-muted-foreground leading-tight">
+                  clocked — <span className="text-accent font-semibold">{paidHours}h worked</span> after the {mealDuration}min meal
+                </p>
+              )}
             </div>
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Rate ($/hr)</label>
@@ -1648,7 +1656,7 @@ export default function CalendarPage() {
           <DialogHeader>
             <DialogTitle className="text-mono text-sm">Add an offer</DialogTitle>
           </DialogHeader>
-          <NewGigPage />
+          <NewGigPage onComplete={() => setQuickAddShiftOpen(false)} />
         </DialogContent>
       </Dialog>
 

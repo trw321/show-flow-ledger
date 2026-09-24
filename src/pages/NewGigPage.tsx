@@ -1,5 +1,5 @@
 import { Calendar } from '@/components/ui/calendar';
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { useData } from '@/lib/DataContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -190,7 +190,12 @@ const EMPTY_MANUAL: ManualEntry = {
   venue: '',
 };
 
-export default function NewGigPage() {
+/**
+ * Rendered both as its own route and inside the Calendar page's "add an offer"
+ * dialog. onComplete is how the dialog host learns a save actually landed, so
+ * it can close itself — the route has no host and simply leaves it undefined.
+ */
+export default function NewGigPage({ onComplete }: { onComplete?: () => void } = {}) {
   const { data, addJob, updateJob: updateExistingJob, addIncome, addEvent } = useData();
   const { fire: fireCelebration, Burst } = useCelebration();
 
@@ -353,6 +358,7 @@ export default function NewGigPage() {
     if (imported > 0) fireCelebration();
     toast.success(`Added ${imported} event${imported !== 1 ? 's' : ''}`);
     setEvents([]); setSelectedEvents(new Set()); setText(''); setStep('input'); setVortexPhase('idle');
+    if (imported > 0) onComplete?.();
   };
 
   // Levelling up has to pass the new setting in rather than rely on state,
@@ -477,6 +483,7 @@ export default function NewGigPage() {
         setText('');
         setHoursResults([]);
         setHoursAccepted(new Set());
+        onComplete?.();
       }, 900);
     }
   };
@@ -512,6 +519,7 @@ export default function NewGigPage() {
     );
     setText(''); setJobs([]); setSelected(new Set()); setStep('input'); setVortexPhase('idle');
     setManual(EMPTY_MANUAL); setManualOpen(false);
+    if (imported > 0) onComplete?.();
   };
 
   const handleClear = () => {
@@ -578,6 +586,40 @@ export default function NewGigPage() {
   const updateParsedJob = (idx: number, field: keyof ParsedJob, value: string | number | undefined) =>
     setJobs(prev => prev.map((j, i) => i === idx ? { ...j, [field]: value } : j));
 
+  // What the selected shifts already agree on, field by field: the value when
+  // they all match, null when they differ. The batch boxes used to start blank
+  // no matter what, so you could not tell an empty field from a shared one, and
+  // retyping a value every shift already had was the normal case.
+  const sharedSelected = useMemo(() => {
+    const picked = jobs.filter((_, i) => selected.has(i));
+    const shared = (read: (j: ParsedJob) => string): string | null => {
+      if (picked.length === 0) return '';
+      const first = read(picked[0]);
+      return picked.every(j => read(j) === first) ? first : null;
+    };
+    return {
+      client: shared(j => j.client ?? ''),
+      payrollCompany: shared(j => j.payrollCompany ?? ''),
+      venue: shared(j => j.venue ?? ''),
+      hourlyRate: shared(j => j.hourlyRate === undefined ? '' : String(j.hourlyRate)),
+    };
+  }, [jobs, selected]);
+
+  const selectionKey = useMemo(() => [...selected].sort((a, b) => a - b).join(','), [selected]);
+
+  // Reseed the boxes when the SELECTION changes — deliberately not on every
+  // sharedSelected change, or typing would be overwritten on each keystroke and
+  // an applied edit would fight the field it came from.
+  useEffect(() => {
+    setBatchEdit({
+      client: sharedSelected.client ?? '',
+      payrollCompany: sharedSelected.payrollCompany ?? '',
+      venue: sharedSelected.venue ?? '',
+      hourlyRate: sharedSelected.hourlyRate ?? '',
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectionKey]);
+
   const batchUpdateJobs = (field: keyof ParsedJob, value: string | number | undefined) =>
     setJobs(prev => prev.map((j, i) => selected.has(i) ? { ...j, [field]: value } : j));
 
@@ -592,8 +634,15 @@ export default function NewGigPage() {
     if (batchEdit.venue.trim()) batchUpdateJobs('venue', batchEdit.venue.trim());
     if (batchEdit.hourlyRate.trim()) batchUpdateJobs('hourlyRate', parseFloat(batchEdit.hourlyRate));
     toast.success(`Updated ${selected.size} shift${selected.size !== 1 ? 's' : ''}`);
-    setBatchEdit({ client: '', payrollCompany: '', venue: '', hourlyRate: '' });
+    // Left as-is rather than blanked: the boxes now hold exactly what every
+    // selected shift shares, which is what they are supposed to show.
   };
+
+  // A filled box only counts as a change when it differs from what the shifts
+  // already share — otherwise prefilling would leave Apply permanently lit up
+  // offering to write back values nothing would change.
+  const batchEditChangesSomething = (Object.keys(batchEdit) as (keyof typeof batchEdit)[])
+    .some(k => batchEdit[k].trim() !== '' && batchEdit[k].trim() !== (sharedSelected[k] ?? ''));
 
   const upLevel = useMemo(() => nextLevel(parserModel, parserEffort), [parserModel, parserEffort]);
 
@@ -964,17 +1013,17 @@ export default function NewGigPage() {
                     if (!batchEdit.hourlyRate && emp.defaultHourlyRate) setBatchEdit(b => ({ ...b, hourlyRate: emp.defaultHourlyRate!.toString() }));
                     if (!batchEdit.payrollCompany && emp.payrollCompany) setBatchEdit(b => ({ ...b, payrollCompany: emp.payrollCompany! }));
                   }}
-                  placeholder="Client"
+                  placeholder={sharedSelected.client === null ? 'varies' : 'Client'}
                   className="[&>input]:h-8 [&>input]:text-xs"
                 />
                 <Input
-                  placeholder="Payroll co."
+                  placeholder={sharedSelected.payrollCompany === null ? 'varies' : 'Payroll co.'}
                   value={batchEdit.payrollCompany}
                   onChange={e => setBatchEdit(b => ({ ...b, payrollCompany: e.target.value }))}
                   className="h-8 text-xs"
                 />
                 <Input
-                  placeholder="Venue"
+                  placeholder={sharedSelected.venue === null ? 'varies' : 'Venue'}
                   value={batchEdit.venue}
                   onChange={e => setBatchEdit(b => ({ ...b, venue: e.target.value }))}
                   className="h-8 text-xs"
@@ -982,7 +1031,7 @@ export default function NewGigPage() {
                 <Input
                   type="number"
                   step="0.01"
-                  placeholder="Rate ($/hr)"
+                  placeholder={sharedSelected.hourlyRate === null ? 'varies' : 'Rate ($/hr)'}
                   value={batchEdit.hourlyRate}
                   onChange={e => setBatchEdit(b => ({ ...b, hourlyRate: e.target.value }))}
                   className="h-8 text-xs font-mono"
@@ -992,7 +1041,7 @@ export default function NewGigPage() {
                 size="sm"
                 variant="outline"
                 onClick={applyBatchEdit}
-                disabled={!batchEdit.client.trim() && !batchEdit.payrollCompany.trim() && !batchEdit.venue.trim() && !batchEdit.hourlyRate.trim()}
+                disabled={!batchEditChangesSomething}
               >
                 Apply to {selected.size} shift{selected.size !== 1 ? 's' : ''}
               </Button>
