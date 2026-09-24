@@ -69,20 +69,23 @@ export interface SmartImportHourUpdate {
  * and calculateDayPay subtracts the meal itself, so passing the model's number
  * through unchanged makes the hour come out twice and underpays the shift.
  *
- * Both sides are reconciled here, at the import boundary, so everything
- * downstream can keep treating job.hoursWorked as the raw span:
- *  - both clock times present: the span between them is ground truth, and it
- *    already covers a run that happens to return a gross number instead.
- *  - no clock times: add back the meal the model deducted.
+ * So the meal gets added back — and the clock span is NOT used to second-guess
+ * the result. hoursWorked also carries contractual adjustments no span can
+ * express: a 5hr minimum call on a 4hr shift, or an "8+2" totalling 10 over an
+ * 11hr spread (EXAMPLE 1 and EXAMPLE 3 in the smart-import prompt). Measuring
+ * the span instead would quietly drop the minimum call and underpay it. The
+ * span is only a fallback for a note that carried no hours at all.
  */
 function rawClockedHours(u: SmartImportHourUpdate): number | undefined {
+  if (u.hoursWorked !== undefined) {
+    const offClockMeal = u.mealMinutes && !u.mealOnClock ? u.mealMinutes / 60 : 0;
+    return u.hoursWorked + offClockMeal;
+  }
   if (u.startTime && u.endTime) {
     const span = calcHours(u.startTime, u.endTime);
     if (span > 0) return span;
   }
-  if (u.hoursWorked === undefined) return undefined;
-  const offClockMeal = u.mealMinutes && !u.mealOnClock ? u.mealMinutes / 60 : 0;
-  return u.hoursWorked + offClockMeal;
+  return undefined;
 }
 
 export function hourUpdateToEntry(u: SmartImportHourUpdate): HoursEntry {

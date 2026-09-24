@@ -606,19 +606,31 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
   }, [jobs, selected]);
 
   const selectionKey = useMemo(() => [...selected].sort((a, b) => a - b).join(','), [selected]);
+  const sharedKey = JSON.stringify(sharedSelected);
+  const prevShared = useRef(sharedSelected);
+  const prevSelectionKey = useRef(selectionKey);
 
-  // Reseed the boxes when the SELECTION changes — deliberately not on every
-  // sharedSelected change, or typing would be overwritten on each keystroke and
-  // an applied edit would fight the field it came from.
+  // Reseed the boxes whenever what the shifts share changes — not just when the
+  // selection does. Editing one shift's client inside its own card changes jobs
+  // but not selected, so keying this on the selection alone left the box holding
+  // the old shared value, and Apply would then quietly write it back over the
+  // edit. A box the user has typed into is left alone; changing the selection
+  // outright discards that and starts from the new shifts.
   useEffect(() => {
-    setBatchEdit({
-      client: sharedSelected.client ?? '',
-      payrollCompany: sharedSelected.payrollCompany ?? '',
-      venue: sharedSelected.venue ?? '',
-      hourlyRate: sharedSelected.hourlyRate ?? '',
+    const previous = prevShared.current;
+    const selectionChanged = prevSelectionKey.current !== selectionKey;
+    prevShared.current = sharedSelected;
+    prevSelectionKey.current = selectionKey;
+    setBatchEdit(current => {
+      const next = { ...current };
+      for (const field of Object.keys(next) as (keyof typeof next)[]) {
+        const untouched = next[field] === (previous[field] ?? '');
+        if (selectionChanged || untouched) next[field] = sharedSelected[field] ?? '';
+      }
+      return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectionKey]);
+  }, [sharedKey, selectionKey]);
 
   const batchUpdateJobs = (field: keyof ParsedJob, value: string | number | undefined) =>
     setJobs(prev => prev.map((j, i) => selected.has(i) ? { ...j, [field]: value } : j));
@@ -1010,8 +1022,12 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
                   value={batchEdit.client}
                   onChange={v => setBatchEdit(b => ({ ...b, client: v }))}
                   onSelectEmployer={emp => {
-                    if (!batchEdit.hourlyRate && emp.defaultHourlyRate) setBatchEdit(b => ({ ...b, hourlyRate: emp.defaultHourlyRate!.toString() }));
-                    if (!batchEdit.payrollCompany && emp.payrollCompany) setBatchEdit(b => ({ ...b, payrollCompany: emp.payrollCompany! }));
+                    // Prefilling used to defeat this: the defaults only applied to an
+                    // empty box, so picking an employer kept the previous batch's rate.
+                    const untouched = (field: 'hourlyRate' | 'payrollCompany') =>
+                      !batchEdit[field] || batchEdit[field] === (sharedSelected[field] ?? '');
+                    if (emp.defaultHourlyRate && untouched('hourlyRate')) setBatchEdit(b => ({ ...b, hourlyRate: emp.defaultHourlyRate!.toString() }));
+                    if (emp.payrollCompany && untouched('payrollCompany')) setBatchEdit(b => ({ ...b, payrollCompany: emp.payrollCompany! }));
                   }}
                   placeholder={sharedSelected.client === null ? 'varies' : 'Client'}
                   className="[&>input]:h-8 [&>input]:text-xs"

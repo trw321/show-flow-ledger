@@ -585,20 +585,6 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
                 })}
               </div>
             )}
-            {/* The toggle's whole effect is on hours paid, so show that here
-                rather than only deep in the pay breakdown. */}
-            {actualHours > 0 && mealDuration !== undefined && mealDuration > 0 && (
-              <p className="text-[11px] text-mono pt-0.5">
-                {mealDeductionHours > 0 ? (
-                  <><span className="text-muted-foreground line-through">{actualHours}h</span>{' '}
-                    <span className="text-accent font-semibold">{paidHours}h paid</span>{' '}
-                    <span className="text-muted-foreground">({mealDuration}min off the clock)</span></>
-                ) : (
-                  <><span className="text-accent font-semibold">{actualHours}h paid</span>{' '}
-                    <span className="text-muted-foreground">(meal stays on the clock)</span></>
-                )}
-              </p>
-            )}
             <div className="pt-0.5">
               <label className="text-[10px] text-mono uppercase text-muted-foreground">Meal penalty (MP) units — 1 unit = 1hr at straight rate</label>
               <ScrollWheel
@@ -615,11 +601,19 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
               <label className="text-xs text-muted-foreground">Hours Worked</label>
               <Input type="number" min="0" step="0.5" value={hoursWorked} onChange={e => handleHoursWorkedChange(e.target.value)} placeholder="e.g. 8" className="h-9 text-sm text-mono" />
               {/* The box holds the clocked span, because that is what gets saved and
-                  what calculateDayPay expects — but the number that matters when you
-                  are looking at it is the hours you actually worked, so show that too. */}
-              {mealDeductionHours > 0 && actualHours > 0 && (
-                <p className="text-[10px] text-mono text-muted-foreground leading-tight">
-                  clocked — <span className="text-accent font-semibold">{paidHours}h worked</span> after the {mealDuration}min meal
+                  what calculateDayPay expects. The number that matters when you are
+                  looking at it is the hours actually worked, so it sits right here —
+                  the meal toggle just above is what changes it. */}
+              {actualHours > 0 && mealDuration !== undefined && mealDuration > 0 && (
+                <p className="text-[11px] text-mono leading-tight">
+                  {mealDeductionHours > 0 ? (
+                    <><span className="text-muted-foreground line-through">{actualHours}h</span>{' '}
+                      <span className="text-accent font-semibold">{paidHours}h worked</span>{' '}
+                      <span className="text-muted-foreground">({mealDuration}min off the clock)</span></>
+                  ) : (
+                    <><span className="text-accent font-semibold">{actualHours}h worked</span>{' '}
+                      <span className="text-muted-foreground">(meal stays on the clock)</span></>
+                  )}
                 </p>
               )}
             </div>

@@ -55,28 +55,45 @@ describe('hourUpdateToEntry — hoursWorked is the raw clocked span', () => {
     expect(hourUpdateToEntry({ ...base, hoursWorked: 9, mealMinutes: 0 }).hoursWorked).toBe(9);
   });
 
-  it('measures an overnight call across midnight', () => {
+  it('falls back to the clock span across midnight when no hours came through', () => {
     const entry = hourUpdateToEntry({
       ...base,
       startTime: '10:00pm',
       endTime: '6:00am',
-      hoursWorked: 7.5,
-      mealMinutes: 30,
-      mealOnClock: false,
     });
     expect(entry.hoursWorked).toBe(8);
   });
 
-  it('prefers the clock span even on a run that returns gross hours', () => {
+  // hoursWorked carries contractual adjustments the clock span cannot express,
+  // so the span must never be used to second-guess it — see the smart-import
+  // prompt's EXAMPLE 1 and EXAMPLE 3.
+  it('keeps a minimum call that runs longer than the hours actually clocked', () => {
+    // "10a-14:00 (5mini)" — 4h on the clock, 5h guaranteed.
+    const entry = hourUpdateToEntry({
+      ...base,
+      startTime: '10:00am',
+      endTime: '2:00pm',
+      hoursWorked: 5,
+    });
+    expect(entry.hoursWorked).toBe(5);
+  });
+
+  it('keeps a minimum call on an overnight spread', () => {
+    const entry = hourUpdateToEntry({ ...base, startTime: '10:00pm', endTime: '2:00am', hoursWorked: 5 });
+    expect(entry.hoursWorked).toBe(5);
+  });
+
+  it('keeps an 8+2 total rather than the wider clock spread', () => {
+    // "8am ... 7p / 8+2" — 11h spread, 10h contractual, 9h after the walk away.
     const entry = hourUpdateToEntry({
       ...base,
       startTime: '8:00am',
-      endTime: '5:00pm',
+      endTime: '7:00pm',
       hoursWorked: 9,
       mealMinutes: 60,
       mealOnClock: false,
     });
-    expect(entry.hoursWorked).toBe(9);
+    expect(entry.hoursWorked).toBe(10);
   });
 
   it('stays undefined when the note carried no hours at all', () => {
