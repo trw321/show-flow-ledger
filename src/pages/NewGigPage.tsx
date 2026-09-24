@@ -179,6 +179,13 @@ function confidenceBadge(c: HoursMatchResult['confidence']) {
   return <span className="text-[10px] font-body px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">No match</span>;
 }
 
+// Shared by every batch-edit box so the "varies" placeholder is one size and one
+// face across all four — the rate box keeps mono digits without a mono placeholder.
+const BATCH_FIELD = 'text-xs placeholder:font-body placeholder:text-xs placeholder:text-muted-foreground/60 placeholder:italic';
+// EmployerCombobox takes a class for its wrapper, so the same rules have to be
+// aimed at the input inside it or they would style the div and miss the box.
+const BATCH_FIELD_COMBO = '[&>input]:h-8 [&>input]:text-xs [&>input]:placeholder:font-body [&>input]:placeholder:text-xs [&>input]:placeholder:text-muted-foreground/60 [&>input]:placeholder:italic';
+
 const EMPTY_MANUAL: ManualEntry = {
   client: '',
   name: '',
@@ -208,6 +215,7 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
   const [jobs, setJobs] = useState<ParsedJob[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [batchEdit, setBatchEdit] = useState({ client: '', payrollCompany: '', venue: '', hourlyRate: '' });
+  const [batchOpen, setBatchOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [step, setStep] = useState<Step>('input');
   const [vortexPhase, setVortexPhase] = useState<VortexPhase>('idle');
@@ -1004,66 +1012,6 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
             </button>
           </div>
 
-          {selected.size >= 2 && (
-            <div className="rounded-md border border-primary/30 bg-primary/5 p-3 flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <p className="text-[11px] text-mono uppercase tracking-wider text-primary">
-                  Batch edit {selected.size} selected
-                </p>
-                <button
-                  onClick={removeSelectedJobs}
-                  className="text-[11px] text-destructive hover:underline flex items-center gap-1"
-                >
-                  <Trash2 size={12} /> Remove selected
-                </button>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <EmployerCombobox
-                  value={batchEdit.client}
-                  onChange={v => setBatchEdit(b => ({ ...b, client: v }))}
-                  onSelectEmployer={emp => {
-                    // Prefilling used to defeat this: the defaults only applied to an
-                    // empty box, so picking an employer kept the previous batch's rate.
-                    const untouched = (field: 'hourlyRate' | 'payrollCompany') =>
-                      !batchEdit[field] || batchEdit[field] === (sharedSelected[field] ?? '');
-                    if (emp.defaultHourlyRate && untouched('hourlyRate')) setBatchEdit(b => ({ ...b, hourlyRate: emp.defaultHourlyRate!.toString() }));
-                    if (emp.payrollCompany && untouched('payrollCompany')) setBatchEdit(b => ({ ...b, payrollCompany: emp.payrollCompany! }));
-                  }}
-                  placeholder={sharedSelected.client === null ? 'varies' : 'Client'}
-                  className="[&>input]:h-8 [&>input]:text-xs"
-                />
-                <Input
-                  placeholder={sharedSelected.payrollCompany === null ? 'varies' : 'Payroll co.'}
-                  value={batchEdit.payrollCompany}
-                  onChange={e => setBatchEdit(b => ({ ...b, payrollCompany: e.target.value }))}
-                  className="h-8 text-xs"
-                />
-                <Input
-                  placeholder={sharedSelected.venue === null ? 'varies' : 'Venue'}
-                  value={batchEdit.venue}
-                  onChange={e => setBatchEdit(b => ({ ...b, venue: e.target.value }))}
-                  className="h-8 text-xs"
-                />
-                <Input
-                  type="number"
-                  step="0.01"
-                  placeholder={sharedSelected.hourlyRate === null ? 'varies' : 'Rate ($/hr)'}
-                  value={batchEdit.hourlyRate}
-                  onChange={e => setBatchEdit(b => ({ ...b, hourlyRate: e.target.value }))}
-                  className="h-8 text-xs font-mono"
-                />
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={applyBatchEdit}
-                disabled={!batchEditChangesSomething}
-              >
-                Apply to {selected.size} shift{selected.size !== 1 ? 's' : ''}
-              </Button>
-            </div>
-          )}
-
           <div className="flex flex-col gap-2">
             {jobs.map((job, i) => (
               <ShiftCard
@@ -1078,6 +1026,92 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
               />
             ))}
           </div>
+
+          {selected.size >= 2 && (
+            <div className="rounded-md border border-primary/30 bg-primary/5">
+              <button
+                type="button"
+                onClick={() => setBatchOpen(o => !o)}
+                className="w-full flex items-center justify-between p-3 text-left"
+              >
+                <span className="text-[11px] text-mono uppercase tracking-wider text-primary">
+                  Batch edit {selected.size} selected
+                </span>
+                {batchOpen
+                  ? <ChevronDown size={14} className="text-primary shrink-0" />
+                  : <ChevronRight size={14} className="text-primary shrink-0" />}
+              </button>
+              {batchOpen && (
+                <div className="px-3 pb-3 flex flex-col gap-2">
+                  {/* Every box keeps a label of its own. The category used to live in
+                      the placeholder, so showing "varies" there left no way to tell
+                      which box was which. */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Client</label>
+                      <EmployerCombobox
+                        value={batchEdit.client}
+                        onChange={v => setBatchEdit(b => ({ ...b, client: v }))}
+                        onSelectEmployer={emp => {
+                          // Prefilling used to defeat this: the defaults only applied to an
+                          // empty box, so picking an employer kept the previous batch's rate.
+                          const untouched = (field: 'hourlyRate' | 'payrollCompany') =>
+                            !batchEdit[field] || batchEdit[field] === (sharedSelected[field] ?? '');
+                          if (emp.defaultHourlyRate && untouched('hourlyRate')) setBatchEdit(b => ({ ...b, hourlyRate: emp.defaultHourlyRate!.toString() }));
+                          if (emp.payrollCompany && untouched('payrollCompany')) setBatchEdit(b => ({ ...b, payrollCompany: emp.payrollCompany! }));
+                        }}
+                        placeholder={sharedSelected.client === null ? 'varies' : ''}
+                        className={BATCH_FIELD_COMBO}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Payroll co.</label>
+                      <Input
+                        placeholder={sharedSelected.payrollCompany === null ? 'varies' : ''}
+                        value={batchEdit.payrollCompany}
+                        onChange={e => setBatchEdit(b => ({ ...b, payrollCompany: e.target.value }))}
+                        className={cn('h-8', BATCH_FIELD)}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Venue</label>
+                      <Input
+                        placeholder={sharedSelected.venue === null ? 'varies' : ''}
+                        value={batchEdit.venue}
+                        onChange={e => setBatchEdit(b => ({ ...b, venue: e.target.value }))}
+                        className={cn('h-8', BATCH_FIELD)}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Rate ($/hr)</label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder={sharedSelected.hourlyRate === null ? 'varies' : ''}
+                        value={batchEdit.hourlyRate}
+                        onChange={e => setBatchEdit(b => ({ ...b, hourlyRate: e.target.value }))}
+                        className={cn('h-8 font-mono', BATCH_FIELD)}
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={applyBatchEdit}
+                    disabled={!batchEditChangesSomething}
+                  >
+                    Apply to {selected.size} shift{selected.size !== 1 ? 's' : ''}
+                  </Button>
+                  <button
+                    onClick={removeSelectedJobs}
+                    className="text-[11px] text-destructive hover:underline flex items-center gap-1 self-start"
+                  >
+                    <Trash2 size={12} /> Remove selected
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           <Button onClick={handleImport} disabled={isImporting || selected.size === 0} className="w-full gap-1.5">
             {isImporting
               ? <><Loader2 size={14} className="animate-spin" />Saving…</>
