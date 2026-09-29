@@ -30,6 +30,12 @@ export interface HoursEntry {
   endTime?: string;
   mealDuration?: 0 | 30 | 45 | 60;
   mealOnClock?: boolean;
+  /**
+   * A walk away was noted but its length was not, so nothing has been deducted
+   * and mealDuration is still unset. The review step has to ask before this can
+   * be accepted — guessing an hour is what it replaced.
+   */
+  mealDurationUnknown?: boolean;
   mealPenalties?: number;
   paid: boolean;
   grossPay?: number;
@@ -55,8 +61,9 @@ export interface SmartImportHourUpdate {
   venue?: string;
   steward?: string;
   hourlyRate?: number;
-  mealMinutes?: 0 | 30 | 45 | 60;
-  mealOnClock?: boolean;
+  mealMinutes?: 0 | 30 | 45 | 60 | null;
+  mealOnClock?: boolean | null;
+  mealDurationUnknown?: boolean | null;
   notes?: string;
 }
 
@@ -77,8 +84,10 @@ export interface SmartImportHourUpdate {
  * span is only a fallback for a note that carried no hours at all.
  */
 function rawClockedHours(u: SmartImportHourUpdate): number | undefined {
-  if (u.hoursWorked !== undefined) {
-    const offClockMeal = u.mealMinutes && !u.mealOnClock ? u.mealMinutes / 60 : 0;
+  if (u.hoursWorked !== undefined && u.hoursWorked !== null) {
+    // An unstated walk away has had nothing deducted, so there is nothing to
+    // add back — the hours are already the full span.
+    const offClockMeal = !u.mealDurationUnknown && u.mealMinutes && !u.mealOnClock ? u.mealMinutes / 60 : 0;
     return u.hoursWorked + offClockMeal;
   }
   if (u.startTime && u.endTime) {
@@ -94,8 +103,11 @@ export function hourUpdateToEntry(u: SmartImportHourUpdate): HoursEntry {
     venue: u.venue,
     startTime: u.startTime,
     endTime: u.endTime,
-    mealDuration: u.mealMinutes,
-    mealOnClock: u.mealOnClock,
+    mealDuration: u.mealMinutes ?? undefined,
+    mealOnClock: u.mealOnClock ?? undefined,
+    // Only carried when actually true — a false from the model is the normal case
+    // and should not look like a set field to anything reading the entry.
+    mealDurationUnknown: u.mealDurationUnknown || undefined,
     paid: false,
     position: u.steward,
     notes: u.notes,

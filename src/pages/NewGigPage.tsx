@@ -225,6 +225,9 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
   const [hoursResults, setHoursResults] = useState<HoursMatchResult[]>([]);
   const [hoursAccepted, setHoursAccepted] = useState<Set<number>>(new Set());
+  // How long each unstated walk away actually was, answered per row. The parser
+  // used to assume an hour; an hour off the clock is an hour of pay, so it asks.
+  const [mealAnswers, setMealAnswers] = useState<Record<number, 30 | 45 | 60>>({});
   const [events, setEvents] = useState<ParsedEvent[]>([]);
   const [selectedEvents, setSelectedEvents] = useState<Set<number>>(new Set());
   const [isImportingEvents, setIsImportingEvents] = useState(false);
@@ -428,7 +431,13 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
   };
 
   const handleApplyHours = async (result: HoursMatchResult, idx: number) => {
-    const { entry, matchedJob } = result;
+    const { matchedJob } = result;
+    const answered = mealAnswers[idx];
+    // The answer to an unstated walk away becomes the meal itself. hoursWorked
+    // stays the full span — calculateDayPay is what does the deduction.
+    const entry: HoursEntry = result.entry.mealDurationUnknown && answered !== undefined
+      ? { ...result.entry, mealDuration: answered, mealOnClock: false, mealDurationUnknown: false }
+      : result.entry;
     if (matchedJob) {
       const updates: Partial<Job> = {};
       if (entry.endTime && !matchedJob.endTime) updates.endTime = entry.endTime;
@@ -491,6 +500,7 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
         setText('');
         setHoursResults([]);
         setHoursAccepted(new Set());
+        setMealAnswers({});
         onComplete?.();
       }, 900);
     }
@@ -533,7 +543,7 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
   const handleClear = () => {
     setText(''); setJobs([]); setSelected(new Set()); setStep('input');
     setVortexPhase('idle'); setManualOpen(false); setManual(EMPTY_MANUAL); setExtraDates([]);
-    setHoursResults([]); setHoursAccepted(new Set());
+    setHoursResults([]); setHoursAccepted(new Set()); setMealAnswers({});
     setEvents([]); setSelectedEvents(new Set());
   };
 
@@ -1143,7 +1153,9 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
                     {result.entry.startTime && `${result.entry.startTime}${result.entry.endTime ? ` – ${result.entry.endTime}` : ''} · `}
                     {result.entry.hoursWorked ? `${result.entry.hoursWorked}h` : ''}
                     {result.entry.hourlyRate ? ` · $${result.entry.hourlyRate}/hr` : ''}
-                    {result.entry.mealDuration !== undefined ? ` · ${result.entry.mealDuration === 0 ? 'no meal' : `${result.entry.mealDuration}min ${result.entry.mealOnClock ? 'on' : 'off'} clock`}` : ''}
+                    {result.entry.mealDurationUnknown
+                      ? ' · walk away, length not stated'
+                      : result.entry.mealDuration !== undefined ? ` · ${result.entry.mealDuration === 0 ? 'no meal' : `${result.entry.mealDuration}min ${result.entry.mealOnClock ? 'on' : 'off'} clock`}` : ''}
                   </p>
                 )}
                 {result.entry.notes && !result.entry.startTime && (
@@ -1167,10 +1179,38 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
                   </div>
                 )}
 
+                {result.entry.mealDurationUnknown && (
+                  <div className="rounded-md border border-warning/40 bg-warning/5 p-2.5 space-y-2">
+                    <p className="text-[11px] flex items-start gap-1.5">
+                      <AlertTriangle size={11} className="text-warning shrink-0 mt-0.5" />
+                      <span>The note says a walk away but not how long. It comes off your pay, so it is not guessed — how long was it?</span>
+                    </p>
+                    <div className="flex gap-1.5">
+                      {([30, 45, 60] as const).map(mins => (
+                        <button
+                          key={mins}
+                          type="button"
+                          onClick={() => setMealAnswers(prev => ({ ...prev, [idx]: mins }))}
+                          className={cn(
+                            'flex-1 py-1.5 rounded-md border text-[11px] text-mono transition-colors',
+                            mealAnswers[idx] === mins
+                              ? 'border-accent bg-accent/15 text-accent font-semibold'
+                              : 'border-border bg-card hover:bg-secondary/40'
+                          )}
+                        >
+                          {mins}min
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <button
+                  disabled={result.entry.mealDurationUnknown && mealAnswers[idx] === undefined}
                   onClick={() => handleApplyHours(result, idx)}
                   className={cn(
                     "w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-body transition-colors",
+                    result.entry.mealDurationUnknown && mealAnswers[idx] === undefined && "opacity-40 cursor-not-allowed",
                     result.matchedJob
                       ? "bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20"
                       : "bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20"

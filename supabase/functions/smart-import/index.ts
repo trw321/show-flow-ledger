@@ -138,11 +138,12 @@ For each entry, extract:
 - startTime / endTime: parse a time range like "10a-14:00", "8am-7p", "22:00-2:00am", "6:30-14:30" → "HH:MM AM/PM". Times after midnight (e.g. 2:00am after 22:00) are the end time on the same date entry.
 - SPLIT SHIFTS: a line with TWO time ranges for the same date joined by "and" (or "&", "then") — e.g. "9a-2p and 10:30p-3am" — is TWO separate entries on that date, not one. Output both as separate hourUpdates entries with the same date, sharing venue/steward/hourlyRate/mealMinutes/mealOnClock unless a range has its own override. Order them earliest-start-time first.
 - mealMinutes / mealOnClock — capture the ACTUAL duration and whether it's paid, don't force everything into a binary:
-  - "walk away", "WA", "YWA", "1MP" (no explicit duration) → mealMinutes=60, mealOnClock=false
+  - "walk away", "WA", "YWA", "1MP" with NO explicit duration → mealOnClock=false, mealMinutes=null, mealDurationUnknown=true. A walk away comes off the pay, so do NOT assume how long it was — the app asks. In this case leave hoursWorked as the FULL span with nothing deducted for the meal.
   - "NWA" (no explicit duration) → mealMinutes=30, mealOnClock=true
   - Any explicit duration phrase overrides the codeword's default — "1/2 hr off", "30 min off", "30off" → mealMinutes=30, mealOnClock=false; "45 min off" → mealMinutes=45, mealOnClock=false; "1hr off"/"hour off" → mealMinutes=60, mealOnClock=false; "30 min on"/"30on" → mealMinutes=30, mealOnClock=true
   - "no meal", "zero", "worked through" → mealMinutes=0
-  - Nothing meal-related mentioned → omit both fields entirely (don't guess)
+  - Nothing meal-related mentioned → mealMinutes=null, mealOnClock=null, mealDurationUnknown=false (don't guess)
+  - mealDurationUnknown is true ONLY for an off-the-clock meal whose length is not stated. Whenever a duration is stated or implied by "NWA", set it false.
 - hoursWorked:
   - Minimum call "(Nhr mini)" or "(Nmini)": compute actual hours from time range. If actual < N, use N as hoursWorked (before meal deduction). If actual ≥ N, use actual.
   - If "N+M" format (e.g. "8+2"): N regular + M overtime = N+M total, then apply meal deduction
@@ -168,6 +169,12 @@ EXAMPLE 3 — walk away with N+M format:
   → date=2025-10-06, venue="moscone c", steward="Rein ratsep", hourlyRate=55.72
     startTime=08:00 AM, endTime=07:00 PM, mealMinutes=60, mealOnClock=false
     hoursWorked = 8+2=10 minus 1hr walk away = 9.0
+
+EXAMPLE 3b — walk away with NO stated length (ask, don't assume):
+  "10-7-25 masonic 8a-6p WA"
+  → date=2025-10-07, venue="masonic", startTime=08:00 AM, endTime=06:00 PM
+    mealOnClock=false, mealMinutes=null, mealDurationUnknown=true
+    hoursWorked=10.0 (the full span — nothing deducted, the length is unknown)
 
 EXAMPLE 4 — split shift, explicit 30-min-off meal (MUST produce 2 entries, earlier first):
   "8.12.26 masonic 9a-2p and 10:30p-3am"
@@ -258,9 +265,10 @@ EXAMPLE — recurring gym schedule (month calendar, MUST expand every occurrence
                 hourlyRate: { type: ["number", "null"] },
                 mealMinutes: { type: ["number", "null"], enum: [0, 30, 45, 60, null] },
                 mealOnClock: { type: ["boolean", "null"] },
+                mealDurationUnknown: { type: ["boolean", "null"] },
                 notes: { type: ["string", "null"] }
               },
-              required: ["date", "startTime", "endTime", "hoursWorked", "venue", "steward", "hourlyRate", "mealMinutes", "mealOnClock", "notes"],
+              required: ["date", "startTime", "endTime", "hoursWorked", "venue", "steward", "hourlyRate", "mealMinutes", "mealOnClock", "mealDurationUnknown", "notes"],
               additionalProperties: false
             }
           },

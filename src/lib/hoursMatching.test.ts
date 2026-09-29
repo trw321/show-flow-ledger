@@ -101,3 +101,112 @@ describe('hourUpdateToEntry — hoursWorked is the raw clocked span', () => {
     expect(hourUpdateToEntry({ ...base, mealMinutes: 60, mealOnClock: false }).hoursWorked).toBeUndefined();
   });
 });
+
+describe('hourUpdateToEntry — a walk away with no stated length', () => {
+  const base: SmartImportHourUpdate = { date: '2026-09-10' };
+
+  it('keeps the full span and adds nothing back, since nothing was deducted', () => {
+    // "8a-6p WA" — a walk away happened, its length was never written down.
+    const entry = hourUpdateToEntry({
+      ...base,
+      startTime: '8:00am',
+      endTime: '6:00pm',
+      hoursWorked: 10,
+      mealMinutes: null,
+      mealOnClock: false,
+      mealDurationUnknown: true,
+    });
+    expect(entry.hoursWorked).toBe(10);
+    expect(entry.mealDuration).toBeUndefined();
+    expect(entry.mealDurationUnknown).toBe(true);
+  });
+
+  it('does not flag a meal whose length was stated', () => {
+    const entry = hourUpdateToEntry({
+      ...base,
+      hoursWorked: 8,
+      mealMinutes: 60,
+      mealOnClock: false,
+      mealDurationUnknown: false,
+    });
+    expect(entry.mealDurationUnknown).toBeUndefined();
+    expect(entry.hoursWorked).toBe(9);
+  });
+
+  it('treats an absent meal as absent, not unknown', () => {
+    const entry = hourUpdateToEntry({ ...base, hoursWorked: 9, mealMinutes: null, mealOnClock: null, mealDurationUnknown: false });
+    expect(entry.mealDuration).toBeUndefined();
+    expect(entry.mealDurationUnknown).toBeUndefined();
+    expect(entry.hoursWorked).toBe(9);
+  });
+});
+
+describe('calculateDayPay — a day built from more than one shift', () => {
+  it('deducts both walk aways on a two-in/two-out day, not just one', () => {
+    // 6h + 5h clocked across two calls, an hour off each. 11h − 2h = 9h paid.
+    const twoMeals = calculateDayPay(11, 50, 0, 0, 1, { duration: 60, onClock: false, offClockMinutesTotal: 120 });
+    expect(twoMeals.billableHours).toBe(9);
+    // What the old overwrite produced: only one meal ever came off.
+    const oneMeal = calculateDayPay(11, 50, 0, 0, 1, { duration: 60, onClock: false });
+    expect(oneMeal.billableHours).toBe(10);
+    expect(twoMeals.totalPay).toBeLessThan(oneMeal.totalPay);
+  });
+
+  it('handles two meals of different lengths', () => {
+    const result = calculateDayPay(11, 50, 0, 0, 1, { duration: 60, onClock: false, offClockMinutesTotal: 90 });
+    expect(result.billableHours).toBe(9.5);
+  });
+
+  it('is unchanged for a single shift, where the total equals the one duration', () => {
+    const viaTotal = calculateDayPay(9, 50, 0, 0, 1, { duration: 60, onClock: false, offClockMinutesTotal: 60 });
+    const viaDuration = calculateDayPay(9, 50, 0, 0, 1, { duration: 60, onClock: false });
+    expect(viaTotal.totalPay).toBe(viaDuration.totalPay);
+    expect(viaTotal.billableHours).toBe(8);
+  });
+
+  it('deducts nothing when the day has meals but all of them are on the clock', () => {
+    const result = calculateDayPay(11, 50, 0, 0, 1, { duration: 30, onClock: true, offClockMinutesTotal: 0 });
+    expect(result.billableHours).toBe(11);
+  });
+});
+
+describe('calculateDayPay — a 6th or 7th day does not compound with overtime', () => {
+  const rate = 50;
+
+  it('bills a 6th day at 1.5x straight through, then normal double time after 12', () => {
+    // 14h on a 6th day: 12h at 1.5x, then 2h at 2x. Not 8h at 1.5 + 4h at 2.25.
+    const result = calculateDayPay(14, rate, 0, 0, 1.5);
+    const expected = 8 * 75 + 4 * 75 + 2 * 100;
+    expect(result.totalPay).toBe(expected);
+    expect(result.totalPay).toBe(1100);
+  });
+
+  it('bills a 10h 6th day flat at 1.5x, with no 2.25x tier', () => {
+    const result = calculateDayPay(10, rate, 0, 0, 1.5);
+    expect(result.totalPay).toBe(10 * 75);
+    // The old compounding charged 2.25x for hours 8-10.
+    expect(result.totalPay).toBeLessThan(8 * 75 + 2 * 112.5);
+  });
+
+  it('bills a 7th day flat at 2x, overtime included', () => {
+    const result = calculateDayPay(14, rate, 0, 0, 2);
+    expect(result.totalPay).toBe(14 * 100);
+  });
+
+  it('leaves an ordinary day alone — straight, then 1.5x, then 2x', () => {
+    const result = calculateDayPay(14, rate, 0, 0, 1);
+    expect(result.totalPay).toBe(8 * 50 + 4 * 75 + 2 * 100);
+  });
+
+  it('still stacks meal penalties on top of a premium day', () => {
+    const withMp = calculateDayPay(10, rate, 0, 2, 1.5);
+    const withoutMp = calculateDayPay(10, rate, 0, 0, 1.5);
+    expect(withMp.totalPay - withoutMp.totalPay).toBe(2 * rate);
+  });
+
+  it('does not push night hours past double time on a 6th day', () => {
+    // Night is 2x; a 1.5x day must not make it 3x.
+    const result = calculateDayPay(4, rate, 0, 0, 1.5, undefined, { rule: 'daily', nightHours: 4, nightMultiplier: 2 });
+    expect(result.totalPay).toBe(4 * 100);
+  });
+});
