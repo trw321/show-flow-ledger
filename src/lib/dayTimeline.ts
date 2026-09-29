@@ -22,10 +22,12 @@
 export const SPLIT_BREAK_MINUTES = 120;
 
 /**
- * A meal has to be called within five hours, and again every five hours after
- * that, so a stretch worked longer than that owes a penalty — more than one if
- * it runs long enough. Suggested, not charged: mealPenalties stays something the
- * user confirms, since whether a penalty was actually owed depends on the call.
+ * A meal penalty is owed for NOT being broken, not for working long. Taking the
+ * meal discharges it: get an hour off and there is no penalty, however long the
+ * stretch that led up to it was. So a penalty is only suggested for a stretch
+ * that ran past five hours and was never closed by a real off-the-clock meal —
+ * a day worked straight through, or one where the break stayed on the clock.
+ * Suggested, not charged: mealPenalties stays something the user confirms.
  */
 export const MEAL_PENALTY_AFTER_HOURS = 5;
 
@@ -161,6 +163,9 @@ export function parseDayTimeline(input: string, gapsOnClock: boolean[] = []): Da
 function derive(calls: DayCall[], gaps: DayGap[]) {
   const shifts: DayCall[][] = [];
   const workedStretches: number[] = [];
+  // Whether each stretch ended in a meal actually taken off the clock. A stretch
+  // that did owes nothing; one that did not is what the five-hour rule is about.
+  const stretchClosedByMeal: boolean[] = [];
   let group: DayCall[] = [];
   let stretch = 0;
 
@@ -173,20 +178,25 @@ function derive(calls: DayCall[], gaps: DayGap[]) {
       shifts.push(group);
       group = [];
       workedStretches.push(stretch);
+      // Off the clock for two hours or more: the meal was certainly taken.
+      stretchClosedByMeal.push(!gap.onClock);
       stretch = 0;
     } else if (gap.onClock) {
-      // Worked straight through, so the stretch keeps running.
+      // Worked straight through, so the stretch keeps running and no meal has
+      // been taken yet.
       stretch += gap.minutes / 60;
     } else {
       workedStretches.push(stretch);
+      stretchClosedByMeal.push(true);
       stretch = 0;
     }
   });
   if (group.length) shifts.push(group);
-  if (stretch > 0) workedStretches.push(stretch);
+  // The last stretch runs to the end of the day, so nothing broke it.
+  if (stretch > 0) { workedStretches.push(stretch); stretchClosedByMeal.push(false); }
 
   const suggestedMealPenalties = workedStretches.reduce(
-    (n, hours) => n + Math.max(0, Math.ceil(hours / MEAL_PENALTY_AFTER_HOURS) - 1),
+    (n, hours, i) => n + (stretchClosedByMeal[i] ? 0 : Math.max(0, Math.ceil(hours / MEAL_PENALTY_AFTER_HOURS) - 1)),
     0
   );
 

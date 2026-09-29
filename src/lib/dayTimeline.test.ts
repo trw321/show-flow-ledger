@@ -191,3 +191,44 @@ describe('the five-hour meal penalty rule', () => {
     expect(withGapOnClock(t, 0, true).suggestedMealPenalties).toBe(1);
   });
 });
+
+describe('a break taken is a break — no penalty, whatever its length', () => {
+  it('owes nothing after a 30-minute break, even on a long stretch', () => {
+    // Seven hours before the break, half an hour off, then more. No MP.
+    const t = parseDayTimeline('8a-3p, 3:30p-7p')!;
+    expect(t.gaps[0].minutes).toBe(30);
+    expect(t.gaps[0].onClock).toBe(false);
+    expect(t.workedStretches).toEqual([7, 3.5]);
+    expect(t.suggestedMealPenalties).toBe(0);
+  });
+
+  it('owes nothing after an hour off, on the same long stretch', () => {
+    const t = parseDayTimeline('8a-3p, 4p-7p')!;
+    expect(t.gaps[0].minutes).toBe(60);
+    expect(t.suggestedMealPenalties).toBe(0);
+  });
+
+  it('treats a 30-minute break the same as an hour', () => {
+    const half = parseDayTimeline('8a-3p, 3:30p-7p')!;
+    const hour = parseDayTimeline('8a-3p, 4p-7p')!;
+    expect(half.suggestedMealPenalties).toBe(hour.suggestedMealPenalties);
+  });
+
+  it('still owes on a long day worked straight through with no break at all', () => {
+    const t = parseDayTimeline('8a-7p')!;
+    expect(t.workedStretches).toEqual([11]);
+    expect(t.suggestedMealPenalties).toBe(2);
+  });
+
+  it('owes nothing on a short day with no break — it is only about long ones', () => {
+    expect(parseDayTimeline('9a-2p')!.suggestedMealPenalties).toBe(0);
+    expect(parseDayTimeline('8a-1p')!.suggestedMealPenalties).toBe(0);
+  });
+
+  it('owes on a long stretch whose only break stayed on the clock', () => {
+    // Never actually broken: the gap was paid, so the stretch never ended.
+    const t = parseDayTimeline('8a-3p, 3:30p-7p', [true])!;
+    expect(t.workedStretches).toEqual([11]);
+    expect(t.suggestedMealPenalties).toBe(2);
+  });
+});
