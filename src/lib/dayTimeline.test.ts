@@ -119,3 +119,75 @@ describe('a multi-call day reaching the pay engine', () => {
     expect(on.totalPay).toBeGreaterThan(off.totalPay);
   });
 });
+
+describe('split shift vs one shift with meals', () => {
+  it('calls a day of short breaks one shift with two meals', () => {
+    const t = parseDayTimeline('8-10, 11-3, 4-7')!;
+    expect(t.isSplit).toBe(false);
+    expect(t.shifts).toHaveLength(1);
+    expect(t.gaps.map(g => g.isSplitBreak)).toEqual([false, false]);
+    expect(t.gaps).toHaveLength(2);
+  });
+
+  it('calls two hours out a split, and groups the calls either side of it', () => {
+    const t = parseDayTimeline('9a-2p and 4p-9p')!;
+    expect(t.gaps[0].minutes).toBe(120);
+    expect(t.isSplit).toBe(true);
+    expect(t.shifts).toHaveLength(2);
+    expect(t.shifts[0][0].start).toBe('09:00 AM');
+    expect(t.shifts[1][0].start).toBe('04:00 PM');
+  });
+
+  it('keeps 1h55m on the near side of the split line', () => {
+    const t = parseDayTimeline('9a-2p and 3:55p-9p')!;
+    expect(t.gaps[0].minutes).toBe(115);
+    expect(t.isSplit).toBe(false);
+    expect(t.shifts).toHaveLength(1);
+  });
+
+  it('splits on the long break and keeps a short one as a meal', () => {
+    // Out 1h after the first call, then 3h out: one split, one meal.
+    const t = parseDayTimeline('8-10, 11-3, 6p-10p')!;
+    expect(t.gaps.map(g => g.isSplitBreak)).toEqual([false, true]);
+    expect(t.isSplit).toBe(true);
+    expect(t.shifts.map(g => g.length)).toEqual([2, 1]);
+  });
+});
+
+describe('the five-hour meal penalty rule', () => {
+  it('suggests none when every stretch is broken within five hours', () => {
+    const t = parseDayTimeline('8-10, 11-3, 4-7')!;
+    expect(t.workedStretches).toEqual([2, 4, 3]);
+    expect(t.suggestedMealPenalties).toBe(0);
+  });
+
+  it('suggests none at exactly five hours', () => {
+    const t = parseDayTimeline('9a-2p')!;
+    expect(t.workedStretches).toEqual([5]);
+    expect(t.suggestedMealPenalties).toBe(0);
+  });
+
+  it('suggests one for a six-hour stretch with no break', () => {
+    const t = parseDayTimeline('8a-2p')!;
+    expect(t.suggestedMealPenalties).toBe(1);
+  });
+
+  it('suggests two once a stretch runs past ten hours', () => {
+    const t = parseDayTimeline('8a-7p')!;
+    expect(t.workedStretches).toEqual([11]);
+    expect(t.suggestedMealPenalties).toBe(2);
+  });
+
+  it('counts a break kept on the clock as no break at all', () => {
+    // 8-10 and 11-3 with the gap paid is one 6h stretch, so a penalty is owed.
+    const t = parseDayTimeline('8-10, 11-3', [true])!;
+    expect(t.workedStretches).toEqual([7]);
+    expect(t.suggestedMealPenalties).toBe(1);
+  });
+
+  it('re-suggests when a gap is put back on the clock', () => {
+    const t = parseDayTimeline('8-10, 11-3')!;
+    expect(t.suggestedMealPenalties).toBe(0);
+    expect(withGapOnClock(t, 0, true).suggestedMealPenalties).toBe(1);
+  });
+});

@@ -14,6 +14,21 @@
  * added up plus any gap that stayed on it.
  */
 
+/**
+ * A break of two hours or more is a split shift — two separate calls that happen
+ * to fall on one date. Anything shorter is one shift with a meal in the middle,
+ * however many meals that comes to.
+ */
+export const SPLIT_BREAK_MINUTES = 120;
+
+/**
+ * A meal has to be called within five hours, and again every five hours after
+ * that, so a stretch worked longer than that owes a penalty — more than one if
+ * it runs long enough. Suggested, not charged: mealPenalties stays something the
+ * user confirms, since whether a penalty was actually owed depends on the call.
+ */
+export const MEAL_PENALTY_AFTER_HOURS = 5;
+
 export interface DayCall {
   /** "08:00 AM" — the app's time format throughout. */
   start: string;
@@ -26,6 +41,8 @@ export interface DayGap {
   start: string;
   end: string;
   minutes: number;
+  /** Two hours or more out: this gap splits the day rather than breaking it. */
+  isSplitBreak: boolean;
   /**
    * A gap you stayed on the clock through is paid and does not come off the
    * day. Clocking out is the normal case, so gaps default to off the clock.
@@ -41,6 +58,17 @@ export interface DayTimeline {
   /** Spread minus the gaps left off the clock. */
   workedHours: number;
   offClockMinutes: number;
+  /** True once any gap is long enough to make this two shifts instead of one. */
+  isSplit: boolean;
+  /**
+   * The day's calls grouped into shifts: one group per stretch between split
+   * breaks. A day with only short breaks is a single group, however many meals.
+   */
+  shifts: DayCall[][];
+  /** How long each unbroken stretch of work ran, in hours. */
+  workedStretches: number[];
+  /** Penalties the five-hour rule implies, for the user to confirm. */
+  suggestedMealPenalties: number;
 }
 
 const TIME = /(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?|a|p)?/gi;
@@ -114,6 +142,7 @@ export function parseDayTimeline(input: string, gapsOnClock: boolean[] = []): Da
       start: fmt(ranges[i - 1].end),
       end: fmt(ranges[i].start),
       minutes,
+      isSplitBreak: minutes >= SPLIT_BREAK_MINUTES,
       onClock: gapsOnClock[gaps.length] ?? false,
     });
   }
@@ -121,12 +150,51 @@ export function parseDayTimeline(input: string, gapsOnClock: boolean[] = []): Da
   const spreadMinutes = ranges[ranges.length - 1].end - ranges[0].start;
   const offClockMinutes = gaps.reduce((sum, g) => sum + (g.onClock ? 0 : g.minutes), 0);
 
+  return { calls, gaps, spreadHours: spreadMinutes / 60, workedHours: (spreadMinutes - offClockMinutes) / 60, offClockMinutes, ...derive(calls, gaps) };
+}
+
+/**
+ * Everything that follows from the calls and gaps rather than from the clock:
+ * where the day splits, how long it was worked without a break, and what the
+ * five-hour rule implies.
+ */
+function derive(calls: DayCall[], gaps: DayGap[]) {
+  const shifts: DayCall[][] = [];
+  const workedStretches: number[] = [];
+  let group: DayCall[] = [];
+  let stretch = 0;
+
+  calls.forEach((call, i) => {
+    group.push(call);
+    stretch += call.hours;
+    const gap = gaps[i];
+    if (!gap) return;
+    if (gap.isSplitBreak) {
+      shifts.push(group);
+      group = [];
+      workedStretches.push(stretch);
+      stretch = 0;
+    } else if (gap.onClock) {
+      // Worked straight through, so the stretch keeps running.
+      stretch += gap.minutes / 60;
+    } else {
+      workedStretches.push(stretch);
+      stretch = 0;
+    }
+  });
+  if (group.length) shifts.push(group);
+  if (stretch > 0) workedStretches.push(stretch);
+
+  const suggestedMealPenalties = workedStretches.reduce(
+    (n, hours) => n + Math.max(0, Math.ceil(hours / MEAL_PENALTY_AFTER_HOURS) - 1),
+    0
+  );
+
   return {
-    calls,
-    gaps,
-    spreadHours: spreadMinutes / 60,
-    workedHours: (spreadMinutes - offClockMinutes) / 60,
-    offClockMinutes,
+    isSplit: gaps.some(g => g.isSplitBreak),
+    shifts,
+    workedStretches,
+    suggestedMealPenalties,
   };
 }
 
@@ -142,5 +210,6 @@ export function withGapOnClock(timeline: DayTimeline, gapIndex: number, onClock:
     gaps,
     offClockMinutes,
     workedHours: (timeline.spreadHours * 60 - offClockMinutes) / 60,
+    ...derive(timeline.calls, gaps),
   };
 }
