@@ -28,6 +28,10 @@ export interface Job {
   mealDuration?: 0 | 30 | 45 | 60;
   /** true = paid/on the clock (no hours deduction), false = unpaid/off the clock (mealDuration is deducted). Irrelevant when mealDuration is 0. */
   mealOnClock?: boolean;
+  /** A second meal, on its own terms: an hour off the clock at lunch and half an hour on the clock later is a normal day. Undefined means the day had only one meal. Deducted independently of the first — see mealDuration. */
+  meal2Duration?: 0 | 30 | 45 | 60;
+  /** Whether the SECOND meal was paid. Same meaning as mealOnClock, for meal2Duration. */
+  meal2OnClock?: boolean;
   /** Units of meal-penalty pay owed (each = 1hr at straight rate) — only meaningful when mealDuration is 0. */
   mealPenalties?: number;
   /** For employers with nightPremiumEnabled: were the hours past midnight actually worked (true, gets the premium) vs. just minimum-call padding that was never really worked (false, straight time)? Undefined = not asked yet / not applicable. Superseded by nightPremiumActualHours when that's set — this stays around for the simple all-or-nothing case and old saved jobs. */

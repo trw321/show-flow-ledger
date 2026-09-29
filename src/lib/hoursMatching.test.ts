@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { hourUpdateToEntry, type SmartImportHourUpdate } from './hoursMatching';
-import { calculateDayPay } from './payCalc';
+import { calculateDayPay, offClockMealMinutes, netHoursWorked, jobPayBreakdown } from './payCalc';
+import type { Job } from './store';
 
 // smart-import hands back hours already net of an off-the-clock meal, while
 // the rest of the app treats job.hoursWorked as the raw clocked span and lets
@@ -208,5 +209,47 @@ describe('calculateDayPay — a 6th or 7th day does not compound with overtime',
     // Night is 2x; a 1.5x day must not make it 3x.
     const result = calculateDayPay(4, rate, 0, 0, 1.5, undefined, { rule: 'daily', nightHours: 4, nightMultiplier: 2 });
     expect(result.totalPay).toBe(4 * 100);
+  });
+});
+
+describe('two meals on one shift, each on its own terms', () => {
+  const shift = (extra: Partial<Job>): Job => ({
+    id: 'j1', name: 'load in', client: 'Acme', date: '2026-10-06',
+    status: 'completed', hoursWorked: 11, hourlyRate: 50,
+    has6th7thDayRule: false, hasVacationPay: false, ...extra,
+  } as Job);
+
+  it('deducts an hour off the clock and leaves half an hour on it alone', () => {
+    // The real case: first lunch 1h off, second 30min on. Only the hour comes off.
+    const job = shift({ mealDuration: 60, mealOnClock: false, meal2Duration: 30, meal2OnClock: true });
+    expect(offClockMealMinutes(job)).toBe(60);
+    expect(netHoursWorked(job)).toBe(10);
+  });
+
+  it('deducts both when both are off the clock', () => {
+    const job = shift({ mealDuration: 60, mealOnClock: false, meal2Duration: 30, meal2OnClock: false });
+    expect(offClockMealMinutes(job)).toBe(90);
+    expect(netHoursWorked(job)).toBe(9.5);
+  });
+
+  it('deducts neither when both are on the clock', () => {
+    const job = shift({ mealDuration: 60, mealOnClock: true, meal2Duration: 30, meal2OnClock: true });
+    expect(offClockMealMinutes(job)).toBe(0);
+    expect(netHoursWorked(job)).toBe(11);
+  });
+
+  it('is unchanged for a shift with only one meal', () => {
+    const job = shift({ mealDuration: 60, mealOnClock: false });
+    expect(offClockMealMinutes(job)).toBe(60);
+    expect(netHoursWorked(job)).toBe(10);
+  });
+
+  it('pays the second meal through to gross, not just the hours display', () => {
+    const oneMeal = shift({ mealDuration: 60, mealOnClock: false });
+    const twoMeals = shift({ mealDuration: 60, mealOnClock: false, meal2Duration: 30, meal2OnClock: false });
+    const a = jobPayBreakdown(oneMeal, [oneMeal]);
+    const b = jobPayBreakdown(twoMeals, [twoMeals]);
+    // Half an hour less worked, billed in the overtime tier.
+    expect(a.gross - b.gross).toBe(0.5 * 75);
   });
 });

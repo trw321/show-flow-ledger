@@ -197,6 +197,18 @@ export function effectiveHoursWorked(job: Job): number {
 }
 
 /**
+ * Every off-the-clock minute a job's meals come to. A day can hold two meals on
+ * independent terms — an hour off at lunch, half an hour on later — and only the
+ * off-the-clock ones reduce the hours. The single place that knows this, so the
+ * second meal cannot be forgotten by one caller and not another.
+ */
+export function offClockMealMinutes(job: Job): number {
+  const first = job.mealDuration && !job.mealOnClock ? job.mealDuration : 0;
+  const second = job.meal2Duration && !job.meal2OnClock ? job.meal2Duration : 0;
+  return first + second;
+}
+
+/**
  * "Hours worked" as it should read anywhere it's shown as a standalone
  * number (Dashboard totals, job badges, exports) — effectiveHoursWorked()
  * minus an off-the-clock meal break, mirroring the deduction calculateDayPay
@@ -207,8 +219,7 @@ export function effectiveHoursWorked(job: Job): number {
  */
 export function netHoursWorked(job: Job): number {
   const raw = effectiveHoursWorked(job);
-  const mealDeduction = (job.mealDuration && !job.mealOnClock) ? job.mealDuration / 60 : 0;
-  return Math.max(0, raw - mealDeduction);
+  return Math.max(0, raw - offClockMealMinutes(job) / 60);
 }
 
 // status never auto-transitions off "upcoming"/"in-progress" as the date
@@ -241,7 +252,7 @@ export function jobPayBreakdown(job: Job, allJobs: Job[], employers: Employer[] 
     ? calculateNightHours(job.startTime, job.endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour)
     : 0;
   const nightHours = resolveConfirmedNightHours(rawNightHours, job.nightPremiumConfirmed, job.nightPremiumActualHours);
-  const { totalPay, duesAmount, taxAmount } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock }, {
+  const { totalPay, duesAmount, taxAmount } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock, offClockMinutesTotal: offClockMealMinutes(job) }, {
     rule: employer?.overtimeRule ?? 'daily',
     otThresholdHours: employer?.dailyOvertimeThresholdHours,
     dtThresholdHours: employer?.dailyDoubletimeThresholdHours,
@@ -454,7 +465,7 @@ export function calculateExpectedPay(
     existing.rate = rate;
     // Each shift on the date brings its own meal. This used to overwrite, so a
     // two-in/two-out day with two walk aways only ever lost one of them.
-    if (job.mealDuration && !job.mealOnClock) existing.offClockMealMinutes += job.mealDuration;
+    existing.offClockMealMinutes += offClockMealMinutes(job);
     if (job.mealDuration !== undefined) { existing.mealDuration = job.mealDuration; existing.mealOnClock = job.mealOnClock; }
     if (job.startTime) { existing.startTime = job.startTime; existing.endTime = job.endTime; existing.nightConfirmed = job.nightPremiumConfirmed; existing.nightActualHours = job.nightPremiumActualHours; }
     byDate.set(job.date, existing);

@@ -132,6 +132,7 @@ describe('backup → restore round trip', () => {
       { id: 'j1', name: 'Warriors Game', client: 'GSW Arena LLC', venue: 'Chase Center',
         date: '2026-09-10', startTime: '08:00 AM', endTime: '05:00 PM', status: 'completed',
         hoursWorked: 9, hourlyRate: 52.75, mealDuration: 60, mealOnClock: false, mealPenalties: 2,
+        meal2Duration: 30, meal2OnClock: true,
         notes: 'dock B', createdAt: '2026-01-01',
         stubCorrections: [{ field: 'gross', was: 1200, now: 1150, at: '2026-09-16' }],
         stubParsed: { employer: 'GSW', totalHours: 24, grossPay: 1266 } },
@@ -186,5 +187,44 @@ describe('backup → restore round trip', () => {
     const back = roundTrip(full).jobs.find(j => j.id === 'j1')!;
     expect(back.mealOnClock).toBe(false);
     expect(back.mealPenalties).toBe(2);
+  });
+});
+
+describe('the second meal survives a backup', () => {
+  it('writes both meals to their own columns', () => {
+    const rows = rowsFor({
+      jobs: [{ id: 'j1', name: 'n', client: 'c', venue: 'v', date: '2026-10-06', status: 'completed',
+        notes: '', createdAt: '2026-01-01', mealDuration: 60, mealOnClock: false,
+        meal2Duration: 30, meal2OnClock: true }],
+    }, 'jobs') as Array<Record<string, unknown>>;
+    expect(rows[0].meal_duration).toBe(60);
+    expect(rows[0].meal_on_clock).toBe(false);
+    expect(rows[0].meal2_duration).toBe(30);
+    expect(rows[0].meal2_on_clock).toBe(true);
+  });
+
+  it('sends null rather than undefined for a shift with one meal', () => {
+    const rows = rowsFor({
+      jobs: [{ id: 'j1', name: 'n', client: 'c', venue: 'v', date: '2026-10-06', status: 'completed',
+        notes: '', createdAt: '2026-01-01', mealDuration: 60, mealOnClock: false }],
+    }, 'jobs') as Array<Record<string, unknown>>;
+    expect(rows[0].meal2_duration).toBeNull();
+    expect(rows[0].meal2_on_clock).toBeNull();
+  });
+
+  it('restores a second meal, and leaves it unset when there was none', () => {
+    const restored = fromRows({
+      jobs: [
+        { id: 'j1', name: 'n', client: 'c', venue: 'v', date: '2026-10-06', status: 'completed',
+          notes: '', created_at: '2026-01-01', meal_duration: 60, meal_on_clock: false,
+          meal2_duration: 30, meal2_on_clock: true },
+        { id: 'j2', name: 'n', client: 'c', venue: 'v', date: '2026-10-07', status: 'completed',
+          notes: '', created_at: '2026-01-01', meal2_duration: null, meal2_on_clock: null },
+      ],
+    } as never);
+    expect(restored.jobs[0].meal2Duration).toBe(30);
+    expect(restored.jobs[0].meal2OnClock).toBe(true);
+    expect(restored.jobs[1].meal2Duration).toBeUndefined();
+    expect(restored.jobs[1].meal2OnClock).toBeUndefined();
   });
 });

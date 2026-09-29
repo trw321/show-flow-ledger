@@ -179,6 +179,11 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   const [payrollCompany, setPayrollCompany] = useState(job.payrollCompany ?? '');
   const [mealDuration, setMealDuration] = useState<Job['mealDuration']>(job.mealDuration ?? undefined);
   const [mealOnClock, setMealOnClock] = useState(job.mealOnClock ?? false);
+  const [meal2Duration, setMeal2Duration] = useState<Job['meal2Duration']>(job.meal2Duration ?? undefined);
+  const [meal2OnClock, setMeal2OnClock] = useState(job.meal2OnClock ?? false);
+  // A second meal is opt-in: most days have one. Shown when the saved shift
+  // already has one, so an existing second meal is never hidden.
+  const [secondMealOpen, setSecondMealOpen] = useState(job.meal2Duration !== undefined);
   const [mealPenalties, setMealPenalties] = useState(job.mealPenalties?.toString() ?? '');
   const [nightPremiumConfirmed, setNightPremiumConfirmed] = useState(job.nightPremiumConfirmed ?? true);
   const [nightPremiumActualHours, setNightPremiumActualHours] = useState(job.nightPremiumActualHours?.toString() ?? '');
@@ -204,6 +209,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
     setMinimumHours(job.minimumHours?.toString() ?? '');
     setPayrollCompany(job.payrollCompany ?? '');
     setMealDuration(job.mealDuration ?? undefined);
+    setMeal2Duration(job.meal2Duration ?? undefined);
+    setMeal2OnClock(job.meal2OnClock ?? false);
+    setSecondMealOpen(job.meal2Duration !== undefined);
     setMealOnClock(job.mealOnClock ?? false);
     setMealPenalties(job.mealPenalties?.toString() ?? '');
     setNightPremiumConfirmed(job.nightPremiumConfirmed ?? true);
@@ -361,14 +369,15 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   // Mirrors calculateDayPay: an off-the-clock meal comes out of the hours
   // before the minimum-call floor applies. Without this the on/off toggle
   // changed the pay but every hours figure on screen stayed put.
-  const mealDeductionHours = (mealDuration && !mealOnClock) ? mealDuration / 60 : 0;
+  const offClockMealMins = ((mealDuration && !mealOnClock) ? mealDuration : 0) + ((meal2Duration && !meal2OnClock) ? meal2Duration : 0);
+  const mealDeductionHours = offClockMealMins / 60;
   const paidHours = Math.max(0, actualHours - mealDeductionHours);
   const billableHours = Math.max(paidHours, minHours);
   const minimumApplied = minHours > 0 && paidHours < minHours && paidHours > 0;
   const rate = parseFloat(hourlyRate) || 0;
   const mealPenaltyUnits = parseFloat(mealPenalties) || 0;
   const payPreview = rate > 0 && billableHours > 0
-    ? calculateDayPay(actualHours, rate, minHours, mealPenaltyUnits, 1, { duration: mealDuration, onClock: mealOnClock }, { nightHours, nightMultiplier: employer?.nightPremiumMultiplier, unionDuesPercent: employer?.unionDuesPercent, estimatedTaxPercent: employer?.estimatedTaxPercent })
+    ? calculateDayPay(actualHours, rate, minHours, mealPenaltyUnits, 1, { duration: mealDuration, onClock: mealOnClock, offClockMinutesTotal: offClockMealMins }, { nightHours, nightMultiplier: employer?.nightPremiumMultiplier, unionDuesPercent: employer?.unionDuesPercent, estimatedTaxPercent: employer?.estimatedTaxPercent })
     : null;
   // calculateDayPay's own breakdown stops at dues/tax — vacation is applied
   // on top of that (same as jobGross/jobPayBreakdown), so it needs its own
@@ -438,6 +447,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
     if (payrollCompany !== (job.payrollCompany ?? '')) updates.payrollCompany = payrollCompany.trim() || undefined;
     if (mealDuration !== (job.mealDuration ?? undefined)) updates.mealDuration = mealDuration;
     if (mealDuration && mealOnClock !== (job.mealOnClock ?? false)) updates.mealOnClock = mealOnClock;
+    if (meal2Duration !== (job.meal2Duration ?? undefined)) updates.meal2Duration = meal2Duration;
+    if (meal2Duration && meal2OnClock !== (job.meal2OnClock ?? false)) updates.meal2OnClock = meal2OnClock;
     const parsedPenalties = parseFloat(mealPenalties);
     if (!isNaN(parsedPenalties) && parsedPenalties !== (job.mealPenalties ?? 0)) updates.mealPenalties = parsedPenalties > 0 ? parsedPenalties : undefined;
     if (rawNightHours > 0) {
@@ -462,6 +473,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
     payrollCompany !== (job.payrollCompany ?? '') ||
     mealDuration !== (job.mealDuration ?? undefined) ||
     (!!mealDuration && mealOnClock !== (job.mealOnClock ?? false)) ||
+    meal2Duration !== (job.meal2Duration ?? undefined) ||
+    (!!meal2Duration && meal2OnClock !== (job.meal2OnClock ?? false)) ||
     (mealPenalties !== (job.mealPenalties?.toString() ?? '')) ||
     (rawNightHours > 0 && nightPremiumConfirmed !== (job.nightPremiumConfirmed ?? true)) ||
     nightActualHoursChanged ||
@@ -561,7 +574,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
               partial break AND still be owed a penalty for it running late,
               so picking one no longer hides the other. */}
           <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">Meal Break</label>
+            <label className="text-xs text-muted-foreground">{secondMealOpen ? 'First Meal' : 'Meal Break'}</label>
             <div className="grid grid-cols-4 gap-1.5">
               {([{ value: 0 as const, label: 'MP' }, { value: 30 as const, label: '30m' }, { value: 45 as const, label: '45m' }, { value: 60 as const, label: '1hr' }]).map(({ value, label }) => {
                 const active = mealDuration === value;
@@ -585,6 +598,54 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
                 })}
               </div>
             )}
+            {/* A second meal gets its own boxes rather than sharing the first's:
+                an hour off at lunch and half an hour on later is a normal day,
+                and the two have nothing to do with each other. */}
+            {!secondMealOpen ? (
+              <button
+                type="button"
+                onClick={() => setSecondMealOpen(true)}
+                className="flex items-center gap-1 text-[11px] text-primary hover:underline pt-0.5"
+              >
+                <Plus size={11} /> Add a second meal
+              </button>
+            ) : (
+              <div className="space-y-1.5 pt-1 border-t border-border/60">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-muted-foreground">Second Meal</label>
+                  <button
+                    type="button"
+                    onClick={() => { setSecondMealOpen(false); setMeal2Duration(undefined); setMeal2OnClock(false); }}
+                    className="text-[11px] text-destructive hover:underline"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {([{ value: 0 as const, label: 'MP' }, { value: 30 as const, label: '30m' }, { value: 45 as const, label: '45m' }, { value: 60 as const, label: '1hr' }]).map(({ value, label }) => {
+                    const active = meal2Duration === value;
+                    return (
+                      <button key={label} type="button" onClick={() => setMeal2Duration(active ? undefined : value)} className={cn("rounded-md border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
+                        <p className={cn("text-sm font-bold text-mono", active && "text-primary")}>{label}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+                {meal2Duration !== undefined && meal2Duration > 0 && (
+                  <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                    {[{ value: true, label: 'On the clock', sub: 'paid, no deduction' }, { value: false, label: 'Off the clock', sub: `${meal2Duration}min deducted` }].map(({ value, label, sub }) => {
+                      const active = meal2OnClock === value;
+                      return (
+                        <button key={label} type="button" onClick={() => setMeal2OnClock(value)} className={cn("rounded-md border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
+                          <p className={cn("text-xs font-bold", active && "text-primary")}>{label}</p>
+                          <p className="text-[9px] leading-tight mt-0.5 opacity-70">{sub}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
             <div className="pt-0.5">
               <label className="text-[10px] text-mono uppercase text-muted-foreground">Meal penalty (MP) units — 1 unit = 1hr at straight rate</label>
               <ScrollWheel
@@ -604,12 +665,12 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
                   what calculateDayPay expects. The number that matters when you are
                   looking at it is the hours actually worked, so it sits right here —
                   the meal toggle just above is what changes it. */}
-              {actualHours > 0 && mealDuration !== undefined && mealDuration > 0 && (
+              {actualHours > 0 && (offClockMealMins > 0 || (mealDuration !== undefined && mealDuration > 0)) && (
                 <p className="text-[11px] text-mono leading-tight">
                   {mealDeductionHours > 0 ? (
                     <><span className="text-muted-foreground line-through">{actualHours}h</span>{' '}
                       <span className="text-accent font-semibold">{paidHours}h worked</span>{' '}
-                      <span className="text-muted-foreground">({mealDuration}min off the clock)</span></>
+                      <span className="text-muted-foreground">({offClockMealMins}min off the clock)</span></>
                   ) : (
                     <><span className="text-accent font-semibold">{actualHours}h worked</span>{' '}
                       <span className="text-muted-foreground">(meal stays on the clock)</span></>
@@ -658,7 +719,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
         {payPreview && (
           <div className={cn("rounded-md border p-3 space-y-1.5", minimumApplied ? "border-accent/40 bg-accent/5" : "border-success/30 bg-success/5")}>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">{minimumApplied ? `Worked ${actualHours}h — paid for ${billableHours}h minimum` : mealDeductionHours > 0 ? `Worked ${actualHours}h — ${mealDuration}min meal = ${paidHours}h paid` : `Worked ${actualHours}h`}</span>
+              <span className="text-xs text-muted-foreground">{minimumApplied ? `Worked ${actualHours}h — paid for ${billableHours}h minimum` : mealDeductionHours > 0 ? `Worked ${actualHours}h — ${offClockMealMins}min meal = ${paidHours}h paid` : `Worked ${actualHours}h`}</span>
               <span className="font-bold text-sm text-mono text-success">${payPreviewTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
             </div>
             {minimumApplied && <p className="text-[10px] text-accent font-medium">{minHours}h minimum call — contract guarantees payment for {minHours}h</p>}
