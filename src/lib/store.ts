@@ -28,6 +28,10 @@ export interface Job {
   mealDuration?: 0 | 30 | 45 | 60;
   /** true = paid/on the clock (no hours deduction), false = unpaid/off the clock (mealDuration is deducted). Irrelevant when mealDuration is 0. */
   mealOnClock?: boolean;
+  /** A day entered as a run of calls — "8-10, 11-3, 4-7" — kept as typed, because the meals are the gaps between the calls and a gap can be any length. When set, it is what the day's off-the-clock minutes are derived from, in place of mealDuration/meal2Duration. See parseDayTimeline. */
+  callTimeline?: string;
+  /** Which of the timeline's gaps were kept on the clock (paid, not deducted), in order. Absent or shorter than the gap list means the rest were off the clock, which is the normal case. */
+  callGapsOnClock?: boolean[];
   /** A second meal, on its own terms: an hour off the clock at lunch and half an hour on the clock later is a normal day. Undefined means the day had only one meal. Deducted independently of the first — see mealDuration. */
   meal2Duration?: 0 | 30 | 45 | 60;
   /** Whether the SECOND meal was paid. Same meaning as mealOnClock, for meal2Duration. */

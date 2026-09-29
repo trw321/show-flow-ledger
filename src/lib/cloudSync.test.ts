@@ -228,3 +228,39 @@ describe('the second meal survives a backup', () => {
     expect(restored.jobs[1].meal2OnClock).toBeUndefined();
   });
 });
+
+describe('a multi-call day survives a backup', () => {
+  it('writes the calls and which gaps were paid', () => {
+    const rows = rowsFor({
+      jobs: [{ id: 'j1', name: 'n', client: 'c', venue: 'v', date: '2026-10-06', status: 'completed',
+        notes: '', createdAt: '2026-01-01', hoursWorked: 11,
+        callTimeline: '8-10, 11-3, 4-7', callGapsOnClock: [false, true] }],
+    }, 'jobs') as Array<Record<string, unknown>>;
+    expect(rows[0].call_timeline).toBe('8-10, 11-3, 4-7');
+    expect(rows[0].call_gaps_on_clock).toEqual([false, true]);
+  });
+
+  it('sends null for an ordinary single-call shift', () => {
+    const rows = rowsFor({
+      jobs: [{ id: 'j1', name: 'n', client: 'c', venue: 'v', date: '2026-10-06', status: 'completed',
+        notes: '', createdAt: '2026-01-01', hoursWorked: 9 }],
+    }, 'jobs') as Array<Record<string, unknown>>;
+    expect(rows[0].call_timeline).toBeNull();
+    expect(rows[0].call_gaps_on_clock).toBeNull();
+  });
+
+  it('restores them, and leaves them unset when there were none', () => {
+    const restored = fromRows({
+      jobs: [
+        { id: 'j1', name: 'n', client: 'c', venue: 'v', date: '2026-10-06', status: 'completed',
+          notes: '', created_at: '2026-01-01', call_timeline: '8-10, 11-3, 4-7', call_gaps_on_clock: [false, true] },
+        { id: 'j2', name: 'n', client: 'c', venue: 'v', date: '2026-10-07', status: 'completed',
+          notes: '', created_at: '2026-01-01', call_timeline: null, call_gaps_on_clock: null },
+      ],
+    } as never);
+    expect(restored.jobs[0].callTimeline).toBe('8-10, 11-3, 4-7');
+    expect(restored.jobs[0].callGapsOnClock).toEqual([false, true]);
+    expect(restored.jobs[1].callTimeline).toBeUndefined();
+    expect(restored.jobs[1].callGapsOnClock).toBeUndefined();
+  });
+});

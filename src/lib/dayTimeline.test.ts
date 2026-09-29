@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseDayTimeline, withGapOnClock } from './dayTimeline';
-import { calculateDayPay } from './payCalc';
+import { calculateDayPay, offClockMealMinutes, netHoursWorked } from './payCalc';
 
 describe('parseDayTimeline', () => {
   it('reads three calls with an hour out between each', () => {
@@ -178,17 +178,20 @@ describe('the five-hour meal penalty rule', () => {
     expect(t.suggestedMealPenalties).toBe(2);
   });
 
-  it('counts a break kept on the clock as no break at all', () => {
-    // 8-10 and 11-3 with the gap paid is one 6h stretch, so a penalty is owed.
+  it('counts a meal on the clock as being fed, because it is', () => {
+    // Paid through the meal still means food arrived, so the five hours restart.
     const t = parseDayTimeline('8-10, 11-3', [true])!;
-    expect(t.workedStretches).toEqual([7]);
-    expect(t.suggestedMealPenalties).toBe(1);
+    expect(t.workedStretches).toEqual([2, 4]);
+    expect(t.suggestedMealPenalties).toBe(0);
   });
 
-  it('re-suggests when a gap is put back on the clock', () => {
-    const t = parseDayTimeline('8-10, 11-3')!;
-    expect(t.suggestedMealPenalties).toBe(0);
-    expect(withGapOnClock(t, 0, true).suggestedMealPenalties).toBe(1);
+  it('suggests the same whether the meal was paid or not', () => {
+    const off = parseDayTimeline('8-10, 11-3')!;
+    const on = withGapOnClock(off, 0, true);
+    expect(off.suggestedMealPenalties).toBe(0);
+    expect(on.suggestedMealPenalties).toBe(0);
+    // The pay differs; the penalty does not.
+    expect(on.workedHours).toBeGreaterThan(off.workedHours);
   });
 });
 
@@ -225,10 +228,52 @@ describe('a break taken is a break — no penalty, whatever its length', () => {
     expect(parseDayTimeline('8a-1p')!.suggestedMealPenalties).toBe(0);
   });
 
-  it('owes on a long stretch whose only break stayed on the clock', () => {
-    // Never actually broken: the gap was paid, so the stretch never ended.
+  it('owes nothing when the only meal was paid — food still arrived', () => {
     const t = parseDayTimeline('8a-3p, 3:30p-7p', [true])!;
-    expect(t.workedStretches).toEqual([11]);
-    expect(t.suggestedMealPenalties).toBe(2);
+    expect(t.workedStretches).toEqual([7, 3.5]);
+    expect(t.suggestedMealPenalties).toBe(0);
+  });
+
+  it('owes for the stretch after the meal when that one runs past five hours', () => {
+    // Fed at 2pm, then six consecutive hours with nothing: one penalty.
+    const t = parseDayTimeline('8a-2p, 3p-9p')!;
+    expect(t.workedStretches).toEqual([6, 6]);
+    expect(t.suggestedMealPenalties).toBe(1);
+  });
+});
+
+describe('the timeline drives a job through the pay engine', () => {
+  const job = (extra: Record<string, unknown>) => ({
+    id: 'j1', name: 'load in', client: 'Acme', date: '2026-10-06', status: 'completed',
+    has6th7thDayRule: false, hasVacationPay: false, ...extra,
+  }) as never;
+
+  it('takes the day off-clock minutes from the calls, not the meal fields', () => {
+    const j = job({ hoursWorked: 11, hourlyRate: 50, callTimeline: '8-10, 11-3, 4-7' });
+    expect(offClockMealMinutes(j)).toBe(120);
+    expect(netHoursWorked(j)).toBe(9);
+  });
+
+  it('honours a gap put back on the clock', () => {
+    const j = job({ hoursWorked: 11, hourlyRate: 50, callTimeline: '8-10, 11-3, 4-7', callGapsOnClock: [true, false] });
+    expect(offClockMealMinutes(j)).toBe(60);
+    expect(netHoursWorked(j)).toBe(10);
+  });
+
+  it('expresses a gap length the fixed meal durations cannot', () => {
+    // 90 minutes out is not 30, 45 or 60 — the timeline is why it still works.
+    const j = job({ hoursWorked: 10.5, hourlyRate: 50, callTimeline: '8-12, 1:30p-6p' });
+    expect(offClockMealMinutes(j)).toBe(90);
+    expect(netHoursWorked(j)).toBe(9);
+  });
+
+  it('ignores the meal fields entirely once a timeline is set', () => {
+    const j = job({ hoursWorked: 11, callTimeline: '8-10, 11-3, 4-7', mealDuration: 30, mealOnClock: false });
+    expect(offClockMealMinutes(j)).toBe(120);
+  });
+
+  it('falls back to the meal fields when the timeline cannot be read', () => {
+    const j = job({ hoursWorked: 9, callTimeline: 'nonsense', mealDuration: 60, mealOnClock: false });
+    expect(offClockMealMinutes(j)).toBe(60);
   });
 });

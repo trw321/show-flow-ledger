@@ -9,7 +9,8 @@ import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
   AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
-import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye } from 'lucide-react';
+import { parseDayTimeline, withGapOnClock, type DayTimeline } from '@/lib/dayTimeline';
+import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO } from 'date-fns';
 import type { Job, CalendarEvent } from '@/lib/store';
 import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross } from '@/lib/payCalc';
@@ -184,6 +185,11 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   // A second meal is opt-in: most days have one. Shown when the saved shift
   // already has one, so an existing second meal is never hidden.
   const [secondMealOpen, setSecondMealOpen] = useState(job.meal2Duration !== undefined);
+  // A day of several calls, typed as it arrives: "8-10, 11-3, 4-7". The gaps
+  // between the calls are the meals, so nothing about them is entered twice.
+  const [callTimeline, setCallTimeline] = useState(job.callTimeline ?? '');
+  const [gapsOnClock, setGapsOnClock] = useState<boolean[]>(job.callGapsOnClock ?? []);
+  const [callsOpen, setCallsOpen] = useState(!!job.callTimeline);
   const [mealPenalties, setMealPenalties] = useState(job.mealPenalties?.toString() ?? '');
   const [nightPremiumConfirmed, setNightPremiumConfirmed] = useState(job.nightPremiumConfirmed ?? true);
   const [nightPremiumActualHours, setNightPremiumActualHours] = useState(job.nightPremiumActualHours?.toString() ?? '');
@@ -212,6 +218,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
     setMeal2Duration(job.meal2Duration ?? undefined);
     setMeal2OnClock(job.meal2OnClock ?? false);
     setSecondMealOpen(job.meal2Duration !== undefined);
+    setCallTimeline(job.callTimeline ?? '');
+    setGapsOnClock(job.callGapsOnClock ?? []);
+    setCallsOpen(!!job.callTimeline);
     setMealOnClock(job.mealOnClock ?? false);
     setMealPenalties(job.mealPenalties?.toString() ?? '');
     setNightPremiumConfirmed(job.nightPremiumConfirmed ?? true);
@@ -364,12 +373,19 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
     }
   };
 
-  const actualHours = parseFloat(hoursWorked) || 0;
+  // The clocked figure for a multi-call day is the whole spread, first in to last
+  // out; the gaps come off it below, exactly as a single meal does.
+  const actualHours = timeline ? timeline.spreadHours : (parseFloat(hoursWorked) || 0);
   const minHours = parseFloat(minimumHours) || 0;
   // Mirrors calculateDayPay: an off-the-clock meal comes out of the hours
   // before the minimum-call floor applies. Without this the on/off toggle
   // changed the pay but every hours figure on screen stayed put.
-  const offClockMealMins = ((mealDuration && !mealOnClock) ? mealDuration : 0) + ((meal2Duration && !meal2OnClock) ? meal2Duration : 0);
+  const timeline: DayTimeline | null = callsOpen && callTimeline.trim()
+    ? parseDayTimeline(callTimeline, gapsOnClock)
+    : null;
+  const offClockMealMins = timeline
+    ? timeline.offClockMinutes
+    : ((mealDuration && !mealOnClock) ? mealDuration : 0) + ((meal2Duration && !meal2OnClock) ? meal2Duration : 0);
   const mealDeductionHours = offClockMealMins / 60;
   const paidHours = Math.max(0, actualHours - mealDeductionHours);
   const billableHours = Math.max(paidHours, minHours);
@@ -447,6 +463,12 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
     if (payrollCompany !== (job.payrollCompany ?? '')) updates.payrollCompany = payrollCompany.trim() || undefined;
     if (mealDuration !== (job.mealDuration ?? undefined)) updates.mealDuration = mealDuration;
     if (mealDuration && mealOnClock !== (job.mealOnClock ?? false)) updates.mealOnClock = mealOnClock;
+    const timelineToSave = callsOpen && callTimeline.trim() ? callTimeline.trim() : undefined;
+    if (timelineToSave !== (job.callTimeline ?? undefined)) updates.callTimeline = timelineToSave;
+    if (timelineToSave && JSON.stringify(gapsOnClock) !== JSON.stringify(job.callGapsOnClock ?? [])) updates.callGapsOnClock = gapsOnClock;
+    // The spread is what gets stored, so every reader outside this dialog sees a
+    // clocked figure it already knows how to handle.
+    if (timeline) updates.hoursWorked = timeline.spreadHours;
     if (meal2Duration !== (job.meal2Duration ?? undefined)) updates.meal2Duration = meal2Duration;
     if (meal2Duration && meal2OnClock !== (job.meal2OnClock ?? false)) updates.meal2OnClock = meal2OnClock;
     const parsedPenalties = parseFloat(mealPenalties);
@@ -473,6 +495,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
     payrollCompany !== (job.payrollCompany ?? '') ||
     mealDuration !== (job.mealDuration ?? undefined) ||
     (!!mealDuration && mealOnClock !== (job.mealOnClock ?? false)) ||
+    (callsOpen && callTimeline.trim() ? callTimeline.trim() : undefined) !== (job.callTimeline ?? undefined) ||
+    (!!callTimeline.trim() && JSON.stringify(gapsOnClock) !== JSON.stringify(job.callGapsOnClock ?? [])) ||
     meal2Duration !== (job.meal2Duration ?? undefined) ||
     (!!meal2Duration && meal2OnClock !== (job.meal2OnClock ?? false)) ||
     (mealPenalties !== (job.mealPenalties?.toString() ?? '')) ||
@@ -567,6 +591,105 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
               <p className="text-[10px] text-mono text-muted-foreground">{startTime} → {endTime} = <span className="text-accent font-semibold">{calcHours(startTime, endTime).toFixed(1)}h</span></p>
             )}
           </div>
+
+          {/* A day of several calls. Typed as one line, because that is how it
+              arrives, and the meals are read out of the gaps rather than entered
+              again beside them — so the hours and the meals cannot disagree. */}
+          {!callsOpen ? (
+            <button
+              type="button"
+              onClick={() => setCallsOpen(true)}
+              className="flex items-center gap-1 text-[11px] text-primary hover:underline self-start"
+            >
+              <Plus size={11} /> More than one call today
+            </button>
+          ) : (
+            <div className="space-y-1.5 rounded-md border border-primary/30 bg-primary/5 p-2.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] text-mono uppercase tracking-wider text-primary" htmlFor="call-timeline">Calls</label>
+                <button
+                  type="button"
+                  onClick={() => { setCallsOpen(false); setCallTimeline(''); setGapsOnClock([]); }}
+                  className="text-[11px] text-destructive hover:underline"
+                >
+                  Remove
+                </button>
+              </div>
+              <Input
+                id="call-timeline"
+                value={callTimeline}
+                onChange={e => setCallTimeline(e.target.value)}
+                placeholder="8-10, 11-3, 4-7"
+                className="h-9 text-sm text-mono"
+                spellCheck={false}
+              />
+              {!timeline ? (
+                <p className="text-[10px] text-muted-foreground">
+                  Commas between calls. The gaps become the meals — 🌭 marks each one.
+                </p>
+              ) : (
+                <>
+                  <div className="rounded-md border border-border overflow-hidden">
+                    {timeline.calls.map((call, i) => {
+                      const gap = timeline.gaps[i];
+                      return (
+                        <div key={i}>
+                          <div className="flex items-center gap-2 px-2 py-1.5 bg-secondary/20">
+                            <span className="text-[9px] text-mono uppercase tracking-wider text-muted-foreground w-11 shrink-0">Call {i + 1}</span>
+                            <span className="text-xs text-mono flex-1 min-w-0">{call.start} – {call.end}</span>
+                            <span className="text-[11px] text-mono text-muted-foreground">{call.hours}h</span>
+                          </div>
+                          {gap && (
+                            <div className="flex items-center gap-2 px-2 py-1.5 border-y border-border bg-background/40">
+                              <span className="text-sm shrink-0" aria-hidden="true">🌭</span>
+                              <span className="text-[11px] text-mono flex-1 min-w-0 text-warning">
+                                {gap.minutes}min{gap.isSplitBreak ? ' · splits the day' : ''}
+                              </span>
+                              <div className="flex shrink-0 rounded-md border border-border overflow-hidden">
+                                {[{ on: true, label: 'Paid' }, { on: false, label: 'Unpaid' }].map(({ on, label }) => (
+                                  <button
+                                    key={label}
+                                    type="button"
+                                    aria-pressed={gap.onClock === on}
+                                    onClick={() => setGapsOnClock(withGapOnClock(timeline, i, on).gaps.map(g => g.onClock))}
+                                    className={cn(
+                                      'text-[9px] text-mono font-bold uppercase tracking-wider px-2 py-1 transition-colors',
+                                      gap.onClock === on ? 'bg-warning text-warning-foreground' : 'bg-secondary/20 text-muted-foreground hover:text-foreground'
+                                    )}
+                                  >
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-mono">
+                    <span className="text-muted-foreground line-through">{timeline.spreadHours}h clocked</span>
+                    {timeline.offClockMinutes > 0 && <span className="text-muted-foreground">−{timeline.offClockMinutes}min</span>}
+                    <span className="text-accent font-semibold">{timeline.workedHours}h worked</span>
+                    {timeline.isSplit && <span className="text-warning">split shift</span>}
+                  </div>
+                  {timeline.suggestedMealPenalties > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setMealPenalties(String(timeline.suggestedMealPenalties))}
+                      className="flex items-start gap-1.5 text-left text-[10px] text-warning hover:underline"
+                    >
+                      <AlertTriangle size={10} className="shrink-0 mt-0.5" />
+                      <span>
+                        {timeline.workedStretches.filter(h => h > 5).map(h => `${h}h`).join(' and ')} with no food —
+                        {' '}{timeline.suggestedMealPenalties} meal {timeline.suggestedMealPenalties === 1 ? 'penalty' : 'penalties'} owed. Tap to set.
+                      </span>
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           {/* Meal break — 2nd most important question after End Time, so it
               lives right here instead of buried in Edit shift. Break duration

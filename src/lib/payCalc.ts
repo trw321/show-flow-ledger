@@ -1,4 +1,5 @@
 import type { Job, Employer } from './store';
+import { parseDayTimeline } from './dayTimeline';
 import { parseISO, differenceInCalendarDays, startOfDay, startOfWeek, endOfWeek } from 'date-fns';
 import { resolveEmployer } from './employerMatch';
 
@@ -203,6 +204,12 @@ export function effectiveHoursWorked(job: Job): number {
  * second meal cannot be forgotten by one caller and not another.
  */
 export function offClockMealMinutes(job: Job): number {
+  // A day entered as a run of calls derives its meals from the gaps, which can be
+  // any length, so the timeline wins over the two fixed-duration meal fields.
+  if (job.callTimeline) {
+    const timeline = parseDayTimeline(job.callTimeline, job.callGapsOnClock ?? []);
+    if (timeline) return timeline.offClockMinutes;
+  }
   const first = job.mealDuration && !job.mealOnClock ? job.mealDuration : 0;
   const second = job.meal2Duration && !job.meal2OnClock ? job.meal2Duration : 0;
   return first + second;
