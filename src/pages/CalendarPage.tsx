@@ -383,6 +383,15 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   const timeline: DayTimeline | null = callsOpen && callTimeline.trim()
     ? parseDayTimeline(callTimeline, gapsOnClock)
     : null;
+  // What the day you typed turns out to be decides how the meals are shown:
+  // nothing to show for a straight call, the boxed buttons for a single lunch
+  // because four boxes beat a row, and the compact rows once there are several.
+  const timelineGaps = timeline?.gaps.length ?? 0;
+  const mealsFromTimeline = timelineGaps > 0;
+  const oneMealFromTimeline = timelineGaps === 1 ? timeline!.gaps[0] : null;
+  const setOnlyGapOnClock = (on: boolean) => {
+    if (timeline) setGapsOnClock(withGapOnClock(timeline, 0, on).gaps.map(g => g.onClock));
+  };
   const offClockMealMins = timeline
     ? timeline.offClockMinutes
     : ((mealDuration && !mealOnClock) ? mealDuration : 0) + ((meal2Duration && !meal2OnClock) ? meal2Duration : 0);
@@ -639,7 +648,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
                             <span className="text-xs text-mono flex-1 min-w-0">{call.start} – {call.end}</span>
                             <span className="text-[11px] text-mono text-muted-foreground">{call.hours}h</span>
                           </div>
-                          {gap && (
+                          {gap && timelineGaps > 1 && (
                             <div className="flex items-center gap-2 px-2 py-1.5 border-y border-border bg-background/40">
                               <span className="text-sm shrink-0" aria-hidden="true">🌭</span>
                               <span className="text-[11px] text-mono flex-1 min-w-0 text-warning">
@@ -667,6 +676,29 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
                       );
                     })}
                   </div>
+                  {oneMealFromTimeline && (
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">
+                        🌭 One meal — {oneMealFromTimeline.minutes}min from the gap
+                      </label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[{ on: true, label: 'On the clock', sub: 'paid, no deduction' }, { on: false, label: 'Off the clock', sub: `${oneMealFromTimeline.minutes}min deducted` }].map(({ on, label, sub: subLabel }) => {
+                          const active = oneMealFromTimeline.onClock === on;
+                          return (
+                            <button key={label} type="button" onClick={() => setOnlyGapOnClock(on)} className={cn("rounded-md border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
+                              <p className={cn("text-xs font-bold", active && "text-primary")}>{label}</p>
+                              <p className="text-[9px] leading-tight mt-0.5 opacity-70">{subLabel}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {timelineGaps === 0 && (
+                    <p className="text-[10px] text-muted-foreground">
+                      One straight call — set the meal with the buttons below.
+                    </p>
+                  )}
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-mono">
                     <span className="text-muted-foreground line-through">{timeline.spreadHours}h clocked</span>
                     {timeline.offClockMinutes > 0 && <span className="text-muted-foreground">−{timeline.offClockMinutes}min</span>}
@@ -697,6 +729,11 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
               partial break AND still be owed a penalty for it running late,
               so picking one no longer hides the other. */}
           <div className="space-y-1.5">
+            {/* The meal buttons stay the default and the right control for one
+                lunch, but once the calls already say where the meals are, setting
+                them again here would be a second source for the same fact. A
+                penalty is owed or not regardless, so that stays below. */}
+            <div className={cn("space-y-1.5", mealsFromTimeline && "hidden")}>
             <label className="text-xs text-muted-foreground">{secondMealOpen ? 'First Meal' : 'Meal Break'}</label>
             <div className="grid grid-cols-4 gap-1.5">
               {([{ value: 0 as const, label: 'MP' }, { value: 30 as const, label: '30m' }, { value: 45 as const, label: '45m' }, { value: 60 as const, label: '1hr' }]).map(({ value, label }) => {
@@ -769,6 +806,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
                 )}
               </div>
             )}
+            </div>
             <div className="pt-0.5">
               <label className="text-[10px] text-mono uppercase text-muted-foreground">Meal penalty (MP) units — 1 unit = 1hr at straight rate</label>
               <ScrollWheel

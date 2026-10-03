@@ -277,3 +277,33 @@ describe('the timeline drives a job through the pay engine', () => {
     expect(offClockMealMinutes(j)).toBe(60);
   });
 });
+
+// The form picks its meal control from the gap count, so these are the three
+// shapes it branches on.
+describe('how many meals the day you typed turns out to have', () => {
+  it('has none for one straight call, so the buttons stay in charge', () => {
+    const t = parseDayTimeline('8a-5p')!;
+    expect(t.gaps).toHaveLength(0);
+    expect(t.calls).toHaveLength(1);
+  });
+
+  it('has exactly one for two calls, which is the common day', () => {
+    const t = parseDayTimeline('8-12, 1-5')!;
+    expect(t.gaps).toHaveLength(1);
+    expect(t.gaps[0].minutes).toBe(60);
+    expect(t.workedHours).toBe(8);
+  });
+
+  it('has two for three calls, where the rows earn their place', () => {
+    const t = parseDayTimeline('8-10, 11-3, 4-7')!;
+    expect(t.gaps).toHaveLength(2);
+    expect(t.workedHours).toBe(9);
+  });
+
+  it('still reports a single meal kept on the clock correctly', () => {
+    const t = parseDayTimeline('8-12, 1-5', [true])!;
+    expect(t.gaps[0].onClock).toBe(true);
+    expect(t.offClockMinutes).toBe(0);
+    expect(t.workedHours).toBe(9);
+  });
+});
