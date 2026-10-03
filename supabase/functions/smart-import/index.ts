@@ -66,6 +66,24 @@ LAYOUT B — labeled card (mobile screenshot):
   The JOB card contains: [YYYY-NNNN job number] on one line, [Employer name] on following lines.
   Multiple cards may appear in a single screenshot.
 
+
+LAYOUT C — IATSE 8 app offer card ("Confirm" / "Timestamp:" at the top, one
+  "Label: value" per line). CRITICAL: this layout has BOTH a "Client:" field and
+  an "Employer:" field, and they mean different things. "Client:" is the LOCAL
+  (e.g. "ia8", "ia16", "Local 8") — it is NOT the employer and must never become
+  client. "Employer:" is the company that actually pays, and THAT is client.
+  "Employer: Elliott Lewis" with "Client: ia8" → client="Elliott Lewis".
+  A short local code like ia8 goes in notes, never in client or payrollCompany.
+
+  Label mappings for this layout:
+    Employer:→client (always wins over the Client: label)
+    Client:→notes as "Local: <value>" | Employer Contact:→notes
+    Date:→date | Call:→startTime + endTime (a range like "08:00 AM - 12:00 PM")
+    Job Steward:→steward | Contact:→notes | Position:→notes as "Position: <value>"
+    Call Note: / Comments: / Employer Requests:→notes (deduplicate if identical)
+    Timestamp:→ignore, it is when the offer was sent, not the work date
+    Site: / Location:→venue. If no venue label is present leave venue empty —
+    do NOT promote a Call Note into venue.
 FIELD MAPPINGS (both layouts):
   Job Number→jobNumber (ALL CB/split jobs inherit same jobNumber) | Start Date→date+startTime
   Employer / JOB card employer→client | Payroll Co.→payrollCompany

@@ -1,0 +1,14 @@
+{
+  "name": "IATSE 8 app offer card — labelled fields, Client is the local not the employer",
+  "note": "This format carries BOTH a 'Client:' field and an 'Employer:' field. Client is the local (ia8); the employer who actually pays is Elliott Lewis. The parser used to take the literal Client label and drop the employer entirely, so the shift saved against 'ia8' and the real employer was lost.",
+  "input": "Confirm\nTimestamp: September 28 2026\nDate: September 28 2026\nCall: 08:00 AM - 12:00 PM\nClient: ia8\nContact: Call Steward Starr\nPosition: Video Tech 2\nJob Steward: KEVIN BARNES\nCall Note: Blacks Booth 1823\nComments: Blacks Booth 1823\nEmployer: Elliott Lewis\nEmployer Contact: Kevin Bebee\nEmployer Requests: Blacks Booth 1823",
+  "expect": [
+    {
+      "date": "2026-09-28",
+      "startTime": "08:00 AM",
+      "endTime": "12:00 PM",
+      "client": "Elliott Lewis",
+      "steward": "KEVIN BARNES"
+    }
+  ]
+}

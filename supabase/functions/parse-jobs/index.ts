@@ -44,6 +44,24 @@ DATA FORMAT:
 
 Line Notes may span multiple lines before the first TAB-separated field.
 
+
+LAYOUT C — IATSE 8 app offer card ("Confirm" / "Timestamp:" at the top, one
+  "Label: value" per line). CRITICAL: this layout has BOTH a "Client:" field and
+  an "Employer:" field, and they mean different things. "Client:" is the LOCAL
+  (e.g. "ia8", "ia16", "Local 8") — it is NOT the employer and must never become
+  client. "Employer:" is the company that actually pays, and THAT is client.
+  "Employer: Elliott Lewis" with "Client: ia8" → client="Elliott Lewis".
+  A short local code like ia8 goes in notes, never in client or payrollCompany.
+
+  Label mappings for this layout:
+    Employer:→client (always wins over the Client: label)
+    Client:→notes as "Local: <value>" | Employer Contact:→notes
+    Date:→date | Call:→startTime + endTime (a range like "08:00 AM - 12:00 PM")
+    Job Steward:→steward | Contact:→notes | Position:→notes as "Position: <value>"
+    Call Note: / Comments: / Employer Requests:→notes (deduplicate if identical)
+    Timestamp:→ignore, it is when the offer was sent, not the work date
+    Site: / Location:→venue. If no venue label is present leave venue empty —
+    do NOT promote a Call Note into venue.
 FIELD MAPPINGS:
 - Job Number → jobNumber (YYYY-NNNN format, e.g. "2026-0929")
 - Start Date line → date (YYYY-MM-DD) AND startTime. 2-digit year "3/17/26" = 2026-03-17. NEVER use today's date.
