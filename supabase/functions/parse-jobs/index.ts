@@ -55,7 +55,8 @@ LAYOUT C — IATSE 8 app offer card ("Confirm" / "Timestamp:" at the top, one
 
   Label mappings for this layout:
     Employer:→client (always wins over the Client: label)
-    Client:→notes as "Local: <value>" | Employer Contact:→notes
+    Client:→local (it is the LOCAL, e.g. ia8 — never client, never payrollCompany)
+    Employer Contact:→notes
     Date:→date | Call:→startTime + endTime (a range like "08:00 AM - 12:00 PM")
     Job Steward:→steward | Contact:→notes | Position:→notes as "Position: <value>"
     Call Note: / Comments: / Employer Requests:→notes (deduplicate if identical)
@@ -109,6 +110,7 @@ Status: "upcoming" for future dates, "completed" for past dates.`;
                 name: { type: "string", description: "Event/show name" },
                 client: { type: "string", description: "Production company or project name" },
                 payrollCompany: { type: ["string", "null"], description: "Payroll agency name" },
+                local: { type: ["string", "null"], description: "Dispatching local, e.g. ia8 — not the employer" },
                 venue: { type: "string", description: "Venue or location" },
                 hourlyRate: { type: ["number", "null"], description: "Hourly rate" },
                 steward: { type: ["string", "null"], description: "Steward or contact person" },
@@ -116,7 +118,7 @@ Status: "upcoming" for future dates, "completed" for past dates.`;
                 status: { type: "string", enum: ["upcoming", "in-progress", "completed", "cancelled"] },
                 notes: { type: ["string", "null"], description: "Additional notes" },
               },
-              required: ["jobNumber", "date", "startTime", "endTime", "name", "client", "payrollCompany", "venue", "hourlyRate", "steward", "parkingCost", "status", "notes"],
+              required: ["jobNumber", "date", "startTime", "endTime", "name", "client", "payrollCompany", "local", "venue", "hourlyRate", "steward", "parkingCost", "status", "notes"],
               additionalProperties: false,
             },
           },

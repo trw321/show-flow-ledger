@@ -28,6 +28,10 @@ export interface Job {
   mealDuration?: 0 | 30 | 45 | 60;
   /** true = paid/on the clock (no hours deduction), false = unpaid/off the clock (mealDuration is deducted). Irrelevant when mealDuration is 0. */
   mealOnClock?: boolean;
+  /** The local that dispatched the call — "ia8", "Local 16". Not the employer: an offer names the local as its "Client", but the company that pays is the employer and lives in `client`, which is what pay rates resolve from. */
+  local?: string;
+  /** Flagged to come back to. Set by hand from the shift form, and set automatically when the payroll company was assumed to be the employer because the offer did not name one. */
+  needsReview?: boolean;
   /** A day entered as a run of calls — "8-10, 11-3, 4-7" — kept as typed, because the meals are the gaps between the calls and a gap can be any length. When set, it is what the day's off-the-clock minutes are derived from, in place of mealDuration/meal2Duration. See parseDayTimeline. */
   callTimeline?: string;
   /** Which of the timeline's gaps were kept on the clock (paid, not deducted), in order. Absent or shorter than the gap list means the rest were off the clock, which is the normal case. */

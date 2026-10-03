@@ -87,3 +87,9 @@ export interface Gig {
   is_split: boolean;
   split_related_gig_id: string | null;
   minimum_hours: number | null
+;
+  // The file was truncated here — these three were mid-interface with no
+  // closing brace, which made the whole project fail to parse and every
+  // `tsc` run a no-op. Closed as-is; nothing is invented. Nothing outside
+  // src/lib/payroll/ imports this yet.
+}

@@ -21,6 +21,8 @@ export interface ParsedJob {
   endTime?: string;
   status: Job['status'];
   payrollCompany?: string;
+  /** The dispatching local, e.g. "ia8" — never the employer. */
+  local?: string;
   hourlyRate?: number;
   steward?: string;
   parkingCost?: number;

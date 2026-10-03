@@ -77,7 +77,8 @@ LAYOUT C — IATSE 8 app offer card ("Confirm" / "Timestamp:" at the top, one
 
   Label mappings for this layout:
     Employer:→client (always wins over the Client: label)
-    Client:→notes as "Local: <value>" | Employer Contact:→notes
+    Client:→local (it is the LOCAL, e.g. ia8 — never client, never payrollCompany)
+    Employer Contact:→notes
     Date:→date | Call:→startTime + endTime (a range like "08:00 AM - 12:00 PM")
     Job Steward:→steward | Contact:→notes | Position:→notes as "Position: <value>"
     Call Note: / Comments: / Employer Requests:→notes (deduplicate if identical)
@@ -243,6 +244,7 @@ EXAMPLE — recurring gym schedule (month calendar, MUST expand every occurrence
                 name: { type: "string" },
                 client: { type: "string" },
                 payrollCompany: { type: ["string", "null"] },
+                local: { type: ["string", "null"] },
                 venue: { type: "string" },
                 hourlyRate: { type: ["number", "null"] },
                 steward: { type: ["string", "null"] },
@@ -250,7 +252,7 @@ EXAMPLE — recurring gym schedule (month calendar, MUST expand every occurrence
                 status: { type: "string", enum: ["upcoming", "in-progress", "completed", "cancelled"] },
                 notes: { type: ["string", "null"] }
               },
-              required: ["jobNumber", "date", "startTime", "endTime", "name", "client", "payrollCompany", "venue", "hourlyRate", "steward", "parkingCost", "status", "notes"],
+              required: ["jobNumber", "date", "startTime", "endTime", "name", "client", "payrollCompany", "local", "venue", "hourlyRate", "steward", "parkingCost", "status", "notes"],
               additionalProperties: false
             }
           },

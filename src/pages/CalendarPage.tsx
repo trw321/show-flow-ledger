@@ -190,6 +190,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   const [callTimeline, setCallTimeline] = useState(job.callTimeline ?? '');
   const [gapsOnClock, setGapsOnClock] = useState<boolean[]>(job.callGapsOnClock ?? []);
   const [callsOpen, setCallsOpen] = useState(!!job.callTimeline);
+  const [needsReview, setNeedsReview] = useState(job.needsReview ?? false);
   const [mealPenalties, setMealPenalties] = useState(job.mealPenalties?.toString() ?? '');
   const [nightPremiumConfirmed, setNightPremiumConfirmed] = useState(job.nightPremiumConfirmed ?? true);
   const [nightPremiumActualHours, setNightPremiumActualHours] = useState(job.nightPremiumActualHours?.toString() ?? '');
@@ -221,6 +222,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
     setCallTimeline(job.callTimeline ?? '');
     setGapsOnClock(job.callGapsOnClock ?? []);
     setCallsOpen(!!job.callTimeline);
+    setNeedsReview(job.needsReview ?? false);
     setMealOnClock(job.mealOnClock ?? false);
     setMealPenalties(job.mealPenalties?.toString() ?? '');
     setNightPremiumConfirmed(job.nightPremiumConfirmed ?? true);
@@ -482,6 +484,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
     // The spread is what gets stored, so every reader outside this dialog sees a
     // clocked figure it already knows how to handle.
     if (timeline) updates.hoursWorked = timeline.spreadHours;
+    if (needsReview !== (job.needsReview ?? false)) updates.needsReview = needsReview || undefined;
     if (meal2Duration !== (job.meal2Duration ?? undefined)) updates.meal2Duration = meal2Duration;
     if (meal2Duration && meal2OnClock !== (job.meal2OnClock ?? false)) updates.meal2OnClock = meal2OnClock;
     const parsedPenalties = parseFloat(mealPenalties);
@@ -510,6 +513,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
     (!!mealDuration && mealOnClock !== (job.mealOnClock ?? false)) ||
     (callsOpen && callTimeline.trim() ? callTimeline.trim() : undefined) !== (job.callTimeline ?? undefined) ||
     (!!callTimeline.trim() && JSON.stringify(gapsOnClock) !== JSON.stringify(job.callGapsOnClock ?? [])) ||
+    needsReview !== (job.needsReview ?? false) ||
     meal2Duration !== (job.meal2Duration ?? undefined) ||
     (!!meal2Duration && meal2OnClock !== (job.meal2OnClock ?? false)) ||
     (mealPenalties !== (job.mealPenalties?.toString() ?? '')) ||
@@ -851,6 +855,22 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
           {!rate && (
             <p className="text-[10px] text-warning">⚠ No rate set — pay won't calculate until this is filled in</p>
           )}
+          {/* Pre-ticked when the payroll company was assumed rather than told
+              to us, so an assumption is visible instead of silent. */}
+          <label className="flex items-start gap-2 cursor-pointer select-none pt-0.5">
+            <input
+              type="checkbox"
+              checked={needsReview}
+              onChange={e => setNeedsReview(e.target.checked)}
+              className="mt-0.5 rounded border-border shrink-0"
+            />
+            <span className="text-[11px] leading-tight">
+              Check this one later
+              {job.payrollCompany && job.payrollCompany === job.client && (
+                <span className="block text-[10px] text-warning">Payroll company is the same as the employer — assumed, the offer did not say.</span>
+              )}
+            </span>
+          </label>
           <Button size="sm" className="w-full" disabled={!hasChanges} onClick={handleSave}>
             Save Hours
           </Button>
@@ -874,6 +894,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
         )}
         <div className="rounded-md border border-border bg-secondary/10 p-3 space-y-2">
           {(client || job.client) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Employer</span><span className="font-medium text-xs">{client || job.client}</span></div>}
+          {job.local && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Client</span><span className="font-medium text-xs">{job.local}</span></div>}
           {(job.payrollCompany || payrollCompany) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Payroll company</span><span className="font-medium text-xs">{payrollCompany || job.payrollCompany}</span></div>}
           {job.venue && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Venue</span><span className="font-medium text-xs">{job.venue}</span></div>}
           {job.jobNumber && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Job #</span><span className="font-medium text-xs text-mono">{job.jobNumber}</span></div>}

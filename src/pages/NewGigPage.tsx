@@ -514,10 +514,17 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
     let imported = 0, skipped = 0, failed = 0;
 
     for (const j of toImport) {
+      // An offer usually names an employer and no separate payroll company,
+      // and in that case the employer is who pays you. Assuming it beats
+      // leaving it blank, but it IS an assumption, so the shift gets flagged
+      // for review rather than quietly presented as something you were told.
+      const payrollAssumed = !j.payrollCompany?.trim() && !!j.client?.trim();
       const draft = {
         jobNumber: j.jobNumber, name: j.name, client: j.client, venue: j.venue,
         date: j.date, startTime: j.startTime, endTime: j.endTime, status: j.status,
-        payrollCompany: j.payrollCompany, hourlyRate: j.hourlyRate, steward: j.steward,
+        payrollCompany: j.payrollCompany?.trim() || j.client,
+        local: j.local, needsReview: payrollAssumed || undefined,
+        hourlyRate: j.hourlyRate, steward: j.steward,
         parkingCost: j.parkingCost, notes: j.notes || '',
         has6th7thDayRule: false, hasVacationPay: false,
       };
