@@ -268,7 +268,7 @@ export default function TimesheetUpload() {
                   <tr className="bg-secondary/50 text-muted-foreground text-xs uppercase tracking-wider text-mono">
                     <th className="w-8 px-3 py-2"></th>
                     <th className="text-left px-3 py-2">Date</th>
-                    <th className="text-left px-3 py-2">Client</th>
+                    <th className="text-left px-3 py-2">Employer</th>
                     <th className="text-left px-3 py-2">Description</th>
                     <th className="text-right px-3 py-2">Hours</th>
                     <th className="text-right px-3 py-2">Rate</th>

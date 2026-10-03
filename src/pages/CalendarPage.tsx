@@ -873,8 +873,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
           </button>
         )}
         <div className="rounded-md border border-border bg-secondary/10 p-3 space-y-2">
-          {(client || job.client) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Client</span><span className="font-medium text-xs">{client || job.client}</span></div>}
-          {(job.payrollCompany || payrollCompany) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Employer / Payroll</span><span className="font-medium text-xs">{payrollCompany || job.payrollCompany}</span></div>}
+          {(client || job.client) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Employer</span><span className="font-medium text-xs">{client || job.client}</span></div>}
+          {(job.payrollCompany || payrollCompany) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Payroll company</span><span className="font-medium text-xs">{payrollCompany || job.payrollCompany}</span></div>}
           {job.venue && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Venue</span><span className="font-medium text-xs">{job.venue}</span></div>}
           {job.jobNumber && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Job #</span><span className="font-medium text-xs text-mono">{job.jobNumber}</span></div>}
           {(startTime || job.startTime) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Start</span><span className="font-medium text-xs text-mono">{startTime || job.startTime}{endTime ? ` – ${endTime}` : ''}</span></div>}
@@ -1178,11 +1178,11 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
         <div className="space-y-3">
           <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/50 uppercase">Update Job</p>
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Client</label>
+            <label className="text-xs text-muted-foreground">Employer</label>
             <Input value={client} onChange={e => setClient(e.target.value)} placeholder="e.g. Live Nation" className="h-9 text-sm" />
           </div>
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Employer / Payroll Company</label>
+            <label className="text-xs text-muted-foreground">Payroll company</label>
             <Input value={payrollCompany} onChange={e => setPayrollCompany(e.target.value)} placeholder="e.g. Nolan AV, Live Nation" className="h-9 text-sm" />
           </div>
           <div className="space-y-1.5">

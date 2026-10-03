@@ -152,7 +152,7 @@ export default function JobForm({ onSubmit, initial, onCancel }: {
         <Input placeholder="Job #" value={jobNumber} onChange={e => setJobNumber(e.target.value)} className="text-sm" />
         <Input placeholder="Job name*" value={name} onChange={e => setName(e.target.value)} required className="col-span-2 text-sm" />
       </div>
-      <EmployerCombobox value={client} onChange={setClient} onSelectEmployer={handleSelectEmployer} placeholder="Client / Production Co." />
+      <EmployerCombobox value={client} onChange={setClient} onSelectEmployer={handleSelectEmployer} placeholder="Employer" />
       <Input placeholder="Venue / Location" value={venue} onChange={e => setVenue(e.target.value)} className="text-sm" />
 
       {/* Date & times */}

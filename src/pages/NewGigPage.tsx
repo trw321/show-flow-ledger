@@ -121,7 +121,7 @@ function ShiftCard({
       {expanded && (
         <div className="border-t border-border px-3 pb-3 pt-3 flex flex-col gap-2">
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Client</label>
+            <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Employer</label>
             <EmployerCombobox
               value={job.client}
               onChange={v => onChange('client', v)}
@@ -1058,7 +1058,7 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
                       which box was which. */}
                   <div className="grid grid-cols-2 gap-2">
                     <div className="flex flex-col gap-1 min-w-0">
-                      <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Client</label>
+                      <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Employer</label>
                       <EmployerCombobox
                         value={batchEdit.client}
                         onChange={v => setBatchEdit(b => ({ ...b, client: v }))}

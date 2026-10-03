@@ -324,7 +324,7 @@ export default function JobPhotoImport({
                       <th className="px-2 py-2 text-left">Date</th>
                       <th className="px-2 py-2 text-left">Start</th>
                       <th className="px-2 py-2 text-left">End</th>
-                      <th className="px-2 py-2 text-left">Client</th>
+                      <th className="px-2 py-2 text-left">Employer</th>
                       <th className="px-2 py-2 text-left">Event</th>
                       <th className="px-2 py-2 text-left">Venue</th>
                       <th className="px-2 py-2 text-left">Rate</th>

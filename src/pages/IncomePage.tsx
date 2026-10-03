@@ -469,7 +469,7 @@ function ReconciliationRowCard({
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] text-mono uppercase text-muted-foreground">Client</label>
+              <label className="text-[10px] text-mono uppercase text-muted-foreground">Employer</label>
               <Input value={editState.client} onChange={e => setEditState(p => ({ ...p, client: e.target.value }))} className="h-8 text-xs font-mono" />
             </div>
             <div className="flex flex-col gap-1">
@@ -868,7 +868,7 @@ export default function IncomePage() {
           <Select value={filterJobClient} onValueChange={setFilterJobClient}>
             <SelectTrigger className="h-7 w-32 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All clients</SelectItem>
+              <SelectItem value="all">All employers</SelectItem>
               {uniqueClients.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
           </Select>
