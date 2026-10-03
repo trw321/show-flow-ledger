@@ -164,7 +164,7 @@ export default function JobForm({ onSubmit, initial, onCancel }: {
 
       {/* Hours & pay — most important */}
       <div className="grid grid-cols-2 gap-2">
-        <Input type="number" step="0.25" min="0" placeholder="Hours worked" value={hoursWorked} onChange={e => handleHoursWorkedChange(e.target.value)} className="text-sm" />
+        <Input type="number" step="0.25" min="0" placeholder="Clocked hours" value={hoursWorked} onChange={e => handleHoursWorkedChange(e.target.value)} className="text-sm" />
         <Input type="number" step="0.01" min="0" placeholder="Rate ($/hr)" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} className="text-sm" />
       </div>
 

@@ -824,7 +824,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
 
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Hours Worked</label>
+              <label className="text-xs text-muted-foreground">Clocked hours</label>
               <Input type="number" min="0" step="0.5" value={hoursWorked} onChange={e => handleHoursWorkedChange(e.target.value)} placeholder="e.g. 8" className="h-9 text-sm text-mono" />
               {/* The box holds the clocked span, because that is what gets saved and
                   what calculateDayPay expects. The number that matters when you are
@@ -878,7 +878,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
           {job.venue && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Venue</span><span className="font-medium text-xs">{job.venue}</span></div>}
           {job.jobNumber && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Job #</span><span className="font-medium text-xs text-mono">{job.jobNumber}</span></div>}
           {(startTime || job.startTime) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Start</span><span className="font-medium text-xs text-mono">{startTime || job.startTime}{endTime ? ` – ${endTime}` : ''}</span></div>}
-          {actualHours > 0 && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Hours Worked</span><span className="font-medium text-xs text-mono">{mealDeductionHours > 0 ? <><span className="text-muted-foreground/60 line-through">{actualHours}h</span> {paidHours}h</> : `${actualHours}h`}</span></div>}
+          {actualHours > 0 && mealDeductionHours > 0 && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Clocked</span><span className="font-medium text-xs text-mono text-muted-foreground">{actualHours}h</span></div>}
+          {actualHours > 0 && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Hours Worked</span><span className="font-medium text-xs text-mono">{paidHours}h</span></div>}
           {rate > 0 && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Rate</span><span className="font-medium text-xs text-mono">${rate}/hr</span></div>}
         </div>
         {payPreview && (
