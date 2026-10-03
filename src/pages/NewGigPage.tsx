@@ -155,7 +155,9 @@ function ShiftCard({
                   step={type === 'number' ? '0.01' : undefined}
                   onChange={e => {
                     const raw = e.target.value;
-                    if (field === 'hourlyRate' || field === 'parkingCost') {
+                    // parkingCost used to be editable here and no longer is;
+                    // hourlyRate is the only numeric field left in this list.
+                    if (field === 'hourlyRate') {
                       onChange(field, raw === '' ? undefined : parseFloat(raw));
                     } else {
                       onChange(field, raw);
@@ -579,7 +581,7 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
       // text path), but it hasn't reliably been reachable from the browser in
       // the past (CORS preflight failures) — parse-job-image is the fallback
       // that's always worked, at the cost of only ever producing jobs.
-      let result: { type?: string; jobs?: ParsedJob[]; hourUpdates?: SmartImportHourUpdate[] };
+      let result: { type?: string; jobs?: ParsedJob[]; hourUpdates?: SmartImportHourUpdate[]; events?: ParsedEvent[] };
       try {
         const resp = await callAPI(`${supabaseUrl}/functions/v1/smart-import`, supabaseKey, {
           imageBase64: base64, imageMimeType: mimeType,

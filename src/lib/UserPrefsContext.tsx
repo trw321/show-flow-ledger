@@ -89,9 +89,8 @@ export function UserPrefsProvider({ children }: { children: React.ReactNode }) {
 
   const setTabEnabled = (tab: TabKey, enabled: boolean) => {
     const next = { ...prefs.tabs, [tab]: enabled };
-    // Reconciliation reads income records — keep them in sync
-    if (tab === 'reconciliation' && enabled) next.income = true;
-    if (tab === 'income' && !enabled) next.reconciliation = false;
+    // Reconciliation used to be its own tab and had to be kept in step with
+    // income. It is a section inside Income now, so there is nothing to sync.
     update({ workerType: 'custom', tabs: next });
   };
 

@@ -124,7 +124,10 @@ const eventRow = (v: CalendarEvent, userId: string) => ({
 /** The whole local ledger as database rows, in insert order. Separated from the
  *  network call so the field mapping — the part that silently loses data when
  *  it's wrong — can be tested without a session. */
-export function buildRows(data: AppData, userId: string): [string, Record<string, unknown>[]][] {
+/** The tables a backup writes, named so supabase.from() will accept them. */
+export type BackupTable = 'jobs' | 'expenses' | 'income' | 'equipment' | 'employers' | 'events';
+
+export function buildRows(data: AppData, userId: string): [BackupTable, Record<string, unknown>[]][] {
   return [
     // Employers and jobs first: expenses, income and equipment reference jobs.
     ['employers', data.employers.map(e => employerRow(e, userId))],
@@ -291,7 +294,11 @@ export async function backupToCloud(data: AppData, userId: string): Promise<Back
     if (rows.length === 0) continue;
     // Chunked so a large ledger doesn't hit the request size limit.
     for (let i = 0; i < rows.length; i += 200) {
-      const { error } = await supabase.from(table).upsert(rows.slice(i, i + 200), { onConflict: 'id' });
+      // buildRows produces one row shape per table, but the loop sees them all
+      // as the same generic record, so the per-table Insert types cannot line up
+      // here. The shapes themselves are covered by the round-trip tests.
+      const batch = rows.slice(i, i + 200) as never;
+      const { error } = await supabase.from(table).upsert(batch, { onConflict: 'id' });
       if (error) return { ok: false, counts, error: `${table}: ${error.message}` };
     }
   }
