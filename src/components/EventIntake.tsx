@@ -286,22 +286,22 @@ export default function EventIntake({ date, onCancel, onSaveMany }: Props) {
         placeholder="Paste a schedule, class times, or plans here…"
         className="w-full rounded-md bg-background/40 border border-border text-xs px-3 py-2 focus:outline-none focus:border-primary/40 resize-none placeholder:text-muted-foreground/50"
       />
-      <div className="flex flex-wrap gap-2 justify-between">
-        <div className="flex flex-wrap gap-2">
-          <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
-          <Button variant="outline" size="sm" onClick={() => setMode('manual')} className="gap-1.5">
-            <PenLine size={13} /> Manual
-          </Button>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" disabled={isParsing} onClick={() => fileInputRef.current?.click()} className="gap-1.5">
-            <Camera size={13} /> Photo
-          </Button>
-          <Button size="sm" disabled={isParsing} onClick={handleParseText} className="gap-1.5">
-            {isParsing ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
-            Parse
-          </Button>
-        </div>
+      {/* One grid rather than two groups held apart by justify-between: when
+          that wrapped on a phone the groups split across rows at different
+          widths with the gap between them left over, which read as crooked.
+          Four equal cells sit square at any width — 2x2 narrow, one row wide. */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Button variant="ghost" size="sm" onClick={onCancel} className="w-full">Cancel</Button>
+        <Button variant="outline" size="sm" onClick={() => setMode('manual')} className="w-full gap-1.5">
+          <PenLine size={13} /> Manual
+        </Button>
+        <Button variant="outline" size="sm" disabled={isParsing} onClick={() => fileInputRef.current?.click()} className="w-full gap-1.5">
+          <Camera size={13} /> Photo
+        </Button>
+        <Button size="sm" disabled={isParsing} onClick={handleParseText} className="w-full gap-1.5">
+          {isParsing ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+          Parse
+        </Button>
       </div>
     </div>
   );
