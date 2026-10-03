@@ -373,13 +373,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
     }
   };
 
-  // The clocked figure for a multi-call day is the whole spread, first in to last
-  // out; the gaps come off it below, exactly as a single meal does.
-  const actualHours = timeline ? timeline.spreadHours : (parseFloat(hoursWorked) || 0);
-  const minHours = parseFloat(minimumHours) || 0;
-  // Mirrors calculateDayPay: an off-the-clock meal comes out of the hours
-  // before the minimum-call floor applies. Without this the on/off toggle
-  // changed the pay but every hours figure on screen stayed put.
+  // Everything below reads the timeline, so it has to be built first — reading a
+  // const above its own declaration is a dead zone, not a hoist, and it took the
+  // whole page down with "Cannot access 'timeline' before initialization".
   const timeline: DayTimeline | null = callsOpen && callTimeline.trim()
     ? parseDayTimeline(callTimeline, gapsOnClock)
     : null;
@@ -388,10 +384,18 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   // because four boxes beat a row, and the compact rows once there are several.
   const timelineGaps = timeline?.gaps.length ?? 0;
   const mealsFromTimeline = timelineGaps > 0;
-  const oneMealFromTimeline = timelineGaps === 1 ? timeline!.gaps[0] : null;
+  const oneMealFromTimeline = timelineGaps === 1 ? timeline.gaps[0] : null;
   const setOnlyGapOnClock = (on: boolean) => {
     if (timeline) setGapsOnClock(withGapOnClock(timeline, 0, on).gaps.map(g => g.onClock));
   };
+
+  // The clocked figure for a multi-call day is the whole spread, first in to last
+  // out; the gaps come off it below, exactly as a single meal does.
+  const actualHours = timeline ? timeline.spreadHours : (parseFloat(hoursWorked) || 0);
+  const minHours = parseFloat(minimumHours) || 0;
+  // Mirrors calculateDayPay: an off-the-clock meal comes out of the hours
+  // before the minimum-call floor applies. Without this the on/off toggle
+  // changed the pay but every hours figure on screen stayed put.
   const offClockMealMins = timeline
     ? timeline.offClockMinutes
     : ((mealDuration && !mealOnClock) ? mealDuration : 0) + ((meal2Duration && !meal2OnClock) ? meal2Duration : 0);
