@@ -172,10 +172,17 @@ describe('the five-hour meal penalty rule', () => {
     expect(t.suggestedMealPenalties).toBe(1);
   });
 
-  it('suggests two once a stretch runs past ten hours', () => {
+  it('accrues another penalty for every hour past the five', () => {
+    // 11h unfed: 6 hours past the five-hour mark, so 6 penalties.
     const t = parseDayTimeline('8a-7p')!;
     expect(t.workedStretches).toEqual([11]);
-    expect(t.suggestedMealPenalties).toBe(2);
+    expect(t.suggestedMealPenalties).toBe(6);
+  });
+
+  it('breaks the hour — a minute past the hour is another whole penalty', () => {
+    expect(parseDayTimeline('8a-2p')!.suggestedMealPenalties).toBe(1);
+    expect(parseDayTimeline('8a-2:01p')!.suggestedMealPenalties).toBe(2);
+    expect(parseDayTimeline('8a-3p')!.suggestedMealPenalties).toBe(2);
   });
 
   it('counts a meal on the clock as being fed, because it is', () => {
@@ -220,7 +227,7 @@ describe('a break taken is a break — no penalty, whatever its length', () => {
   it('still owes on a long day worked straight through with no break at all', () => {
     const t = parseDayTimeline('8a-7p')!;
     expect(t.workedStretches).toEqual([11]);
-    expect(t.suggestedMealPenalties).toBe(2);
+    expect(t.suggestedMealPenalties).toBe(6);
   });
 
   it('owes nothing on a short day with no break — it is only about long ones', () => {
@@ -305,5 +312,35 @@ describe('how many meals the day you typed turns out to have', () => {
     expect(t.gaps[0].onClock).toBe(true);
     expect(t.offClockMinutes).toBe(0);
     expect(t.workedHours).toBe(9);
+  });
+});
+
+describe('two hours guaranteed after an off-the-clock meal', () => {
+  it('owes the shortfall when you are sent home early after a meal', () => {
+    // Back at 1pm, cut at 2pm: one hour worked where two were guaranteed.
+    const t = parseDayTimeline('8a-12p, 1p-2p')!;
+    expect(t.workedStretches).toEqual([4, 1]);
+    expect(t.postMealShortfallHours).toBe(1);
+  });
+
+  it('owes nothing once the two hours are actually worked', () => {
+    const t = parseDayTimeline('8a-12p, 1p-3p')!;
+    expect(t.postMealShortfallHours).toBe(0);
+  });
+
+  it('owes nothing when the meal stayed on the clock', () => {
+    // Paid through the meal, so there is no coming back to guarantee.
+    const t = parseDayTimeline('8a-12p, 1p-2p', [true])!;
+    expect(t.postMealShortfallHours).toBe(0);
+  });
+
+  it('counts the shortfall after each off-the-clock meal', () => {
+    const t = parseDayTimeline('8a-12p, 1p-1:30p, 2:30p-3p')!;
+    // 30min after the first meal and 30min after the second: 1.5h + 1.5h.
+    expect(t.postMealShortfallHours).toBe(3);
+  });
+
+  it('owes nothing on a day with no meal at all', () => {
+    expect(parseDayTimeline('8a-5p')!.postMealShortfallHours).toBe(0);
   });
 });

@@ -132,6 +132,12 @@ export interface Employer {
   nightPremiumStartHour?: number; // 0-23, default 0 (midnight)
   nightPremiumEndHour?: number;   // 0-23, optional — undefined means "until end of shift"
   nightPremiumMultiplier?: number; // default 2.0
+  /** Union hours "break the hour": any part of an hour worked bills as a whole hour, so 6h06m pays 7. Off by default — not every contract rounds. */
+  roundUpToWholeHours?: boolean;
+  /** Hours guaranteed after an off-the-clock meal before you can be sent home. Short of it, the difference is paid at straight time. IATSE-style 2 is typical. Undefined/0 = no such guarantee. */
+  postMealMinimumHours?: number;
+  /** Hours you can work before a meal must be called. Past it a penalty accrues for every hour or part of an hour, until a meal starts. Default 5. */
+  mealPenaltyAfterHours?: number;
   /** Percent of gross pay auto-deducted for this employer's union dues (e.g. 3.5 = 3.5%). Undefined/0 = no deduction. */
   unionDuesPercent?: number;
   /** IATSE local number this employer's work falls under (e.g. "16", "8"). Free text — purely informational, shown in exports. */

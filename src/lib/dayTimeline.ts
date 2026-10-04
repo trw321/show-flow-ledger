@@ -34,6 +34,12 @@ export const SPLIT_BREAK_MINUTES = 120;
  */
 export const MEAL_PENALTY_AFTER_HOURS = 5;
 
+/**
+ * Hours you are guaranteed after an off-the-clock meal before they can send you
+ * home. Come up short and the difference is paid at straight time anyway.
+ */
+export const POST_MEAL_MINIMUM_HOURS = 2;
+
 export interface DayCall {
   /** "08:00 AM" — the app's time format throughout. */
   start: string;
@@ -74,6 +80,11 @@ export interface DayTimeline {
   workedStretches: number[];
   /** Penalties the five-hour rule implies, for the user to confirm. */
   suggestedMealPenalties: number;
+  /**
+   * Straight-time hours owed because a call ended too soon after an
+   * off-the-clock meal — two hours are guaranteed once you come back.
+   */
+  postMealShortfallHours: number;
 }
 
 const TIME = /(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?|a|p)?/gi;
@@ -189,16 +200,31 @@ function derive(calls: DayCall[], gaps: DayGap[]) {
   // The last stretch runs to the end of the day, so nothing broke it.
   if (stretch > 0) { workedStretches.push(stretch); stretchClosedByMeal.push(false); }
 
-  const suggestedMealPenalties = workedStretches.reduce(
-    (n, hours, i) => n + (stretchClosedByMeal[i] ? 0 : Math.max(0, Math.ceil(hours / MEAL_PENALTY_AFTER_HOURS) - 1)),
-    0
-  );
+  // Union hours break the hour here too: past the five, every hour or part of
+  // an hour worked unfed is another penalty. Six hours straight is one penalty;
+  // six hours and a minute is two. A stretch that ended in a meal owes nothing,
+  // however long it ran, because they fed you.
+  const suggestedMealPenalties = workedStretches.reduce((n, hours, i) => {
+    if (stretchClosedByMeal[i]) return n;
+    const pastDue = hours - MEAL_PENALTY_AFTER_HOURS;
+    return n + (pastDue > 0 ? Math.ceil(pastDue) : 0);
+  }, 0);
+
+  // Each off-the-clock meal has to be followed by the guaranteed minimum. The
+  // stretch right after it is what has to cover that.
+  let postMealShortfallHours = 0;
+  gaps.forEach((gap, i) => {
+    if (gap.onClock) return;
+    const after = workedStretches[i + 1] ?? 0;
+    if (after < POST_MEAL_MINIMUM_HOURS) postMealShortfallHours += POST_MEAL_MINIMUM_HOURS - after;
+  });
 
   return {
     isSplit: gaps.some(g => g.isSplitBreak),
     shifts,
     workedStretches,
     suggestedMealPenalties,
+    postMealShortfallHours,
   };
 }
 

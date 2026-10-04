@@ -253,3 +253,54 @@ describe('two meals on one shift, each on its own terms', () => {
     expect(a.gross - b.gross).toBe(0.5 * 75);
   });
 });
+
+describe('union hours break the hour', () => {
+  it('bills a part hour as a whole one when the contract rounds', () => {
+    const plain = calculateDayPay(6.1, 50, 0, 0, 1);
+    const rounded = calculateDayPay(6.1, 50, 0, 0, 1, undefined, { roundUpToWholeHours: true });
+    expect(plain.billableHours).toBe(6.1);
+    expect(rounded.billableHours).toBe(7);
+    expect(rounded.totalPay).toBe(7 * 50);
+  });
+
+  it('leaves a whole number alone', () => {
+    expect(calculateDayPay(6, 50, 0, 0, 1, undefined, { roundUpToWholeHours: true }).billableHours).toBe(6);
+  });
+
+  it('rounds after the meal comes out, not before', () => {
+    // 9h clocked, 1h meal off, so 8h billable — already whole, nothing to round.
+    const r = calculateDayPay(9, 50, 0, 0, 1, { duration: 60, onClock: false }, { roundUpToWholeHours: true });
+    expect(r.billableHours).toBe(8);
+    expect(r.totalPay).toBe(8 * 50);
+  });
+
+  it('rounds after the minimum call, not before', () => {
+    // 2h worked against a 5.5h minimum: the minimum is what rounds, to 6.
+    const r = calculateDayPay(2, 50, 5.5, 0, 1, undefined, { roundUpToWholeHours: true });
+    expect(r.billableHours).toBe(6);
+  });
+
+  it('is off unless the contract says otherwise', () => {
+    expect(calculateDayPay(8.25, 50, 0, 0, 1).billableHours).toBe(8.25);
+  });
+});
+
+describe('the two hours guaranteed after a meal reach the pay', () => {
+  it('pays the shortfall at straight time, on top of the hours worked', () => {
+    const withPad = calculateDayPay(5, 50, 0, 0, 1, undefined, { postMealPaddingHours: 1 });
+    const without = calculateDayPay(5, 50, 0, 0, 1);
+    expect(withPad.totalPay - without.totalPay).toBe(50);
+  });
+
+  it('pays padding flat, never as overtime', () => {
+    // 10h worked is already into OT; the padding must not be billed at 1.5x.
+    const withPad = calculateDayPay(10, 50, 0, 0, 1, undefined, { postMealPaddingHours: 2 });
+    const without = calculateDayPay(10, 50, 0, 0, 1);
+    expect(withPad.totalPay - without.totalPay).toBe(2 * 50);
+  });
+
+  it('adds nothing when the guarantee was met', () => {
+    const r = calculateDayPay(8, 50, 0, 0, 1, undefined, { postMealPaddingHours: 0 });
+    expect(r.totalPay).toBe(calculateDayPay(8, 50, 0, 0, 1).totalPay);
+  });
+});
