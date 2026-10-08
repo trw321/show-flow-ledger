@@ -130,6 +130,24 @@ function resolveTypedEnd(start: string, end: string): string {
   return isNaN(e) ? end : minutesToTimeStr(e);
 }
 
+/**
+ * Whether the stub for a shift has been photographed yet. Lit when it has,
+ * greyed out when it has not — the same read-at-a-glance treatment the pay
+ * figure gets, so a row of shifts shows what is still missing without reading.
+ */
+function StubMark({ hasStub }: { hasStub: boolean }) {
+  return (
+    <span
+      role="img"
+      aria-label={hasStub ? 'Pay stub uploaded' : 'No pay stub yet'}
+      title={hasStub ? 'Pay stub uploaded' : 'No pay stub yet'}
+      className={cn('text-[11px] leading-none select-none', hasStub ? 'opacity-100' : 'opacity-30 grayscale')}
+    >
+      ✅
+    </span>
+  );
+}
+
 function calcHours(start: string, end: string): number {
   const s = parseTimeToMins(start);
   if (isNaN(s)) return 0;
@@ -1778,7 +1796,7 @@ export default function CalendarPage() {
                         {job.startTime && <span>{job.startTime}{job.endTime ? ` – ${job.endTime}` : ''}</span>}
                         {hours > 0 && <span>{hours}h</span>}
                         {earned > 0 && <span className="font-semibold">${earned.toLocaleString()}</span>}
-                        <Receipt size={11} className={job.payStub ? 'opacity-70' : 'opacity-25'} aria-label={job.payStub ? 'Pay stub uploaded' : 'No pay stub'} />
+                        <StubMark hasStub={!!job.payStub} />
                       </div>
                       {job.startTime && !job.endTime && (
                         <p className="text-[10px] text-warning font-medium">⚠ No end time set — tap to add it</p>
@@ -1969,7 +1987,7 @@ export default function CalendarPage() {
                         {first.jobNumber && <span className="text-[10px] text-mono text-white/30">#{first.jobNumber}</span>}
                         <span className="flex-1" />
                         {totalHours > 0 && (
-                          <Receipt size={12} className={cn('shrink-0', first.payStub ? 'text-success' : 'text-white/20')} aria-label={first.payStub ? 'Pay stub uploaded' : 'No pay stub'} />
+                          <StubMark hasStub={!!first.payStub} />
                         )}
                         {isGroup && (
                           expanded
@@ -1991,7 +2009,7 @@ export default function CalendarPage() {
                               {netHoursWorked(job) > 0 ? `${netHoursWorked(job)}h` : isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
                               {job.startTime && !job.endTime && <span className="text-warning"> · no end time</span>}
                               {effectiveHoursWorked(job) > 0 && (
-                                <Receipt size={10} className={job.payStub ? 'text-success opacity-80' : 'opacity-25'} aria-label={job.payStub ? 'Pay stub uploaded' : 'No pay stub'} />
+                                <StubMark hasStub={!!job.payStub} />
                               )}
                             </span>
                           </div>
