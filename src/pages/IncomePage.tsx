@@ -753,6 +753,10 @@ export default function IncomePage() {
   const totalExpected = reconciliation.reduce((s, r) => s + r.expectedPay, 0);
   const totalActual = reconciliation.reduce((s, r) => s + r.actualPaid, 0);
   const totalDiff = totalActual - totalExpected;
+  // Named rather than signed: "owed $420" reads without working out which way
+  // a minus points.
+  const owed = Math.max(0, totalExpected - totalActual);
+  const overpaid = Math.max(0, totalActual - totalExpected);
 
   const reconciliationGroups = useMemo(() => {
     const groups: Record<string, { client: string; weekStart: string; rows: ReconciliationRow[] }> = {};
@@ -848,7 +852,35 @@ export default function IncomePage() {
     <SpacePageWrapper>
       <MoneyRain active={rainActive} />
       <div className="max-w-lg mx-auto">
-      <PageHeader title="$" description={`total: $${total.toLocaleString()}`} />
+      <PageHeader title="Income" description={`${total.toLocaleString()} logged`} />
+
+      {/* The three figures the page exists to answer, before any of the tools
+          for changing them. Still owed is the one you came for, so it is the
+          one that is big. */}
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        <div className={cn(
+          'col-span-2 rounded-lg border p-4',
+          owed > 0.01 ? 'border-warning/40 bg-warning/5' : 'border-success/30 bg-success/5',
+        )}>
+          <p className="text-[10px] text-muted-foreground text-mono uppercase tracking-wider">
+            {owed > 0.01 ? 'Still owed' : overpaid > 0.01 ? 'Paid over' : 'All settled'}
+          </p>
+          <p className={cn(
+            'text-3xl font-bold text-mono mt-1 break-all',
+            owed > 0.01 ? 'text-warning' : 'text-success',
+          )}>
+            ${(owed > 0.01 ? owed : overpaid > 0.01 ? overpaid : 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          </p>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-3">
+          <p className="text-[10px] text-muted-foreground text-mono uppercase tracking-wider">Earned</p>
+          <p className="text-xl font-bold text-mono mt-0.5 break-all">${totalExpected.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-3">
+          <p className="text-[10px] text-muted-foreground text-mono uppercase tracking-wider">Paid</p>
+          <p className="text-xl font-bold text-mono text-success mt-0.5 break-all">${totalActual.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+        </div>
+      </div>
 
       {/* Statement import */}
       <div className="mb-4">
@@ -894,24 +926,6 @@ export default function IncomePage() {
           />
         </DialogContent>
       </Dialog>
-
-      {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
-        <div className="rounded-lg border border-border bg-card p-3">
-          <p className="text-[10px] text-muted-foreground text-mono uppercase leading-tight">Expected</p>
-          <p className="text-sm font-bold text-mono mt-1 break-all">${totalExpected.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-3">
-          <p className="text-[10px] text-muted-foreground text-mono uppercase leading-tight">Paid</p>
-          <p className="text-sm font-bold text-mono text-success mt-1 break-all">${totalActual.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-        </div>
-        <div className={`rounded-lg border p-3 ${totalDiff >= 0 ? 'border-success/30 bg-success/5' : 'border-destructive/30 bg-destructive/5'}`}>
-          <p className="text-[10px] text-muted-foreground text-mono uppercase leading-tight">Diff</p>
-          <p className={`text-sm font-bold text-mono mt-1 break-all ${totalDiff >= 0 ? 'text-success' : 'text-destructive'}`}>
-            {totalDiff >= 0 ? '+' : ''}${totalDiff.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-          </p>
-        </div>
-      </div>
 
       {reconciliation.length === 0 ? (
         <EmptyState icon={Scale} title="No data to reconcile" description="Add jobs with hours worked to see pay tracking." />
