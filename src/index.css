@@ -6,61 +6,88 @@
 
 @layer base {
   :root {
-    --background: 0 0% 5%;
-    --foreground: 0 0% 95%;
+    /* ─────────────────────────────────────────────────────────────────
+       ONE BASE COLOUR. Everything below is derived from it.
 
-    --card: 0 0% 8%;
-    --card-foreground: 0 0% 95%;
+       The app is the colour: the ground, the cards and the wells are the
+       same hue three steps apart, so depth comes from the colour itself
+       rather than from borders drawn on black. Change --base-h and the
+       whole app re-skins, which is what makes a theme picker in Settings
+       nearly free later.
 
-    --popover: 0 0% 10%;
-    --popover-foreground: 0 0% 95%;
+       depth  = how far the whole ramp sits into the dark
+       spread = how far cards separate from the ground
+       Past about 0.6 depth the surface stops reading as a hue at all.
+       ───────────────────────────────────────────────────────────────── */
+    --base-h: 344;
+    --base-s: 72;
+    --base-l: 36;
+    --depth: 0.46;
+    --spread: 0.1;
 
-    --primary: 252 78% 60%;
-    --primary-foreground: 0 0% 100%;
+    /* The three surfaces, each a step further down the same hue. */
+    --l-ground: calc(var(--base-l) * (1 - var(--depth)));
+    --l-card:   calc(var(--base-l) * (1 - var(--depth) - var(--spread)));
+    --l-well:   calc(var(--base-l) * (1 - var(--depth) - var(--spread) * 2));
+    /* Edges read as light coming off the surface, not as a drawn line. */
+    --l-edge:   calc(var(--base-l) + (100 - var(--base-l)) * 0.16);
 
-    --secondary: 0 0% 14%;
-    --secondary-foreground: 0 0% 85%;
+    --background: var(--base-h) calc(var(--base-s) * 1%) calc(var(--l-ground) * 1%);
+    --foreground: 40 28% 93%;
 
-    --muted: 0 0% 12%;
-    --muted-foreground: 0 0% 45%;
+    --card: var(--base-h) calc(var(--base-s) * 1%) calc(var(--l-card) * 1%);
+    --card-foreground: 40 28% 93%;
 
-    --accent: 188 80% 50%;
-    --accent-foreground: 0 0% 100%;
+    --popover: var(--base-h) calc(var(--base-s) * 1%) calc(var(--l-card) * 1%);
+    --popover-foreground: 40 28% 93%;
 
-    --destructive: 0 72% 55%;
-    --destructive-foreground: 0 0% 98%;
+    /* Primary is the base hue brought up into the light, so the one
+       interactive colour belongs to the surface instead of fighting it. */
+    --primary: var(--base-h) calc(var(--base-s) * 1%) 62%;
+    --primary-foreground: var(--base-h) 60% 10%;
 
-    /* Deepened/saturated per request, one notch back from the darkest option
-       tried — that one measured ~2.9:1 text-on-background contrast (below
-       the 4.5:1 minimum for the small status text most usages are), this
-       one measures ~5.2:1. Foreground stays near-black — at this lightness
-       black text actually contrasts better against it than white does. */
-    --success: 76 92% 30%;
-    --success-foreground: 0 0% 5%;
+    --secondary: var(--base-h) calc(var(--base-s) * 0.9%) calc(var(--l-well) * 1%);
+    --secondary-foreground: 40 20% 86%;
 
-    /* Matched to the amber-500/blue-500 raw colors Income/BankStatementImport
-       already use for these exact meanings, so routing those call sites
-       through the token is a no-op recolor, not a shift. */
-    --info: 217 91% 60%;
-    --info-foreground: 0 0% 100%;
+    --muted: var(--base-h) calc(var(--base-s) * 0.8%) calc(var(--l-well) * 1%);
+    /* Dimmed by desaturating toward the surface rather than greying out, so
+       quiet text still belongs to the colour. */
+    --muted-foreground: var(--base-h) 18% 66%;
 
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 5%;
+    --accent: 158 90% 66%;
+    --accent-foreground: 160 60% 8%;
 
-    --border: 0 0% 16%;
-    --input: 0 0% 16%;
-    --ring: 252 78% 60%;
+    --destructive: 344 95% 64%;
+    --destructive-foreground: 344 60% 10%;
 
-    --radius: 0.375rem;
+    /* The three meanings, fixed across every base colour: green reads
+       straight time and agreement, amber overtime and nearly, red double
+       time and a real gap. Chosen to survive on a mid-tone surface rather
+       than on black. */
+    --success: 152 86% 56%;
+    --success-foreground: 152 60% 8%;
 
-    --sidebar-background: 0 0% 3%;
-    --sidebar-foreground: 0 0% 55%;
-    --sidebar-primary: 252 78% 60%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 0% 10%;
-    --sidebar-accent-foreground: 0 0% 95%;
-    --sidebar-border: 0 0% 12%;
-    --sidebar-ring: 252 78% 60%;
+    --info: 199 90% 62%;
+    --info-foreground: 199 60% 10%;
+
+    --warning: 40 96% 60%;
+    --warning-foreground: 40 70% 10%;
+
+    --border: var(--base-h) calc(var(--base-s) * 0.5%) calc(var(--l-edge) * 1%);
+    --input: var(--base-h) calc(var(--base-s) * 0.5%) calc(var(--l-edge) * 1%);
+    --ring: 158 90% 66%;
+
+    /* Square. Nothing in a terminal has rounded corners. */
+    --radius: 0rem;
+
+    --sidebar-background: var(--base-h) calc(var(--base-s) * 1%) calc(var(--l-well) * 1%);
+    --sidebar-foreground: var(--base-h) 18% 66%;
+    --sidebar-primary: var(--base-h) calc(var(--base-s) * 1%) 62%;
+    --sidebar-primary-foreground: var(--base-h) 60% 10%;
+    --sidebar-accent: var(--base-h) calc(var(--base-s) * 1%) calc(var(--l-card) * 1%);
+    --sidebar-accent-foreground: 40 28% 93%;
+    --sidebar-border: var(--base-h) calc(var(--base-s) * 0.5%) calc(var(--l-edge) * 1%);
+    --sidebar-ring: 158 90% 66%;
 
     /* Headings = DM Serif Display, body/UI text = DM Sans, data/numbers/
        labels/timestamps = Space Mono via --font-mono (.text-mono reads
@@ -94,6 +121,97 @@
     letter-spacing: 0.05em;
     text-transform: uppercase;
   }
+
+  /* Numbers line up in columns all over this app — hours against hours, pay
+     against pay — and they only line up if the digits are the same width. */
+  .text-mono, [class*="font-mono"], input[type="number"] {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   The 8-bit layer. Hard edges, stepped shadows, blocky meters — the look
+   of a thing built out of character cells rather than drawn with curves.
+   ─────────────────────────────────────────────────────────────────────── */
+@layer components {
+  /* A panel with a lit top-left and a hard shadow below right, which is how
+     a raised cell reads without a gradient or a blur anywhere near it. */
+  .pixel-panel {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    box-shadow:
+      inset 1px 1px 0 hsl(var(--base-h) 30% 50% / 0.22),
+      3px 3px 0 hsl(var(--base-h) 60% 6% / 0.55);
+  }
+
+  /* The same cell pressed in rather than raised — for wells, meters and
+     anything that should read as recessed into the panel. */
+  .pixel-well {
+    background: hsl(var(--secondary));
+    border: 1px solid hsl(var(--border));
+    box-shadow: inset 2px 2px 0 hsl(var(--base-h) 60% 5% / 0.5);
+  }
+
+  /* A button that physically depresses. No transition — it snaps, because
+     nothing in a terminal eases. */
+  .pixel-button {
+    border: 1px solid hsl(var(--border));
+    box-shadow: 2px 2px 0 hsl(var(--base-h) 60% 6% / 0.6);
+    transition: none;
+  }
+  .pixel-button:active {
+    transform: translate(2px, 2px);
+    box-shadow: none;
+  }
+
+  /* A segmented bar: discrete lit blocks, not a smooth fill. Set --segments
+     and --lit, and colour it with --seg-on. */
+  .pixel-meter {
+    --segments: 20;
+    --lit: 0;
+    --seg-on: hsl(var(--success));
+    display: block;
+    height: 0.75rem;
+    background:
+      repeating-linear-gradient(
+        to right,
+        var(--seg-on) 0,
+        var(--seg-on) calc(100% / var(--segments) - 2px),
+        transparent calc(100% / var(--segments) - 2px),
+        transparent calc(100% / var(--segments))
+      );
+    background-size: calc(var(--lit) / var(--segments) * 100%) 100%;
+    background-repeat: no-repeat;
+  }
+
+  /* A frame drawn in box characters, for section headers that should read
+     as a terminal window rather than a card. */
+  .pixel-frame {
+    position: relative;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+  }
+  .pixel-frame::before {
+    content: "";
+    position: absolute;
+    inset: 2px;
+    border: 1px solid hsl(var(--border) / 0.4);
+    pointer-events: none;
+  }
+
+  /* Scanlines, used sparingly — one surface at a time, never the whole app. */
+  .pixel-scan {
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 2px,
+      hsl(var(--base-h) 60% 4% / 0.18) 2px,
+      hsl(var(--base-h) 60% 4% / 0.18) 3px
+    );
+  }
+}
+
+@layer base {
 
   /* Custom scrollbar */
   ::-webkit-scrollbar {

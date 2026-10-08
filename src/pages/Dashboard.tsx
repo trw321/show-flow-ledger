@@ -54,10 +54,10 @@ function PaySummaryTable({ rows, jobs, employers }: { rows: PeriodStat[]; jobs: 
   const years = Array.from({ length: 6 }, (_, i) => now.getFullYear() - 4 + i);
 
   return (
-    <div className="mb-6 rounded-md border border-white/10 overflow-x-auto">
+    <div className="mb-6 rounded-md border border-border overflow-x-auto">
       <table className="w-full text-xs">
         <thead>
-          <tr className="bg-white/5 text-white/50 text-[10px] uppercase tracking-wider">
+          <tr className="bg-foreground/5 text-muted-foreground text-[10px] uppercase tracking-wider">
             <th className="text-left font-medium py-2 px-1.5">Period</th>
             <th className="text-right font-medium py-2 px-1.5">Gross</th>
             <th className="text-right font-medium py-2 px-1.5">Net</th>
@@ -68,11 +68,11 @@ function PaySummaryTable({ rows, jobs, employers }: { rows: PeriodStat[]; jobs: 
         <tbody className="divide-y divide-white/10">
           {rows.map(row => (
             <tr key={row.label} className="text-mono">
-              <td className="py-2 px-1.5 text-white/80 font-medium whitespace-nowrap">{row.label}</td>
-              <td className="py-2 px-1.5 text-right text-white/70 whitespace-nowrap">{money(row.gross)}</td>
+              <td className="py-2 px-1.5 text-foreground/80 font-medium whitespace-nowrap">{row.label}</td>
+              <td className="py-2 px-1.5 text-right text-foreground/70 whitespace-nowrap">{money(row.gross)}</td>
               <td className="py-2 px-1.5 text-right text-success font-semibold whitespace-nowrap">{money(row.net)}</td>
-              <td className="py-2 px-1.5 text-right text-white/70 whitespace-nowrap">{row.hours > 0 ? row.hours.toFixed(1) : '—'}</td>
-              <td className="py-2 px-1.5 text-right text-white/70 whitespace-nowrap">{row.shifts || '—'}</td>
+              <td className="py-2 px-1.5 text-right text-foreground/70 whitespace-nowrap">{row.hours > 0 ? row.hours.toFixed(1) : '—'}</td>
+              <td className="py-2 px-1.5 text-right text-foreground/70 whitespace-nowrap">{row.shifts || '—'}</td>
             </tr>
           ))}
           <tr className="text-mono bg-white/[0.03]">
@@ -82,10 +82,10 @@ function PaySummaryTable({ rows, jobs, employers }: { rows: PeriodStat[]; jobs: 
                 <ScrollWheel values={years} value={browseYear} onChange={v => setBrowseYear(v as number)} className="w-14" />
               </div>
             </td>
-            <td className="py-2 px-1.5 text-right text-white/70 whitespace-nowrap">{money(browseStat.gross)}</td>
+            <td className="py-2 px-1.5 text-right text-foreground/70 whitespace-nowrap">{money(browseStat.gross)}</td>
             <td className="py-2 px-1.5 text-right text-success font-semibold whitespace-nowrap">{money(browseStat.net)}</td>
-            <td className="py-2 px-1.5 text-right text-white/70 whitespace-nowrap">{browseStat.hours > 0 ? browseStat.hours.toFixed(1) : '—'}</td>
-            <td className="py-2 px-1.5 text-right text-white/70 whitespace-nowrap">{browseStat.shifts || '—'}</td>
+            <td className="py-2 px-1.5 text-right text-foreground/70 whitespace-nowrap">{browseStat.hours > 0 ? browseStat.hours.toFixed(1) : '—'}</td>
+            <td className="py-2 px-1.5 text-right text-foreground/70 whitespace-nowrap">{browseStat.shifts || '—'}</td>
           </tr>
         </tbody>
       </table>
@@ -120,10 +120,10 @@ function HoursMeter({ jobs }: { jobs: Job[] }) {
   if (worked === 0) return null;
 
   return (
-    <div className="mb-6 rounded-md border border-white/10 bg-black/30 p-3">
+    <div className="mb-6 rounded-md border border-border bg-background/30 p-3">
       <div className="flex items-baseline justify-between mb-2">
-        <p className="text-[9px] text-mono uppercase tracking-widest text-white/40">Month Levels</p>
-        <p className="text-[9px] text-mono text-white/30">{worked} day{worked !== 1 ? 's' : ''} · peak {Math.round(peak)}h</p>
+        <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground">Month Levels</p>
+        <p className="text-[9px] text-mono text-muted-foreground/60">{worked} day{worked !== 1 ? 's' : ''} · peak {Math.round(peak)}h</p>
       </div>
       <div className="flex items-stretch gap-[2px] h-14" role="img" aria-label={`Hours per day this month, peak ${Math.round(peak)} hours`}>
         {byDay.map((hours, i) => {
@@ -151,7 +151,7 @@ function HoursMeter({ jobs }: { jobs: Job[] }) {
           );
         })}
       </div>
-      <div className="mt-2 flex items-center gap-3 text-[9px] text-mono text-white/35">
+      <div className="mt-2 flex items-center gap-3 text-[9px] text-mono text-muted-foreground">
         <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-[1px] bg-success inline-block" />ST</span>
         <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-[1px] bg-warning inline-block" />OT 8h+</span>
         <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-[1px] bg-destructive inline-block" />DT 12h+</span>
@@ -164,7 +164,7 @@ function ExportButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="btn-bounce w-full mb-6 flex items-center justify-center gap-2 rounded-md border border-white/10 bg-white/5 hover:bg-white/10 py-3 px-4 text-sm font-semibold text-white/90 transition-colors"
+      className="btn-bounce w-full mb-6 flex items-center justify-center gap-2 rounded-md border border-border bg-foreground/5 hover:bg-foreground/10 py-3 px-4 text-sm font-semibold text-foreground/90 transition-colors"
     >
       <Download size={16} />
       Export to Excel
@@ -333,7 +333,7 @@ export default function Dashboard() {
         <span className={`text-xs font-body uppercase tracking-wider ${displayTotal >= 0 ? 'text-success' : 'text-destructive'}`}>
           {showExpenses ? 'net' : 'income'} {displayTotal >= 0 ? '↑' : '↓'}
         </span>
-        <span className="text-xs text-white/40 font-body ml-auto">{totalHours.toFixed(1)}h logged</span>
+        <span className="text-xs text-muted-foreground font-body ml-auto">{totalHours.toFixed(1)}h logged</span>
       </div>
 
       <HoursMeter jobs={data.jobs} />
@@ -348,14 +348,14 @@ export default function Dashboard() {
           {isOnStage ? '🎤 On Stage' : '🎭 On Deck'}
         </h2>
         {!nextJob ? (
-          <div className="rounded-md border border-white/10 bg-black/30 p-4 flex flex-col items-center gap-1 py-6">
+          <div className="rounded-md border border-border bg-background/30 p-4 flex flex-col items-center gap-1 py-6">
             <p className="text-2xl">🌅</p>
             <p className="text-xs text-muted-foreground font-body">No jobs on the horizon</p>
           </div>
         ) : (
           <button
             onClick={() => navigate(`/calendar?job=${nextJob.id}`)}
-            className="w-full rounded-md border border-white/10 bg-white/5 p-4 text-left hover:bg-white/10 active:opacity-80 transition-colors"
+            className="w-full rounded-md border border-border bg-foreground/5 p-4 text-left hover:bg-foreground/10 active:opacity-80 transition-colors"
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
@@ -377,21 +377,21 @@ export default function Dashboard() {
 
       {/* ── By employer ────────────────────────────────────────────────────── */}
       {byEmployer.length > 0 && (
-        <div className="mb-6 rounded-md border border-white/10 bg-white/5 overflow-hidden">
+        <div className="mb-6 rounded-md border border-border bg-foreground/5 overflow-hidden">
           <button
             onClick={() => setEmployerExpanded(e => !e)}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-white/5 transition-colors"
+            className="w-full px-4 py-3 flex items-center justify-between hover:bg-foreground/5 transition-colors"
           >
-            <h2 className="text-[10px] font-body uppercase tracking-widest text-white/40">By employer</h2>
-            <ChevronDown size={14} className={`text-white/40 transition-transform ${employerExpanded ? 'rotate-180' : ''}`} />
+            <h2 className="text-[10px] font-body uppercase tracking-widest text-muted-foreground">By employer</h2>
+            <ChevronDown size={14} className={`text-muted-foreground transition-transform ${employerExpanded ? 'rotate-180' : ''}`} />
           </button>
           {employerExpanded && (
-            <div className="divide-y divide-white/10 border-t border-white/10">
+            <div className="divide-y divide-white/10 border-t border-border">
               {byEmployer.map(({ client, hours, earned, jobs }) => (
                 <div key={client} className="flex items-center justify-between px-4 py-2.5">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-white/90 truncate">{client}</p>
-                    <p className="text-[10px] font-body text-white/40">{jobs} job{jobs !== 1 ? 's' : ''} · {hours.toFixed(1)}h</p>
+                    <p className="text-sm font-medium text-foreground/90 truncate">{client}</p>
+                    <p className="text-[10px] font-body text-muted-foreground">{jobs} job{jobs !== 1 ? 's' : ''} · {hours.toFixed(1)}h</p>
                   </div>
                   <p className="text-sm font-bold text-mono text-white shrink-0 ml-3">
                     ${earned.toLocaleString(undefined, { minimumFractionDigits: 0 })}
@@ -405,18 +405,18 @@ export default function Dashboard() {
 
       {/* Recent expenses — only if there are any */}
       {showExpenses && recentExpenses.length > 0 && (
-        <div className="mb-6 rounded-md border border-white/10 bg-white/5 p-4">
-          <h2 className="text-[10px] font-body mb-3 text-white/40 uppercase tracking-widest">Recent Expenses</h2>
+        <div className="mb-6 rounded-md border border-border bg-foreground/5 p-4">
+          <h2 className="text-[10px] font-body mb-3 text-muted-foreground uppercase tracking-widest">Recent Expenses</h2>
           <div className="space-y-2">
             {recentExpenses.map(exp => (
-              <div key={exp.id} className="flex items-center justify-between rounded-md bg-white/5 px-3 py-2">
+              <div key={exp.id} className="flex items-center justify-between rounded-md bg-foreground/5 px-3 py-2">
                 <div>
-                  <p className="text-sm font-medium text-white/90">{exp.description}</p>
-                  <p className="text-xs text-white/40 font-body">{exp.category}</p>
+                  <p className="text-sm font-medium text-foreground/90">{exp.description}</p>
+                  <p className="text-xs text-muted-foreground font-body">{exp.category}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-bold text-mono text-destructive">-${exp.amount.toLocaleString()}</p>
-                  <p className="text-xs text-white/40 font-body">{format(new Date(exp.date), 'MMM d')}</p>
+                  <p className="text-xs text-muted-foreground font-body">{format(new Date(exp.date), 'MMM d')}</p>
                 </div>
               </div>
             ))}

@@ -18,7 +18,7 @@ interface StatCardProps {
 // Variant only tints the icon, never the border/background/shadow — color
 // communicates real status (paid/warning/etc), not per-card decoration.
 const iconVariants: Record<StatCardVariant, string> = {
-  default: 'text-white/50',
+  default: 'text-muted-foreground',
   primary: 'text-primary',
   accent: 'text-accent',
   success: 'text-success',
@@ -29,15 +29,15 @@ const iconVariants: Record<StatCardVariant, string> = {
 
 export default function StatCard({ label, value, icon: Icon, variant = 'default', subtitle }: StatCardProps) {
   return (
-    <div className="rounded-md border border-white/10 bg-white/5 p-4 transition-colors hover:border-white/20">
+    <div className="rounded-md border border-border bg-foreground/5 p-4 transition-colors hover:border-border">
       <div className="flex items-center justify-between">
-        <p className="text-[10px] uppercase tracking-widest text-white/40 font-medium">{label}</p>
-        <div className={cn("w-8 h-8 rounded-full flex items-center justify-center bg-white/10", iconVariants[variant])}>
+        <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium">{label}</p>
+        <div className={cn("w-8 h-8 rounded-full flex items-center justify-center bg-foreground/10", iconVariants[variant])}>
           <Icon size={14} />
         </div>
       </div>
       <p className="mt-2 text-2xl font-bold text-mono text-white">{value}</p>
-      {subtitle && <p className="mt-1 text-xs text-white/40">{subtitle}</p>}
+      {subtitle && <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>}
     </div>
   );
 }

@@ -1947,7 +1947,7 @@ export default function CalendarPage() {
                 const expanded = expandedGroupKey === key;
                 const openJob = (job: Job) => { setSelectedDate(job.date); setSelectedJobId(job.id); };
                 return (
-                  <div key={key} className="relative overflow-hidden rounded-xl border border-white/10 bg-[#0b0910] shadow-lg shadow-black/50">
+                  <div key={key} className="relative overflow-hidden rounded-xl border border-border bg-[#0b0910] shadow-lg shadow-black/50">
                     {/* Graphic background fill so a shift reads as its own card
                         rather than another flat row — tint carries the status,
                         the bolt is a watermark, both behind the content. */}
@@ -1967,8 +1967,8 @@ export default function CalendarPage() {
                           {/* Date leads — it's how a shift gets identified,
                               and it keeps the card reading like a card. */}
                           <p className="text-[17px] font-bold text-mono tracking-tight leading-none text-white">{dateRange}</p>
-                          <p className="text-[13px] text-white/75 leading-snug truncate mt-1">{first.name}</p>
-                          <p className="text-[11px] text-white/40 truncate">{first.client}</p>
+                          <p className="text-[13px] text-foreground/75 leading-snug truncate mt-1">{first.name}</p>
+                          <p className="text-[11px] text-muted-foreground truncate">{first.client}</p>
                         </div>
                         {/* Pay is the reason this list gets opened, so it's the
                             one thing sized to be read without stopping. */}
@@ -1976,23 +1976,23 @@ export default function CalendarPage() {
                           {totalEarned > 0 ? (
                             <p className="text-lg font-bold text-mono text-success leading-none">${Math.round(totalEarned).toLocaleString()}</p>
                           ) : (
-                            <p className="text-[11px] text-mono text-white/35 leading-none">{statusLabel[first.status]}</p>
+                            <p className="text-[11px] text-mono text-muted-foreground leading-none">{statusLabel[first.status]}</p>
                           )}
-                          {totalHours > 0 && <p className="text-[10px] text-mono text-white/40 mt-1.5">{totalHours}h</p>}
+                          {totalHours > 0 && <p className="text-[10px] text-mono text-muted-foreground mt-1.5">{totalHours}h</p>}
                         </div>
                       </div>
                       <div className="mt-2.5 flex items-center gap-1.5">
                         <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", jobDotClass(first, paidJobIds))} />
-                        {isGroup && <span className="text-[10px] text-mono bg-white/10 text-white/70 px-1.5 py-0.5 rounded-full">{jobs.length} days</span>}
-                        {first.jobNumber && <span className="text-[10px] text-mono text-white/30">#{first.jobNumber}</span>}
+                        {isGroup && <span className="text-[10px] text-mono bg-foreground/10 text-foreground/70 px-1.5 py-0.5 rounded-full">{jobs.length} days</span>}
+                        {first.jobNumber && <span className="text-[10px] text-mono text-muted-foreground/60">#{first.jobNumber}</span>}
                         <span className="flex-1" />
                         {totalHours > 0 && (
                           <StubMark hasStub={!!first.payStub} />
                         )}
                         {isGroup && (
                           expanded
-                            ? <ChevronDown size={14} className="text-white/40 shrink-0" />
-                            : <ChevronRight size={14} className="text-white/40 shrink-0" />
+                            ? <ChevronDown size={14} className="text-muted-foreground shrink-0" />
+                            : <ChevronRight size={14} className="text-muted-foreground shrink-0" />
                         )}
                       </div>
                     </div>

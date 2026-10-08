@@ -725,11 +725,11 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
         </div>
         <div className="relative z-10 p-4 flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <h1 className="text-xs text-mono uppercase tracking-widest text-white/60 font-medium">
+            <h1 className="text-xs text-mono uppercase tracking-widest text-foreground/60 font-medium">
               Job Log
             </h1>
             {(hasContent || manualHasContent || manualOpen) && (
-              <button onClick={handleClear} className="text-white/40 hover:text-white/70 transition-colors p-1" aria-label="Clear">
+              <button onClick={handleClear} className="text-muted-foreground hover:text-foreground/70 transition-colors p-1" aria-label="Clear">
                 <X size={14} />
               </button>
             )}
@@ -741,14 +741,14 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
               <button
                 type="button"
                 onClick={() => setManualOpen(false)}
-                className="self-start text-[11px] text-white/40 hover:text-white/70 transition-colors"
+                className="self-start text-[11px] text-muted-foreground hover:text-foreground/70 transition-colors"
               >
                 ← Back to paste
               </button>
 
               {/* Employer — full width, up top */}
               <div className="flex flex-col gap-1">
-               <label className="text-[10px] font-body uppercase tracking-wider text-white/50">Employer</label>
+               <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Employer</label>
                 <EmployerCombobox
                   value={manual.client}
                   onChange={v => handleManualChange('client', v)}
@@ -765,11 +765,11 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
 
                 {/* Left — calendar */}
                 <div className="flex flex-col gap-1 flex-shrink-0">
-                  <label className="text-[10px] font-body uppercase tracking-wider text-white/50">
+                  <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">
                     Date <span className="text-lime-400">*</span>
                   </label>
                   <div
-                    className="rounded-md overflow-hidden border border-white/10 bg-black/40"
+                    className="rounded-md overflow-hidden border border-border bg-background/40"
                     {...swipe}
                   >
                     <Calendar
@@ -781,7 +781,7 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
                       classNames={{
                         cell: "h-9 w-9 text-center text-sm p-0 relative focus-within:relative focus-within:z-20",
                       }}
-                      className="text-white/80 [&_button]:text-white/70 [&_button:hover]:bg-white/10 [&_button[aria-selected]]:!bg-transparent [&_button[aria-selected]]:text-white [&_button[aria-selected]]:outline [&_button[aria-selected]]:outline-[3px] [&_button[aria-selected]]:outline-yellow-300 [&_button[aria-selected]]:-outline-offset-2 [&_button[aria-selected]]:!rounded-full [&_button[aria-selected]:hover]:!bg-transparent [&_button[data-today]]:!bg-blue-500 [&_button[data-today]]:!text-white [&_button[data-today][aria-selected]]:!bg-transparent [&_button[data-today][aria-selected]]:outline-yellow-300"
+                      className="text-foreground/80 [&_button]:text-foreground/70 [&_button:hover]:bg-foreground/10 [&_button[aria-selected]]:!bg-transparent [&_button[aria-selected]]:text-white [&_button[aria-selected]]:outline [&_button[aria-selected]]:outline-[3px] [&_button[aria-selected]]:outline-yellow-300 [&_button[aria-selected]]:-outline-offset-2 [&_button[aria-selected]]:!rounded-full [&_button[aria-selected]:hover]:!bg-transparent [&_button[data-today]]:!bg-blue-500 [&_button[data-today]]:!text-white [&_button[data-today][aria-selected]]:!bg-transparent [&_button[data-today][aria-selected]]:outline-yellow-300"
                     />
                   </div>
                 </div>
@@ -789,59 +789,59 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
                 {/* Right — fields stacked */}
                 <div className="flex flex-col gap-2 flex-1 sm:pt-6">
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-body uppercase tracking-wider text-white/50">Call time <span className="inline-block w-1.5 h-1.5 rounded-full bg-lime-400 mb-0.5 ml-0.5" /></label>
+                    <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Call time <span className="inline-block w-1.5 h-1.5 rounded-full bg-lime-400 mb-0.5 ml-0.5" /></label>
                     <Input
                       value={manual.startTime}
                       onChange={e => handleManualChange('startTime', e.target.value)}
                       placeholder="4:00 PM"
-                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-primary/40"
+                      className="h-9 text-xs font-mono bg-background/40 border-border text-foreground/80 placeholder:text-muted-foreground/60 focus:border-primary/40"
                     />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-body uppercase tracking-wider text-white/50">Rate ($/hr) <span className="inline-block w-1.5 h-1.5 rounded-full bg-lime-400 mb-0.5 ml-0.5" /></label>
+                    <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Rate ($/hr) <span className="inline-block w-1.5 h-1.5 rounded-full bg-lime-400 mb-0.5 ml-0.5" /></label>
                     <Input
                       type="number"
                       step="0.01"
                       value={manual.hourlyRate}
                       onChange={e => handleManualChange('hourlyRate', e.target.value)}
                       placeholder="0.00"
-                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-primary/40"
+                      className="h-9 text-xs font-mono bg-background/40 border-border text-foreground/80 placeholder:text-muted-foreground/60 focus:border-primary/40"
                     />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-body uppercase tracking-wider text-white/50">Position</label>
+                    <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Position</label>
                     <Input
                       value={manual.position}
                       onChange={e => handleManualChange('position', e.target.value)}
                       placeholder="e.g. A1, Followspot"
-                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-primary/40"
+                      className="h-9 text-xs font-mono bg-background/40 border-border text-foreground/80 placeholder:text-muted-foreground/60 focus:border-primary/40"
                     />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-body uppercase tracking-wider text-white/50">Event name</label>
+                    <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Event name</label>
                     <Input
                       value={manual.name}
                       onChange={e => handleManualChange('name', e.target.value)}
                       placeholder="e.g. Olivia Rodrigo"
-                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-primary/40"
+                      className="h-9 text-xs font-mono bg-background/40 border-border text-foreground/80 placeholder:text-muted-foreground/60 focus:border-primary/40"
                     />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-body uppercase tracking-wider text-white/50">Venue</label>
+                    <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Venue</label>
                     <Input
                       value={manual.venue}
                       onChange={e => handleManualChange('venue', e.target.value)}
                       placeholder="e.g. The Met"
-                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-primary/40"
+                      className="h-9 text-xs font-mono bg-background/40 border-border text-foreground/80 placeholder:text-muted-foreground/60 focus:border-primary/40"
                     />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-body uppercase tracking-wider text-white/50">Payroll co.</label>
+                    <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Payroll co.</label>
                     <Input
                       value={manual.payrollCompany}
                       onChange={e => handleManualChange('payrollCompany', e.target.value)}
                       placeholder="e.g. AVTS"
-                      className="h-9 text-xs font-mono bg-black/40 border-white/10 text-white/80 placeholder:text-white/20 focus:border-primary/40"
+                      className="h-9 text-xs font-mono bg-background/40 border-border text-foreground/80 placeholder:text-muted-foreground/60 focus:border-primary/40"
                     />
                   </div>
                 </div>
@@ -850,7 +850,7 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
               {/* Additional dates — bulk-create the same shift across multiple days */}
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-body uppercase tracking-wider text-white/50">
+                  <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">
                     Additional dates {extraDates.length > 0 && <span className="text-lime-400">({extraDates.length})</span>}
                   </label>
                   <button
@@ -869,19 +869,19 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
                           type="date"
                           value={d}
                           onChange={e => setExtraDates(prev => prev.map((v, vi) => vi === i ? e.target.value : v))}
-                          className="flex-1 h-9 rounded-md bg-black/40 border border-white/10 text-white/80 text-xs font-mono px-3 focus:outline-none focus:border-primary/40 [color-scheme:dark]"
+                          className="flex-1 h-9 rounded-md bg-background/40 border border-border text-foreground/80 text-xs font-mono px-3 focus:outline-none focus:border-primary/40 [color-scheme:dark]"
                         />
                         <button
                           type="button"
                           onClick={() => setExtraDates(prev => prev.filter((_, vi) => vi !== i))}
-                          className="text-white/40 hover:text-destructive transition-colors p-1.5"
+                          className="text-muted-foreground hover:text-destructive transition-colors p-1.5"
                           aria-label="Remove date"
                         >
                           <X size={14} />
                         </button>
                       </div>
                     ))}
-                    <p className="text-[10px] text-white/30">Same employer, time, rate & details on each date — you'll be able to tweak any of them before saving.</p>
+                    <p className="text-[10px] text-muted-foreground/60">Same employer, time, rate & details on each date — you'll be able to tweak any of them before saving.</p>
                   </div>
                 )}
               </div>
@@ -912,9 +912,9 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
                     : 'Paste a dispatch offer, hours note, personal schedule, or text here…'
                 }
                 className={cn(
-                  'w-full bg-black/40 backdrop-blur-sm border border-white/10 rounded-md',
-                  'px-3 py-2.5 text-xs text-mono text-white/80 placeholder:text-white/25',
-                  'focus:outline-none focus:border-primary/40 focus:bg-black/50',
+                  'w-full bg-background/40 backdrop-blur-sm border border-border rounded-md',
+                  'px-3 py-2.5 text-xs text-mono text-foreground/80 placeholder:text-muted-foreground/60',
+                  'focus:outline-none focus:border-primary/40 focus:bg-background/50',
                   'resize-none transition-colors leading-relaxed',
                   isParsing && 'opacity-50 cursor-not-allowed',
                 )}
@@ -936,7 +936,7 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
                   disabled={isParsing}
                   size="sm"
                   variant="outline"
-                  className="gap-1.5 bg-black/40 border-white/10 text-white/80 hover:bg-black/60 hover:text-white"
+                  className="gap-1.5 bg-background/40 border-border text-foreground/80 hover:bg-background/60 hover:text-white"
                 >
                   <Camera size={13} /> Photo
                 </Button>
@@ -951,17 +951,17 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
                   </Button>
                 )}
                 {step === 'review-jobs' && (
-                  <span className="text-[11px] text-white/40 text-mono ml-auto">
+                  <span className="text-[11px] text-muted-foreground text-mono ml-auto">
                     {jobs.length} shift{jobs.length !== 1 ? 's' : ''} ready
                   </span>
                 )}
                 {step === 'review-hours' && (
-                  <span className="text-[11px] text-white/40 text-mono ml-auto">
+                  <span className="text-[11px] text-muted-foreground text-mono ml-auto">
                     {hoursResults.length - hoursAccepted.size} of {hoursResults.length} left
                   </span>
                 )}
                 {step === 'review-events' && (
-                  <span className="text-[11px] text-white/40 text-mono ml-auto">
+                  <span className="text-[11px] text-muted-foreground text-mono ml-auto">
                     {events.length} event{events.length !== 1 ? 's' : ''} ready
                   </span>
                 )}
@@ -976,7 +976,7 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
                   onChange={e => { setParserModel(e.target.value); saveParserChoice(e.target.value, parserEffort); }}
                   disabled={isParsing}
                   aria-label="Parsing model"
-                  className="bg-black/40 border border-white/10 rounded-md px-2 py-1 text-[10px] text-mono text-white/60 focus:outline-none focus:border-primary/40 disabled:opacity-50"
+                  className="bg-background/40 border border-border rounded-md px-2 py-1 text-[10px] text-mono text-foreground/60 focus:outline-none focus:border-primary/40 disabled:opacity-50"
                 >
                   {PARSER_MODELS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
                 </select>
@@ -986,7 +986,7 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
                     onChange={e => { const v = e.target.value as ReasoningEffort; setParserEffort(v); saveParserChoice(parserModel, v); }}
                     disabled={isParsing}
                     aria-label="Reasoning effort"
-                    className="bg-black/40 border border-white/10 rounded-md px-2 py-1 text-[10px] text-mono text-white/60 focus:outline-none focus:border-primary/40 disabled:opacity-50"
+                    className="bg-background/40 border border-border rounded-md px-2 py-1 text-[10px] text-mono text-foreground/60 focus:outline-none focus:border-primary/40 disabled:opacity-50"
                   >
                     {REASONING_EFFORTS.map(e => <option key={e.id} value={e.id}>Thinking: {e.label}</option>)}
                   </select>
@@ -1007,10 +1007,10 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
                       <ChevronsUp size={12} /> Level up → {upLevel.label}
                     </button>
                   ) : (
-                    <span className="text-[10px] text-white/30 text-mono">Top level — nothing higher to try</span>
+                    <span className="text-[10px] text-muted-foreground/60 text-mono">Top level — nothing higher to try</span>
                   )
                 )}
-                <span className="text-[10px] text-white/25 text-mono">
+                <span className="text-[10px] text-muted-foreground/60 text-mono">
                   {PARSER_MODELS.find(m => m.id === parserModel)?.note}
                 </span>
               </div>
