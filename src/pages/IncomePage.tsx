@@ -758,6 +758,19 @@ export default function IncomePage() {
   const owed = Math.max(0, totalExpected - totalActual);
   const overpaid = Math.max(0, totalActual - totalExpected);
 
+  // Hours and days are the figures worth leading with: they are what you sold,
+  // and whether a row has been settled is a cleaner fact than how much of the
+  // money has landed. A row counts as paid once anything at all has come in.
+  const isSettled = (r: ReconciliationRow) => r.actualPaid > 0;
+  const datesIn = (rows: ReconciliationRow[]) =>
+    new Set(rows.flatMap(r => r.jobs.map(j => j.date))).size;
+  const hoursTotal = reconciliation.reduce((sum, r) => sum + r.totalHours, 0);
+  const hoursPaid = reconciliation.filter(isSettled).reduce((sum, r) => sum + r.totalHours, 0);
+  const daysTotal = datesIn(reconciliation);
+  const daysPaid = datesIn(reconciliation.filter(isSettled));
+  const paidFraction = totalExpected > 0 ? Math.min(1, totalActual / totalExpected) : 0;
+  const round1 = (n: number) => Math.round(n * 10) / 10;
+
   const reconciliationGroups = useMemo(() => {
     const groups: Record<string, { client: string; weekStart: string; rows: ReconciliationRow[] }> = {};
     const order: string[] = [];
@@ -858,27 +871,44 @@ export default function IncomePage() {
           for changing them. Still owed is the one you came for, so it is the
           one that is big. */}
       <div className="grid grid-cols-2 gap-2 mb-4">
+        <div className="rounded-lg border border-border bg-card p-3">
+          <p className="text-[10px] text-muted-foreground text-mono uppercase tracking-wider">Hours paid</p>
+          <p className="text-3xl font-bold text-mono mt-0.5 leading-none">
+            {round1(hoursPaid)}<span className="text-base text-muted-foreground font-medium"> / {round1(hoursTotal)}h</span>
+          </p>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-3">
+          <p className="text-[10px] text-muted-foreground text-mono uppercase tracking-wider">Days paid</p>
+          <p className="text-3xl font-bold text-mono mt-0.5 leading-none">
+            {daysPaid}<span className="text-base text-muted-foreground font-medium"> / {daysTotal}</span>
+          </p>
+        </div>
+
+        {/* The money underneath, as how far along it is rather than a bare
+            total — the gap is the part worth seeing. */}
         <div className={cn(
-          'col-span-2 rounded-lg border p-4',
+          'col-span-2 rounded-lg border p-3',
           owed > 0.01 ? 'border-warning/40 bg-warning/5' : 'border-success/30 bg-success/5',
         )}>
-          <p className="text-[10px] text-muted-foreground text-mono uppercase tracking-wider">
-            {owed > 0.01 ? 'Still owed' : overpaid > 0.01 ? 'Paid over' : 'All settled'}
-          </p>
-          <p className={cn(
-            'text-3xl font-bold text-mono mt-1 break-all',
-            owed > 0.01 ? 'text-warning' : 'text-success',
-          )}>
-            ${(owed > 0.01 ? owed : overpaid > 0.01 ? overpaid : 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-          </p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-3">
-          <p className="text-[10px] text-muted-foreground text-mono uppercase tracking-wider">Earned</p>
-          <p className="text-xl font-bold text-mono mt-0.5 break-all">${totalExpected.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-3">
-          <p className="text-[10px] text-muted-foreground text-mono uppercase tracking-wider">Paid</p>
-          <p className="text-xl font-bold text-mono text-success mt-0.5 break-all">${totalActual.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-sm font-bold text-mono">
+              <span className="text-success">${totalActual.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+              <span className="text-muted-foreground font-medium"> of ${totalExpected.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+            </p>
+            <p className={cn('text-[11px] text-mono font-semibold', owed > 0.01 ? 'text-warning' : 'text-success')}>
+              {owed > 0.01
+                ? `${owed.toLocaleString(undefined, { maximumFractionDigits: 0 })} short`
+                : overpaid > 0.01
+                  ? `${overpaid.toLocaleString(undefined, { maximumFractionDigits: 0 })} over`
+                  : 'All settled'}
+            </p>
+          </div>
+          <div className="mt-2 h-1.5 rounded-full bg-secondary/40 overflow-hidden">
+            <div
+              className={cn('h-full rounded-full', owed > 0.01 ? 'bg-warning' : 'bg-success')}
+              style={{ width: `${Math.round(paidFraction * 100)}%` }}
+            />
+          </div>
         </div>
       </div>
 
