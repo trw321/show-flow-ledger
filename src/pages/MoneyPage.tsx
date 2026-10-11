@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
+import { learnFromStubs, dismissSuggestion, consumeSkip, type Suggestion } from '@/lib/stubLearning';
 import { createPortal } from 'react-dom';
 import { HoursMeter, PaySummaryTable, ExportButton, type PeriodStat } from '@/components/MoneyWidgets';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
@@ -609,7 +610,7 @@ function ReconciliationRowCard({
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function MoneyPage() {
-  const { data, addIncome, updateIncome, deleteIncome, updateJob } = useData();
+  const { data, addIncome, updateIncome, deleteIncome, updateJob, updateEmployer } = useData();
   const navigate = useNavigate();
   const [editId, setEditId] = useState<string | null>(null);
 
@@ -788,6 +789,31 @@ export default function MoneyPage() {
   const paidFraction = totalExpected > 0 ? Math.min(1, totalActual / totalExpected) : 0;
   const round1 = (n: number) => Math.round(n * 10) / 10;
   const totalLogged = '$' + total.toLocaleString(undefined, { maximumFractionDigits: 0 }) + ' logged';
+
+  // Rates the stubs disagree with the saved profile about, across every
+  // employer. This used to surface only inside the detail of a shift that
+  // happened to carry a parsed stub, which is nowhere near where payroll is
+  // actually read.
+  const rateSuggestions = useMemo(
+    () => learnFromStubs(data.jobs, data.employers),
+    [data.jobs, data.employers],
+  );
+
+  const applyRate = async (s: Suggestion) => {
+    const employer = data.employers.find(e => e.id === s.employerId);
+    if (!employer) return;
+    await updateEmployer(s.employerId, {
+      [s.field]: s.suggested,
+      dismissedSuggestions: consumeSkip(employer, s.field),
+    });
+    toast.success(employer.name + ' — ' + s.label.toLowerCase() + ' set to ' + s.suggested + '%');
+  };
+
+  const skipRate = async (s: Suggestion) => {
+    const employer = data.employers.find(e => e.id === s.employerId);
+    if (!employer) return;
+    await updateEmployer(s.employerId, { dismissedSuggestions: dismissSuggestion(employer, s.field) });
+  };
 
   // ── Carried over from the Dashboard ──────────────────────────────────────
   // How long the oldest unpaid shift has been waiting. This was the one thing
@@ -1010,6 +1036,46 @@ export default function MoneyPage() {
       </div>
 
       <PaySummaryTable rows={paySummaryRows} jobs={data.jobs} employers={data.employers} />
+
+      {/* Dues and tax come off, vacation goes on top — each a percentage this
+          employer pays, read off the stubs rather than typed in. */}
+      {rateSuggestions.length > 0 && (
+        <div className="pixel-panel mb-4 p-3 space-y-3">
+          <p className="text-[9px] text-mono font-bold tracking-widest uppercase text-accent">
+            Learned from your stubs
+          </p>
+          {rateSuggestions.map(sug => (
+            <div key={sug.employerId + sug.field} className="space-y-1.5">
+              <p className="text-[11px]">
+                <span className="font-semibold">{sug.employerName}</span> — {sug.label.toLowerCase()} looks like{' '}
+                <span className="text-mono text-success font-bold">{sug.suggested}%</span>
+                {sug.current != null && <>, not <span className="text-mono line-through text-destructive">{sug.current}%</span></>}
+              </p>
+              <p className="text-[10px] text-mono text-muted-foreground">
+                {sug.sampleCount === 1
+                  ? 'From 1 stub (' + sug.evidence[0] + ') — worth a look, not conclusive'
+                  : sug.sampleCount + ' stubs agree (' + sug.evidence.join(', ') + ') — strong signal'}
+              </p>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => applyRate(sug)}
+                  className="flex-1 rounded-md border border-success/40 bg-success/10 text-success px-2 py-1 text-[10px] font-medium hover:bg-success/20 transition-colors"
+                >
+                  Always use {sug.suggested}%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => skipRate(sug)}
+                  className="rounded-md border border-border bg-secondary/20 text-muted-foreground px-2 py-1 text-[10px] hover:text-foreground transition-colors"
+                >
+                  Not now
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Three ways in, behind one button — both of these were sitting open and
           taking the top of the page whether or not anything was being added. */}

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Crop, Highlighter, Undo2, Check, X } from 'lucide-react';
+import { Crop, Highlighter, Undo2, Check, X, ZoomIn, ZoomOut, Move } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /**
@@ -15,7 +15,10 @@ import { cn } from '@/lib/utils';
  */
 
 interface Rect { x: number; y: number; w: number; h: number }
-type Tool = 'crop' | 'redact';
+type Tool = 'crop' | 'redact' | 'pan';
+
+/** How far in you can go. Four times is enough to put a marker on one line. */
+const MAX_ZOOM = 4;
 
 interface Props {
   /** The picked file, as a data URL. */
@@ -43,6 +46,10 @@ export default function StubEditor({ source, onCancel, onDone }: Props) {
   const [crop, setCrop] = useState<Rect | null>(null);
   const [drag, setDrag] = useState<{ from: { x: number; y: number }; to: { x: number; y: number } } | null>(null);
   const [ready, setReady] = useState(false);
+  // Drawn bigger than the frame and scrolled, rather than scaled in place:
+  // the canvas keeps its own pixel size, so a mark still lands where it was
+  // put, and panning is the browser's own scrolling.
+  const [zoom, setZoom] = useState(1);
 
   // Everything is kept in the image's own pixel coordinates, so a redaction
   // lands in the same place whatever size the canvas is drawn at on screen.
@@ -124,6 +131,7 @@ export default function StubEditor({ source, onCancel, onDone }: Props) {
 
   const undo = () => {
     if (tool === 'crop' && crop) { setCrop(null); return; }
+    if (redactions.length === 0 && crop) { setCrop(null); return; }
     setRedactions(prev => prev.slice(0, -1));
   };
 
@@ -152,8 +160,9 @@ export default function StubEditor({ source, onCancel, onDone }: Props) {
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
         {([
-          { id: 'redact' as const, label: 'Black out', icon: Highlighter },
+          { id: 'redact' as const, label: 'Mark', icon: Highlighter },
           { id: 'crop' as const, label: 'Crop', icon: Crop },
+          { id: 'pan' as const, label: 'Move', icon: Move },
         ]).map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -161,7 +170,7 @@ export default function StubEditor({ source, onCancel, onDone }: Props) {
             aria-pressed={tool === id}
             onClick={() => setTool(id)}
             className={cn(
-              'pixel-button flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold uppercase tracking-wider',
+              'pixel-button flex-1 flex items-center justify-center gap-1 py-2 text-[11px] font-bold uppercase tracking-wider',
               tool === id ? 'bg-primary/20 border-primary text-primary' : 'bg-card text-muted-foreground',
             )}
           >
@@ -179,20 +188,69 @@ export default function StubEditor({ source, onCancel, onDone }: Props) {
         </button>
       </div>
 
+      {/* Zoom first, then mark: at phone width a whole stub is too small to
+          put a marker on one line of it. */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setZoom(z => Math.max(1, Math.round((z - 0.5) * 2) / 2))}
+          disabled={zoom <= 1}
+          aria-label="Zoom out"
+          className="pixel-button h-8 w-9 bg-card text-muted-foreground disabled:opacity-30"
+        >
+          <ZoomOut size={14} className="mx-auto" />
+        </button>
+        <input
+          type="range"
+          min={1}
+          max={MAX_ZOOM}
+          step={0.5}
+          value={zoom}
+          onChange={e => setZoom(Number(e.target.value))}
+          aria-label="Zoom"
+          className="flex-1 accent-primary"
+        />
+        <button
+          type="button"
+          onClick={() => setZoom(z => Math.min(MAX_ZOOM, Math.round((z + 0.5) * 2) / 2))}
+          disabled={zoom >= MAX_ZOOM}
+          aria-label="Zoom in"
+          className="pixel-button h-8 w-9 bg-card text-muted-foreground disabled:opacity-30"
+        >
+          <ZoomIn size={14} className="mx-auto" />
+        </button>
+        <span className="w-10 text-right text-[11px] text-mono text-muted-foreground">{zoom}x</span>
+      </div>
+
       <p className="text-[11px] text-muted-foreground">
         {tool === 'redact'
-          ? 'Drag over anything that should not leave your phone — a member number, an address. It is painted into the image, not laid over it.'
-          : 'Drag the part of the stub worth keeping.'}
+          ? 'Zoom in, then drag over anything that should not leave your phone — a member number, an address. It is painted into the image, not laid over it.'
+          : tool === 'crop'
+            ? 'Drag the part of the stub worth keeping.'
+            : 'Drag to move around the stub. Switch back to Mark or Crop to draw.'}
       </p>
 
-      <canvas
-        ref={canvasRef}
-        className="w-full h-auto border border-border touch-none cursor-crosshair bg-secondary/20"
-        onPointerDown={e => { (e.target as Element).setPointerCapture(e.pointerId); startDrag(e.clientX, e.clientY); }}
-        onPointerMove={e => moveDrag(e.clientX, e.clientY)}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-      />
+      {/* The frame scrolls; the canvas inside it is as wide as the zoom says.
+          In Move mode the canvas stops swallowing touches so the frame can be
+          dragged around in the ordinary way. */}
+      <div className="max-h-[55vh] overflow-auto border border-border bg-secondary/20">
+        <canvas
+          ref={canvasRef}
+          style={{ width: zoom * 100 + '%', maxWidth: 'none' }}
+          className={cn(
+            'h-auto block',
+            tool === 'pan' ? 'touch-auto cursor-grab' : 'touch-none cursor-crosshair',
+          )}
+          onPointerDown={e => {
+            if (tool === 'pan') return;
+            (e.target as Element).setPointerCapture(e.pointerId);
+            startDrag(e.clientX, e.clientY);
+          }}
+          onPointerMove={e => { if (tool !== 'pan') moveDrag(e.clientX, e.clientY); }}
+          onPointerUp={() => { if (tool !== 'pan') endDrag(); }}
+          onPointerCancel={() => { if (tool !== 'pan') endDrag(); }}
+        />
+      </div>
 
       <div className="grid grid-cols-2 gap-2">
         <Button variant="ghost" size="sm" onClick={onCancel} className="gap-1.5">
