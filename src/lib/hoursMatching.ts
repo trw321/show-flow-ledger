@@ -124,16 +124,32 @@ export interface MatchResult {
   conflicts: string[];
 }
 
-export function scoreMatch(entry: HoursEntry, job: Job): { score: number; conflicts: string[] } {
+/**
+ * A callback is a second call on a day you have already worked, and it starts
+ * when the show needs you rather than when the first call did. A start time
+ * that disagrees with the parent shift is therefore the normal case, not
+ * evidence against the match — so it is not compared at all for one.
+ */
+export function isCallbackShift(job: Job): boolean {
+  // Word-bounded, so "CBS Television City" stays a venue, not a callback.
+  return /\bcb\b|\bcall[\s-]?backs?\b/i.test(`${job.notes ?? ''} ${job.name ?? ''}`);
+}
+
+export function scoreMatch(entry: HoursEntry, job: Job): { score: number; possible: number; conflicts: string[] } {
   let score = 0;
+  // Only the checks that could actually run count toward the total. A shift
+  // with no venue recorded used to score the same as one whose venue
+  // disagreed, because both simply missed the points.
+  let possible = 50;
   const conflicts: string[] = [];
 
   // Date match is prerequisite
-  if (job.date !== entry.date) return { score: 0, conflicts: [] };
+  if (job.date !== entry.date) return { score: 0, possible: 50, conflicts: [] };
   score += 50;
 
   // Venue fuzzy match
   if (entry.venue && job.venue) {
+    possible += 30;
     const ev = entry.venue.toLowerCase();
     const jv = job.venue.toLowerCase();
     const evWords = ev.split(/\s+/);
@@ -148,11 +164,13 @@ export function scoreMatch(entry: HoursEntry, job: Job): { score: number; confli
     if (ev.includes(jc.slice(0, 4)) || jc.includes(ev.slice(0, 4))) score += 15;
   }
 
-  // Start time match
-  if (entry.startTime && job.startTime) {
+  // Start time match — skipped entirely for a callback, which is expected to
+  // start at its own time.
+  if (entry.startTime && job.startTime && !isCallbackShift(job)) {
     const em = parseTimeToMins(entry.startTime);
     const jm = parseTimeToMins(job.startTime);
     if (!isNaN(em) && !isNaN(jm)) {
+      possible += 20;
       const diff = Math.abs(em - jm);
       if (diff === 0) score += 20;
       else if (diff <= 30) score += 10;
@@ -160,7 +178,7 @@ export function scoreMatch(entry: HoursEntry, job: Job): { score: number; confli
     }
   }
 
-  return { score, conflicts };
+  return { score, possible, conflicts };
 }
 
 export function matchEntries(entries: HoursEntry[], jobs: Job[]): MatchResult[] {
@@ -172,17 +190,25 @@ export function matchEntries(entries: HoursEntry[], jobs: Job[]): MatchResult[] 
 
     let best: Job | null = null;
     let bestScore = 0;
+    let bestPossible = 50;
     let bestConflicts: string[] = [];
 
     for (const job of candidates) {
-      const { score, conflicts } = scoreMatch(entry, job);
-      if (score > bestScore) { best = job; bestScore = score; bestConflicts = conflicts; }
+      const { score, possible, conflicts } = scoreMatch(entry, job);
+      if (score > bestScore) { best = job; bestScore = score; bestPossible = possible; bestConflicts = conflicts; }
     }
 
+    // Scored against what could be checked rather than a fixed total, so a
+    // shift that simply has nothing to compare is not punished for it. The
+    // date alone can never be high confidence though — on a day with two
+    // calls it does not tell them apart — so high needs something else to
+    // have agreed as well.
+    const ratio = bestPossible > 0 ? bestScore / bestPossible : 0;
+    const corroborated = bestPossible > 50;
     const confidence: MatchResult['confidence'] =
-      bestScore >= 80 ? 'high' :
-      bestScore >= 50 ? 'medium' :
-      bestScore > 0 ? 'low' : 'none';
+      bestScore === 0 ? 'none' :
+      ratio >= 0.9 && corroborated ? 'high' :
+      ratio >= 0.6 ? 'medium' : 'low';
 
     return { entry, matchedJob: best, score: bestScore, confidence, conflicts: bestConflicts };
   });

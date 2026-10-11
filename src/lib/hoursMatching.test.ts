@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hourUpdateToEntry, type SmartImportHourUpdate } from './hoursMatching';
+import { hourUpdateToEntry, matchEntries, isCallbackShift, type SmartImportHourUpdate, type HoursEntry } from './hoursMatching';
 import { calculateDayPay, offClockMealMinutes, netHoursWorked, jobPayBreakdown } from './payCalc';
 import type { Job } from './store';
 
@@ -302,5 +302,60 @@ describe('the two hours guaranteed after a meal reach the pay', () => {
   it('adds nothing when the guarantee was met', () => {
     const r = calculateDayPay(8, 50, 0, 0, 1, undefined, { postMealPaddingHours: 0 });
     expect(r.totalPay).toBe(calculateDayPay(8, 50, 0, 0, 1).totalPay);
+  });
+});
+
+describe('matching an hours note to a shift', () => {
+  const job = (extra: Partial<Job>): Job => ({
+    id: 'j1', name: 'Warriors', client: 'GSW', venue: 'Chase Center',
+    date: '2026-09-10', status: 'upcoming', notes: '',
+    has6th7thDayRule: false, hasVacationPay: false, ...extra,
+  } as Job);
+  const note = (extra: Partial<HoursEntry>): HoursEntry => ({
+    date: '2026-09-10', paid: false, ...extra,
+  });
+
+  it('does not hold a callback\'s own start time against it', () => {
+    // A callback starts when the show needs you, not when the first call did.
+    const cb = job({ startTime: '08:00 AM', notes: 'CB 6PM' });
+    const entry = note({ venue: 'Chase Center', startTime: '06:00 PM' });
+    const result = matchEntries([entry], [cb])[0];
+    expect(result.matchedJob?.id).toBe('j1');
+    expect(result.confidence).toBe('high');
+    expect(result.conflicts).toEqual([]);
+  });
+
+  it('still flags a start time that disagrees on an ordinary shift', () => {
+    const ordinary = job({ startTime: '08:00 AM' });
+    const entry = note({ venue: 'Chase Center', startTime: '06:00 PM' });
+    const result = matchEntries([entry], [ordinary])[0];
+    expect(result.conflicts.length).toBe(1);
+    expect(result.conflicts[0]).toContain('Start time');
+    expect(result.confidence).not.toBe('high');
+  });
+
+  it('is high when everything that could be checked agreed', () => {
+    const result = matchEntries(
+      [note({ venue: 'Chase Center', startTime: '08:00 AM' })],
+      [job({ startTime: '08:00 AM' })],
+    )[0];
+    expect(result.confidence).toBe('high');
+  });
+
+  it('never calls a date-only match high — one day can hold two calls', () => {
+    const result = matchEntries([note({})], [job({})])[0];
+    expect(result.matchedJob?.id).toBe('j1');
+    expect(result.confidence).toBe('medium');
+  });
+
+  it('recognises the callback wording as well as the code', () => {
+    expect(isCallbackShift(job({ notes: 'cb for load out' }))).toBe(true);
+    expect(isCallbackShift(job({ notes: 'Callback 10p' }))).toBe(true);
+    expect(isCallbackShift(job({ name: 'Call Back' }))).toBe(true);
+    expect(isCallbackShift(job({ notes: 'dock B, bring blacks' }))).toBe(false);
+  });
+
+  it('does not mistake an ordinary word containing cb for a callback', () => {
+    expect(isCallbackShift(job({ notes: 'cbs television city' }))).toBe(false);
   });
 });
