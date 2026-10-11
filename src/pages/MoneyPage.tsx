@@ -3,7 +3,7 @@ import { HoursMeter, PaySummaryTable, ExportButton, type PeriodStat } from '@/co
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import { getPayTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
 import { jobGross, jobPayBreakdown } from '@/lib/payCalc';
-import { Eye, Flame } from 'lucide-react';
+import { Eye, Flame, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
@@ -610,6 +610,7 @@ export default function MoneyPage() {
 
   // Reconciliation state (ported from the retired Pay page)
   const [filterJobClient, setFilterJobClient] = useState<string>('all');
+  const [addOpen, setAddOpen] = useState(false);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [togglingKey, setTogglingKey] = useState<string | null>(null);
@@ -902,13 +903,25 @@ export default function MoneyPage() {
     <SpacePageWrapper>
       <MoneyRain active={rainActive} />
       <div className="max-w-lg mx-auto">
-      <PageHeader title="Income" description={`${total.toLocaleString()} logged`} />
+      {/* The bullet belonged to every other page. This one is about money and
+          sits on a star field, so it gets a sign of its own. */}
+      <div className="mb-4 md:mb-6 flex items-end gap-3">
+        <span className="relative shrink-0 leading-none" aria-hidden="true">
+          <span className="absolute -top-1 -left-1.5 text-[9px] text-accent/70">✦</span>
+          <span className="absolute -bottom-1 -right-1 text-[7px] text-primary/70">✦</span>
+          <span className="text-4xl font-display text-success drop-shadow-[0_0_10px_hsl(var(--success)/0.5)]">$</span>
+        </span>
+        <div className="min-w-0 pb-0.5">
+          <h1 className="text-xl md:text-2xl font-display tracking-wide leading-none">Money</h1>
+          <p className="mt-1 text-xs text-muted-foreground font-body">${total.toLocaleString()} logged</p>
+        </div>
+      </div>
 
       {/* How long the oldest unpaid shift has waited. The Dashboard's one
           genuinely unique panel, and the reason to open this page at all. */}
       {payTier !== 'none' && oldestUnpaid && (
         <button
-          onClick={() => setExpandedRow(null)}
+          onClick={() => navigate(`/?job=${oldestUnpaid.job.id}`)}
           className={cn(
             'pixel-button w-full mb-4 flex items-center gap-3 px-4 py-3 text-left',
             payTier === 'watching' ? 'border-primary/60 bg-primary/10'
@@ -979,32 +992,41 @@ export default function MoneyPage() {
       <HoursMeter jobs={data.jobs} />
       <PaySummaryTable rows={paySummaryRows} jobs={data.jobs} employers={data.employers} />
 
-      {/* Statement import */}
-      <div className="mb-4">
-        <IncomeStatementUpload />
-      </div>
-
-      {/* Madlib quick add */}
-      <IncomeMadlib
-        jobs={jobs}
-        onAdd={(inc) => { addIncome(inc); toast.success('income added'); }}
-      />
+      {/* Three ways in, behind one button — both of these were sitting open and
+          taking the top of the page whether or not anything was being added. */}
+      {!addOpen ? (
+        <Button onClick={() => setAddOpen(true)} className="pixel-button w-full mb-4 gap-1.5">
+          <Plus size={15} /> Add income
+        </Button>
+      ) : (
+        <div className="pixel-panel mb-4 p-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-body uppercase tracking-widest text-muted-foreground">Add income</p>
+            <button type="button" onClick={() => setAddOpen(false)} className="text-[11px] text-muted-foreground hover:text-foreground">Close</button>
+          </div>
+          <Button size="sm" variant="outline" className="w-full gap-1.5" onClick={() => setShowImport(true)}>
+            <Upload size={13} /> From a screenshot or statement
+          </Button>
+          <IncomeStatementUpload />
+          <IncomeMadlib
+            jobs={jobs}
+            onAdd={(inc) => { addIncome(inc); toast.success('income added'); setAddOpen(false); }}
+          />
+        </div>
+      )}
 
       {/* ── Reconciliation (ported from the retired Pay page) ──────────────── */}
       <div className="mt-8 mb-3 flex items-center justify-between gap-2">
-        <p className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60">Reconciliation</p>
-        <div className="flex items-center gap-2">
+        <p className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60">Shift by shift</p>
+        {uniqueClients.length > 1 && (
           <Select value={filterJobClient} onValueChange={setFilterJobClient}>
-            <SelectTrigger className="h-7 w-32 text-xs"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-7 w-36 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All employers</SelectItem>
               {uniqueClients.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={() => setShowImport(true)}>
-            <Upload size={13} /> Import
-          </Button>
-        </div>
+        )}
       </div>
 
       {/* Import dialog */}
