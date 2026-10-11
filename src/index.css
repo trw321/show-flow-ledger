@@ -47,12 +47,12 @@
     --primary-foreground: var(--base-h) 60% 10%;
 
     --secondary: var(--base-h) calc(var(--base-s) * 0.9%) calc(var(--l-well) * 1%);
-    --secondary-foreground: 40 20% 86%;
+    --secondary-foreground: 40 20% 88%;
 
     --muted: var(--base-h) calc(var(--base-s) * 0.8%) calc(var(--l-well) * 1%);
     /* Dimmed by desaturating toward the surface rather than greying out, so
        quiet text still belongs to the colour. */
-    --muted-foreground: var(--base-h) 18% 66%;
+    --muted-foreground: var(--base-h) 16% 58%;
 
     --accent: 158 90% 66%;
     --accent-foreground: 160 60% 8%;

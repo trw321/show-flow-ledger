@@ -71,14 +71,18 @@ export default function EventIntake({ date, onCancel, onSaveMany }: Props) {
   };
 
   const matchingDates = useMemo(() => {
-    if (days.size === 0 || !rangeStart || !rangeEnd) return [];
+    // No weekday ticked means "just these dates", which for the common case —
+    // one plan on the day you opened — is that one day. Requiring a weekday
+    // made a single-day plan impossible to save at all: the form refused it
+    // and nothing reached the calendar.
+    if (!rangeStart || !rangeEnd) return [];
     const start = new Date(rangeStart + 'T12:00:00');
     const end = new Date(rangeEnd + 'T12:00:00');
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return [];
     const out: string[] = [];
     const cur = new Date(start);
     while (cur <= end) {
-      if (days.has(cur.getDay())) out.push(format(cur, 'yyyy-MM-dd'));
+      if (days.size === 0 || days.has(cur.getDay())) out.push(format(cur, 'yyyy-MM-dd'));
       cur.setDate(cur.getDate() + 1);
     }
     return out;
@@ -143,7 +147,7 @@ export default function EventIntake({ date, onCancel, onSaveMany }: Props) {
 
   const handleSaveManual = async () => {
     if (!title.trim()) { toast.error('Give it a name'); return; }
-    if (matchingDates.length === 0) { toast.error('Pick at least one day of the week and a valid range'); return; }
+    if (matchingDates.length === 0) { toast.error('Check the dates — the end is before the start'); return; }
     setIsSaving(true);
     try {
       await onSaveMany(matchingDates.map(d => ({
@@ -220,7 +224,7 @@ export default function EventIntake({ date, onCancel, onSaveMany }: Props) {
         <Input placeholder="What's the plan?" value={title} onChange={e => setTitle(e.target.value)} className="h-8 text-sm" autoFocus />
 
         <div className="flex flex-col gap-1.5">
-          <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Repeats on</label>
+          <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Repeats on <span className="opacity-60">— leave blank for a one-off</span></label>
           <div className="flex gap-1.5">
             {DAYS.map(d => (
               <button

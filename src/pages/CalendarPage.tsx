@@ -135,6 +135,18 @@ function resolveTypedEnd(start: string, end: string): string {
  * greyed out when it has not — the same read-at-a-glance treatment the pay
  * figure gets, so a row of shifts shows what is still missing without reading.
  */
+/**
+ * A stable colour per plan name, so the same plan is the same stripe every week
+ * it appears and two different plans never read as one. Hashed rather than
+ * assigned, so it survives plans being added and deleted in any order.
+ */
+const PLAN_HUES = [199, 158, 40, 280, 320, 95, 15, 240];
+function planColor(title: string): string {
+  let hash = 0;
+  for (let i = 0; i < title.length; i++) hash = (hash * 31 + title.charCodeAt(i)) >>> 0;
+  return `hsl(${PLAN_HUES[hash % PLAN_HUES.length]} 75% 58%)`;
+}
+
 function StubMark({ hasStub }: { hasStub: boolean }) {
   return (
     <span
@@ -176,12 +188,15 @@ function addHoursToTime(start: string, hours: number): string {
 
 // ── Job detail view ───────────────────────────────────────────────────────────
 
-function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
+function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOnMount, onStubOpened }: {
   job: Job;
   onBack: () => void;
   onSave: (updates: Partial<Job>) => void;
   onDuplicated: (count: number) => void;
   onDelete: () => void;
+  /** Opened by the stub button on a shift row — go straight to the camera. */
+  openStubOnMount?: boolean;
+  onStubOpened?: () => void;
 }) {
   const { data, addJob, updateJob: updateJobDirect, updateIncome, updateEmployer } = useData();
   const { user } = useAuth();
@@ -220,6 +235,15 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete }: {
   const [duplicating, setDuplicating] = useState(false);
   const [dupDates, setDupDates] = useState<string[]>(['']);
   const stubInputRef = useRef<HTMLInputElement>(null);
+  // Arriving from a row's stub button means the camera is the only thing
+  // wanted, so skip the step of finding the control in the form.
+  useEffect(() => {
+    if (!openStubOnMount) return;
+    onStubOpened?.();
+    const t = setTimeout(() => stubInputRef.current?.click(), 120);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openStubOnMount]);
 
   const resetFieldsFromJob = () => {
     setClient(job.client ?? '');
@@ -1351,6 +1375,9 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  // Set when a row's stub button was what opened the job, so the detail view
+  // can go straight to the camera instead of making you find the control.
+  const [openStubFor, setOpenStubFor] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'month' | 'year'>('month');
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [expandedGroupKey, setExpandedGroupKey] = useState<string | null>(null);
@@ -1623,9 +1650,18 @@ export default function CalendarPage() {
                       <div className="flex gap-0.5 mt-0.5 h-2 items-center">
                         {dayJobs.slice(0, 3).map((job, j) => <span key={j} className={cn("w-1.5 h-1.5 rounded-full", jobDotClass(job, paidJobIds))} />)}
                         {dayJobs.length > 3 && <span className="text-[7px] text-muted-foreground text-mono">+{dayJobs.length - 3}</span>}
-                        {hasEvents && <span className="w-1.5 h-1.5 rounded-full bg-black border border-white" title="Personal event" />}
                       </div>
                       {hasPay && <span className="text-[8px] text-mono text-success font-semibold leading-none mt-0.5">${payByDate[dateKey] >= 1000 ? `${(payByDate[dateKey] / 1000).toFixed(1)}k` : payByDate[dateKey].toFixed(0)}</span>}
+                      {/* Plans underline the cell instead of taking a dot in the
+                          job row — a recurring one then reads as a stripe down
+                          the month, which a dot never did. */}
+                      {hasEvents && (
+                        <span className="absolute inset-x-1 bottom-0 flex h-[3px] gap-px" aria-hidden="true">
+                          {dayEvents.slice(0, 3).map((ev, j) => (
+                            <span key={j} className="flex-1" style={{ background: planColor(ev.title) }} />
+                          ))}
+                        </span>
+                      )}
                     </div>
                   );
                 })}
@@ -1736,7 +1772,7 @@ export default function CalendarPage() {
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Unpaid</span>
                 <span className={cn("text-mono font-semibold", period.unpaid > 0 ? "text-warning" : "text-muted-foreground")}>
-                  {period.unpaid > 0 ? `$${period.unpaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '✓'}
+                  {period.unpaid > 0 ? `${period.unpaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'all paid'}
                 </span>
               </div>
             </div>
@@ -1796,7 +1832,15 @@ export default function CalendarPage() {
                         {job.startTime && <span>{job.startTime}{job.endTime ? ` – ${job.endTime}` : ''}</span>}
                         {hours > 0 && <span>{hours}h</span>}
                         {earned > 0 && <span className="font-semibold">${earned.toLocaleString()}</span>}
-                        <StubMark hasStub={!!job.payStub} />
+                        <button
+                          type="button"
+                          onClick={e => { e.stopPropagation(); setOpenStubFor(job.id); setSelectedJobId(job.id); }}
+                          className="ml-auto flex items-center gap-1 text-[10px] text-mono uppercase tracking-wider opacity-80 hover:opacity-100"
+                          aria-label={job.payStub ? 'Replace the pay stub photo' : 'Add a pay stub photo'}
+                        >
+                          <StubMark hasStub={!!job.payStub} />
+                          {!job.payStub && <span>+ stub</span>}
+                        </button>
                       </div>
                       {job.startTime && !job.endTime && (
                         <p className="text-[10px] text-warning font-medium">⚠ No end time set — tap to add it</p>
@@ -1873,6 +1917,8 @@ export default function CalendarPage() {
           ) : (
             <JobDetailView
               job={selectedJob}
+              openStubOnMount={openStubFor === selectedJob.id}
+              onStubOpened={() => setOpenStubFor(null)}
               onBack={() => setSelectedJobId(null)}
               onSave={(updates) => { updateJob(selectedJob.id, updates); setSelectedJobId(null); toast.success('Job updated'); }}
               onDuplicated={(count) => { closeDialog(); toast.success(`Created ${count} shift${count !== 1 ? 's' : ''}`); }}
