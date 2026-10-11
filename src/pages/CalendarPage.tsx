@@ -66,11 +66,12 @@ function jobDotClass(job: Job, paidJobIds: Set<string>): string {
 // Card wash behind a shift — same status meaning as the dot, just readable
 // from across the list instead of a 6px dot.
 function cardTintClass(job: Job, paidJobIds: Set<string>): string {
-  if (paidJobIds.has(job.id)) return 'from-success/20 via-success/[0.06] to-transparent';
-  if (isOverdueUpcoming(job)) return 'from-warning/20 via-warning/[0.06] to-transparent';
-  if (job.status === 'completed') return 'from-primary/20 via-primary/[0.06] to-transparent';
-  if (job.status === 'cancelled') return 'from-white/10 via-white/[0.03] to-transparent';
-  return 'from-accent/20 via-accent/[0.06] to-transparent';
+  if (paidJobIds.has(job.id)) return 'from-dot-paid/25 via-dot-paid/[0.07] to-transparent';
+  if (isOverdueUpcoming(job)) return 'from-dot-overdue/25 via-dot-overdue/[0.07] to-transparent';
+  if (job.status === 'completed') return 'from-dot-completed/25 via-dot-completed/[0.07] to-transparent';
+  if (job.status === 'cancelled') return 'from-dot-cancelled/20 via-dot-cancelled/[0.05] to-transparent';
+  if (job.status === 'in-progress') return 'from-dot-working/25 via-dot-working/[0.07] to-transparent';
+  return 'from-dot-upcoming/25 via-dot-upcoming/[0.07] to-transparent';
 }
 
 const CONFIDENCE_STYLES: Record<MatchConfidence, { box: string; pill: string }> = {
@@ -299,22 +300,6 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     setEditing(false);
   };
 
-  const handleStubUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (stubInputRef.current) stubInputRef.current.value = '';
-    if (!file) return;
-
-    // A photo goes to the editor first, so anything that should not leave the
-    // phone is painted out before the upload or the vision model sees it. A
-    // PDF has nothing to crop, so it carries on.
-    if (file.type.startsWith('image/')) {
-      const raw = await readFileAsDataUrl(file);
-      setEditingStub(raw);
-      return;
-    }
-    await ingestStub(file);
-  };
-
   const ingestStub = async (file: File) => {
     const isImage = file.type.startsWith('image/');
     // PDFs can't be downscaled here, so they go into storage at full size —
@@ -370,6 +355,22 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     } finally {
       setParsingStub(false);
     }
+  };
+
+  const handleStubUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (stubInputRef.current) stubInputRef.current.value = '';
+    if (!file) return;
+
+    // A photo goes to the editor first, so anything that should not leave the
+    // phone is painted out before the upload or the vision model sees it. A
+    // PDF has nothing to crop, so it carries on.
+    if (file.type.startsWith('image/')) {
+      const raw = await readFileAsDataUrl(file);
+      setEditingStub(raw);
+      return;
+    }
+    await ingestStub(file);
   };
 
   const handleDelete = () => setConfirmingDelete(true);
@@ -2063,16 +2064,11 @@ export default function CalendarPage() {
                 const openJob = (job: Job) => { setSelectedDate(job.date); setSelectedJobId(job.id); };
                 return (
                   <div key={key} className="relative overflow-hidden rounded-xl border border-border bg-[#0b0910] shadow-lg shadow-black/50">
-                    {/* Graphic background fill so a shift reads as its own card
-                        rather than another flat row — tint carries the status,
-                        the bolt is a watermark, both behind the content. */}
+                    {/* The wash is the same colour as the shift's dot, so a row
+                        says what it is from across the list without reading it.
+                        There was an outlined bolt watermarked behind this; it
+                        read as a stray graphic rather than as texture. */}
                     <div aria-hidden className={cn("pointer-events-none absolute inset-0 bg-gradient-to-br", cardTintClass(first, paidJobIds))} />
-                    <Zap
-                      aria-hidden
-                      size={96}
-                      className="pointer-events-none absolute -right-4 -top-5 rotate-12 text-white/[0.04]"
-                      strokeWidth={1.5}
-                    />
                     <div
                       onClick={() => isGroup ? setExpandedGroupKey(expanded ? null : key) : openJob(first)}
                       className="relative p-3 cursor-pointer active:opacity-80 transition-opacity"
