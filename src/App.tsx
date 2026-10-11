@@ -5,10 +5,9 @@ import { DataProvider } from '@/lib/DataContext';
 import { AuthProvider } from '@/lib/AuthContext';
 import LoadingScreen from '@/components/LoadingScreen';
 import AppLayout from '@/components/AppLayout';
-import Dashboard from '@/pages/Dashboard';
 import CalendarPage from '@/pages/CalendarPage';
 import ExpensesPage from '@/pages/ExpensesPage';
-import IncomePage from '@/pages/IncomePage';
+import MoneyPage from '@/pages/MoneyPage';
 import PayOutsPage from '@/pages/PayOutsPage';
 import SettingsPage from '@/pages/SettingsPage';
 import AuthPage from '@/pages/AuthPage';
@@ -30,14 +29,17 @@ export default function App() {
           <Route path="/auth" element={<AuthPage />} />
           <Route path="/pattern-auth" element={<PatternAuthPage />} />
           <Route element={<AppLayout />}>
-            <Route path="/" element={<Dashboard />} />
+            {/* The calendar is where the work actually happens, so it is home. */}
+            <Route path="/" element={<CalendarPage />} />
+            <Route path="/dashboard" element={<Navigate to="/" replace />} />
             <Route path="/new" element={<Navigate to="/" replace />} />
             <Route path="/log" element={<Navigate to="/" replace />} />
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/expenses" element={<ExpensesPage />} />
-            <Route path="/income" element={<IncomePage />} />
+            <Route path="/money" element={<MoneyPage />} />
+            <Route path="/income" element={<Navigate to="/money" replace />} />
             <Route path="/payouts" element={<PayOutsPage />} />
-            <Route path="/pay" element={<Navigate to="/income" replace />} />
+            <Route path="/pay" element={<Navigate to="/money" replace />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<NotFound />} />
           </Route>

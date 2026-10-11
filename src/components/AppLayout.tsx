@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard,
   CalendarDays,
   Receipt,
   Settings,
@@ -22,24 +21,21 @@ interface NavItem {
   tab?: TabKey;
 }
 
-// Dashboard (now including Job Log's intake) and Calendar are the core
-// loop, plus Settings — always shown. Expenses/Income/Pay Outs are the ones
-// Settings' "Visible Sections" panel actually controls. Pay is unlinked
-// pending the Money Business merge — the page and route still exist, just
-// not in nav.
+// The Calendar is the core loop and Settings is always reachable; Money,
+// Expenses and Pay Outs are what Settings' "Visible Sections" panel controls.
+// The Dashboard is gone — it showed the same month totals as Money with one
+// extra chart, and the chart moved there with it.
 const ALL_NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard', to: '/', icon: <LayoutDashboard size={18} /> },
-  { label: 'Calendar', to: '/calendar', icon: <CalendarDays size={18} /> },
+  { label: 'Calendar', to: '/', icon: <CalendarDays size={18} /> },
+  { label: 'Money', to: '/money', icon: <TrendingUp size={18} />, tab: 'income' },
   { label: 'Expenses', to: '/expenses', icon: <Receipt size={18} />, tab: 'expenses' },
-  { label: 'Income', to: '/income', icon: <TrendingUp size={18} />, tab: 'income' },
   { label: 'Pay Outs', to: '/payouts', icon: <Wallet size={18} />, tab: 'payouts' },
   { label: 'Settings', to: '/settings', icon: <Settings size={18} /> },
 ];
 
 const ALL_TAB_ITEMS: NavItem[] = [
-  { label: 'Dashboard', to: '/', icon: <LayoutDashboard size={20} /> },
-  { label: 'Calendar', to: '/calendar', icon: <CalendarDays size={20} /> },
-  { label: 'Income', to: '/income', icon: <TrendingUp size={20} /> },
+  { label: 'Calendar', to: '/', icon: <CalendarDays size={20} /> },
+  { label: 'Money', to: '/money', icon: <TrendingUp size={20} /> },
 ];
 
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {

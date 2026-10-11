@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react';
+import { useNeedsHours } from '@/lib/useNeedsHours';
 import { useSearchParams } from 'react-router-dom';
 import { useData } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
@@ -1373,6 +1374,9 @@ function EventForm({ initial, onSave, onCancel }: {
 export default function CalendarPage() {
   const { data, updateJob, deleteJob, addEvent, updateEvent, deleteEvent } = useData();
   const [currentDate, setCurrentDate] = useState(new Date());
+  // Shifts whose date has passed with no hours on them. This used to be the
+  // Dashboard's hero card; it is about shifts, so it belongs here.
+  const { jobsNeedingHours, oldestDays } = useNeedsHours(data.jobs);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   // Set when a row's stub button was what opened the job, so the detail view
@@ -1571,6 +1575,23 @@ export default function CalendarPage() {
         </div>
       }
     >
+      {jobsNeedingHours.length > 0 && (
+        <button
+          onClick={() => { setSelectedDate(jobsNeedingHours[0].date); setSelectedJobId(jobsNeedingHours[0].id); }}
+          className="pixel-button w-full mb-3 flex items-center gap-3 border-accent/60 bg-accent/10 px-3 py-2.5 text-left"
+        >
+          <Zap size={18} className="text-accent shrink-0" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-accent">
+              Log hours{jobsNeedingHours.length > 1 ? ` — ${jobsNeedingHours.length} shifts` : ''}
+            </p>
+            <p className="text-xs font-body mt-0.5 text-muted-foreground truncate">
+              {jobsNeedingHours[0].name} · {oldestDays === 0 ? 'today' : `${oldestDays}d ago`}
+            </p>
+          </div>
+        </button>
+      )}
+
       <div className="flex items-center gap-2 mb-3">
         <div className="flex flex-1 bg-secondary/30 rounded-lg p-0.5">
           <button onClick={() => setViewMode('month')} className={cn("flex-1 text-[10px] text-mono font-medium py-1 px-3 rounded-md transition-colors", viewMode === 'month' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>Month</button>

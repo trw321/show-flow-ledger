@@ -1,4 +1,9 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
+import { HoursMeter, PaySummaryTable, ExportButton, type PeriodStat } from '@/components/MoneyWidgets';
+import { exportWeeklyToExcel } from '@/lib/exportWeekly';
+import { getPayTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
+import { jobGross, jobPayBreakdown } from '@/lib/payCalc';
+import { Eye, Flame } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
@@ -12,7 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DollarSign, Mic, MicOff, Trash2, Pencil, Clock, Scale, ChevronDown, ChevronUp, Upload, Check, X } from 'lucide-react';
-import { format, differenceInDays, addDays, endOfMonth, parseISO, startOfWeek } from 'date-fns';
+import { format, differenceInDays, addDays, endOfMonth, parseISO, startOfWeek, isWithinInterval, endOfWeek, startOfMonth, differenceInCalendarDays } from 'date-fns';
 import { calculateExpectedPay, effectiveHoursWorked, netHoursWorked } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import type { Income, Job } from '@/lib/store';
@@ -598,7 +603,7 @@ function ReconciliationRowCard({
 
 // ── Page ───────────────────────────────────────────────────────────────────
 
-export default function IncomePage() {
+export default function MoneyPage() {
   const { data, addIncome, updateIncome, deleteIncome, updateJob } = useData();
   const navigate = useNavigate();
   const [editId, setEditId] = useState<string | null>(null);
@@ -771,6 +776,38 @@ export default function IncomePage() {
   const paidFraction = totalExpected > 0 ? Math.min(1, totalActual / totalExpected) : 0;
   const round1 = (n: number) => Math.round(n * 10) / 10;
 
+  // ── Carried over from the Dashboard ──────────────────────────────────────
+  // How long the oldest unpaid shift has been waiting. This was the one thing
+  // the Dashboard said that nothing else did, so it leads the page.
+  const awaitingPayment = useMemo(() => data.jobs
+    .map(job => ({ job, pay: jobGross(job, data.jobs, data.employers) }))
+    .filter(({ job, pay }) => pay > 0 && !paidJobIds.has(job.id))
+    .sort((a, b) => a.job.date.localeCompare(b.job.date)), [data.jobs, data.employers, paidJobIds]);
+  const oldestUnpaid = awaitingPayment[0];
+  const daysWaiting = oldestUnpaid ? differenceInCalendarDays(new Date(), parseISO(oldestUnpaid.job.date)) : 0;
+  const payTier: PayTimingTier = oldestUnpaid ? getPayTimingTier(daysWaiting) : 'none';
+  const totalUnpaidDue = awaitingPayment.reduce((sum, { pay }) => sum + pay, 0);
+
+  const paySummaryRows = useMemo(() => {
+    const now = new Date();
+    const ranges: { label: string; test: (j: Job) => boolean }[] = [
+      { label: 'Today', test: j => j.date === format(now, 'yyyy-MM-dd') },
+      { label: 'This Week', test: j => { try { return isWithinInterval(parseISO(j.date), { start: startOfWeek(now), end: endOfWeek(now) }); } catch { return false; } } },
+      { label: 'This Month', test: j => { try { return isWithinInterval(parseISO(j.date), { start: startOfMonth(now), end: endOfMonth(now) }); } catch { return false; } } },
+      { label: 'This Year', test: j => j.date.startsWith(format(now, 'yyyy')) },
+    ];
+    return ranges.map(({ label, test }): PeriodStat => {
+      let gross = 0, net = 0, hours = 0, shifts = 0;
+      for (const job of data.jobs.filter(test)) {
+        const h = netHoursWorked(job);
+        if (h <= 0) continue;
+        const { gross: g, net: n } = jobPayBreakdown(job, data.jobs, data.employers);
+        gross += g; net += n; hours += h; shifts += 1;
+      }
+      return { label, gross, net, hours, shifts };
+    });
+  }, [data.jobs, data.employers]);
+
   const reconciliationGroups = useMemo(() => {
     const groups: Record<string, { client: string; weekStart: string; rows: ReconciliationRow[] }> = {};
     const order: string[] = [];
@@ -867,6 +904,33 @@ export default function IncomePage() {
       <div className="max-w-lg mx-auto">
       <PageHeader title="Income" description={`${total.toLocaleString()} logged`} />
 
+      {/* How long the oldest unpaid shift has waited. The Dashboard's one
+          genuinely unique panel, and the reason to open this page at all. */}
+      {payTier !== 'none' && oldestUnpaid && (
+        <button
+          onClick={() => setExpandedRow(null)}
+          className={cn(
+            'pixel-button w-full mb-4 flex items-center gap-3 px-4 py-3 text-left',
+            payTier === 'watching' ? 'border-primary/60 bg-primary/10'
+              : payTier === 'warm' ? 'border-warning/60 bg-warning/10'
+              : 'border-destructive/60 bg-destructive/10',
+          )}
+        >
+          {payTier === 'watching' && <Eye size={18} className="text-primary shrink-0" />}
+          {payTier === 'warm' && <Flame size={18} className="flame-flicker text-warning shrink-0" />}
+          {payTier === 'blazing' && <span className="flame-flicker text-xl shrink-0">🔥</span>}
+          <div className="min-w-0">
+            <p className={cn('text-sm font-semibold',
+              payTier === 'watching' ? 'text-primary' : payTier === 'warm' ? 'text-warning' : 'text-destructive')}>
+              {PAY_TIMING_LABELS[payTier]} — check for pay
+            </p>
+            <p className="text-xs font-body mt-0.5 text-muted-foreground">
+              ${totalUnpaidDue.toLocaleString(undefined, { maximumFractionDigits: 0 })} out · {daysWaiting}d since {oldestUnpaid.job.name}
+            </p>
+          </div>
+        </button>
+      )}
+
       {/* The three figures the page exists to answer, before any of the tools
           for changing them. Still owed is the one you came for, so it is the
           one that is big. */}
@@ -912,6 +976,9 @@ export default function IncomePage() {
         </div>
       </div>
 
+      <HoursMeter jobs={data.jobs} />
+      <PaySummaryTable rows={paySummaryRows} jobs={data.jobs} employers={data.employers} />
+
       {/* Statement import */}
       <div className="mb-4">
         <IncomeStatementUpload />
@@ -956,6 +1023,8 @@ export default function IncomePage() {
           />
         </DialogContent>
       </Dialog>
+
+      <ExportButton onClick={() => exportWeeklyToExcel(data.jobs, data.expenses, data.income, data.employers)} />
 
       {reconciliation.length === 0 ? (
         <EmptyState icon={Scale} title="No data to reconcile" description="Add jobs with hours worked to see pay tracking." />
