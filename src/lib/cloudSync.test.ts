@@ -87,7 +87,7 @@ describe('buildRows', () => {
   // first real backup: every job was rejected on meal_penalties.
   it('never sends null to a NOT NULL column', () => {
     const NOT_NULL: Record<string, string[]> = {
-      jobs: ['name', 'client', 'venue', 'date', 'status', 'has_6th_7th_day_rule', 'has_vacation_pay', 'meal_penalties', 'notes', 'created_at'],
+      jobs: ['name', 'client', 'venue', 'date', 'status', 'has_6th_7th_day_rule', 'meal_penalties', 'notes', 'created_at'],
       expenses: ['category', 'description', 'amount', 'date', 'created_at'],
       income: ['client', 'description', 'amount', 'date', 'status', 'created_at'],
       equipment: ['name', 'category', 'status', 'notes', 'created_at'],

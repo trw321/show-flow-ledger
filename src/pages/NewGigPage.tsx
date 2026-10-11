@@ -488,7 +488,6 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
         payrollCompany: entry.payrollCompany,
         notes: entry.notes || '',
         has6th7thDayRule: false,
-        hasVacationPay: false,
       });
     }
     const nextAccepted = new Set(hoursAccepted).add(idx);
@@ -528,7 +527,7 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
         local: j.local, needsReview: payrollAssumed || undefined,
         hourlyRate: j.hourlyRate, steward: j.steward,
         parkingCost: j.parkingCost, notes: j.notes || '',
-        has6th7thDayRule: false, hasVacationPay: false,
+        has6th7thDayRule: false,
       };
       const key = getJobDedupKey(draft);
       if (existingKeys.has(key)) { skipped++; continue; }

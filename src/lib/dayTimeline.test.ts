@@ -252,7 +252,7 @@ describe('a break taken is a break — no penalty, whatever its length', () => {
 describe('the timeline drives a job through the pay engine', () => {
   const job = (extra: Record<string, unknown>) => ({
     id: 'j1', name: 'load in', client: 'Acme', date: '2026-10-06', status: 'completed',
-    has6th7thDayRule: false, hasVacationPay: false, ...extra,
+    has6th7thDayRule: false, ...extra,
   }) as never;
 
   it('takes the day off-clock minutes from the calls, not the meal fields', () => {

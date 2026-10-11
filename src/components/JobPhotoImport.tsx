@@ -170,7 +170,6 @@ export default function JobPhotoImport({
           parkingCost: job.parkingCost,
           notes: job.notes || '',
           has6th7thDayRule: false,
-          hasVacationPay: false,
         };
         const key = getJobDedupKey(draft);
         if (existingKeys.has(key)) continue;

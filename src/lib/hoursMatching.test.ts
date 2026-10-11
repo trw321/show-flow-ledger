@@ -216,7 +216,7 @@ describe('two meals on one shift, each on its own terms', () => {
   const shift = (extra: Partial<Job>): Job => ({
     id: 'j1', name: 'load in', client: 'Acme', date: '2026-10-06',
     status: 'completed', hoursWorked: 11, hourlyRate: 50,
-    has6th7thDayRule: false, hasVacationPay: false, ...extra,
+    has6th7thDayRule: false, ...extra,
   } as Job);
 
   it('deducts an hour off the clock and leaves half an hour on it alone', () => {
@@ -309,7 +309,7 @@ describe('matching an hours note to a shift', () => {
   const job = (extra: Partial<Job>): Job => ({
     id: 'j1', name: 'Warriors', client: 'GSW', venue: 'Chase Center',
     date: '2026-09-10', status: 'upcoming', notes: '',
-    has6th7thDayRule: false, hasVacationPay: false, ...extra,
+    has6th7thDayRule: false, ...extra,
   } as Job);
   const note = (extra: Partial<HoursEntry>): HoursEntry => ({
     date: '2026-09-10', paid: false, ...extra,

@@ -403,7 +403,6 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
         hourlyRate: job.hourlyRate,
         minimumHours: job.minimumHours,
         has6th7thDayRule: job.has6th7thDayRule,
-        hasVacationPay: job.hasVacationPay,
         steward: job.steward,
         mealDuration: job.mealDuration,
         mealOnClock: job.mealOnClock,
