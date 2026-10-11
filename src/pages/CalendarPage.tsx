@@ -33,8 +33,8 @@ import NewGigPage from '@/pages/NewGigPage';
 
 const statusDot: Record<Job['status'], string> = {
   upcoming: 'bg-dot-upcoming',
-  'in-progress': 'bg-dot-working',
-  completed: 'bg-dot-completed',
+  'in-progress': 'bg-dot-pending',
+  completed: 'bg-dot-pending',
   cancelled: 'bg-dot-cancelled',
 };
 
@@ -42,8 +42,7 @@ const statusDot: Record<Job['status'], string> = {
 export const SHIFT_STATES = [
   { dot: 'bg-dot-overdue', label: 'needs hours' },
   { dot: 'bg-dot-upcoming', label: 'upcoming' },
-  { dot: 'bg-dot-working', label: 'working' },
-  { dot: 'bg-dot-completed', label: 'hours in' },
+  { dot: 'bg-dot-pending', label: 'pending' },
   { dot: 'bg-dot-paid', label: 'paid' },
 ] as const;
 
@@ -68,9 +67,9 @@ function jobDotClass(job: Job, paidJobIds: Set<string>): string {
 function cardTintClass(job: Job, paidJobIds: Set<string>): string {
   if (paidJobIds.has(job.id)) return 'from-dot-paid/25 via-dot-paid/[0.07] to-transparent';
   if (isOverdueUpcoming(job)) return 'from-dot-overdue/25 via-dot-overdue/[0.07] to-transparent';
-  if (job.status === 'completed') return 'from-dot-completed/25 via-dot-completed/[0.07] to-transparent';
+  if (job.status === 'completed') return 'from-dot-pending/25 via-dot-pending/[0.07] to-transparent';
   if (job.status === 'cancelled') return 'from-dot-cancelled/20 via-dot-cancelled/[0.05] to-transparent';
-  if (job.status === 'in-progress') return 'from-dot-working/25 via-dot-working/[0.07] to-transparent';
+  if (job.status === 'in-progress') return 'from-dot-pending/25 via-dot-pending/[0.07] to-transparent';
   return 'from-dot-upcoming/25 via-dot-upcoming/[0.07] to-transparent';
 }
 

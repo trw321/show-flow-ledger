@@ -23,8 +23,7 @@ export default {
         // base, so five states stay apart in every theme.
         dot: {
           upcoming: 'hsl(var(--dot-upcoming))',
-          working: 'hsl(var(--dot-working))',
-          completed: 'hsl(var(--dot-completed))',
+          pending: 'hsl(var(--dot-pending))',
           paid: 'hsl(var(--dot-paid))',
           overdue: 'hsl(var(--dot-overdue))',
           cancelled: 'hsl(var(--dot-cancelled))',

@@ -122,14 +122,20 @@ export function HoursMeter({ jobs }: { jobs: Job[] }) {
   return (
     <div className="mb-6 rounded-md border border-border bg-background/30 p-3">
       <div className="flex items-baseline justify-between mb-2">
-        <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground">Month Levels</p>
-        <p className="text-[9px] text-mono text-muted-foreground/60">{worked} day{worked !== 1 ? 's' : ''} · peak {Math.round(peak)}h</p>
+        <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground">
+          Hours a day · {format(new Date(), 'MMMM')}
+        </p>
+        <p className="text-[9px] text-mono text-muted-foreground/60">{worked} day{worked !== 1 ? 's' : ''} · longest {Math.round(peak)}h</p>
       </div>
       <div className="flex items-stretch gap-[2px] h-14" role="img" aria-label={`Hours per day this month, peak ${Math.round(peak)} hours`}>
         {byDay.map((hours, i) => {
           const lit = hours > 0 ? Math.max(1, Math.round((hours / peak) * METER_SEGMENTS)) : 0;
           return (
-            <div key={i} className="flex-1 h-full flex flex-col-reverse gap-[2px] min-w-0">
+            <div
+              key={i}
+              className="flex-1 h-full flex flex-col-reverse gap-[2px] min-w-0"
+              title={hours > 0 ? `${format(new Date(), 'MMM')} ${i + 1} — ${Math.round(hours * 10) / 10}h` : `${format(new Date(), 'MMM')} ${i + 1} — no shift`}
+            >
               {Array.from({ length: METER_SEGMENTS }, (_, s) => {
                 const hoursAtSegment = ((s + 1) / METER_SEGMENTS) * peak;
                 const on = s < lit;
@@ -138,11 +144,11 @@ export function HoursMeter({ jobs }: { jobs: Job[] }) {
                     key={s}
                     className={cn(
                       'flex-1 rounded-[1px]',
-                      !on ? 'bg-white/[0.04]'
+                      !on ? 'bg-foreground/[0.06]'
                         : hoursAtSegment > DT_HOURS ? 'bg-destructive'
                         : hoursAtSegment > OT_HOURS ? 'bg-warning'
                         : 'bg-success',
-                      on && i + 1 === today && 'ring-1 ring-white/40',
+                      on && i + 1 === today && 'ring-1 ring-foreground/50',
                     )}
                   />
                 );
@@ -151,10 +157,18 @@ export function HoursMeter({ jobs }: { jobs: Job[] }) {
           );
         })}
       </div>
-      <div className="mt-2 flex items-center gap-3 text-[9px] text-mono text-muted-foreground">
+      <div className="mt-1 flex text-[8px] text-mono text-muted-foreground/50" aria-hidden="true">
+        {byDay.map((_, i) => (
+          <span key={i} className="flex-1 text-center min-w-0">
+            {(i + 1) % 7 === 0 || i === 0 ? i + 1 : ''}
+          </span>
+        ))}
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-3 text-[9px] text-mono text-muted-foreground">
         <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-[1px] bg-success inline-block" />ST</span>
         <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-[1px] bg-warning inline-block" />OT 8h+</span>
         <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-[1px] bg-destructive inline-block" />DT 12h+</span>
+        <span className="ml-auto opacity-70">from your logged hours</span>
       </div>
     </div>
   );

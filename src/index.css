@@ -83,8 +83,9 @@
        and from every base colour, because a dot is six pixels and the only
        thing telling them apart is the hue. */
     --dot-upcoming:  199 90% 62%;
-    --dot-working:   284 88% 72%;
-    --dot-completed: 266 70% 68%;
+    /* Worked-or-working and waiting on the money are one thing to the eye:
+       pending. Two violets a few degrees apart only looked like a smudge. */
+    --dot-pending:   284 88% 72%;
     --dot-paid:      152 86% 56%;
     --dot-overdue:    40 96% 60%;
     --dot-cancelled: 344 70% 56%;
