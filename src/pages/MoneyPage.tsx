@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { HoursMeter, PaySummaryTable, ExportButton, type PeriodStat } from '@/components/MoneyWidgets';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import { getPayTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
@@ -71,8 +72,10 @@ function MoneyRain({ active }: { active: boolean }) {
 
   if (drops.length === 0) return null;
 
-  return (
-    <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
+  // Rendered into the body rather than the page: the money falls over the
+  // whole screen, and a wrapper with overflow hidden cannot cut it off.
+  return createPortal(
+    <div className="fixed inset-0 pointer-events-none z-[100] overflow-hidden">
       {drops.map(d => (
         <span
           key={d.id}
@@ -93,7 +96,8 @@ function MoneyRain({ active }: { active: boolean }) {
           100% { transform: translateY(110vh) rotate(${Math.random() > 0.5 ? '' : '-'}${Math.floor(Math.random() * 360)}deg); opacity: 0.3; }
         }
       `}</style>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -415,11 +419,12 @@ function ReconciliationRowCard({
               onClick={(e) => { e.stopPropagation(); onPaidToggle(); }}
               disabled={isToggling}
               className={cn(
-                "w-6 h-6 rounded-full flex items-center justify-center text-sm transition-all",
-                payStatus !== 'unpaid' ? "grayscale-0 opacity-90" : "grayscale opacity-60 hover:opacity-90",
+                "w-9 h-9 rounded-full flex items-center justify-center text-lg transition-all shrink-0",
+                payStatus === 'full' ? "grayscale-0 opacity-100" : "grayscale opacity-55 hover:grayscale-0 hover:opacity-100",
                 isToggling && "opacity-40"
               )}
-              title={payStatus === 'unpaid' ? 'Mark paid' : payStatus === 'partial' ? 'Revert partial payment to pending' : 'Mark unpaid'}
+              aria-label={payStatus === 'full' ? 'Mark unpaid' : 'Mark paid'}
+              title={payStatus === 'full' ? 'Mark unpaid' : payStatus === 'partial' ? 'Mark the rest paid' : 'Mark paid'}
             >
               💰
             </button>
@@ -857,16 +862,22 @@ export default function MoneyPage() {
     const key = `${row.client}-${row.periodLabel}`;
     setTogglingKey(key);
     try {
-      if (row.isPaid && row.relatedIncomeIds.length > 0) {
+      // Fully paid already — the tap means undo.
+      if (row.actualPaid >= row.expectedPay - 0.01 && row.relatedIncomeIds.length > 0) {
         for (const id of row.relatedIncomeIds) {
           await updateIncome(id, { status: 'pending' });
         }
-      } else if (!row.isPaid) {
+      } else {
+        // Nothing in yet, or only part of it. Either way the tap means "this
+        // got paid", so top it up to the full amount and make it rain —
+        // marking a shift paid by hand is the whole point of the button.
+        const shortfall = Math.max(0, row.expectedPay - row.actualPaid);
+        if (shortfall <= 0.01) { setTogglingKey(null); return; }
         await addIncome({
           jobId: row.jobId,
           client: row.client,
           description: `Payment — ${row.periodLabel}`,
-          amount: row.expectedPay,
+          amount: shortfall,
           date: format(new Date(), 'yyyy-MM-dd'),
           status: 'paid' as const,
         });
@@ -1017,7 +1028,9 @@ export default function MoneyPage() {
 
       {/* ── Reconciliation (ported from the retired Pay page) ──────────────── */}
       <div className="mt-8 mb-3 flex items-center justify-between gap-2">
-        <p className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60">Shift by shift</p>
+        <p className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60">
+          Every shift · tap 💰 when one gets paid
+        </p>
         {uniqueClients.length > 1 && (
           <Select value={filterJobClient} onValueChange={setFilterJobClient}>
             <SelectTrigger className="h-7 w-36 text-xs"><SelectValue /></SelectTrigger>
