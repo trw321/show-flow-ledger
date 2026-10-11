@@ -700,6 +700,13 @@ export default function MoneyPage() {
         const paymentWindow = addDays(period.end, 90);
 
         const periodIncome = data.income.filter(i => {
+          // Money tied to this shift counts whenever it arrived. The window
+          // below is only there to stop UNLINKED payments drifting onto the
+          // wrong period — applying it to linked ones meant that marking a
+          // shift paid more than 90 days after it ended created income the
+          // row could not see, so the money bag never lit and tapping again
+          // paid it a second time.
+          if (i.jobId) return i.jobId === referenceJob.id;
           const d = parseISO(i.date);
           if (d > paymentWindow) return false;
           // Income already linked to a specific job only ever counts toward
@@ -709,7 +716,6 @@ export default function MoneyPage() {
           // the same client name. The name-match fallback is for genuinely
           // unlinked income (e.g. an imported bank statement not yet tied to
           // a specific job) only.
-          if (i.jobId) return i.jobId === referenceJob.id;
           return namesMatch(i.client, referenceJob.client) || namesMatch(i.client, referenceJob.payrollCompany);
         });
 
@@ -781,6 +787,7 @@ export default function MoneyPage() {
   const daysPaid = datesIn(reconciliation.filter(isSettled));
   const paidFraction = totalExpected > 0 ? Math.min(1, totalActual / totalExpected) : 0;
   const round1 = (n: number) => Math.round(n * 10) / 10;
+  const totalLogged = '$' + total.toLocaleString(undefined, { maximumFractionDigits: 0 }) + ' logged';
 
   // ── Carried over from the Dashboard ──────────────────────────────────────
   // How long the oldest unpaid shift has been waiting. This was the one thing
@@ -911,23 +918,24 @@ export default function MoneyPage() {
   };
 
   return (
-    <SpacePageWrapper>
+    <SpacePageWrapper
+      title={
+        /* In the header row so it lines up with the lamp, the way every other
+           page's title does, instead of sitting in the body under an empty
+           one. */
+        <div className="flex items-center gap-2.5">
+          <span className="relative shrink-0 leading-none" aria-hidden="true">
+            <span className="absolute -top-1 -left-1.5 text-[8px] text-accent/70">✦</span>
+            <span className="absolute -bottom-1 -right-1 text-[6px] text-primary/70">✦</span>
+            <span className="text-2xl font-display text-success drop-shadow-[0_0_8px_hsl(var(--success)/0.5)]">$</span>
+          </span>
+          <h1 className="text-lg font-display tracking-wide leading-none">Money</h1>
+        </div>
+      }
+      description={totalLogged}
+    >
       <MoneyRain active={rainActive} />
       <div className="max-w-lg mx-auto">
-      {/* The bullet belonged to every other page. This one is about money and
-          sits on a star field, so it gets a sign of its own. */}
-      <div className="mb-4 md:mb-6 flex items-end gap-3">
-        <span className="relative shrink-0 leading-none" aria-hidden="true">
-          <span className="absolute -top-1 -left-1.5 text-[9px] text-accent/70">✦</span>
-          <span className="absolute -bottom-1 -right-1 text-[7px] text-primary/70">✦</span>
-          <span className="text-4xl font-display text-success drop-shadow-[0_0_10px_hsl(var(--success)/0.5)]">$</span>
-        </span>
-        <div className="min-w-0 pb-0.5">
-          <h1 className="text-xl md:text-2xl font-display tracking-wide leading-none">Money</h1>
-          <p className="mt-1 text-xs text-muted-foreground font-body">${total.toLocaleString()} logged</p>
-        </div>
-      </div>
-
       {/* How long the oldest unpaid shift has waited. The Dashboard's one
           genuinely unique panel, and the reason to open this page at all. */}
       {payTier !== 'none' && oldestUnpaid && (
@@ -959,18 +967,19 @@ export default function MoneyPage() {
           for changing them. Still owed is the one you came for, so it is the
           one that is big. */}
       <div className="grid grid-cols-2 gap-2 mb-4">
-        <div className="rounded-lg border border-border bg-card p-3">
-          <p className="text-[10px] text-muted-foreground text-mono uppercase tracking-wider">Hours paid</p>
-          <p className="text-3xl font-bold text-mono mt-0.5 leading-none">
-            {round1(hoursPaid)}<span className="text-base text-muted-foreground font-medium"> / {round1(hoursTotal)}h</span>
-          </p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-3">
-          <p className="text-[10px] text-muted-foreground text-mono uppercase tracking-wider">Days paid</p>
-          <p className="text-3xl font-bold text-mono mt-0.5 leading-none">
-            {daysPaid}<span className="text-base text-muted-foreground font-medium"> / {daysTotal}</span>
-          </p>
-        </div>
+        {/* Stacked the same way as each other: the figure, then what it is
+            out of. Side by side at 3xl they wrapped differently and read as
+            two different kinds of number. */}
+        {([
+          { label: 'Hours paid', value: String(round1(hoursPaid)), of: round1(hoursTotal) + 'h' },
+          { label: 'Days paid', value: String(daysPaid), of: daysTotal + ' days' },
+        ]).map(({ label, value, of }) => (
+          <div key={label} className="rounded-lg border border-border bg-card p-3">
+            <p className="text-[10px] text-muted-foreground text-mono uppercase tracking-wider">{label}</p>
+            <p className="text-2xl font-bold text-mono mt-1 leading-none">{value}</p>
+            <p className="text-[11px] text-mono text-muted-foreground mt-1 leading-none">of {of}</p>
+          </div>
+        ))}
 
         {/* The money underneath, as how far along it is rather than a bare
             total — the gap is the part worth seeing. */}
@@ -1000,7 +1009,6 @@ export default function MoneyPage() {
         </div>
       </div>
 
-      <HoursMeter jobs={data.jobs} />
       <PaySummaryTable rows={paySummaryRows} jobs={data.jobs} employers={data.employers} />
 
       {/* Three ways in, behind one button — both of these were sitting open and
