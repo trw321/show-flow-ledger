@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react';
+import StubEditor from '@/components/StubEditor';
 import { useNeedsHours } from '@/lib/useNeedsHours';
 import { useSearchParams } from 'react-router-dom';
 import { useData } from '@/lib/DataContext';
@@ -230,6 +231,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   const [nightPremiumActualHours, setNightPremiumActualHours] = useState(job.nightPremiumActualHours?.toString() ?? '');
   const [payStub, setPayStub] = useState(job.payStub ?? '');
   const [stubParsed, setStubParsed] = useState(job.stubParsed);
+  // The picked photo, held while it is cropped and blacked out.
+  const [editingStub, setEditingStub] = useState<string | null>(null);
   const [parsingStub, setParsingStub] = useState(false);
   const [viewingStub, setViewingStub] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -292,6 +295,18 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     if (stubInputRef.current) stubInputRef.current.value = '';
     if (!file) return;
 
+    // A photo goes to the editor first, so anything that should not leave the
+    // phone is painted out before the upload or the vision model sees it. A
+    // PDF has nothing to crop, so it carries on.
+    if (file.type.startsWith('image/')) {
+      const raw = await readFileAsDataUrl(file);
+      setEditingStub(raw);
+      return;
+    }
+    await ingestStub(file);
+  };
+
+  const ingestStub = async (file: File) => {
     const isImage = file.type.startsWith('image/');
     // PDFs can't be downscaled here, so they go into storage at full size —
     // and storage is a single ~5MB budget shared with every other record.
@@ -1025,6 +1040,22 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             </button>
           )}
           <input ref={stubInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleStubUpload} disabled={parsingStub} />
+          {editingStub && (
+            <div className="pixel-panel p-3 space-y-2">
+              <p className="text-[10px] text-mono uppercase tracking-widest text-muted-foreground">Before it leaves your phone</p>
+              <StubEditor
+                source={editingStub}
+                onCancel={() => setEditingStub(null)}
+                onDone={async (edited) => {
+                  setEditingStub(null);
+                  const res = await fetch(edited);
+                  const blob = await res.blob();
+                  // Named so the rest of the path can treat it as a picked photo.
+                  await ingestStub(new File([blob], `stub-${job.id}.jpg`, { type: blob.type || 'image/jpeg' }));
+                }}
+              />
+            </div>
+          )}
         </label>
 
         {/* Storing a stub nobody can look at is just a boolean with a storage
