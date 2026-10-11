@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import ThemePicker from '@/components/ThemePicker';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/AuthContext';
@@ -395,6 +396,8 @@ export default function SettingsPage() {
         <PageHeader title="Mode" description="Customize which sections appear in your app" showDot={false} />
 
       <AccountSection />
+
+      <ThemePicker />
 
       {/* Worker profile */}
       <section>

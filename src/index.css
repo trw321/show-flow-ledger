@@ -19,10 +19,10 @@
        spread = how far cards separate from the ground
        Past about 0.6 depth the surface stops reading as a hue at all.
        ───────────────────────────────────────────────────────────────── */
-    --base-h: 344;
-    --base-s: 72;
-    --base-l: 36;
-    --depth: 0.46;
+    --base-h: 236;
+    --base-s: 88;
+    --base-l: 48;
+    --depth: 0.52;
     --spread: 0.1;
 
     /* The three surfaces, each a step further down the same hue. */
@@ -97,6 +97,41 @@
     --font-body: 'DM Sans', sans-serif;
     --font-mono: 'Space Mono', monospace;
     --font-spooky: 'Creepster', cursive;
+  }
+
+  /* Four gels. Each sets the one base colour and its depth; every surface,
+     edge and dim text in the app follows from those. */
+
+  /* Deep violet — darker base, so it needs less depth to sit right. */
+  [data-theme="violet"] {
+    --base-h: 270;
+    --base-s: 84;
+    --base-l: 40;
+    --depth: 0.42;
+    --spread: 0.11;
+  }
+
+  /* Chroma green — a light yellow-green, so it takes much more depth before
+     it reads as a surface rather than a highlighter. */
+  [data-theme="green"] {
+    --base-h: 64;
+    --base-s: 70;
+    --base-l: 52;
+    --depth: 0.72;
+    --spread: 0.09;
+    --primary: var(--base-h) 70% 56%;
+    --primary-foreground: 64 60% 8%;
+  }
+
+  /* Gunmetal — barely saturated on purpose. The one quiet option. */
+  [data-theme="gunmetal"] {
+    --base-h: 207;
+    --base-s: 16;
+    --base-l: 46;
+    --depth: 0.56;
+    --spread: 0.13;
+    --primary: 199 70% 62%;
+    --primary-foreground: 199 50% 10%;
   }
 }
 
