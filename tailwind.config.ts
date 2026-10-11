@@ -19,6 +19,16 @@ export default {
         mono: ['Space Mono', 'monospace'],
       },
       colors: {
+        // What a shift is, as a colour. Fixed rather than derived from the
+        // base, so five states stay apart in every theme.
+        dot: {
+          upcoming: 'hsl(var(--dot-upcoming))',
+          working: 'hsl(var(--dot-working))',
+          completed: 'hsl(var(--dot-completed))',
+          paid: 'hsl(var(--dot-paid))',
+          overdue: 'hsl(var(--dot-overdue))',
+          cancelled: 'hsl(var(--dot-cancelled))',
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

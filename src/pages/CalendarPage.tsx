@@ -32,11 +32,20 @@ import ScrollWheel from '@/components/ScrollWheel';
 import NewGigPage from '@/pages/NewGigPage';
 
 const statusDot: Record<Job['status'], string> = {
-  upcoming: 'bg-accent',
-  'in-progress': 'bg-accent',
-  completed: 'bg-primary',
-  cancelled: 'bg-destructive',
+  upcoming: 'bg-dot-upcoming',
+  'in-progress': 'bg-dot-working',
+  completed: 'bg-dot-completed',
+  cancelled: 'bg-dot-cancelled',
 };
+
+/** The dot rule, in the order it is applied — also what the legend prints. */
+export const SHIFT_STATES = [
+  { dot: 'bg-dot-overdue', label: 'needs hours' },
+  { dot: 'bg-dot-upcoming', label: 'upcoming' },
+  { dot: 'bg-dot-working', label: 'working' },
+  { dot: 'bg-dot-completed', label: 'hours in' },
+  { dot: 'bg-dot-paid', label: 'paid' },
+] as const;
 
 const statusColors: Record<Job['status'], string> = {
   upcoming: 'bg-accent/20 text-accent border-accent/30',
@@ -49,8 +58,8 @@ const statusColors: Record<Job['status'], string> = {
 // A job counts as "paid" once a linked income record is marked paid —
 // distinct from just "completed" (worked, pay estimated but not yet received).
 function jobDotClass(job: Job, paidJobIds: Set<string>): string {
-  if (paidJobIds.has(job.id)) return 'bg-success';
-  if (isOverdueUpcoming(job)) return 'bg-warning';
+  if (paidJobIds.has(job.id)) return 'bg-dot-paid';
+  if (isOverdueUpcoming(job)) return 'bg-dot-overdue';
   return statusDot[job.status];
 }
 
@@ -1719,6 +1728,14 @@ export default function CalendarPage() {
                 })}
             </div>
           ))}
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+            {SHIFT_STATES.map(({ dot, label }) => (
+              <span key={label} className="flex items-center gap-1 text-[9px] text-mono uppercase tracking-wider text-muted-foreground">
+                <span className={cn('w-1.5 h-1.5 rounded-full', dot)} /> {label}
+              </span>
+            ))}
+          </div>
+
           <div className="mt-4 space-y-1">
             <div className="flex items-center justify-between px-1 pb-1 border-b border-border/30">
               <span className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground/50">{format(currentDate, 'MMMM')}</span>
