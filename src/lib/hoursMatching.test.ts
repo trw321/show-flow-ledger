@@ -388,9 +388,23 @@ describe('a shift that has not happened yet', () => {
     expect(effectiveHoursWorked(scheduled(dayOffset(-1)))).toBe(9);
   });
 
-  it('still counts hours entered by hand, whatever the date', () => {
-    // Logging hours on a future shift is a deliberate act — honour it.
-    expect(effectiveHoursWorked(scheduled(dayOffset(7), { hoursWorked: 9 }))).toBe(9);
+  it('does not count hours filled in ahead of the day', () => {
+    // A schedule entered early is a plan, not a timesheet.
+    const planned = scheduled(dayOffset(7), { hoursWorked: 9, hoursPlanned: true });
+    expect(effectiveHoursWorked(planned)).toBe(0);
+  });
+
+  it('still does not count them once the day passes, until confirmed', () => {
+    const planned = scheduled(dayOffset(-1), { hoursWorked: 9, hoursPlanned: true });
+    expect(effectiveHoursWorked(planned)).toBe(0);
+    expect(jobPayBreakdown(planned, [planned]).gross).toBe(0);
+  });
+
+  it('counts them the moment the shift is confirmed', () => {
+    // Confirming clears the flag — that is all it does.
+    const confirmed = scheduled(dayOffset(-1), { hoursWorked: 9 });
+    expect(effectiveHoursWorked(confirmed)).toBe(9);
+    expect(jobPayBreakdown(confirmed, [confirmed]).gross).toBeGreaterThan(0);
   });
 
   it('counts nothing for a future shift with no times at all', () => {

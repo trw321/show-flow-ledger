@@ -551,6 +551,11 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     // clocked figure it already knows how to handle.
     if (timeline) updates.hoursWorked = timeline.spreadHours;
     if (needsReview !== (job.needsReview ?? false)) updates.needsReview = needsReview || undefined;
+    // Hours put in before the day are a plan. They stay one until the shift is
+    // confirmed, so filling in a schedule early never turns itself into a
+    // timesheet when the date rolls past.
+    const isFuture = job.date > new Date().toISOString().slice(0, 10);
+    if (isFuture && (actualHours > 0 || timeline)) updates.hoursPlanned = true;
     if (meal2Duration !== (job.meal2Duration ?? undefined)) updates.meal2Duration = meal2Duration;
     if (meal2Duration && meal2OnClock !== (job.meal2OnClock ?? false)) updates.meal2OnClock = meal2OnClock;
     const parsedPenalties = parseFloat(mealPenalties);
@@ -921,6 +926,22 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           {!rate && (
             <p className="text-[10px] text-warning">⚠ No rate set — pay won't calculate until this is filled in</p>
           )}
+          {job.hoursPlanned && job.date <= new Date().toISOString().slice(0, 10) && (
+            <button
+              type="button"
+              onClick={() => onSave({ hoursPlanned: undefined, status: 'completed' })}
+              className="pixel-button w-full flex items-center gap-2.5 border-accent/60 bg-accent/10 px-3 py-2.5 text-left"
+            >
+              <Check size={16} className="text-accent shrink-0" />
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-accent">Confirm {paidHours}h worked</span>
+                <span className="block text-[11px] text-muted-foreground mt-0.5">
+                  Planned ahead of the day — nothing counts it until you say it happened.
+                </span>
+              </span>
+            </button>
+          )}
+
           {/* Pre-ticked when the payroll company was assumed rather than told
               to us, so an assumption is visible instead of silent. */}
           <label className="flex items-start gap-2 cursor-pointer select-none pt-0.5">
@@ -1907,6 +1928,7 @@ export default function CalendarPage() {
                         {job.startTime && <span>{job.startTime}{job.endTime ? ` – ${job.endTime}` : ''}</span>}
                         {hours > 0 && <span>{hours}h</span>}
                         {earned > 0 && <span className="font-semibold">${earned.toLocaleString()}</span>}
+                        {job.hoursPlanned && <span className="text-[10px] text-mono uppercase tracking-wider text-accent">planned</span>}
                         <button
                           type="button"
                           onClick={e => { e.stopPropagation(); setOpenStubFor(job.id); setSelectedJobId(job.id); }}

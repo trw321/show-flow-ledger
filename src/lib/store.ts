@@ -27,6 +27,8 @@ export interface Job {
   mealDuration?: 0 | 30 | 45 | 60;
   /** true = paid/on the clock (no hours deduction), false = unpaid/off the clock (mealDuration is deducted). Irrelevant when mealDuration is 0. */
   mealOnClock?: boolean;
+  /** Hours filled in before the shift happened. They are a plan, not a timesheet: nothing counts them as worked or earned until the shift is confirmed on or after the day. Cleared on confirmation. Absent on anything logged after the fact. */
+  hoursPlanned?: boolean;
   /** The local that dispatched the call — "ia8", "Local 16". Not the employer: an offer names the local as its "Client", but the company that pays is the employer and lives in `client`, which is what pay rates resolve from. */
   local?: string;
   /** Flagged to come back to. Set by hand from the shift form, and set automatically when the payroll company was assumed to be the employer because the offer did not name one. */

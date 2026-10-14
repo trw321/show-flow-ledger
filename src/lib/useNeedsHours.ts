@@ -10,7 +10,12 @@ import type { Job } from '@/lib/store';
 // "Ready to log" list so they can never drift out of sync with each other.
 export function needsHours(job: Job): boolean {
   const jobDate = new Date(job.date + 'T12:00:00');
-  return (isToday(jobDate) || isPast(jobDate)) && effectiveHoursWorked(job) === 0 && job.status !== 'cancelled' && job.status !== 'completed';
+  if (!(isToday(jobDate) || isPast(jobDate))) return false;
+  if (job.status === 'cancelled') return false;
+  // Planned hours waiting to be confirmed need a tap just as much as no hours
+  // at all do, and "completed" does not excuse them.
+  if (job.hoursPlanned) return true;
+  return effectiveHoursWorked(job) === 0 && job.status !== 'completed';
 }
 
 export function useNeedsHours(jobs: Job[]) {

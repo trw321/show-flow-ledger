@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseDayTimeline, withGapOnClock } from './dayTimeline';
 import { calculateDayPay, offClockMealMinutes, netHoursWorked } from './payCalc';
+import { needsHours } from './useNeedsHours';
 
 describe('parseDayTimeline', () => {
   it('reads three calls with an hour out between each', () => {
@@ -342,5 +343,27 @@ describe('two hours guaranteed after an off-the-clock meal', () => {
 
   it('owes nothing on a day with no meal at all', () => {
     expect(parseDayTimeline('8a-5p')!.postMealShortfallHours).toBe(0);
+  });
+});
+
+describe('a planned shift waiting to be confirmed', () => {
+  const yesterday = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  };
+
+  it('is still asking to be dealt with', () => {
+    expect(needsHours({
+      id: 'j1', name: 'n', client: 'c', date: yesterday(), status: 'completed',
+      hoursWorked: 9, hoursPlanned: true,
+    } as never)).toBe(true);
+  });
+
+  it('stops asking once confirmed', () => {
+    expect(needsHours({
+      id: 'j1', name: 'n', client: 'c', date: yesterday(), status: 'completed',
+      hoursWorked: 9,
+    } as never)).toBe(false);
   });
 });
