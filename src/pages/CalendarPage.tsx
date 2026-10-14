@@ -394,8 +394,10 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
         client: job.client,
         venue: job.venue,
         date,
-        startTime: job.startTime,
-        endTime: job.endTime,
+        // Deliberately no startTime, endTime or hoursWorked. A duplicate is
+        // the same booking on another day — the times it was actually worked
+        // belong to the day it was worked, and carrying them over means every
+        // copy arrives pre-filled with hours nobody has done yet.
         status: 'upcoming',
         paySchedule: job.paySchedule,
         payrollCompany: job.payrollCompany,
@@ -533,13 +535,22 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
 
   const handleSave = () => {
     const updates: Partial<Job> = {};
-    if (client.trim() !== (job.client ?? '') && client.trim()) updates.client = client.trim();
+    // Clearing a field used to be ignored everywhere below: the guards all
+    // asked "is there a value?" rather than "did it change?", so a wrong entry
+    // could be deleted, saved, and come straight back.
+    if (client.trim() !== (job.client ?? '')) updates.client = client.trim();
     if (startTime !== (job.startTime ?? '')) updates.startTime = startTime || undefined;
     if (endTime !== (job.endTime ?? '')) updates.endTime = endTime || undefined;
-    if (actualHours > 0) { updates.hoursWorked = actualHours; updates.status = 'completed'; }
+    if (hoursWorked !== (job.hoursWorked?.toString() ?? '')) {
+      const entered = parseFloat(hoursWorked);
+      updates.hoursWorked = entered > 0 ? entered : undefined;
+      if (entered > 0) updates.status = 'completed';
+    }
     if (hourlyRate !== (job.hourlyRate?.toString() ?? '')) updates.hourlyRate = rate > 0 ? rate : undefined;
-    const parsedMin = parseFloat(minimumHours);
-    if (!isNaN(parsedMin) && parsedMin !== (job.minimumHours ?? 0)) updates.minimumHours = parsedMin > 0 ? parsedMin : undefined;
+    if (minimumHours !== (job.minimumHours?.toString() ?? '')) {
+      const parsedMin = parseFloat(minimumHours);
+      updates.minimumHours = parsedMin > 0 ? parsedMin : undefined;
+    }
     if (payrollCompany !== (job.payrollCompany ?? '')) updates.payrollCompany = payrollCompany.trim() || undefined;
     if (mealDuration !== (job.mealDuration ?? undefined)) updates.mealDuration = mealDuration;
     if (mealDuration && mealOnClock !== (job.mealOnClock ?? false)) updates.mealOnClock = mealOnClock;
@@ -557,8 +568,10 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     if (isFuture && (actualHours > 0 || timeline)) updates.hoursPlanned = true;
     if (meal2Duration !== (job.meal2Duration ?? undefined)) updates.meal2Duration = meal2Duration;
     if (meal2Duration && meal2OnClock !== (job.meal2OnClock ?? false)) updates.meal2OnClock = meal2OnClock;
-    const parsedPenalties = parseFloat(mealPenalties);
-    if (!isNaN(parsedPenalties) && parsedPenalties !== (job.mealPenalties ?? 0)) updates.mealPenalties = parsedPenalties > 0 ? parsedPenalties : undefined;
+    if (mealPenalties !== (job.mealPenalties?.toString() ?? '')) {
+      const parsedPenalties = parseFloat(mealPenalties);
+      updates.mealPenalties = parsedPenalties > 0 ? parsedPenalties : undefined;
+    }
     if (rawNightHours > 0) {
       if (nightPremiumConfirmed !== (job.nightPremiumConfirmed ?? true)) updates.nightPremiumConfirmed = nightPremiumConfirmed;
       const nextActualHours = nightPremiumConfirmed ? undefined : validNightActualHours;
@@ -572,7 +585,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     validNightActualHours !== (job.nightPremiumActualHours ?? undefined);
 
   const hasChanges =
-    (client.trim() !== (job.client ?? '') && client.trim() !== '') ||
+    client.trim() !== (job.client ?? '') ||
     startTime !== (job.startTime ?? '') ||
     endTime !== (job.endTime ?? '') ||
     hoursWorked !== (job.hoursWorked?.toString() ?? '') ||
