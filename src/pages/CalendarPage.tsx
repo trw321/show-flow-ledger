@@ -28,7 +28,6 @@ import { compareStubToShifts, disagreements, type RowStatus } from '@/lib/stubCo
 import { resizeImageForStorage, readFileAsDataUrl } from '@/lib/imageResize';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import EventIntake from '@/components/EventIntake';
-import ScrollWheel from '@/components/ScrollWheel';
 import NewGigPage from '@/pages/NewGigPage';
 
 const statusDot: Record<Job['status'], string> = {
@@ -887,13 +886,40 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             )}
             </div>
             <div className="pt-0.5">
-              <label className="text-[10px] text-mono uppercase text-muted-foreground">Meal penalty (MP) units — 1 unit = 1hr at straight rate</label>
-              <ScrollWheel
-                values={Array.from({ length: 10 }, (_, i) => i)}
-                value={parseFloat(mealPenalties) || 0}
-                onChange={v => setMealPenalties(String(v))}
-                className="mt-1 w-20"
-              />
+              {/* A vertical wheel for a number that is almost always 0, 1 or 2
+                  spent a whole column of the form on empty space. A row with
+                  the count in the middle is the same control in one line. */}
+              <label className="text-[10px] text-mono uppercase text-muted-foreground">Meal penalties — 1 = 1hr at straight rate</label>
+              <div className="mt-1 flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-label="One fewer meal penalty"
+                  disabled={(parseFloat(mealPenalties) || 0) <= 0}
+                  onClick={() => setMealPenalties(String(Math.max(0, (parseFloat(mealPenalties) || 0) - 1)))}
+                  className="pixel-button h-9 w-9 shrink-0 bg-card text-lg leading-none text-muted-foreground disabled:opacity-30"
+                >
+                  −
+                </button>
+                <span className={cn(
+                  'h-9 min-w-[3rem] px-3 flex items-center justify-center text-mono text-lg font-bold pixel-well',
+                  (parseFloat(mealPenalties) || 0) > 0 ? 'text-warning' : 'text-muted-foreground',
+                )}>
+                  {parseFloat(mealPenalties) || 0}
+                </span>
+                <button
+                  type="button"
+                  aria-label="One more meal penalty"
+                  onClick={() => setMealPenalties(String(Math.min(20, (parseFloat(mealPenalties) || 0) + 1)))}
+                  className="pixel-button h-9 w-9 shrink-0 bg-card text-lg leading-none text-muted-foreground"
+                >
+                  +
+                </button>
+                {(parseFloat(mealPenalties) || 0) > 0 && rate > 0 && (
+                  <span className="text-[11px] text-mono text-warning ml-auto">
+                    +${((parseFloat(mealPenalties) || 0) * rate).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
