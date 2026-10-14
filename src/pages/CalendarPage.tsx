@@ -1522,17 +1522,29 @@ export default function CalendarPage() {
     });
     const monthHours = monthJobs.reduce((s, j) => s + netHoursWorked(j), 0);
     const monthExpected = monthJobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers), 0);
-    const monthPaid = data.income
-      .filter(i => i.status === 'paid' && (() => { try { return isWithinInterval(parseISO(i.date), { start: monthStart, end: monthEnd }); } catch { return false; } })())
-      .reduce((s, i) => s + i.amount, 0);
+
+    // A payment belongs to the month of the work it paid for, not the month
+    // the cheque turned up. Dating it by arrival put September's money in
+    // October, so October showed pay against no hours and September looked
+    // unpaid. Income with no shift behind it has only its own date to go on.
+    const workDateFor = (i: { jobId?: string; date: string }) => {
+      const job = i.jobId ? data.jobs.find(j => j.id === i.jobId) : undefined;
+      return job ? job.date : i.date;
+    };
+    const paidIn = (test: (workDate: string) => boolean) => data.income
+      .filter(i => i.status === 'paid' && test(workDateFor(i)))
+      .reduce((sum, i) => sum + i.amount, 0);
+
+    const monthPaid = paidIn(d => {
+      try { return isWithinInterval(parseISO(d), { start: monthStart, end: monthEnd }); }
+      catch { return false; }
+    });
 
     const yearPrefix = format(currentDate, 'yyyy');
     const ytdJobs = data.jobs.filter(j => j.date.startsWith(yearPrefix));
     const ytdHours = ytdJobs.reduce((s, j) => s + netHoursWorked(j), 0);
     const ytdExpected = ytdJobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers), 0);
-    const ytdPaid = data.income
-      .filter(i => i.status === 'paid' && i.date.startsWith(yearPrefix))
-      .reduce((s, i) => s + i.amount, 0);
+    const ytdPaid = paidIn(d => d.startsWith(yearPrefix));
 
     return {
       month: { label: format(currentDate, 'MMM'), hours: monthHours, expected: monthExpected, paid: monthPaid, unpaid: Math.max(0, monthExpected - monthPaid) },
