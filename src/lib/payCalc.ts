@@ -215,8 +215,14 @@ function parseTimeToMinutes(t: string): number {
  * that shift as 0 hours worked even though both times are right there.
  */
 export function effectiveHoursWorked(job: Job): number {
+  // Hours you entered yourself always count — you would not have typed them
+  // for a shift you had not worked.
   if (job.hoursWorked) return job.hoursWorked;
+  // Clock times on their own are a SCHEDULE until the day arrives. Deriving
+  // hours from them regardless meant a shift booked for next week counted as
+  // worked and earned in the month summary.
   if (!job.startTime || !job.endTime) return 0;
+  if (job.date > new Date().toISOString().slice(0, 10)) return 0;
   const s = parseTimeToMinutes(job.startTime);
   let e = parseTimeToMinutes(job.endTime);
   if (isNaN(s) || isNaN(e)) return 0;

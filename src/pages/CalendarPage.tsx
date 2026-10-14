@@ -1839,8 +1839,15 @@ export default function CalendarPage() {
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Unpaid</span>
+                {/* "All paid" used to show whenever the figure came to zero,
+                    which included a month where nothing had been earned yet —
+                    saying everything was settled when nothing was owed. */}
                 <span className={cn("text-mono font-semibold", period.unpaid > 0 ? "text-warning" : "text-muted-foreground")}>
-                  {period.unpaid > 0 ? `${period.unpaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'all paid'}
+                  {period.unpaid > 0
+                    ? '$' + period.unpaid.toLocaleString(undefined, { maximumFractionDigits: 0 })
+                    : period.expected > 0
+                      ? 'all paid'
+                      : 'nothing due'}
                 </span>
               </div>
             </div>

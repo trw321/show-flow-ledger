@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { hourUpdateToEntry, matchEntries, isCallbackShift, type SmartImportHourUpdate, type HoursEntry } from './hoursMatching';
-import { calculateDayPay, offClockMealMinutes, netHoursWorked, jobPayBreakdown } from './payCalc';
+import { calculateDayPay, offClockMealMinutes, netHoursWorked, jobPayBreakdown, effectiveHoursWorked } from './payCalc';
 import type { Job } from './store';
 
 // smart-import hands back hours already net of an off-the-clock meal, while
@@ -357,5 +357,43 @@ describe('matching an hours note to a shift', () => {
 
   it('does not mistake an ordinary word containing cb for a callback', () => {
     expect(isCallbackShift(job({ notes: 'cbs television city' }))).toBe(false);
+  });
+});
+
+describe('a shift that has not happened yet', () => {
+  const dayOffset = (n: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+  const scheduled = (date: string, extra: Partial<Job> = {}): Job => ({
+    id: 'j1', name: 'Load in', client: 'Acme', date,
+    startTime: '08:00 AM', endTime: '05:00 PM', status: 'upcoming',
+    hourlyRate: 50, has6th7thDayRule: false, ...extra,
+  } as Job);
+
+  it('counts no hours for clock times on a future date', () => {
+    // Booked for next week: the times are a schedule, not a timesheet.
+    expect(effectiveHoursWorked(scheduled(dayOffset(7)))).toBe(0);
+    expect(netHoursWorked(scheduled(dayOffset(7), { mealDuration: 60, mealOnClock: false }))).toBe(0);
+  });
+
+  it('earns nothing on a future date', () => {
+    const job = scheduled(dayOffset(7));
+    expect(jobPayBreakdown(job, [job]).gross).toBe(0);
+  });
+
+  it('counts the clock times once the day has arrived', () => {
+    expect(effectiveHoursWorked(scheduled(dayOffset(0)))).toBe(9);
+    expect(effectiveHoursWorked(scheduled(dayOffset(-1)))).toBe(9);
+  });
+
+  it('still counts hours entered by hand, whatever the date', () => {
+    // Logging hours on a future shift is a deliberate act — honour it.
+    expect(effectiveHoursWorked(scheduled(dayOffset(7), { hoursWorked: 9 }))).toBe(9);
+  });
+
+  it('counts nothing for a future shift with no times at all', () => {
+    expect(effectiveHoursWorked(scheduled(dayOffset(7), { startTime: undefined, endTime: undefined }))).toBe(0);
   });
 });
