@@ -397,8 +397,14 @@ function ReconciliationRowCard({
   // a whole project read as the whole thing being paid. This distinguishes
   // "some money in, but short of the period's expected total" from a
   // genuine full match.
-  const payStatus: 'unpaid' | 'partial' | 'full' =
-    row.actualPaid <= 0 ? 'unpaid' : row.actualPaid < row.expectedPay - 0.01 ? 'partial' : 'full';
+  // "Partial" used to mean the money that arrived was less than expected,
+  // which is the normal case rather than a problem: the estimate is before
+  // dues and tax come out and the cheque is after, so a correctly paid shift
+  // looked part-paid forever. A period is paid or it is not; whether the
+  // amount matches is what the figures beside it are for, and a project
+  // spanning two periods shows as part paid on the group, where some of its
+  // periods have landed and others have not.
+  const payStatus: 'unpaid' | 'full' = row.actualPaid > 0 ? 'full' : 'unpaid';
 
   return (
     <div className="rounded-2xl border border-border bg-card p-3.5 hover:border-primary/20 transition-colors">
@@ -410,10 +416,9 @@ function ReconciliationRowCard({
             <span className={cn(
               "text-[9px] font-bold text-mono uppercase rounded-full px-2 py-0.5 border",
               payStatus === 'full' ? "bg-success/15 text-success border-success/30"
-                : payStatus === 'partial' ? "bg-warning/15 text-warning border-warning/30"
                 : "bg-secondary text-muted-foreground border-border"
             )}>
-              {payStatus === 'full' ? 'paid' : payStatus === 'partial' ? 'partial' : 'unpaid'}
+              {payStatus === 'full' ? 'paid' : 'unpaid'}
             </span>
             {/* Money bag paid toggle — greyscale until any income exists, full color once some (or all) has come in */}
             <button
@@ -425,7 +430,7 @@ function ReconciliationRowCard({
                 isToggling && "opacity-40"
               )}
               aria-label={payStatus === 'full' ? 'Mark unpaid' : 'Mark paid'}
-              title={payStatus === 'full' ? 'Mark unpaid' : payStatus === 'partial' ? 'Mark the rest paid' : 'Mark paid'}
+              title={payStatus === 'full' ? 'Mark unpaid' : 'Mark paid'}
             >
               💰
             </button>
@@ -896,15 +901,15 @@ export default function MoneyPage() {
     setTogglingKey(key);
     try {
       // Fully paid already — the tap means undo.
-      if (row.actualPaid >= row.expectedPay - 0.01 && row.relatedIncomeIds.length > 0) {
+      // Anything in means the tap is an undo. Topping up a shortfall was
+      // wrong: the estimate is gross and a cheque is net, so "the rest" was
+      // really the tax and dues, and adding it invented income.
+      if (row.actualPaid > 0 && row.relatedIncomeIds.length > 0) {
         for (const id of row.relatedIncomeIds) {
           await updateIncome(id, { status: 'pending' });
         }
       } else {
-        // Nothing in yet, or only part of it. Either way the tap means "this
-        // got paid", so top it up to the full amount and make it rain —
-        // marking a shift paid by hand is the whole point of the button.
-        const shortfall = Math.max(0, row.expectedPay - row.actualPaid);
+        const shortfall = row.expectedPay;
         if (shortfall <= 0.01) { setTogglingKey(null); return; }
         await addIncome({
           jobId: row.jobId,
