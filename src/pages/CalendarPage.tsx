@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react';
+import { projectSiblingsToRelabel } from '@/lib/projectGrouping';
 import StubEditor from '@/components/StubEditor';
 import { useNeedsHours } from '@/lib/useNeedsHours';
 import { useSearchParams } from 'react-router-dom';
@@ -234,6 +235,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   const [gapsOnClock, setGapsOnClock] = useState<boolean[]>(job.callGapsOnClock ?? []);
   const [callsOpen, setCallsOpen] = useState(!!job.callTimeline);
   const [needsReview, setNeedsReview] = useState(job.needsReview ?? false);
+  // Changing an employer on one shift usually means it was wrong on the whole
+  // run, so the rest of the project is offered rather than left behind.
+  const [relabelProject, setRelabelProject] = useState(true);
   const [mealPenalties, setMealPenalties] = useState(job.mealPenalties?.toString() ?? '');
   const [nightPremiumConfirmed, setNightPremiumConfirmed] = useState(job.nightPremiumConfirmed ?? true);
   const [nightPremiumActualHours, setNightPremiumActualHours] = useState(job.nightPremiumActualHours?.toString() ?? '');
@@ -533,6 +537,11 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     toast('Skipped — I\'ll ask again after the next stub');
   };
 
+  const employerChanged = client.trim() !== (job.client ?? '') && client.trim() !== '';
+  const projectSiblings = employerChanged
+    ? projectSiblingsToRelabel(job, job.client ?? '', data.jobs)
+    : [];
+
   const handleSave = () => {
     const updates: Partial<Job> = {};
     // Clearing a field used to be ignored everywhere below: the guards all
@@ -578,6 +587,12 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
       if (nextActualHours !== (job.nightPremiumActualHours ?? undefined)) updates.nightPremiumActualHours = nextActualHours;
     }
     if (payStub !== (job.payStub ?? '')) updates.payStub = payStub || undefined;
+    // The rest of the run, if it was offered and kept.
+    if (employerChanged && relabelProject && projectSiblings.length > 0) {
+      const next = client.trim();
+      for (const sibling of projectSiblings) updateJobDirect(sibling.id, { client: next });
+      toast.success('Employer updated on ' + (projectSiblings.length + 1) + ' shifts');
+    }
     onSave(updates);
   };
 
@@ -997,6 +1012,22 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
               )}
             </span>
           </label>
+          {projectSiblings.length > 0 && (
+            <label className="flex items-start gap-2 cursor-pointer select-none rounded-md border border-accent/40 bg-accent/5 p-2.5">
+              <input
+                type="checkbox"
+                checked={relabelProject}
+                onChange={e => setRelabelProject(e.target.checked)}
+                className="mt-0.5 rounded border-border shrink-0"
+              />
+              <span className="text-[11px] leading-tight">
+                Change the employer on the other {projectSiblings.length} shift{projectSiblings.length !== 1 ? 's' : ''} too
+                <span className="block text-[10px] text-muted-foreground mt-0.5">
+                  {job.jobNumber?.trim() ? 'Job #' + job.jobNumber.trim() : job.name} — still says {job.client}.
+                </span>
+              </span>
+            </label>
+          )}
           <Button size="sm" className="w-full" disabled={!hasChanges} onClick={handleSave}>
             Save Hours
           </Button>
