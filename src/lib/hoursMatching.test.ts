@@ -411,3 +411,31 @@ describe('a shift that has not happened yet', () => {
     expect(effectiveHoursWorked(scheduled(dayOffset(7), { startTime: undefined, endTime: undefined }))).toBe(0);
   });
 });
+
+describe('vacation pay', () => {
+  const employer = (over: Record<string, unknown> = {}) => ({
+    id: 'e1', name: 'Acme', overtimeRule: 'daily', createdAt: '2026-01-01',
+    unionDuesPercent: 3.5, estimatedTaxPercent: 20, vacationPercent: 8, ...over,
+  }) as never;
+  const shift = { id: 'j1', name: 'n', client: 'Acme', date: '2026-09-10',
+    status: 'completed', hoursWorked: 10, hourlyRate: 50, has6th7thDayRule: false } as Job;
+
+  it('is a percentage of gross, not of what is left after deductions', () => {
+    const b = jobPayBreakdown(shift, [shift], [employer()]);
+    // 8h straight + 2h at time and a half = $550 gross.
+    expect(b.gross).toBe(550);
+    expect(b.vacation).toBeCloseTo(550 * 0.08, 2);
+  });
+
+  it('does not shrink when the deductions grow', () => {
+    // Vacation is earned on the work, so a bigger tax bill cannot reduce it.
+    const low = jobPayBreakdown(shift, [shift], [employer({ estimatedTaxPercent: 5 })]);
+    const high = jobPayBreakdown(shift, [shift], [employer({ estimatedTaxPercent: 35 })]);
+    expect(low.vacation).toBeCloseTo(high.vacation, 2);
+    expect(high.net).toBeLessThan(low.net);
+  });
+
+  it('adds nothing when the employer pays no vacation', () => {
+    expect(jobPayBreakdown(shift, [shift], [employer({ vacationPercent: undefined })]).vacation).toBe(0);
+  });
+});

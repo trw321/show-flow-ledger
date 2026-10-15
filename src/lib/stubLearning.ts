@@ -47,11 +47,12 @@ function impliedPercents(stub: NonNullable<Job['stubParsed']>): Partial<Record<L
     out.estimatedTaxPercent = round2((stub.taxAmount / afterDues) * 100);
   }
 
-  // Vacation is added on top of net, so it's a percentage of what's left after
-  // both deductions — the same base jobPayBreakdown applies it to.
-  const net = afterDues - (stub.taxAmount ?? 0);
-  if (stub.vacationAmount != null && net > 0) {
-    out.vacationPercent = round2((stub.vacationAmount / net) * 100);
+  // Vacation is a percentage of gross, the same base jobPayBreakdown applies
+  // it to. Reading it off the net made every stub teach a rate several points
+  // too high, so the learned figure was wrong in the same direction the
+  // calculation was.
+  if (stub.vacationAmount != null) {
+    out.vacationPercent = round2((stub.vacationAmount / gross) * 100);
   }
   return out;
 }

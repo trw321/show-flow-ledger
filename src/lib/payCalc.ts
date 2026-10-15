@@ -328,7 +328,11 @@ export function jobPayBreakdown(job: Job, allJobs: Job[], employers: Employer[] 
   const gross = totalPay + duesAmount + taxAmount + weeklyBonus;
   const netBeforeVacation = totalPay + weeklyBonus;
   const vacationPercent = employer?.vacationPercent ?? 0;
-  const vacation = vacationPercent > 0 ? netBeforeVacation * (vacationPercent / 100) : 0;
+  // Vacation is a percentage of GROSS — 8% of what the work earned, before
+  // dues and tax come off it. Taking it off the net understated it by however
+  // much had already been deducted, which for 3.5% dues plus any tax is not a
+  // rounding difference.
+  const vacation = vacationPercent > 0 ? gross * (vacationPercent / 100) : 0;
   const net = netBeforeVacation + vacation;
   // Deductions come back out individually so a pay stub can be reconciled
   // line by line, not just on the totals.

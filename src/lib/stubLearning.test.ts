@@ -20,7 +20,7 @@ const stubJob = (id: string, over: Partial<NonNullable<Job['stubParsed']>> = {})
   status: 'completed',
   notes: '',
   createdAt: '2026-01-01',
-  stubParsed: { employer: 'GSW Arena LLC', grossPay: 1000, duesAmount: 35, taxAmount: 212.30, vacationAmount: 45.16, ...over },
+  stubParsed: { employer: 'GSW Arena LLC', grossPay: 1000, duesAmount: 35, taxAmount: 212.30, vacationAmount: 80, ...over },
 });
 
 describe('learnFromStubs', () => {
@@ -31,11 +31,11 @@ describe('learnFromStubs', () => {
     const vac = s.find(x => x.field === 'vacationPercent')!;
     expect(dues.suggested).toBe(3.5);
     expect(tax.suggested).toBe(22);   // charged after dues, matching the pay engine
-    expect(vac.suggested).toBe(6);
+    expect(vac.suggested).toBe(8);  // 8% of GROSS, not of what is left after deductions
   });
 
   it('stays quiet when the profile already agrees', () => {
-    const e = employer({ unionDuesPercent: 3.5, estimatedTaxPercent: 22, vacationPercent: 6 });
+    const e = employer({ unionDuesPercent: 3.5, estimatedTaxPercent: 22, vacationPercent: 8 });
     expect(learnFromStubs([stubJob('a')], [e])).toEqual([]);
   });
 
