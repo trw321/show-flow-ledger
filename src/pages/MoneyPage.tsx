@@ -397,13 +397,14 @@ function ReconciliationRowCard({
   // a whole project read as the whole thing being paid. This distinguishes
   // "some money in, but short of the period's expected total" from a
   // genuine full match.
-  // "Partial" used to mean the money that arrived was less than expected,
-  // which is the normal case rather than a problem: the estimate is before
-  // dues and tax come out and the cheque is after, so a correctly paid shift
-  // looked part-paid forever. A period is paid or it is not; whether the
-  // amount matches is what the figures beside it are for, and a project
-  // spanning two periods shows as part paid on the group, where some of its
-  // periods have landed and others have not.
+  // "Partial" used to mean the money that arrived was less than expected.
+  // expectedPay is an ESTIMATE — calculateDayPay has already taken its guess
+  // at dues and tax out of it — so it lands near a real cheque but almost
+  // never on it, and any difference at all made a correctly paid shift read
+  // as part paid forever. A period is paid or it is not; how close the amount
+  // came is what the figures beside it are for. Part paid belongs to the
+  // group above, where a project spanning pay periods has had some land and
+  // not others.
   const payStatus: 'unpaid' | 'full' = row.actualPaid > 0 ? 'full' : 'unpaid';
 
   return (
@@ -901,9 +902,10 @@ export default function MoneyPage() {
     setTogglingKey(key);
     try {
       // Fully paid already — the tap means undo.
-      // Anything in means the tap is an undo. Topping up a shortfall was
-      // wrong: the estimate is gross and a cheque is net, so "the rest" was
-      // really the tax and dues, and adding it invented income.
+      // Anything in means the tap is an undo. Topping up the difference was
+      // wrong: expectedPay is an estimate, so the gap between it and a real
+      // payment is estimating error, not money still owed — recording it as
+      // income invented a payment that never arrived.
       if (row.actualPaid > 0 && row.relatedIncomeIds.length > 0) {
         for (const id of row.relatedIncomeIds) {
           await updateIncome(id, { status: 'pending' });
