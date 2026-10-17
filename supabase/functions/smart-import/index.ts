@@ -13,7 +13,15 @@ serve(async (req) => {
   }
 
   try {
-    const { text, imageBase64, imageMimeType, model, reasoningEffort } = await req.json();
+    const { text, imageBase64, imageMimeType, model, reasoningEffort, forceType } = await req.json();
+
+    // A told type is also a hint to the model: asked for hours, read the
+    // text as hours even where it reads like an offer, and the other way.
+    const toldType = forceType === "hours"
+      ? "\n\nTHE USER HAS SAID THIS IS A NOTE ABOUT HOURS ALREADY WORKED. Classify it as \"hours\" and fill hourUpdates, even if it reads like a future offer."
+      : forceType === "jobs"
+        ? "\n\nTHE USER HAS SAID THIS IS A JOB OFFER OR SCHEDULE. Classify it as \"jobs\" and fill jobs, even if it reads like a note about work already done."
+        : "";
 
     const chosenModel = model && (PARSER_MODELS as readonly string[]).includes(model) ? model : undefined;
     const chosenEffort = ["none","low","medium","high"].includes(reasoningEffort) ? reasoningEffort : undefined;
@@ -235,7 +243,7 @@ For each entry extract:
 EXAMPLE — recurring gym schedule (month calendar, MUST expand every occurrence):
   "Spin with Alex — Mon/Wed/Fri 6:00 AM, month of March 2026"
   → One entry per Mon/Wed/Fri in March 2026: title="Spin with Alex", startTime=06:00 AM,
-    notes="Instructor: Alex", one entry per date (e.g. 2026-03-02, 2026-03-04, 2026-03-06, ...)`;
+    notes="Instructor: Alex", one entry per date (e.g. 2026-03-02, 2026-03-04, 2026-03-06, ...)${toldType}`;
 
     const parsed = await callToolWithGateway(systemPrompt, userContent, {
       name: "import_data",
@@ -327,6 +335,14 @@ EXAMPLE — recurring gym schedule (month calendar, MUST expand every occurrence
     }, { model: chosenModel, reasoningEffort: chosenEffort as ReasoningEffort | undefined });
 
     if (!parsed.type) throw new Error("Failed to classify and parse");
+
+    // The user said what this is, so the classification is not a question.
+    // Guessing between a future offer and a note about hours already worked
+    // is the one call this gets wrong often enough to matter, and it is the
+    // one thing the person pasting always knows for certain.
+    if (forceType && parsed.type !== forceType) {
+      parsed.type = forceType;
+    }
 
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }

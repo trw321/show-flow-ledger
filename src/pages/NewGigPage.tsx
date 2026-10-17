@@ -3,7 +3,7 @@ import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { useData } from '@/lib/DataContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Upload, Loader2, Check, Plus, X, ChevronRight, ChevronDown, AlertTriangle, Trash2, Camera, PenLine, Phone, ChevronsUp } from 'lucide-react';
+import { Upload, Loader2, Check, Plus, X, ChevronRight, ChevronDown, AlertTriangle, Trash2, Camera, PenLine, Phone, ChevronsUp, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -376,7 +376,13 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
 
   // Levelling up has to pass the new setting in rather than rely on state,
   // which React hasn't committed yet when the retry fires.
-  const handleParse = async (override?: { model: string; effort: ReasoningEffort }) => {
+  /**
+   * What the pasted text is. Telling it beats guessing: the one call the
+   * classifier gets wrong often enough to matter is a future offer written
+   * casually, which reads a lot like a note about hours already worked — and
+   * the person pasting it always knows which it is.
+   */
+  const handleParse = async (override?: { model: string; effort: ReasoningEffort }, forceType?: 'jobs' | 'hours') => {
     if (!text.trim()) { toast.error('Paste dispatch text first'); return; }
     const useModel = override?.model ?? parserModel;
     const useEffort = override?.effort ?? parserEffort;
@@ -413,7 +419,7 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
       }
 
       setParseProgress('Classifying…');
-      const resp = await callAPI(`${supabaseUrl}/functions/v1/smart-import`, supabaseKey, { text, model: useModel, reasoningEffort: useEffort });
+      const resp = await callAPI(`${supabaseUrl}/functions/v1/smart-import`, supabaseKey, { text, model: useModel, reasoningEffort: useEffort, forceType });
       if (!resp.ok) throw new Error((await resp.json()).error || 'Failed to parse');
       const result = await resp.json();
 
@@ -506,6 +512,8 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
       }, 900);
     }
   };
+
+  const parseAs = (forceType: 'jobs' | 'hours') => handleParse(undefined, forceType);
 
   const handleImport = async () => {
     const toImport = jobs.filter((_, i) => selected.has(i));
@@ -929,6 +937,20 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
                   {isParsing
                     ? <><Loader2 size={13} className="animate-spin" />{parseProgress || 'Parsing…'}</>
                     : <><Upload size={13} />Parse</>}
+                </Button>
+                {/* Telling it beats guessing. A future offer written casually
+                    reads a lot like a note about hours already worked, and that
+                    is the one call the classifier gets wrong often enough to
+                    matter — while the person pasting always knows which it is. */}
+                <Button
+                  onClick={() => parseAs('hours')}
+                  disabled={isParsing || !text.trim()}
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 bg-background/40 border-border text-foreground/80 hover:bg-background/60 hover:text-foreground"
+                  title="A note about hours already worked, not an offer"
+                >
+                  <Clock size={13} /> Add hours
                 </Button>
                 <Button
                   onClick={() => fileInputRef.current?.click()}
