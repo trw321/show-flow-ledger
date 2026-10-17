@@ -133,6 +133,8 @@ export interface Employer {
   nightPremiumStartHour?: number; // 0-23, default 0 (midnight)
   nightPremiumEndHour?: number;   // 0-23, optional — undefined means "until end of shift"
   nightPremiumMultiplier?: number; // default 2.0
+  /** Employers like Odeum match into a retirement plan — a percentage of gross they owe on top of the pay, to the plan rather than to you. Tracked so a missing one is visible; never part of take-home. */
+  retirementMatchPercent?: number;
   /** Union hours "break the hour": any part of an hour worked bills as a whole hour, so 6h06m pays 7. Off by default — not every contract rounds. */
   roundUpToWholeHours?: boolean;
   /** Hours guaranteed after an off-the-clock meal before you can be sent home. Short of it, the difference is paid at straight time. IATSE-style 2 is typical. Undefined/0 = no such guarantee. */

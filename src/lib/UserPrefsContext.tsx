@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { EMPTY_PROFILE, type PayerProfile } from '@/lib/payerProfile';
 import { supabase } from '@/integrations/supabase/client';
 
 // Calendar/log/reconciliation/equipment/taxes/discover/scheduling used to be
@@ -13,6 +14,8 @@ export type WorkerType = 'w2' | '1099' | 'boss' | 'custom';
 export interface UserPrefs {
   workerType: WorkerType;
   tabs: Record<TabKey, boolean>;
+  /** Tax, exempt status and what each local charges — see payerProfile. */
+  payer: PayerProfile;
 }
 
 export const TAB_LABELS: Record<TabKey, { label: string; description: string }> = {
@@ -27,7 +30,7 @@ export const WORKER_PRESETS: Record<'w2' | '1099' | 'boss', Record<TabKey, boole
   boss:   { expenses: true,  income: true, payouts: true },
 };
 
-const DEFAULT_PREFS: UserPrefs = { workerType: '1099', tabs: WORKER_PRESETS['1099'] };
+const DEFAULT_PREFS: UserPrefs = { workerType: '1099', tabs: WORKER_PRESETS['1099'], payer: EMPTY_PROFILE };
 
 function prefsKey(uid?: string | null) {
   return uid ? `av-prefs-${uid}` : 'av-prefs';
@@ -41,6 +44,9 @@ function loadPrefs(uid?: string | null): UserPrefs {
     return {
       workerType: parsed.workerType ?? DEFAULT_PREFS.workerType,
       tabs: { ...DEFAULT_PREFS.tabs, ...parsed.tabs },
+      // Saved before the payer profile existed: start empty rather than
+      // undefined, so every reader can assume the shape is there.
+      payer: { ...EMPTY_PROFILE, ...(parsed.payer ?? {}) },
     };
   } catch {
     return DEFAULT_PREFS;
@@ -55,6 +61,7 @@ interface UserPrefsContextValue {
   prefs: UserPrefs;
   setWorkerType: (type: WorkerType) => void;
   setTabEnabled: (tab: TabKey, enabled: boolean) => void;
+  setPayer: (payer: PayerProfile) => void;
 }
 
 const UserPrefsContext = createContext<UserPrefsContextValue | null>(null);
@@ -84,18 +91,22 @@ export function UserPrefsProvider({ children }: { children: React.ReactNode }) {
 
   const setWorkerType = (type: WorkerType) => {
     const tabs = type === 'custom' ? prefs.tabs : WORKER_PRESETS[type as 'w2' | '1099' | 'boss'];
-    update({ workerType: type, tabs });
+    update({ ...prefs, workerType: type, tabs });
   };
+
+  // Your tax rate, whether the W2 was filed exempt, and what each local
+  // charges — see payerProfile for why these are not the employer's.
+  const setPayer = (payer: PayerProfile) => update({ ...prefs, payer });
 
   const setTabEnabled = (tab: TabKey, enabled: boolean) => {
     const next = { ...prefs.tabs, [tab]: enabled };
     // Reconciliation used to be its own tab and had to be kept in step with
     // income. It is a section inside Income now, so there is nothing to sync.
-    update({ workerType: 'custom', tabs: next });
+    update({ ...prefs, workerType: 'custom', tabs: next });
   };
 
   return (
-    <UserPrefsContext.Provider value={{ prefs, setWorkerType, setTabEnabled }}>
+    <UserPrefsContext.Provider value={{ prefs, setWorkerType, setTabEnabled, setPayer }}>
       {children}
     </UserPrefsContext.Provider>
   );

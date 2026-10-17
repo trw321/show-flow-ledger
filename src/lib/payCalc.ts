@@ -1,4 +1,5 @@
 import type { Job, Employer } from './store';
+import { ratesForShift, EMPTY_PROFILE, type PayerProfile } from './payerProfile';
 import { parseDayTimeline, POST_MEAL_MINIMUM_HOURS } from './dayTimeline';
 import { parseISO, differenceInCalendarDays, startOfDay, startOfWeek, endOfWeek } from 'date-fns';
 import { resolveEmployer } from './employerMatch';
@@ -300,11 +301,19 @@ export function isOverdueUpcoming(job: Job): boolean {
  * the union-dues feature require four separate edits to land everywhere.
  * New callers should use this instead of adding a fifth local copy.
  */
-export function jobPayBreakdown(job: Job, allJobs: Job[], employers: Employer[] = []): { gross: number; net: number; dues: number; tax: number; vacation: number } {
+export function jobPayBreakdown(
+  job: Job,
+  allJobs: Job[],
+  employers: Employer[] = [],
+  payer: PayerProfile = EMPTY_PROFILE,
+): { gross: number; net: number; dues: number; tax: number; vacation: number; retirementMatch: number } {
   const hours = effectiveHoursWorked(job);
-  if (!hours) return { gross: 0, net: 0, dues: 0, tax: 0, vacation: 0 };
+  if (!hours) return { gross: 0, net: 0, dues: 0, tax: 0, vacation: 0, retirementMatch: 0 };
   const rate = job.hourlyRate ?? 0;
   const employer = resolveEmployer(job.client, employers);
+  // Dues follow the local, tax follows you, and only what is left is the
+  // employer's to say. See payerProfile for why.
+  const rates = ratesForShift(job, employer, payer);
   const dayMult = getDayMultiplier(job.date, job.client, allJobs, job.has6th7thDayRule ?? false);
   const rawNightHours = ((employer?.nightPremiumEnabled ?? true) && job.startTime && job.endTime)
     ? calculateNightHours(job.startTime, job.endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour)
@@ -320,28 +329,34 @@ export function jobPayBreakdown(job: Job, allJobs: Job[], employers: Employer[] 
     dtMultiplier: employer?.doubletimeMultiplier,
     nightHours,
     nightMultiplier: employer?.nightPremiumMultiplier,
-    unionDuesPercent: employer?.unionDuesPercent,
-    estimatedTaxPercent: employer?.estimatedTaxPercent,
+    unionDuesPercent: rates.unionDuesPercent,
+    estimatedTaxPercent: rates.estimatedTaxPercent,
   });
   const weeklyBonus = employer ? calculateWeeklyOvertimeBonus(job, allJobs, employer) : 0;
   // totalPay already has dues+tax deducted — add them back to get gross-before-deductions.
   const gross = totalPay + duesAmount + taxAmount + weeklyBonus;
   const netBeforeVacation = totalPay + weeklyBonus;
-  const vacationPercent = employer?.vacationPercent ?? 0;
+  const vacationPercent = rates.vacationPercent ?? 0;
   // Vacation is a percentage of GROSS — 8% of what the work earned, before
   // dues and tax come off it. Taking it off the net understated it by however
   // much had already been deducted, which for 3.5% dues plus any tax is not a
   // rounding difference.
   const vacation = vacationPercent > 0 ? gross * (vacationPercent / 100) : 0;
   const net = netBeforeVacation + vacation;
+  // A retirement match is owed to the plan, not to you, so it is reported
+  // beside the pay rather than inside it — a missing one should be visible
+  // without ever being counted as take-home.
+  const retirementMatch = employer?.retirementMatchPercent
+    ? gross * (employer.retirementMatchPercent / 100)
+    : 0;
   // Deductions come back out individually so a pay stub can be reconciled
   // line by line, not just on the totals.
-  return { gross, net, dues: duesAmount, tax: taxAmount, vacation };
+  return { gross, net, dues: duesAmount, tax: taxAmount, vacation, retirementMatch };
 }
 
 /** Net pay only — see jobPayBreakdown for gross+net together. */
-export function jobGross(job: Job, allJobs: Job[], employers: Employer[] = []): number {
-  return jobPayBreakdown(job, allJobs, employers).net;
+export function jobGross(job: Job, allJobs: Job[], employers: Employer[] = [], payer?: PayerProfile): number {
+  return jobPayBreakdown(job, allJobs, employers, payer).net;
 }
 
 /**

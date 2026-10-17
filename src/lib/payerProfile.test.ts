@@ -77,3 +77,47 @@ describe('which source owns which number', () => {
     expect(r.vacationPercent).toBeUndefined();
   });
 });
+
+describe('the engine reads the right owner', () => {
+  const shift = {
+    id: 'j1', name: 'n', client: 'Blackpoint', date: '2026-09-10', local: 'ia16',
+    status: 'completed', hoursWorked: 8, hourlyRate: 50, has6th7thDayRule: false,
+  } as Job;
+  const blackpoint = {
+    id: 'e1', name: 'Blackpoint', overtimeRule: 'daily', createdAt: '2026-01-01',
+    unionDuesPercent: 99, estimatedTaxPercent: 99, vacationPercent: 99,
+  } as Employer;
+
+  it('prefers the local and you over whatever the employer holds', async () => {
+    const { jobPayBreakdown } = await import('./payCalc');
+    const b = jobPayBreakdown(shift, [shift], [blackpoint], profile);
+    expect(b.gross).toBe(400);
+    expect(b.dues).toBeCloseTo(400 * 0.035, 2);   // the local's 3.5%, not 99%
+    expect(b.vacation).toBeCloseTo(400 * 0.08, 2); // the local's 8%, not 99%
+  });
+
+  it('withholds nothing for an exempt W2, however the employer is set up', async () => {
+    const { jobPayBreakdown } = await import('./payCalc');
+    const b = jobPayBreakdown(shift, [shift], [blackpoint], { ...profile, taxExempt: true });
+    expect(b.tax).toBe(0);
+  });
+
+  it('reports an employer 401k match beside the pay, never inside it', async () => {
+    const { jobPayBreakdown } = await import('./payCalc');
+    const odeum = { ...blackpoint, name: 'Blackpoint', retirementMatchPercent: 6 } as Employer;
+    const withMatch = jobPayBreakdown(shift, [shift], [odeum], profile);
+    const without = jobPayBreakdown(shift, [shift], [blackpoint], profile);
+    expect(withMatch.retirementMatch).toBeCloseTo(400 * 0.06, 2);
+    // It is owed to the plan, so take-home must not move.
+    expect(withMatch.net).toBeCloseTo(without.net, 2);
+  });
+
+  it('keeps calculating an old ledger the same way', async () => {
+    const { jobPayBreakdown } = await import('./payCalc');
+    const legacy = { ...shift, local: undefined } as Job;
+    const old = { ...blackpoint, unionDuesPercent: 3.5, estimatedTaxPercent: 20, vacationPercent: 8 } as Employer;
+    const b = jobPayBreakdown(legacy, [legacy], [old], EMPTY_PROFILE);
+    expect(b.dues).toBeCloseTo(400 * 0.035, 2);
+    expect(b.vacation).toBeCloseTo(400 * 0.08, 2);
+  });
+});
