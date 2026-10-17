@@ -115,10 +115,18 @@ export function calculateDayPay(
     breakdown.push(`${mealMinutes}min meal on clock (no deduction)`);
   }
 
-  // Night hours can never exceed what was actually worked (padding-only hours
-  // beyond adjustedHours are never night-eligible), nor the billable total.
-  const nightHours = Math.max(0, Math.min(overtimeOptions?.nightHours ?? 0, adjustedHours, billableHours));
-  const ladderHours = billableHours - nightHours;
+  // Hours you were PAID for but did not work — the gap up to a minimum call,
+  // and anything a round-up added — are straight time. Overtime is for hours
+  // actually stood there: two hours worked against a twelve-hour minimum is
+  // twelve hours of straight time, not eight straight and four at time and a
+  // half. Only the worked hours go through the ladder; the padding is added
+  // flat afterwards.
+  const workedHours = Math.min(adjustedHours, billableHours);
+  const paddingHours = Math.max(0, billableHours - workedHours);
+  // Night hours can never exceed what was actually worked — padding is never
+  // night-eligible either, for the same reason.
+  const nightHours = Math.max(0, Math.min(overtimeOptions?.nightHours ?? 0, workedHours));
+  const ladderHours = workedHours - nightHours;
 
   let pay = 0;
 
@@ -148,6 +156,12 @@ export function calculateDayPay(
     breakdown.push(`${otThreshold}h straight × ${effectiveRate.toFixed(2)} = ${straightPay.toFixed(2)}`);
     breakdown.push(`${otHours}h OT × ${otRate.toFixed(2)} = ${otPay.toFixed(2)}`);
     breakdown.push(`${dtHours}h DT × ${dtRate.toFixed(2)} = ${dtPay.toFixed(2)}`);
+  }
+
+  if (paddingHours > 0) {
+    const padPay = paddingHours * effectiveRate;
+    pay += padPay;
+    breakdown.push(`${paddingHours}h minimum-call padding × $${effectiveRate.toFixed(2)} = $${padPay.toFixed(2)}`);
   }
 
   if (nightHours > 0) {
@@ -324,8 +338,15 @@ export function jobPayBreakdown(
       effectiveHoursWorked(other) > 0,
   );
   const isSplitDay = dayShifts.length > 1;
-  const dayHours = isSplitDay ? dayShifts.reduce((sum, j) => sum + effectiveHoursWorked(j), 0) : hours;
-  const share = isSplitDay && dayHours > 0 ? hours / dayHours : 1;
+  // Each side of a split carries its own minimum call — four or five hours a
+  // half — so a short morning bills its minimum rather than the hours stood
+  // there. The minimums are applied FIRST, per side, and the day's overtime
+  // then runs over what that comes to.
+  const billable = (j: Job) => Math.max(effectiveHoursWorked(j), j.minimumHours ?? 0);
+  const dayHours = isSplitDay
+    ? dayShifts.reduce((sum, j) => sum + billable(j), 0)
+    : hours;
+  const share = isSplitDay && dayHours > 0 ? billable(job) / dayHours : 1;
   const employer = resolveEmployer(job.client, employers);
   // Dues follow the local, tax follows you, and only what is left is the
   // employer's to say. See payerProfile for why.
@@ -350,7 +371,10 @@ export function jobPayBreakdown(
       }, 0)
     : nightHours;
 
-  const dayResult = calculateDayPay(dayHours, rate, job.minimumHours ?? 0, dayPenalties, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock, offClockMinutesTotal: dayMealMinutes }, {
+  // On a split the minimums are already in dayHours, one per side; applying
+  // the shift's own minimum again here would floor the whole day at it.
+  const dayMinimum = isSplitDay ? 0 : (job.minimumHours ?? 0);
+  const dayResult = calculateDayPay(dayHours, rate, dayMinimum, dayPenalties, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock, offClockMinutesTotal: dayMealMinutes }, {
     rule: employer?.overtimeRule ?? 'daily',
     otThresholdHours: employer?.dailyOvertimeThresholdHours,
     dtThresholdHours: employer?.dailyDoubletimeThresholdHours,

@@ -439,3 +439,23 @@ describe('vacation pay', () => {
     expect(jobPayBreakdown(shift, [shift], [employer({ vacationPercent: undefined })]).vacation).toBe(0);
   });
 });
+
+describe('minimum-call padding is straight time', () => {
+  it('does not pay overtime on hours nobody worked', () => {
+    // 2h actually worked against a 12h minimum. The 10h of padding is money
+    // for not being there — it cannot be overtime.
+    const r = calculateDayPay(2, 50, 12, 0, 1);
+    expect(r.billableHours).toBe(12);
+    expect(r.totalPay).toBe(12 * 50);
+  });
+
+  it('still pays overtime on hours that were worked', () => {
+    // 10h worked against a 12h minimum: 8 straight, 2 at OT, then 2 padding.
+    const r = calculateDayPay(10, 50, 12, 0, 1);
+    expect(r.totalPay).toBe(8 * 50 + 2 * 75 + 2 * 50);
+  });
+
+  it('leaves a day with no minimum exactly as it was', () => {
+    expect(calculateDayPay(10, 50, 0, 0, 1).totalPay).toBe(8 * 50 + 2 * 75);
+  });
+});

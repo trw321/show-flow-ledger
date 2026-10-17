@@ -152,3 +152,41 @@ describe('a split day is one day for overtime', () => {
     expect(jobPayBreakdown(only, [only], [], EMPTY_PROFILE).gross).toBe(8 * 50 + 2 * 75);
   });
 });
+
+describe('each side of a split keeps its own minimum call', () => {
+  const side = (id: string, hours: number, minimum = 4): Job => ({
+    id, name: 'Masonic', client: 'Acme', date: '2026-09-10', jobNumber: '2026-5000',
+    status: 'completed', hoursWorked: hours, minimumHours: minimum, hourlyRate: 50,
+    has6th7thDayRule: false,
+  } as Job);
+
+  it('bills a short morning at its minimum, not the hours stood there', async () => {
+    const { jobPayBreakdown } = await import('./payCalc');
+    // 3h worked against a 4h minimum, then 5h at night: 4 + 5 = 9 billable.
+    const day = [side('a', 3), side('b', 5)];
+    const total = day.reduce((sum, j) => sum + jobPayBreakdown(j, day, [], EMPTY_PROFILE).gross, 0);
+    expect(total).toBeCloseTo(8 * 50 + 1 * 75, 2);
+  });
+
+  it('applies the minimum once per side, never to the whole day', async () => {
+    const { jobPayBreakdown } = await import('./payCalc');
+    // Two 5h halves against a 5h minimum is 10 billable, not floored at 5.
+    const day = [side('a', 5, 5), side('b', 5, 5)];
+    const total = day.reduce((sum, j) => sum + jobPayBreakdown(j, day, [], EMPTY_PROFILE).gross, 0);
+    expect(total).toBeCloseTo(8 * 50 + 2 * 75, 2);
+  });
+
+  it('pays a short half its minimum even when the other half is long', async () => {
+    const { jobPayBreakdown } = await import('./payCalc');
+    const day = [side('a', 1), side('b', 8)];
+    const short = jobPayBreakdown(day[0], day, [], EMPTY_PROFILE).gross;
+    // One hour worked, four hours owed — that is the point of a minimum.
+    expect(short).toBeGreaterThan(1 * 50);
+  });
+
+  it('leaves a single shift minimum working as it always did', async () => {
+    const { jobPayBreakdown } = await import('./payCalc');
+    const only = side('a', 2, 5);
+    expect(jobPayBreakdown(only, [only], [], EMPTY_PROFILE).gross).toBe(5 * 50);
+  });
+});
