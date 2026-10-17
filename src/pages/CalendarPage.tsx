@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react';
+import { isCallbackShift } from '@/lib/hoursMatching';
 import { projectSiblingsToRelabel } from '@/lib/projectGrouping';
 import StubEditor from '@/components/StubEditor';
 import { useNeedsHours } from '@/lib/useNeedsHours';
@@ -156,6 +157,20 @@ function planColor(title: string): string {
   let hash = 0;
   for (let i = 0; i < title.length; i++) hash = (hash * 31 + title.charCodeAt(i)) >>> 0;
   return `hsl(${PLAN_HUES[hash % PLAN_HUES.length]} 75% 58%)`;
+}
+
+/**
+ * A callback — a second call on a day already worked, or a later day of a run.
+ * Worth seeing at a glance: it starts at its own time and it is the one the
+ * hours note is most likely to disagree with.
+ */
+function CallbackMark({ job }: { job: Job }) {
+  if (!isCallbackShift(job)) return null;
+  return (
+    <span role="img" aria-label="Callback" title="Callback" className="text-[11px] leading-none select-none">
+      ☎️
+    </span>
+  );
 }
 
 function StubMark({ hasStub }: { hasStub: boolean }) {
@@ -953,7 +968,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
 
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Clocked hours</label>
+              <label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <CallbackMark job={job} />Clocked hours
+              </label>
               <Input type="number" min="0" step="0.5" value={hoursWorked} onChange={e => handleHoursWorkedChange(e.target.value)} placeholder="e.g. 8" className="h-9 text-sm text-mono" />
               {/* The box holds the clocked span, because that is what gets saved and
                   what calculateDayPay expects. The number that matters when you are
@@ -2002,7 +2019,7 @@ export default function CalendarPage() {
                   return (
                     <div key={job.id} onClick={() => setSelectedJobId(job.id)} className={cn("rounded-md border p-3 space-y-1 cursor-pointer hover:opacity-90 transition-opacity", paid ? "bg-success/20 text-success border-success/30" : overdue ? "bg-warning/20 text-warning border-warning/30" : statusColors[job.status])}>
                       <div className="flex items-start justify-between">
-                        <div><p className="font-medium text-sm">{job.name}</p><p className="text-xs opacity-70">{job.client}</p></div>
+                        <div><p className="font-medium text-sm flex items-center gap-1.5"><CallbackMark job={job} />{job.name}</p><p className="text-xs opacity-70">{job.client}</p></div>
                         <span className="text-[10px] text-mono uppercase font-medium opacity-70">{paid ? 'Paid' : overdue ? 'Needs Hours' : job.status}</span>
                       </div>
                       {job.venue && <p className="text-xs opacity-60">{job.venue}</p>}
@@ -2224,7 +2241,7 @@ export default function CalendarPage() {
                             onClick={() => openJob(job)}
                             className="px-3 py-2 pl-6 flex items-center justify-between gap-2 cursor-pointer hover:bg-primary/10 active:bg-primary/15 transition-colors"
                           >
-                            <span className="text-xs text-mono">{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}</span>
+                            <span className="text-xs text-mono flex items-center gap-1.5"><CallbackMark job={job} />{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}</span>
                             <span className="flex items-center gap-1.5 text-[11px] text-mono text-muted-foreground">
                               {netHoursWorked(job) > 0 ? `${netHoursWorked(job)}h` : isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
                               {job.startTime && !job.endTime && <span className="text-warning"> · no end time</span>}

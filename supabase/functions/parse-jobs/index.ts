@@ -66,6 +66,13 @@ LAYOUT C — IATSE 8 app offer card ("Confirm" / "Timestamp:" at the top, one
 FIELD MAPPINGS:
 - Job Number → jobNumber (YYYY-NNNN format, e.g. "2026-0929")
 - Start Date line → date (YYYY-MM-DD) AND startTime. 2-digit year "3/17/26" = 2026-03-17. NEVER use today's date.
+- END DATE IS THE SPAN OF THE PROJECT, NOT THE END OF ONE SHIFT. A start date of
+  10/13/26 with an end date of 10/14/26 is TWO days of work — the 13th and the
+  14th — and the later days are callbacks. Output one entry per day in the range,
+  every one carrying the same jobNumber, employer, venue, skill and rate, and the
+  same startTime unless a day states its own. Nobody is booked for 24 hours
+  straight, so never read a later end date as one long shift. An end date equal
+  to the start date, or absent, is a single day. An end date ADDS days; it never merges calls that are already separate on a single day — a same-day "CB 10P" is still two entries on that date, and a span simply repeats that pattern across the range.
 - Employer → client
 - Payroll Co. → payrollCompany
 - Job Site → venue. The NAME of the place only — "PIER 80", "FROST AMPHITHEATER", "CHASE CENTER".

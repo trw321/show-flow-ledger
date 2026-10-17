@@ -60,11 +60,23 @@ LAYOUT A — tab-separated (desktop copy/paste):
 
   Line Notes may span multiple lines before the first tab-separated data.
 
-LAYOUT B — labeled card (mobile screenshot):
-  Labels appear as section headers (JOB, START DATE, START TIME, SKILL, RATE, SITE,
-  STEWARD, REPORT TO LOCATION, LINE NOTES) with values directly below them.
+LAYOUT B — labeled card (mobile screenshot or the local's web portal):
+  Labels appear as headers (JOB, START DATE, START TIME, END DATE, SKILL, RATE,
+  SITE, STEWARD, REPORT TO LOCATION, LINE NOTES) with values directly below or
+  beside them, as a card or as a table.
   The JOB card contains: [YYYY-NNNN job number] on one line, [Employer name] on following lines.
   Multiple cards may appear in a single screenshot.
+
+  END DATE IS THE SPAN OF THE PROJECT, NOT THE END OF ONE SHIFT. A start date
+  of 10/13/26 with an end date of 10/14/26 is TWO days of work — the 13th and
+  the 14th — and the later days are callbacks. Output one entry per day in the
+  range, every one carrying the same jobNumber, the same employer, venue, skill
+  and rate, and the same startTime unless a day states its own.
+  Nobody is booked for 24 hours straight, so never read a later end date as one
+  long shift. When the end date equals the start date, or there is none, it is
+  a single day. An end date ADDS days; it never merges calls that are already
+  separate on a single day — a same-day "CB 10P" is still two entries on that
+  date, and a span simply repeats that pattern across the range.
 
 
 LAYOUT C — IATSE 8 app offer card ("Confirm" / "Timestamp:" at the top, one

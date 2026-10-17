@@ -1,0 +1,23 @@
+{
+  "name": "IATSE 16 portal — END DATE is how many days the project spans",
+  "note": "An end date later than the start date means the project runs those days and the later ones are callbacks. It is never one 24-hour shift — nobody is booked for that. The parser used to read only the start date and drop the second day entirely.",
+  "input": "Job Offer\nAccept\tDecline\nJOB\tSTART DATE\tSTART TIME\tEND DATE\n2026-3224 LIVE BOX DIGITAL LLC\t10/13/26\t07:00 AM\t10/14/26\nSKILL\tRATE\tSITE\nT ELEC X\t57.39\tPALACE HOTEL\nSTEWARD\tRESPOND BY\n\tAnytime",
+  "expect": [
+    {
+      "jobNumber": "2026-3224",
+      "date": "2026-10-13",
+      "startTime": "07:00 AM",
+      "client": "LIVE BOX DIGITAL LLC",
+      "venue": "PALACE HOTEL",
+      "hourlyRate": 57.39
+    },
+    {
+      "jobNumber": "2026-3224",
+      "date": "2026-10-14",
+      "startTime": "07:00 AM",
+      "client": "LIVE BOX DIGITAL LLC",
+      "venue": "PALACE HOTEL",
+      "hourlyRate": 57.39
+    }
+  ]
+}
