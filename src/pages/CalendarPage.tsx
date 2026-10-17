@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react';
+import { sameProject } from '@/lib/projectGrouping';
 import { isCallbackShift } from '@/lib/hoursMatching';
 import { projectSiblingsToRelabel } from '@/lib/projectGrouping';
 import StubEditor from '@/components/StubEditor';
@@ -168,7 +169,28 @@ function CallbackMark({ job }: { job: Job }) {
   if (!isCallbackShift(job)) return null;
   return (
     <span role="img" aria-label="Callback" title="Callback" className="text-[11px] leading-none select-none">
-      ☎️
+      📞
+    </span>
+  );
+}
+
+/**
+ * One of two calls on the same day for the same project — a split shift. The
+ * day's two halves are stored as separate shifts, which without this reads as
+ * two unrelated calls that happen to share a date. It matters because the
+ * turnaround between them is unpaid and the pay engine treats the day as one.
+ */
+function SplitMark({ job, allJobs }: { job: Job; allJobs: Job[] }) {
+  const isSplit = allJobs.some(
+    other => other.id !== job.id && other.date === job.date && sameProject(other, job),
+  );
+  if (!isSplit) return null;
+  return (
+    <span
+      title="Split shift — another call the same day"
+      className="text-[9px] text-mono font-bold uppercase tracking-wider text-warning"
+    >
+      split
     </span>
   );
 }
@@ -969,7 +991,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <CallbackMark job={job} />Clocked hours
+                <CallbackMark job={job} />Clocked hours<SplitMark job={job} allJobs={data.jobs} />
               </label>
               <Input type="number" min="0" step="0.5" value={hoursWorked} onChange={e => handleHoursWorkedChange(e.target.value)} placeholder="e.g. 8" className="h-9 text-sm text-mono" />
               {/* The box holds the clocked span, because that is what gets saved and
@@ -2019,7 +2041,7 @@ export default function CalendarPage() {
                   return (
                     <div key={job.id} onClick={() => setSelectedJobId(job.id)} className={cn("rounded-md border p-3 space-y-1 cursor-pointer hover:opacity-90 transition-opacity", paid ? "bg-success/20 text-success border-success/30" : overdue ? "bg-warning/20 text-warning border-warning/30" : statusColors[job.status])}>
                       <div className="flex items-start justify-between">
-                        <div><p className="font-medium text-sm flex items-center gap-1.5"><CallbackMark job={job} />{job.name}</p><p className="text-xs opacity-70">{job.client}</p></div>
+                        <div><p className="font-medium text-sm flex items-center gap-1.5"><CallbackMark job={job} />{job.name}<SplitMark job={job} allJobs={data.jobs} /></p><p className="text-xs opacity-70">{job.client}</p></div>
                         <span className="text-[10px] text-mono uppercase font-medium opacity-70">{paid ? 'Paid' : overdue ? 'Needs Hours' : job.status}</span>
                       </div>
                       {job.venue && <p className="text-xs opacity-60">{job.venue}</p>}
@@ -2241,7 +2263,7 @@ export default function CalendarPage() {
                             onClick={() => openJob(job)}
                             className="px-3 py-2 pl-6 flex items-center justify-between gap-2 cursor-pointer hover:bg-primary/10 active:bg-primary/15 transition-colors"
                           >
-                            <span className="text-xs text-mono flex items-center gap-1.5"><CallbackMark job={job} />{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}</span>
+                            <span className="text-xs text-mono flex items-center gap-1.5"><CallbackMark job={job} />{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}<SplitMark job={job} allJobs={data.jobs} /></span>
                             <span className="flex items-center gap-1.5 text-[11px] text-mono text-muted-foreground">
                               {netHoursWorked(job) > 0 ? `${netHoursWorked(job)}h` : isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
                               {job.startTime && !job.endTime && <span className="text-warning"> · no end time</span>}

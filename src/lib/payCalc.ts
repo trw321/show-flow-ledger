@@ -310,6 +310,22 @@ export function jobPayBreakdown(
   const hours = effectiveHoursWorked(job);
   if (!hours) return { gross: 0, net: 0, dues: 0, tax: 0, vacation: 0, retirementMatch: 0 };
   const rate = job.hourlyRate ?? 0;
+
+  // A split day is ONE day. Both halves share the same overtime ladder, so the
+  // evening call carries on from where the morning left off — five hours and
+  // five hours is a ten-hour day with two of them at time and a half, not two
+  // five-hour days at straight time. Pay is worked out for the whole day and
+  // this shift takes its share by hours, which is also what keeps the parts
+  // adding up to the day.
+  const dayShifts = allJobs.filter(
+    other =>
+      other.date === job.date &&
+      (other.client ?? '') === (job.client ?? '') &&
+      effectiveHoursWorked(other) > 0,
+  );
+  const isSplitDay = dayShifts.length > 1;
+  const dayHours = isSplitDay ? dayShifts.reduce((sum, j) => sum + effectiveHoursWorked(j), 0) : hours;
+  const share = isSplitDay && dayHours > 0 ? hours / dayHours : 1;
   const employer = resolveEmployer(job.client, employers);
   // Dues follow the local, tax follows you, and only what is left is the
   // employer's to say. See payerProfile for why.
@@ -319,7 +335,22 @@ export function jobPayBreakdown(
     ? calculateNightHours(job.startTime, job.endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour)
     : 0;
   const nightHours = resolveConfirmedNightHours(rawNightHours, job.nightPremiumConfirmed, job.nightPremiumActualHours);
-  const { totalPay, duesAmount, taxAmount } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock, offClockMinutesTotal: offClockMealMinutes(job) }, {
+  const dayMealMinutes = isSplitDay
+    ? dayShifts.reduce((sum, j) => sum + offClockMealMinutes(j), 0)
+    : offClockMealMinutes(job);
+  const dayPenalties = isSplitDay
+    ? dayShifts.reduce((sum, j) => sum + (j.mealPenalties ?? 0), 0)
+    : (job.mealPenalties ?? 0);
+  const dayNightHours = isSplitDay
+    ? dayShifts.reduce((sum, j) => {
+        const raw = ((employer?.nightPremiumEnabled ?? true) && j.startTime && j.endTime)
+          ? calculateNightHours(j.startTime, j.endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour)
+          : 0;
+        return sum + resolveConfirmedNightHours(raw, j.nightPremiumConfirmed, j.nightPremiumActualHours);
+      }, 0)
+    : nightHours;
+
+  const dayResult = calculateDayPay(dayHours, rate, job.minimumHours ?? 0, dayPenalties, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock, offClockMinutesTotal: dayMealMinutes }, {
     rule: employer?.overtimeRule ?? 'daily',
     otThresholdHours: employer?.dailyOvertimeThresholdHours,
     dtThresholdHours: employer?.dailyDoubletimeThresholdHours,
@@ -327,11 +358,15 @@ export function jobPayBreakdown(
     roundUpToWholeHours: employer?.roundUpToWholeHours,
     postMealPaddingHours: postMealPaddingHours(job, employer),
     dtMultiplier: employer?.doubletimeMultiplier,
-    nightHours,
+    nightHours: dayNightHours,
     nightMultiplier: employer?.nightPremiumMultiplier,
     unionDuesPercent: rates.unionDuesPercent,
     estimatedTaxPercent: rates.estimatedTaxPercent,
   });
+  // This shift's portion of the day, by hours.
+  const totalPay = dayResult.totalPay * share;
+  const duesAmount = dayResult.duesAmount * share;
+  const taxAmount = dayResult.taxAmount * share;
   const weeklyBonus = employer ? calculateWeeklyOvertimeBonus(job, allJobs, employer) : 0;
   // totalPay already has dues+tax deducted — add them back to get gross-before-deductions.
   const gross = totalPay + duesAmount + taxAmount + weeklyBonus;

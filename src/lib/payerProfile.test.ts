@@ -121,3 +121,34 @@ describe('the engine reads the right owner', () => {
     expect(b.vacation).toBeCloseTo(400 * 0.08, 2);
   });
 });
+
+describe('a split day is one day for overtime', () => {
+  const half = (id: string, hours: number): Job => ({
+    id, name: 'Masonic', client: 'Acme', date: '2026-09-10', jobNumber: '2026-5000',
+    status: 'completed', hoursWorked: hours, hourlyRate: 50, has6th7thDayRule: false,
+  } as Job);
+
+  it('bills the second half into overtime, not back at straight time', async () => {
+    const { jobPayBreakdown } = await import('./payCalc');
+    // 5h in the morning and 5h at night is a 10-hour day: 8 straight, 2 at OT.
+    const day = [half('a', 5), half('b', 5)];
+    const total = day.reduce((sum, j) => sum + jobPayBreakdown(j, day, [], EMPTY_PROFILE).gross, 0);
+    expect(total).toBe(8 * 50 + 2 * 75);
+  });
+
+  it('does not invent overtime on two unrelated shifts the same day', async () => {
+    const { jobPayBreakdown } = await import('./payCalc');
+    // Different employers, so each is its own day's work.
+    const a = half('a', 5);
+    const b = { ...half('b', 5), client: 'Other', jobNumber: '2026-6000' } as Job;
+    const total = jobPayBreakdown(a, [a, b], [], EMPTY_PROFILE).gross
+      + jobPayBreakdown(b, [a, b], [], EMPTY_PROFILE).gross;
+    expect(total).toBe(10 * 50);
+  });
+
+  it('leaves an ordinary single shift exactly as it was', async () => {
+    const { jobPayBreakdown } = await import('./payCalc');
+    const only = half('a', 10);
+    expect(jobPayBreakdown(only, [only], [], EMPTY_PROFILE).gross).toBe(8 * 50 + 2 * 75);
+  });
+});
