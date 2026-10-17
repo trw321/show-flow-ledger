@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import TaxAndLocalsSettings from '@/components/TaxAndLocalsSettings';
 import ThemePicker from '@/components/ThemePicker';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -62,9 +63,10 @@ interface EmployerFormState {
   unionLocal: string;
   estimatedTaxPercent: string;
   vacationPercent: string;
+  retirementMatchPercent: string;
 }
 
-const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '', nightPremiumEnabled: true, unionDuesPercent: '', unionLocal: '', estimatedTaxPercent: '', vacationPercent: '' };
+const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '', nightPremiumEnabled: true, unionDuesPercent: '', unionLocal: '', estimatedTaxPercent: '', vacationPercent: '', retirementMatchPercent: '' };
 
 function employerToForm(e: Employer): EmployerFormState {
   return {
@@ -78,6 +80,7 @@ function employerToForm(e: Employer): EmployerFormState {
     unionLocal: e.unionLocal ?? '',
     estimatedTaxPercent: e.estimatedTaxPercent?.toString() ?? '',
     vacationPercent: e.vacationPercent?.toString() ?? '',
+    retirementMatchPercent: e.retirementMatchPercent?.toString() ?? '',
   };
 }
 
@@ -171,6 +174,16 @@ function EmployerForm({ initial, onSave, onCancel }: {
           onChange={e => setForm(f => ({ ...f, vacationPercent: e.target.value }))}
           className="h-8 text-xs"
           title="Vacation/fringe pay added on top of gross — leave blank if this employer doesn't pay it"
+        />
+        <Input
+          type="number"
+          step="0.1"
+          min="0"
+          placeholder="401k match % (e.g. 6)"
+          value={form.retirementMatchPercent}
+          onChange={e => setForm(f => ({ ...f, retirementMatchPercent: e.target.value }))}
+          className="h-8 text-xs"
+          title="A percentage of gross this employer owes into your retirement plan. Owed to the plan, not to you, so it never counts as take-home — tracked so a missing one is visible."
         />
       </div>
       <div className="flex gap-2 justify-end pt-1">
@@ -368,6 +381,7 @@ export default function SettingsPage() {
       unionLocal: form.unionLocal.trim() || undefined,
       estimatedTaxPercent: form.estimatedTaxPercent ? parseFloat(form.estimatedTaxPercent) : undefined,
       vacationPercent: form.vacationPercent ? parseFloat(form.vacationPercent) : undefined,
+      retirementMatchPercent: form.retirementMatchPercent ? parseFloat(form.retirementMatchPercent) : undefined,
     });
     setAddingEmployer(false);
   };
@@ -386,6 +400,7 @@ export default function SettingsPage() {
       unionLocal: form.unionLocal.trim() || undefined,
       estimatedTaxPercent: form.estimatedTaxPercent ? parseFloat(form.estimatedTaxPercent) : undefined,
       vacationPercent: form.vacationPercent ? parseFloat(form.vacationPercent) : undefined,
+      retirementMatchPercent: form.retirementMatchPercent ? parseFloat(form.retirementMatchPercent) : undefined,
     });
     setEditingEmployerId(null);
   };
@@ -398,6 +413,8 @@ export default function SettingsPage() {
       <AccountSection />
 
       <ThemePicker />
+
+      <TaxAndLocalsSettings />
 
       {/* Worker profile */}
       <section>

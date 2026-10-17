@@ -3,7 +3,7 @@ import { normaliseLocal, findLocalRates, ratesForShift, EMPTY_PROFILE, type Paye
 import type { Employer, Job } from './store';
 
 const profile: PayerProfile = {
-  estimatedTaxPercent: 22,
+  tax: { federalEffectivePercent: 22 },
   locals: [
     { local: 'ia16', unionDuesPercent: 3.5, vacationPercent: 8 },
     { local: 'ia8', unionDuesPercent: 4 },
@@ -56,7 +56,7 @@ describe('which source owns which number', () => {
   });
 
   it('withholds nothing when the W2 was filed exempt', () => {
-    const exempt = { ...profile, taxExempt: true };
+    const exempt = { ...profile, tax: { ...profile.tax, federalExempt: true } };
     expect(ratesForShift(job({ local: 'ia16' }), employer(), exempt).estimatedTaxPercent).toBe(0);
   });
 
@@ -98,7 +98,7 @@ describe('the engine reads the right owner', () => {
 
   it('withholds nothing for an exempt W2, however the employer is set up', async () => {
     const { jobPayBreakdown } = await import('./payCalc');
-    const b = jobPayBreakdown(shift, [shift], [blackpoint], { ...profile, taxExempt: true });
+    const b = jobPayBreakdown(shift, [shift], [blackpoint], { ...profile, tax: { ...profile.tax, federalExempt: true } });
     expect(b.tax).toBe(0);
   });
 

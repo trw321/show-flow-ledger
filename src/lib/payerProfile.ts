@@ -1,4 +1,5 @@
 import type { Employer, Job } from '@/lib/store';
+import type { TaxProfile } from '@/lib/taxEstimate';
 
 /**
  * Who sets which number.
@@ -26,10 +27,8 @@ export interface LocalRates {
 
 /** Numbers that follow you rather than any employer or local. */
 export interface PayerProfile {
-  /** Your own bracket-and-state estimate. One number, not one per employer. */
-  estimatedTaxPercent?: number;
-  /** W2 filed as exempt — nothing is withheld, and that should be visible. */
-  taxExempt?: boolean;
+  /** Filing status, dependents, state, exempt — see taxEstimate. */
+  tax?: TaxProfile;
   locals: LocalRates[];
 }
 
@@ -64,9 +63,11 @@ export function ratesForShift(
   return {
     unionDuesPercent: fromLocal?.unionDuesPercent ?? employer?.unionDuesPercent,
     vacationPercent: fromLocal?.vacationPercent ?? employer?.vacationPercent,
-    // Exempt means nothing is withheld, whatever the estimate says.
-    estimatedTaxPercent: profile.taxExempt
+    // Exempt stops federal income tax withholding. It does not stop Social
+    // Security or Medicare — those are not modelled per shift, they are in
+    // the year-end estimate, which says so plainly.
+    estimatedTaxPercent: profile.tax?.federalExempt
       ? 0
-      : profile.estimatedTaxPercent ?? employer?.estimatedTaxPercent,
+      : profile.tax?.federalEffectivePercent ?? employer?.estimatedTaxPercent,
   };
 }
