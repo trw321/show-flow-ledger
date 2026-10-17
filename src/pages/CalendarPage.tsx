@@ -587,10 +587,14 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     if (client.trim() !== (job.client ?? '')) updates.client = client.trim();
     if (startTime !== (job.startTime ?? '')) updates.startTime = startTime || undefined;
     if (endTime !== (job.endTime ?? '')) updates.endTime = endTime || undefined;
+    const isFuture = job.date > new Date().toISOString().slice(0, 10);
     if (hoursWorked !== (job.hoursWorked?.toString() ?? '')) {
       const entered = parseFloat(hoursWorked);
       updates.hoursWorked = entered > 0 ? entered : undefined;
-      if (entered > 0) updates.status = 'completed';
+      // Filling in hours ahead of the day does not make the shift completed —
+      // it has not happened. It stays upcoming until the day arrives and the
+      // shift is confirmed, which is what clears hoursPlanned.
+      if (entered > 0 && !isFuture) updates.status = 'completed';
     }
     if (hourlyRate !== (job.hourlyRate?.toString() ?? '')) updates.hourlyRate = rate > 0 ? rate : undefined;
     if (minimumHours !== (job.minimumHours?.toString() ?? '')) {
@@ -605,12 +609,14 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     if (timelineToSave && JSON.stringify(gapsOnClock) !== JSON.stringify(job.callGapsOnClock ?? [])) updates.callGapsOnClock = gapsOnClock;
     // The spread is what gets stored, so every reader outside this dialog sees a
     // clocked figure it already knows how to handle.
-    if (timeline) updates.hoursWorked = timeline.spreadHours;
+    if (timeline) {
+      updates.hoursWorked = timeline.spreadHours;
+      if (!isFuture) updates.status = 'completed';
+    }
     if (needsReview !== (job.needsReview ?? false)) updates.needsReview = needsReview || undefined;
     // Hours put in before the day are a plan. They stay one until the shift is
     // confirmed, so filling in a schedule early never turns itself into a
     // timesheet when the date rolls past.
-    const isFuture = job.date > new Date().toISOString().slice(0, 10);
     if (isFuture && (actualHours > 0 || timeline)) updates.hoursPlanned = true;
     if (meal2Duration !== (job.meal2Duration ?? undefined)) updates.meal2Duration = meal2Duration;
     if (meal2Duration && meal2OnClock !== (job.meal2OnClock ?? false)) updates.meal2OnClock = meal2OnClock;
