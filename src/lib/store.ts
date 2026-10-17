@@ -195,6 +195,21 @@ function migrateJob(job: Job & { mealType?: 'YWA' | 'NWA' }): Job {
     else if (job.mealType === 'NWA') { job.mealDuration = 30; job.mealOnClock = true; }
   }
   delete job.mealType;
+
+  // Logging hours used to mark a shift completed whatever its date, so shifts
+  // booked for days that have not happened are sitting in old ledgers reading
+  // as done — and done is what the dot, the card wash and the label all key
+  // off, so they look finished and settled. Put them back to upcoming, and
+  // mark the hours as the plan they always were.
+  //
+  // Only ever touches a FUTURE date. A past shift marked completed is just a
+  // shift that was worked, and is left alone.
+  const today = new Date().toISOString().slice(0, 10);
+  if (job.date > today && job.status === 'completed') {
+    job.status = 'upcoming';
+    if (job.hoursWorked && job.hoursPlanned === undefined) job.hoursPlanned = true;
+  }
+
   return job;
 }
 
@@ -370,3 +385,6 @@ export function useAppData(_userId: string | null) {
     addEvent, updateEvent, deleteEvent,
   };
 }
+
+/** Load-time repairs, reachable from tests without exporting them generally. */
+export const __testables = { migrateJob };
