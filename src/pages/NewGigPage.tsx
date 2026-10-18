@@ -1,4 +1,5 @@
 import { Calendar } from '@/components/ui/calendar';
+import { logParseFailure } from '@/lib/parseFailures';
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { useData } from '@/lib/DataContext';
 import { Button } from '@/components/ui/button';
@@ -434,6 +435,14 @@ export default function NewGigPage({ onComplete, startAs }: {
         setVortexPhase('pulling');
       } else finishJobsParse(result.jobs || []);
     } catch (err) {
+      void logParseFailure({
+        source: 'smart-import',
+        kind: 'error',
+        inputText: text,
+        model: useModel,
+        effort: useEffort,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
       toast.error(err instanceof Error ? err.message : 'Failed to parse');
       setVortexPhase('pulling');
     } finally {
@@ -518,6 +527,27 @@ export default function NewGigPage({ onComplete, startAs }: {
   };
 
   const parseAs = (forceType: 'jobs' | 'hours') => handleParse(undefined, forceType);
+
+  /**
+   * Asked for again, harder. Reaching for this means the first answer was
+   * wrong, which is worth recording even though nothing threw — a wrong
+   * answer that looks fine is the kind that costs a shift.
+   */
+  const retryHarder = () => {
+    if (!upLevel) return;
+    void logParseFailure({
+      source: 'smart-import',
+      kind: 'retry',
+      inputText: text,
+      model: parserModel,
+      effort: parserEffort,
+      resultCount: jobs.length || hoursResults.length || events.length,
+    });
+    setParserModel(upLevel.model);
+    setParserEffort(upLevel.effort);
+    saveParserChoice(upLevel.model, upLevel.effort);
+    handleParse({ model: upLevel.model, effort: upLevel.effort });
+  };
 
   const handleImport = async () => {
     const toImport = jobs.filter((_, i) => selected.has(i));
@@ -997,50 +1027,28 @@ export default function NewGigPage({ onComplete, startAs }: {
               {/* Which model reads the offer. Only the models that can actually
                   return a strict tool call are listed — most of the ~130 the
                   API exposes are speech or image models. */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <select
-                  value={parserModel}
-                  onChange={e => { setParserModel(e.target.value); saveParserChoice(e.target.value, parserEffort); }}
-                  disabled={isParsing}
-                  aria-label="Parsing model"
-                  className="bg-background/40 border border-border rounded-md px-2 py-1 text-[10px] text-mono text-foreground/60 focus:outline-none focus:border-primary/40 disabled:opacity-50"
-                >
-                  {PARSER_MODELS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-                </select>
-                {supportsReasoning(parserModel) && (
-                  <select
-                    value={parserEffort}
-                    onChange={e => { const v = e.target.value as ReasoningEffort; setParserEffort(v); saveParserChoice(parserModel, v); }}
-                    disabled={isParsing}
-                    aria-label="Reasoning effort"
-                    className="bg-background/40 border border-border rounded-md px-2 py-1 text-[10px] text-mono text-foreground/60 focus:outline-none focus:border-primary/40 disabled:opacity-50"
-                  >
-                    {REASONING_EFFORTS.map(e => <option key={e.id} value={e.id}>Thinking: {e.label}</option>)}
-                  </select>
-                )}
-                {/* One tap to retry harder when an offer came back wrong,
-                    instead of guessing which dropdown to touch. */}
-                {hasParsed && text.trim() && !isParsing && (
-                  upLevel ? (
+              {/* No model picker. Choosing one was a question about machinery
+                  that nobody pasting a dispatch offer should have to answer —
+                  what matters is whether the result is right, and if it is not,
+                  trying harder. Every retry is recorded so the prompt or a
+                  fixture can be fixed rather than the failure just retried
+                  away. */}
+              {hasParsed && text.trim() && !isParsing && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  {upLevel ? (
                     <button
-                      onClick={() => {
-                        setParserModel(upLevel.model);
-                        setParserEffort(upLevel.effort);
-                        saveParserChoice(upLevel.model, upLevel.effort);
-                        handleParse({ model: upLevel.model, effort: upLevel.effort });
-                      }}
+                      onClick={() => retryHarder()}
                       className="flex items-center gap-1 rounded-md border border-accent/40 bg-accent/10 hover:bg-accent/20 text-accent px-2 py-1 text-[10px] font-medium text-mono transition-colors"
                     >
-                      <ChevronsUp size={12} /> Level up → {upLevel.label}
+                      <ChevronsUp size={12} /> Not right? Try a smarter model
                     </button>
                   ) : (
-                    <span className="text-[10px] text-muted-foreground/60 text-mono">Top level — nothing higher to try</span>
-                  )
-                )}
-                <span className="text-[10px] text-muted-foreground/60 text-mono">
-                  {PARSER_MODELS.find(m => m.id === parserModel)?.note}
-                </span>
-              </div>
+                    <span className="text-[10px] text-muted-foreground/60 text-mono">
+                      Already on the smartest model — logged so it can be looked at
+                    </span>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>

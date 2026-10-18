@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.4"
   }
   graphql_public: {
     Tables: {
@@ -653,6 +653,7 @@ export type Database = {
           has_6th_7th_day_rule: boolean
           has_vacation_pay: boolean
           hourly_rate: number | null
+          hours_planned: boolean | null
           hours_worked: number | null
           id: string
           job_number: string | null
@@ -694,6 +695,7 @@ export type Database = {
           has_6th_7th_day_rule?: boolean
           has_vacation_pay?: boolean
           hourly_rate?: number | null
+          hours_planned?: boolean | null
           hours_worked?: number | null
           id?: string
           job_number?: string | null
@@ -735,6 +737,7 @@ export type Database = {
           has_6th_7th_day_rule?: boolean
           has_vacation_pay?: boolean
           hourly_rate?: number | null
+          hours_planned?: boolean | null
           hours_worked?: number | null
           id?: string
           job_number?: string | null
@@ -807,6 +810,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      parse_failures: {
+        Row: {
+          classified_as: string | null
+          created_at: string
+          effort: string | null
+          error_message: string | null
+          id: string
+          input_text: string | null
+          kind: string
+          model: string | null
+          notes: string | null
+          resolved: boolean
+          result_count: number | null
+          source: string
+          user_id: string
+        }
+        Insert: {
+          classified_as?: string | null
+          created_at?: string
+          effort?: string | null
+          error_message?: string | null
+          id?: string
+          input_text?: string | null
+          kind: string
+          model?: string | null
+          notes?: string | null
+          resolved?: boolean
+          result_count?: number | null
+          source: string
+          user_id: string
+        }
+        Update: {
+          classified_as?: string | null
+          created_at?: string
+          effort?: string | null
+          error_message?: string | null
+          id?: string
+          input_text?: string | null
+          kind?: string
+          model?: string | null
+          notes?: string | null
+          resolved?: boolean
+          result_count?: number | null
+          source?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       parties: {
         Row: {
