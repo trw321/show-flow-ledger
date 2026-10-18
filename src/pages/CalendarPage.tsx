@@ -1375,7 +1375,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-secondary/30 transition-colors"
           >
             <Copy size={14} className="text-muted-foreground shrink-0" />
-            <span className="text-xs font-medium flex-1">Duplicate this shift to other dates</span>
+            <span className="text-xs font-medium flex-1">Extend this job to more days</span>
             <ChevronDown size={14} className={cn("text-muted-foreground transition-transform", duplicating && "rotate-180")} />
           </button>
           {duplicating && (
@@ -1564,6 +1564,7 @@ export default function CalendarPage() {
   const [addingEventDate, setAddingEventDate] = useState<string | null>(null);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickAddShiftOpen, setQuickAddShiftOpen] = useState(false);
+  const [quickAddHoursOpen, setQuickAddHoursOpen] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
 
   // Deep-link from Dashboard's hero cards (?job=<id>) straight into that
@@ -1744,7 +1745,7 @@ export default function CalendarPage() {
   return (
     <SpacePageWrapper
       title="Calendar"
-      description="Your month at a glance"
+      description={viewMode === 'year' ? 'Your year at a glance' : 'Your month at a glance'}
       action={
         <div className="flex flex-wrap gap-2">
           <button
@@ -1752,6 +1753,14 @@ export default function CalendarPage() {
             className="flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary px-3 py-1.5 text-xs font-medium transition-colors"
           >
             <Plus size={13} /> if you want work (add an offer)
+          </button>
+          {/* Hours are a separate way in now, not something the intake box is
+              asked to recognise. */}
+          <button
+            onClick={() => setQuickAddHoursOpen(true)}
+            className="flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 hover:bg-accent/20 text-accent px-3 py-1.5 text-xs font-medium transition-colors"
+          >
+            <Plus size={13} /> add hours
           </button>
           <button
             onClick={() => setQuickAddOpen(true)}
@@ -2178,6 +2187,18 @@ export default function CalendarPage() {
       {/* Reuses the exact same Job Log intake (paste/photo/manual + parse
           review) that lives on the Dashboard, rather than a second copy of
           that flow — same component, just also reachable from here. */}
+      <Dialog open={quickAddHoursOpen} onOpenChange={setQuickAddHoursOpen}>
+        <DialogContent
+          className="max-w-md max-h-[85vh] overflow-y-auto rounded-lg"
+          onOpenAutoFocus={e => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle className="text-mono text-sm">Add hours worked</DialogTitle>
+          </DialogHeader>
+          <NewGigPage startAs="hours" onComplete={() => setQuickAddHoursOpen(false)} />
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={quickAddShiftOpen} onOpenChange={setQuickAddShiftOpen}>
         <DialogContent
           className="max-w-md max-h-[85vh] overflow-y-auto rounded-lg"

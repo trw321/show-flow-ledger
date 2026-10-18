@@ -82,10 +82,10 @@
     /* The five things a shift can be. Fixed hues, well apart from each other
        and from every base colour, because a dot is six pixels and the only
        thing telling them apart is the hue. */
-    --dot-upcoming:  199 90% 62%;
+    --dot-upcoming:  205 88% 70%;
     /* Worked-or-working and waiting on the money are one thing to the eye:
        pending. Two violets a few degrees apart only looked like a smudge. */
-    --dot-pending:   284 88% 72%;
+    --dot-pending:   272 62% 78%;
     --dot-paid:      152 86% 56%;
     --dot-overdue:    40 96% 60%;
     --dot-cancelled: 344 70% 56%;

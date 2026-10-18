@@ -204,7 +204,11 @@ const EMPTY_MANUAL: ManualEntry = {
  * dialog. onComplete is how the dialog host learns a save actually landed, so
  * it can close itself — the route has no host and simply leaves it undefined.
  */
-export default function NewGigPage({ onComplete }: { onComplete?: () => void } = {}) {
+export default function NewGigPage({ onComplete, startAs }: {
+  onComplete?: () => void;
+  /** Opened from "add hours", so Parse means hours and says so. */
+  startAs?: 'hours';
+} = {}) {
   const { data, addJob, updateJob: updateExistingJob, addIncome, addEvent } = useData();
   const { fire: fireCelebration, Burst } = useCelebration();
 
@@ -904,7 +908,9 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
             </div>
           )}
 
-          {/* Unified paste-or-photo intake — one box handles offers, hours notes, and everything in between */}
+          {/* Paste-or-photo intake. Offers and schedules by default; "Add hours"
+              below says the text is about work already done, which is the one
+              call the classifier is not reliable on. */}
           {!manualOpen && (
             <>
               <textarea
@@ -916,7 +922,7 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
                 placeholder={
                   step !== 'input'
                     ? 'Paste more to add it…'
-                    : 'Paste a dispatch offer, hours note, personal schedule, or text here…'
+                    : 'Paste a dispatch offer, a schedule, or any text about upcoming work…'
                 }
                 className={cn(
                   'w-full bg-background/40 backdrop-blur-sm border border-border rounded-md',
@@ -925,11 +931,11 @@ export default function NewGigPage({ onComplete }: { onComplete?: () => void } =
                   'resize-none transition-colors leading-relaxed',
                   isParsing && 'opacity-50 cursor-not-allowed',
                 )}
-                aria-label="Paste dispatch text or hours note"
+                aria-label="Paste a dispatch offer or schedule"
               />
               <div className="flex items-center gap-2 flex-wrap">
                 <Button
-                  onClick={() => handleParse()}
+                  onClick={() => handleParse(undefined, startAs)}
                   disabled={isParsing || !text.trim()}
                   size="sm"
                   className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground border-0 font-medium"
