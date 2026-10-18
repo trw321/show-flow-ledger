@@ -598,6 +598,7 @@ export type Database = {
           created_at: string
           date: string
           description: string
+          entered_by_hand: boolean | null
           id: string
           invoice_number: string | null
           job_id: string | null
@@ -611,6 +612,7 @@ export type Database = {
           created_at?: string
           date: string
           description?: string
+          entered_by_hand?: boolean | null
           id?: string
           invoice_number?: string | null
           job_id?: string | null
@@ -624,6 +626,7 @@ export type Database = {
           created_at?: string
           date?: string
           description?: string
+          entered_by_hand?: boolean | null
           id?: string
           invoice_number?: string | null
           job_id?: string | null
@@ -674,6 +677,7 @@ export type Database = {
           pay_period_start: string | null
           pay_schedule: string | null
           pay_stub: string | null
+          pay_stub_kind: string | null
           payroll_company: string | null
           start_time: string | null
           status: string
@@ -716,6 +720,7 @@ export type Database = {
           pay_period_start?: string | null
           pay_schedule?: string | null
           pay_stub?: string | null
+          pay_stub_kind?: string | null
           payroll_company?: string | null
           start_time?: string | null
           status?: string
@@ -758,6 +763,7 @@ export type Database = {
           pay_period_start?: string | null
           pay_schedule?: string | null
           pay_stub?: string | null
+          pay_stub_kind?: string | null
           payroll_company?: string | null
           start_time?: string | null
           status?: string

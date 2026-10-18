@@ -57,6 +57,7 @@ const jobRow = (j: Job, userId: string) => ({
   meal2_duration: orNull(j.meal2Duration),
   meal2_on_clock: orNull(j.meal2OnClock),
   hours_planned: orNull(j.hoursPlanned),
+  pay_stub_kind: orNull(j.payStubKind),
   local: orNull(j.local),
   needs_review: orNull(j.needsReview),
   call_timeline: orNull(j.callTimeline),
@@ -80,7 +81,8 @@ const expenseRow = (e: Expense, userId: string) => ({
 const incomeRow = (i: Income, userId: string) => ({
   id: i.id, user_id: userId, job_id: orNull(i.jobId), client: i.client,
   description: i.description, amount: i.amount, date: i.date, status: i.status,
-  invoice_number: orNull(i.invoiceNumber), created_at: i.createdAt,
+  invoice_number: orNull(i.invoiceNumber), entered_by_hand: orNull(i.enteredByHand),
+  created_at: i.createdAt,
 });
 
 const equipmentRow = (q: Equipment, userId: string) => ({
@@ -174,6 +176,7 @@ const toJob = (r: Row): Job => ({
   meal2Duration: und(r.meal2_duration as Job['meal2Duration']),
   meal2OnClock: und(r.meal2_on_clock as boolean),
   hoursPlanned: und(r.hours_planned as boolean),
+  payStubKind: und(r.pay_stub_kind as Job['payStubKind']),
   local: und(r.local as string),
   needsReview: und(r.needs_review as boolean),
   callTimeline: und(r.call_timeline as string),
@@ -198,6 +201,7 @@ const toIncome = (r: Row): Income => ({
   id: r.id as string, jobId: und(r.job_id as string), client: r.client as string,
   description: r.description as string, amount: r.amount as number, date: r.date as string,
   status: r.status as Income['status'], invoiceNumber: und(r.invoice_number as string),
+  enteredByHand: und(r.entered_by_hand as boolean),
   createdAt: r.created_at as string,
 });
 

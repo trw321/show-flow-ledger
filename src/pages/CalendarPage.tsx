@@ -195,15 +195,34 @@ function SplitMark({ job, allJobs }: { job: Job; allJobs: Job[] }) {
   );
 }
 
-function StubMark({ hasStub }: { hasStub: boolean }) {
+/**
+ * Where the record of this shift's money came from, which is not the same as
+ * whether there is one. A stub shows what was earned and what came out of it,
+ * a cheque only shows what arrived, and a figure typed in by hand has had
+ * nothing checked against a document at all — so they cannot be the same mark.
+ */
+function StubMark({ job, paidByHand }: { job: Job; paidByHand?: boolean }) {
+  const mark = job.payStub
+    ? job.payStubKind === 'check'
+      ? { icon: '💵', label: 'Cheque photographed' }
+      : { icon: '🧾', label: 'Pay stub photographed' }
+    : paidByHand
+      ? { icon: '✏️', label: 'Marked paid by hand — nothing checked against a document' }
+      : null;
+
+  if (!mark) {
+    return (
+      <span role="img" aria-label="Nothing logged for this shift's pay yet"
+        title="Nothing logged for this shift's pay yet"
+        className="text-[11px] leading-none select-none opacity-30 grayscale">
+        🧾
+      </span>
+    );
+  }
   return (
-    <span
-      role="img"
-      aria-label={hasStub ? 'Pay stub uploaded' : 'No pay stub yet'}
-      title={hasStub ? 'Pay stub uploaded' : 'No pay stub yet'}
-      className={cn('text-[11px] leading-none select-none', hasStub ? 'opacity-100' : 'opacity-30 grayscale')}
-    >
-      ✅
+    <span role="img" aria-label={mark.label} title={mark.label}
+      className="text-[11px] leading-none select-none">
+      {mark.icon}
     </span>
   );
 }
@@ -282,6 +301,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   const [stubParsed, setStubParsed] = useState(job.stubParsed);
   // The picked photo, held while it is cropped and blacked out.
   const [editingStub, setEditingStub] = useState<string | null>(null);
+  const [pendingStubKind, setPendingStubKind] = useState<'stub' | 'check'>('stub');
   const [parsingStub, setParsingStub] = useState(false);
   const [viewingStub, setViewingStub] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -371,7 +391,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
       // Parsing only runs for actual images (PDFs aren't something the vision
       // model can read reliably here).
       if (!isImage) {
-        await updateJobDirect(job.id, { payStub: stubValue });
+        await updateJobDirect(job.id, { payStub: stubValue, payStubKind: pendingStubKind });
         return;
       }
 
@@ -384,11 +404,11 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
         if (!resp.ok) throw new Error((await resp.json()).error || 'Failed to read pay stub');
         const { paystub } = await resp.json();
         setStubParsed(paystub);
-        await updateJobDirect(job.id, { payStub: stubValue, stubParsed: paystub });
+        await updateJobDirect(job.id, { payStub: stubValue, payStubKind: pendingStubKind, stubParsed: paystub });
         toast.success('Pay stub read — net $' + (paystub.netPay ?? '?'));
       } catch (err) {
         // Attachment is still worth keeping; parsing failure isn't fatal.
-        await updateJobDirect(job.id, { payStub: stubValue });
+        await updateJobDirect(job.id, { payStub: stubValue, payStubKind: pendingStubKind });
         toast.error(err instanceof Error ? err.message : 'Could not read the pay stub — saved as attachment only');
       }
     } finally {
@@ -1187,6 +1207,25 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           {editingStub && (
             <div className="pixel-panel p-3 space-y-2">
               <p className="text-[10px] text-mono uppercase tracking-widest text-muted-foreground">Before it leaves your phone</p>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { kind: 'stub' as const, icon: '🧾', label: 'Pay stub' },
+                  { kind: 'check' as const, icon: '💵', label: 'Cheque' },
+                ]).map(({ kind, icon, label }) => (
+                  <button
+                    key={kind}
+                    type="button"
+                    aria-pressed={pendingStubKind === kind}
+                    onClick={() => setPendingStubKind(kind)}
+                    className={cn(
+                      'pixel-button flex items-center justify-center gap-1.5 py-2 text-xs font-bold',
+                      pendingStubKind === kind ? 'bg-primary/20 border-primary text-primary' : 'bg-card text-muted-foreground',
+                    )}
+                  >
+                    <span aria-hidden="true">{icon}</span> {label}
+                  </button>
+                ))}
+              </div>
               <StubEditor
                 source={editingStub}
                 onCancel={() => setEditingStub(null)}
@@ -1579,6 +1618,15 @@ export default function CalendarPage() {
     }
     setSearchParams(prev => { prev.delete('job'); return prev; }, { replace: true });
   }, [searchParams, data.jobs, setSearchParams]);
+
+  // Shifts whose only evidence is somebody saying so.
+  const paidByHandJobIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const i of data.income) {
+      if (i.status === 'paid' && i.enteredByHand && i.jobId) set.add(i.jobId);
+    }
+    return set;
+  }, [data.income]);
 
   const jobsByDate = useMemo(() => {
     const map: Record<string, Job[]> = {};
@@ -2071,7 +2119,7 @@ export default function CalendarPage() {
                           className="ml-auto flex items-center gap-1 text-[10px] text-mono uppercase tracking-wider opacity-80 hover:opacity-100"
                           aria-label={job.payStub ? 'Replace the pay stub photo' : 'Add a pay stub photo'}
                         >
-                          <StubMark hasStub={!!job.payStub} />
+                          <StubMark job={job} paidByHand={paidByHandJobIds.has(job.id)} />
                           {!job.payStub && <span>+ stub</span>}
                         </button>
                       </div>
@@ -2273,7 +2321,7 @@ export default function CalendarPage() {
                         {first.jobNumber && <span className="text-[10px] text-mono text-muted-foreground/60">#{first.jobNumber}</span>}
                         <span className="flex-1" />
                         {totalHours > 0 && (
-                          <StubMark hasStub={!!first.payStub} />
+                          <StubMark job={first} paidByHand={paidByHandJobIds.has(first.id)} />
                         )}
                         {isGroup && (
                           expanded
@@ -2295,7 +2343,7 @@ export default function CalendarPage() {
                               {netHoursWorked(job) > 0 ? `${netHoursWorked(job)}h` : isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
                               {job.startTime && !job.endTime && <span className="text-warning"> · no end time</span>}
                               {effectiveHoursWorked(job) > 0 && (
-                                <StubMark hasStub={!!job.payStub} />
+                                <StubMark job={job} paidByHand={paidByHandJobIds.has(job.id)} />
                               )}
                             </span>
                           </div>

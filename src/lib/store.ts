@@ -27,6 +27,8 @@ export interface Job {
   mealDuration?: 0 | 30 | 45 | 60;
   /** true = paid/on the clock (no hours deduction), false = unpaid/off the clock (mealDuration is deducted). Irrelevant when mealDuration is 0. */
   mealOnClock?: boolean;
+  /** Which kind of photo is on this shift: a pay stub (the breakdown) or the cheque itself. They prove different things — a stub says what was earned and deducted, a cheque only says what arrived — so they are marked differently. */
+  payStubKind?: 'stub' | 'check';
   /** Hours filled in before the shift happened. They are a plan, not a timesheet: nothing counts them as worked or earned until the shift is confirmed on or after the day. Cleared on confirmation. Absent on anything logged after the fact. */
   hoursPlanned?: boolean;
   /** The local that dispatched the call — "ia8", "Local 16". Not the employer: an offer names the local as its "Client", but the company that pays is the employer and lives in `client`, which is what pay rates resolve from. */
@@ -98,6 +100,8 @@ export interface Income {
   date: string;
   status: 'pending' | 'paid' | 'overdue';
   paymentMethod?: 'direct_deposit' | 'check' | 'cash' | 'other';
+  /** Typed in by hand rather than read off a stub, a cheque or a statement. Worth knowing: nothing has been checked against a document. */
+  enteredByHand?: boolean;
   invoiceNumber?: string;
   createdAt: string;
 }

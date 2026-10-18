@@ -917,6 +917,9 @@ export default function MoneyPage() {
           jobId: row.jobId,
           client: row.client,
           description: `Payment — ${row.periodLabel}`,
+          // Tapping the money bag is somebody saying so; no stub, no cheque,
+          // nothing checked. Worth marking as that rather than as evidence.
+          enteredByHand: true,
           amount: shortfall,
           date: format(new Date(), 'yyyy-MM-dd'),
           status: 'paid' as const,
