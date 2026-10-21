@@ -155,8 +155,8 @@ export default function PatternAuthPage({ onUnlocked }: { onUnlocked?: () => voi
         className="w-full max-w-xs flex flex-col items-center gap-6 py-8"
       >
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-mono tracking-widest funky-gradient-text">AV LEDGER</h1>
-          <p className="text-xs text-muted-foreground mt-1 tracking-wide uppercase">Bookkeeping for AV technicians</p>
+          <h1 className="text-3xl font-display tracking-wide text-foreground">Show Flow</h1>
+          <p className="text-[11px] text-mono text-muted-foreground mt-1 tracking-[0.2em] uppercase">Shifts · hours · pay</p>
         </div>
 
         <AnimatePresence mode="wait">

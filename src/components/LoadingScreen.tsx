@@ -40,7 +40,7 @@ export default function LoadingScreen({ onComplete }: { onComplete: () => void }
             initial={{ opacity: 0 }}
             animate={{ opacity: 0.4 + progress * 0.006 }}
           >
-            AV LEDGER
+            Show Flow
           </motion.p>
 
           {/* Progress bar */}

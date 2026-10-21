@@ -39,11 +39,9 @@ export default function AuthPage() {
         className="w-full max-w-sm"
       >
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-mono tracking-widest funky-gradient-text">
-            AV LEDGER
-          </h1>
-          <p className="text-xs text-muted-foreground mt-2 tracking-wide uppercase">
-            Bookkeeping for AV technicians
+          <h1 className="text-3xl font-display tracking-wide text-foreground">Show Flow</h1>
+          <p className="text-[11px] text-mono text-muted-foreground mt-2 tracking-[0.2em] uppercase">
+            Shifts · hours · pay
           </p>
         </div>
 
