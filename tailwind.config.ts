@@ -84,10 +84,17 @@ export default {
           ring: "hsl(var(--sidebar-ring))",
         },
       },
+      // Every rounded size reads the one token, so corners are a single dial
+      // for the whole app. xl/2xl/3xl used to be fixed sizes that ignored it,
+      // which is why some pages stayed rounded after the rest went square.
+      // rounded-full is left alone: pills and dots are meant to be round.
       borderRadius: {
+        "3xl": "var(--radius)",
+        "2xl": "var(--radius)",
+        xl: "var(--radius)",
         lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        md: "max(0px, calc(var(--radius) - 2px))",
+        sm: "max(0px, calc(var(--radius) - 4px))",
       },
       keyframes: {
         "accordion-down": {

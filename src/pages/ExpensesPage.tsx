@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Receipt, Mic, MicOff, Trash2, Pencil, ChevronRight, Filter } from 'lucide-react';
+import { Receipt, Mic, MicOff, Trash2, Pencil, ChevronRight, Filter, Plus } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isWithinInterval } from 'date-fns';
 import type { Expense } from '@/lib/store';
 import { cn } from '@/lib/utils';
@@ -222,6 +222,18 @@ export default function ExpensesPage() {
   }, [filteredExpenses]);
 
   const total = filteredExpenses.reduce((s, e) => s + e.amount, 0);
+  const [addOpen, setAddOpen] = useState(false);
+
+  // What an expenses page is opened to answer: what this month has cost, and
+  // what the year has — the year being the figure that matters at tax time.
+  const thisMonth = format(new Date(), 'yyyy-MM');
+  const thisYear = format(new Date(), 'yyyy');
+  const monthSpent = data.expenses.filter(e => e.date.startsWith(thisMonth)).reduce((sum, e) => sum + e.amount, 0);
+  const yearSpent = data.expenses.filter(e => e.date.startsWith(thisYear)).reduce((sum, e) => sum + e.amount, 0);
+  const money = (n: number) => '$' + n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  // The header counts everything, so changing the filter below does not
+  // change what the page says has been logged.
+  const allLogged = data.expenses.reduce((sum, e) => sum + e.amount, 0);
 
   const toggleCategory = (cat: string) => {
     setOpenCategories(prev => {
@@ -232,18 +244,50 @@ export default function ExpensesPage() {
   };
 
   return (
-    <SpacePageWrapper title="Expenses" description={`total: $${total.toLocaleString()}`}>
+    <SpacePageWrapper
+      title={
+        /* In the header row with the lamp, like Calendar and Money. */
+        <div className="flex items-center gap-2.5">
+          <span className="text-2xl leading-none" aria-hidden="true">🧾</span>
+          <h1 className="text-lg font-display tracking-wide leading-none">Expenses</h1>
+        </div>
+      }
+      description={money(allLogged) + ' logged'}
+    >
       <div className="max-w-lg mx-auto">
-      {/* Receipt import */}
-      <div className="mb-4">
-        <ExpenseReceiptUpload />
+
+      {/* The two figures first, then the tools. The receipt scanner and the
+          quick-add form used to sit open at the top whether or not anything
+          was being added — most of a screen spent on nothing. */}
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        <div className="pixel-panel p-3">
+          <p className="text-[10px] text-muted-foreground text-mono uppercase tracking-wider">This month</p>
+          <p className="text-2xl font-bold text-mono mt-1 leading-none">{money(monthSpent)}</p>
+        </div>
+        <div className="pixel-panel p-3">
+          <p className="text-[10px] text-muted-foreground text-mono uppercase tracking-wider">This year</p>
+          <p className="text-2xl font-bold text-mono mt-1 leading-none">{money(yearSpent)}</p>
+          <p className="text-[10px] text-mono text-muted-foreground mt-1">for tax time</p>
+        </div>
       </div>
 
-      {/* Madlib quick add */}
-      <ExpenseMadlib
-        jobs={jobs}
-        onAdd={(exp) => { addExpense(exp); toast.success('expense added'); }}
-      />
+      {!addOpen ? (
+        <Button onClick={() => setAddOpen(true)} className="pixel-button w-full mb-4 gap-1.5">
+          <Plus size={15} /> Add expense
+        </Button>
+      ) : (
+        <div className="pixel-panel mb-4 p-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-body uppercase tracking-widest text-muted-foreground">Add expense</p>
+            <button type="button" onClick={() => setAddOpen(false)} className="text-[11px] text-muted-foreground hover:text-foreground">Close</button>
+          </div>
+          <ExpenseReceiptUpload />
+          <ExpenseMadlib
+            jobs={jobs}
+            onAdd={(exp) => { addExpense(exp); toast.success('Expense added'); setAddOpen(false); }}
+          />
+        </div>
+      )}
 
       {/* Date Filter Bar */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
@@ -271,11 +315,11 @@ export default function ExpensesPage() {
       {data.expenses.length === 0 ? (
         <div className="rounded-2xl border border-border/40 bg-secondary/10 p-8 text-center">
           <Receipt size={28} className="text-muted-foreground/30 mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">no expenses yet</p>
-          <p className="text-xs text-muted-foreground/50 mt-1">use the quick add above or scan a receipt</p>
+          <p className="text-sm text-muted-foreground">No expenses yet</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">Tap Add expense to scan a receipt or type one in.</p>
         </div>
       ) : grouped.length === 0 ? (
-        <p className="text-center text-muted-foreground py-8 text-sm">no expenses match this filter.</p>
+        <p className="text-center text-muted-foreground py-8 text-sm">Nothing in that range.</p>
       ) : (
         <div className="space-y-3">
           {grouped.map(([cat, exps]) => {

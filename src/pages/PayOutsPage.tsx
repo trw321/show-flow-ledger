@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useData } from '@/lib/DataContext';
 import type { PayOut, PayOutMethod } from '@/lib/store';
-import PageHeader from '@/components/PageHeader';
+import SpacePageWrapper from '@/components/SpacePageWrapper';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -24,10 +24,10 @@ const METHOD_LABELS: Record<PaymentMethod, string> = {
 };
 
 const METHOD_COLORS: Record<PaymentMethod, string> = {
-  check:  'bg-blue-500/15 text-blue-400',
+  check:  'bg-info/15 text-info',
   cash:   'bg-success/15 text-success',
-  venmo:  'bg-violet-500/15 text-violet-400',
-  zelle:  'bg-purple-500/15 text-purple-400',
+  venmo:  'bg-accent/15 text-accent',
+  zelle:  'bg-accent/15 text-accent',
   ach:    'bg-primary/15 text-primary',
   other:  'bg-secondary text-muted-foreground',
 };
@@ -94,37 +94,46 @@ export default function PayOutsPage() {
   }, [payouts]);
 
   return (
-    <>
-      <PageHeader title="Pay Outs" description="Record and track crew payments" />
-
-      <Button size="sm" onClick={() => setDialog(true)} className="gap-1.5 mb-6">
-        <Plus size={14} /> Record Payment
-      </Button>
-
-      {/* Summary stats */}
-      {payouts.length > 0 && (
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <div className="rounded-2xl border border-border bg-card p-3 text-center">
-            <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground/50 mb-1">This Month</p>
-            <p className="text-lg font-bold text-mono text-success">${stats.monthTotal.toLocaleString()}</p>
-          </div>
-          <div className="rounded-2xl border border-border bg-card p-3 text-center">
-            <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground/50 mb-1">All Time</p>
-            <p className="text-lg font-bold text-mono">${stats.total.toLocaleString()}</p>
-          </div>
-          <div className="rounded-2xl border border-border bg-card p-3 text-center">
-            <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground/50 mb-1">Workers Paid</p>
-            <p className="text-lg font-bold text-mono">{stats.workerCount}</p>
-          </div>
+    <SpacePageWrapper
+      title={
+        /* In the header row with the lamp, like every other page. This one
+           had no wrapper at all, so no star field and a borrowed header. */
+        <div className="flex items-center gap-2.5">
+          <span className="text-2xl leading-none" aria-hidden="true">💸</span>
+          <h1 className="text-lg font-display tracking-wide leading-none">Pay Outs</h1>
         </div>
-      )}
+      }
+      description="What you have paid your crew"
+    >
+      <div className="max-w-lg mx-auto">
+
+      {/* The figures first, then the button — the same order as Money and
+          Expenses, so every page is read the same way. */}
+      <div className="grid grid-cols-3 gap-2 mb-4">
+        <div className="pixel-panel p-3">
+          <p className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">This month</p>
+          <p className="text-xl font-bold text-mono mt-1 leading-none">${stats.monthTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+        </div>
+        <div className="pixel-panel p-3">
+          <p className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">All time</p>
+          <p className="text-xl font-bold text-mono mt-1 leading-none">${stats.total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+        </div>
+        <div className="pixel-panel p-3">
+          <p className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Crew paid</p>
+          <p className="text-xl font-bold text-mono mt-1 leading-none">{stats.workerCount}</p>
+        </div>
+      </div>
+
+      <Button onClick={() => setDialog(true)} className="pixel-button w-full mb-4 gap-1.5">
+        <Plus size={15} /> Record a payment
+      </Button>
 
       {/* Payout list */}
       {payouts.length === 0 ? (
         <div className="rounded-2xl border border-border/40 bg-secondary/10 p-8 text-center">
           <Wallet size={28} className="text-muted-foreground/30 mx-auto mb-3" />
           <p className="text-sm text-muted-foreground">No payments recorded yet</p>
-          <p className="text-xs text-muted-foreground/50 mt-1">Hit "Record Payment" to log your first crew payout</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">Tap Record a payment to log what you paid someone.</p>
         </div>
       ) : (
         <div className="space-y-6">
@@ -242,6 +251,7 @@ export default function PayOutsPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </>
+      </div>
+    </SpacePageWrapper>
   );
 }
