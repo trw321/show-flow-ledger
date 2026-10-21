@@ -210,15 +210,10 @@ function StubMark({ job, paidByHand }: { job: Job; paidByHand?: boolean }) {
       ? { icon: '✏️', label: 'Marked paid by hand — nothing checked against a document' }
       : null;
 
-  if (!mark) {
-    return (
-      <span role="img" aria-label="Nothing logged for this shift's pay yet"
-        title="Nothing logged for this shift's pay yet"
-        className="text-[11px] leading-none select-none opacity-30 grayscale">
-        🧾
-      </span>
-    );
-  }
+  // Nothing logged gets no mark at all. A greyed-out stub was the same picture
+  // as a real stub, which made "nothing here" and "a stub is here" look alike
+  // at six pixels — the one thing the mark exists to tell apart.
+  if (!mark) return null;
   return (
     <span role="img" aria-label={mark.label} title={mark.label}
       className="text-[11px] leading-none select-none">
