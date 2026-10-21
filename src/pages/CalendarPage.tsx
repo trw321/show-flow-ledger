@@ -633,6 +633,11 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     // confirmed, so filling in a schedule early never turns itself into a
     // timesheet when the date rolls past.
     if (isFuture && (actualHours > 0 || timeline)) updates.hoursPlanned = true;
+    // Saving hours on or after the day IS confirming them. Only the Confirm
+    // button used to clear the flag, so editing a planned figure and pressing
+    // Save — the obvious way to say "this is what I worked" — left it a plan:
+    // the reminder stayed up, and the hours went on counting toward nothing.
+    if (!isFuture && job.hoursPlanned && (actualHours > 0 || timeline)) updates.hoursPlanned = undefined;
     if (meal2Duration !== (job.meal2Duration ?? undefined)) updates.meal2Duration = meal2Duration;
     if (meal2Duration && meal2OnClock !== (job.meal2OnClock ?? false)) updates.meal2OnClock = meal2OnClock;
     if (mealPenalties !== (job.mealPenalties?.toString() ?? '')) {
