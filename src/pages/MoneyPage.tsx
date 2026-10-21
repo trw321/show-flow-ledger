@@ -616,7 +616,7 @@ function ReconciliationRowCard({
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function MoneyPage() {
-  const { data, addIncome, updateIncome, deleteIncome, updateJob, updateEmployer } = useData();
+  const { data, addIncome, updateIncome, deleteIncome, updateJob, updateEmployer, addJob } = useData();
   const navigate = useNavigate();
   const [editId, setEditId] = useState<string | null>(null);
 
@@ -794,6 +794,45 @@ export default function MoneyPage() {
   const daysPaid = datesIn(reconciliation.filter(isSettled));
   const paidFraction = totalExpected > 0 ? Math.min(1, totalActual / totalExpected) : 0;
   const round1 = (n: number) => Math.round(n * 10) / 10;
+  // Payments no shift claimed — no job linked, and no shift for that employer
+  // in a window it could belong to. They counted toward what was logged and
+  // nothing else, with nowhere on the page to find them.
+  const unmatchedIncome = useMemo(() => {
+    const claimed = new Set(reconciliation.flatMap(r => r.relatedIncomeIds));
+    return data.income.filter(i => i.status === 'paid' && !claimed.has(i.id));
+  }, [data.income, reconciliation]);
+
+  /**
+   * Turn a payment with no shift behind it into one. The payment is the
+   * evidence the work happened; the shift is what the rest of the app
+   * reasons about, so without it the money cannot be reconciled against
+   * anything. The new shift is marked for review, because everything but the
+   * date and employer is a guess.
+   */
+  const makeShiftFrom = async (incomeId: string) => {
+    const payment = data.income.find(i => i.id === incomeId);
+    if (!payment) return;
+    const job = await addJob({
+      name: payment.description || 'Shift from a payment',
+      client: payment.client,
+      venue: '',
+      date: payment.date,
+      // Not 'completed': with no hours yet, that would hide it from the
+      // Log hours reminder, and nothing else would ever ask for them.
+      status: 'upcoming',
+      // The payment's date is when the money landed, not when the work was.
+      notes: 'Made from a $' + payment.amount.toLocaleString() + ' payment dated ' + payment.date
+        + ' — move it to the day you worked, then add the hours and rate.',
+      needsReview: true,
+      has6th7thDayRule: false,
+    } as never);
+    if (!job) return;
+    await updateIncome(incomeId, { jobId: job.id });
+    toast.success('Shift made — add the hours to it', {
+      action: { label: 'Open', onClick: () => navigate(`/?job=${job.id}`) },
+    });
+  };
+
   const totalLogged = '$' + total.toLocaleString(undefined, { maximumFractionDigits: 0 }) + ' logged';
 
   // Rates the stubs disagree with the saved profile about, across every
@@ -1145,6 +1184,33 @@ export default function MoneyPage() {
 
       <ExportButton onClick={() => exportWeeklyToExcel(data.jobs, data.expenses, data.income, data.employers)} />
 
+      {unmatchedIncome.length > 0 && (
+        <div className="pixel-panel mb-6 p-3 space-y-2">
+          <p className="text-[10px] text-mono uppercase tracking-widest text-warning">
+            Payments with no shift · {unmatchedIncome.length}
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            Money that arrived but isn't tied to any shift, so it can't be checked against what you worked.
+          </p>
+          {unmatchedIncome.map(i => (
+            <div key={i.id} className="flex items-center gap-2 border-t border-border pt-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium truncate">{i.client || i.description}</p>
+                <p className="text-[10px] text-mono text-muted-foreground">{i.date} · ${i.amount.toLocaleString()}</p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-[11px] shrink-0"
+                onClick={() => makeShiftFrom(i.id)}
+              >
+                Make a shift
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {reconciliation.length === 0 ? (
         <EmptyState icon={Scale} title="No data to reconcile" description="Add jobs with hours worked to see pay tracking." />
       ) : (
@@ -1186,7 +1252,8 @@ export default function MoneyPage() {
                   type="button"
                   onClick={() => setExpandedGroups(prev => {
                     const next = new Set(prev);
-                    next.has(group.key) ? next.delete(group.key) : next.add(group.key);
+                    if (next.has(group.key)) next.delete(group.key);
+                    else next.add(group.key);
                     return next;
                   })}
                   className="w-full flex items-center gap-3 p-3.5 text-left hover:bg-secondary/20 transition-colors"
