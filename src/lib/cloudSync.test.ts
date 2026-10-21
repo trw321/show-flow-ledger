@@ -4,7 +4,7 @@ import type { AppData } from './store';
 
 const USER = 'user-1';
 
-const empty: AppData = { jobs: [], expenses: [], income: [], equipment: [], employers: [], events: [] };
+const empty: AppData = { jobs: [], expenses: [], income: [], equipment: [], employers: [], events: [], payouts: [] };
 
 const rowsFor = (data: Partial<AppData>, table: string) => {
   const all = buildRows({ ...empty, ...data }, USER);
@@ -146,6 +146,7 @@ describe('backup → restore round trip', () => {
     employers: [{ id: 'e1', name: 'GSW Arena LLC', overtimeRule: 'daily', unionDuesPercent: 3.5, createdAt: '2026-01-01',
                   dismissedSuggestions: [{ field: 'estimatedTaxPercent', skipsRemaining: 1, dismissedAt: '2026-09-16' }] }],
     events: [{ id: 'v1', title: 'Dentist', date: '2026-09-15', createdAt: '2026-01-01' }],
+    payouts: [{ id: 'o1', workerName: 'Sam', amount: 450, date: '2026-09-12', jobRef: '2026-2956', method: 'venmo', notes: 'load out', createdAt: '2026-01-01' }],
   };
 
   const roundTrip = (data: AppData): AppData =>
@@ -262,5 +263,29 @@ describe('a multi-call day survives a backup', () => {
     expect(restored.jobs[0].callGapsOnClock).toEqual([false, true]);
     expect(restored.jobs[1].callTimeline).toBeUndefined();
     expect(restored.jobs[1].callGapsOnClock).toBeUndefined();
+  });
+});
+
+describe('crew payments back up with everything else', () => {
+  it('write to their own table', () => {
+    const rows = rowsFor({
+      payouts: [{ id: 'o1', workerName: 'Sam', amount: 450, date: '2026-09-12', method: 'venmo', createdAt: '2026-01-01' }],
+    }, 'payouts') as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].worker_name).toBe('Sam');
+    expect(rows[0].amount).toBe(450);
+    expect(rows[0].user_id).toBe(USER);
+  });
+
+  it('come back exactly as they went', () => {
+    const payouts = [{ id: 'o1', workerName: 'Sam', amount: 450, date: '2026-09-12', jobRef: '2026-2956', method: 'venmo' as const, notes: 'load out', createdAt: '2026-01-01' }];
+    const all = buildRows({ ...empty, payouts }, USER);
+    const raw = Object.fromEntries(all.map(([t, rows]) => [t, rows])) as never;
+    const restored = fromRows(raw);
+    expect(restored.payouts).toEqual(payouts);
+  });
+
+  it('restore as an empty list for an account that never had any', () => {
+    expect(fromRows({} as never).payouts).toEqual([]);
   });
 });

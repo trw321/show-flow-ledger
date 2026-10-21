@@ -184,6 +184,22 @@ export interface CalendarEvent {
   createdAt: string;
 }
 
+/** Money you paid someone who worked for you. */
+export type PayOutMethod = 'check' | 'cash' | 'venmo' | 'zelle' | 'ach' | 'other';
+
+export interface PayOut {
+  id: string;
+  workerName: string;
+  amount: number;
+  date: string;
+  jobRef?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  method?: PayOutMethod;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface AppData {
   jobs: Job[];
   expenses: Expense[];
@@ -191,12 +207,46 @@ export interface AppData {
   equipment: Equipment[];
   employers: Employer[];
   events: CalendarEvent[];
+  /**
+   * Crew payments. They used to live in their own storage key, outside the
+   * ledger, so the cloud backup never saw them and they were stuck on the one
+   * device — and signed out they were never saved at all.
+   */
+  payouts: PayOut[];
 }
 
 // ── localStorage persistence ────────────────────────────────────────────────
 
 const CACHE_KEY = 'av-bookkeeper-data';
-const defaultData: AppData = { jobs: [], expenses: [], income: [], equipment: [], employers: [], events: [] };
+const defaultData: AppData = { jobs: [], expenses: [], income: [], equipment: [], employers: [], events: [], payouts: [] };
+
+/**
+ * Crew payments saved by the old Pay Outs page, which kept them under their own
+ * key per account. Folded into the ledger on load so they back up and sync with
+ * everything else. The old keys are left in place rather than deleted — if
+ * anything goes wrong here, the originals are still there to recover from.
+ */
+function adoptStandalonePayouts(existing: PayOut[]): PayOut[] {
+  const seen = new Set(existing.map(p => p.id));
+  const adopted: PayOut[] = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith('av-payouts-')) continue;
+      const list = JSON.parse(localStorage.getItem(key) ?? '[]');
+      if (!Array.isArray(list)) continue;
+      for (const p of list) {
+        if (p && typeof p.id === 'string' && !seen.has(p.id)) {
+          seen.add(p.id);
+          adopted.push(p as PayOut);
+        }
+      }
+    }
+  } catch {
+    // Unreadable storage leaves the ledger exactly as it was.
+  }
+  return adopted.length ? [...existing, ...adopted] : existing;
+}
 
 // Old jobs may still carry the retired mealType ('YWA'/'NWA') field instead of
 // mealDuration/mealOnClock. Convert on load so historical deduction behavior
@@ -228,9 +278,21 @@ function migrateJob(job: Job & { mealType?: 'YWA' | 'NWA' }): Job {
 function loadCache(): AppData {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
-    if (!raw) return defaultData;
+    if (!raw) {
+      const payouts = adoptStandalonePayouts([]);
+      if (payouts.length === 0) return defaultData;
+      const fresh = { ...defaultData, payouts };
+      saveCache(fresh);
+      return fresh;
+    }
     const parsed: AppData = { ...defaultData, ...JSON.parse(raw) };
     parsed.jobs = (parsed.jobs || []).map(migrateJob);
+    const before = parsed.payouts || [];
+    parsed.payouts = adoptStandalonePayouts(before);
+    // Write adopted payments straight through, so the ledger in storage is
+    // the record of them — not a copy rebuilt from the old key on every load,
+    // which would quietly stop working the day that key went away.
+    if (parsed.payouts !== before) saveCache(parsed);
     return parsed;
   } catch {
     return defaultData;
@@ -378,6 +440,18 @@ export function useAppData(_userId: string | null) {
     update(prev => ({ ...prev, events: prev.events.filter(e => e.id !== id) }));
   }, []);
 
+  // ── Crew payments ─────────────────────────────────────────────────────────
+
+  const addPayout = useCallback(async (payout: Omit<PayOut, 'id' | 'createdAt'>) => {
+    const created: PayOut = { ...payout, id: uid(), createdAt: new Date().toISOString() };
+    update(prev => ({ ...prev, payouts: [created, ...(prev.payouts ?? [])] }));
+    return created;
+  }, []);
+
+  const deletePayout = useCallback(async (id: string) => {
+    update(prev => ({ ...prev, payouts: (prev.payouts ?? []).filter(p => p.id !== id) }));
+  }, []);
+
   // Used by a cloud restore. Goes through update() like everything else, so a
   // restore that can't fit in storage fails the same visible way a save does
   // rather than half-applying.
@@ -395,8 +469,9 @@ export function useAppData(_userId: string | null) {
     addEquipment, updateEquipment, deleteEquipment,
     addEmployer, updateEmployer, deleteEmployer,
     addEvent, updateEvent, deleteEvent,
+    addPayout, deletePayout,
   };
 }
 
 /** Load-time repairs, reachable from tests without exporting them generally. */
-export const __testables = { migrateJob };
+export const __testables = { migrateJob, adoptStandalonePayouts };

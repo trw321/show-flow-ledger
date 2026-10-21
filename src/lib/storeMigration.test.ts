@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import type { Job } from './store';
 
 // migrateJob is not exported, so the repair is exercised through the same
@@ -57,5 +57,49 @@ describe('repairing shifts that marked themselves done before the day', () => {
     const fixed = migrateJob(job({ mealType: 'YWA' } as Partial<Job>));
     expect(fixed.mealDuration).toBe(60);
     expect(fixed.mealOnClock).toBe(false);
+  });
+});
+
+describe('crew payments saved by the old Pay Outs page', () => {
+  const { adoptStandalonePayouts } = __testables;
+  const old = (id: string, worker = 'Sam') => ({
+    id, workerName: worker, amount: 100, date: '2026-09-12', createdAt: '2026-01-01',
+  });
+
+  beforeEach(() => localStorage.clear());
+
+  it('are folded into the ledger', () => {
+    localStorage.setItem('av-payouts-user-1', JSON.stringify([old('o1'), old('o2', 'Alex')]));
+    const adopted = adoptStandalonePayouts([]);
+    expect(adopted.map(p => p.id).sort()).toEqual(['o1', 'o2']);
+  });
+
+  it('are not duplicated if the ledger already has them', () => {
+    localStorage.setItem('av-payouts-user-1', JSON.stringify([old('o1')]));
+    const adopted = adoptStandalonePayouts([old('o1') as never]);
+    expect(adopted).toHaveLength(1);
+  });
+
+  it('are left where they were, as a way back if anything goes wrong', () => {
+    localStorage.setItem('av-payouts-user-1', JSON.stringify([old('o1')]));
+    adoptStandalonePayouts([]);
+    expect(localStorage.getItem('av-payouts-user-1')).not.toBeNull();
+  });
+
+  it('come from every account that saved some on this device', () => {
+    localStorage.setItem('av-payouts-user-1', JSON.stringify([old('o1')]));
+    localStorage.setItem('av-payouts-user-2', JSON.stringify([old('o2')]));
+    expect(adoptStandalonePayouts([])).toHaveLength(2);
+  });
+
+  it('leave the ledger alone when there is nothing to adopt', () => {
+    const existing = [old('o9') as never];
+    expect(adoptStandalonePayouts(existing)).toBe(existing);
+  });
+
+  it('survive a corrupt old entry without taking the ledger down', () => {
+    localStorage.setItem('av-payouts-user-1', '{not json');
+    expect(() => adoptStandalonePayouts([])).not.toThrow();
+    expect(adoptStandalonePayouts([])).toEqual([]);
   });
 });

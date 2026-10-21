@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import type { AppData, Job, Expense, Income, Equipment, Employer, CalendarEvent } from './store';
+import type { AppData, Job, Expense, Income, Equipment, Employer, CalendarEvent, PayOut } from './store';
 
 // One-way backup: local is the source of truth and the cloud is a copy of it.
 // Nothing is read back or merged here — that's a later step — so this can never
@@ -127,11 +127,17 @@ const eventRow = (v: CalendarEvent, userId: string) => ({
   location: orNull(v.location), notes: orNull(v.notes), created_at: v.createdAt,
 });
 
+const payoutRow = (o: PayOut, userId: string) => ({
+  id: o.id, user_id: userId, worker_name: o.workerName, amount: o.amount, date: o.date,
+  job_ref: orNull(o.jobRef), period_start: orNull(o.periodStart), period_end: orNull(o.periodEnd),
+  method: orNull(o.method), notes: orNull(o.notes), created_at: o.createdAt,
+});
+
 /** The whole local ledger as database rows, in insert order. Separated from the
  *  network call so the field mapping — the part that silently loses data when
  *  it's wrong — can be tested without a session. */
 /** The tables a backup writes, named so supabase.from() will accept them. */
-export type BackupTable = 'jobs' | 'expenses' | 'income' | 'equipment' | 'employers' | 'events';
+export type BackupTable = 'jobs' | 'expenses' | 'income' | 'equipment' | 'employers' | 'events' | 'payouts';
 
 export function buildRows(data: AppData, userId: string): [BackupTable, Record<string, unknown>[]][] {
   return [
@@ -142,6 +148,9 @@ export function buildRows(data: AppData, userId: string): [BackupTable, Record<s
     ['income', data.income.map(i => incomeRow(i, userId))],
     ['equipment', data.equipment.map(q => equipmentRow(q, userId))],
     ['events', (data.events ?? []).map(v => eventRow(v, userId))],
+    // Crew payments ride along with everything else now, rather than sitting
+    // in their own storage the backup never looked at.
+    ['payouts', (data.payouts ?? []).map(o => payoutRow(o, userId))],
   ];
 }
 
@@ -264,8 +273,17 @@ export interface RestoreResult {
  *  to do with it, so nothing local is touched unless they say so. */
 /** Database rows back into app data. Separated from the network call so the
  *  mapping can be round-tripped against buildRows in a test. */
+const toPayout = (r: Row): PayOut => ({
+  id: r.id as string, workerName: r.worker_name as string, amount: Number(r.amount),
+  date: r.date as string, jobRef: und(r.job_ref as string),
+  periodStart: und(r.period_start as string), periodEnd: und(r.period_end as string),
+  method: und(r.method as PayOut['method']), notes: und(r.notes as string),
+  createdAt: r.created_at as string,
+});
+
 export function fromRows(raw: Record<string, Row[]>): AppData {
   return {
+    payouts: (raw.payouts ?? []).map(toPayout),
     jobs: (raw.jobs ?? []).map(toJob),
     expenses: (raw.expenses ?? []).map(toExpense),
     income: (raw.income ?? []).map(toIncome),
@@ -276,7 +294,7 @@ export function fromRows(raw: Record<string, Row[]>): AppData {
 }
 
 export async function fetchFromCloud(): Promise<RestoreResult> {
-  const tables = ['jobs', 'expenses', 'income', 'equipment', 'employers', 'events'] as const;
+  const tables = ['jobs', 'expenses', 'income', 'equipment', 'employers', 'events', 'payouts'] as const;
   const raw: Record<string, Row[]> = {};
 
   for (const t of tables) {

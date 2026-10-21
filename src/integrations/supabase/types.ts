@@ -1064,6 +1064,48 @@ export type Database = {
           },
         ]
       }
+      payouts: {
+        Row: {
+          amount: number
+          created_at: string
+          date: string
+          id: string
+          job_ref: string | null
+          method: string | null
+          notes: string | null
+          period_end: string | null
+          period_start: string | null
+          user_id: string
+          worker_name: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          date: string
+          id: string
+          job_ref?: string | null
+          method?: string | null
+          notes?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          user_id: string
+          worker_name: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          date?: string
+          id?: string
+          job_ref?: string | null
+          method?: string | null
+          notes?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          user_id?: string
+          worker_name?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

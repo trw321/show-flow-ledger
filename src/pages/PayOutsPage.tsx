@@ -1,4 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
+import { useData } from '@/lib/DataContext';
+import type { PayOut, PayOutMethod } from '@/lib/store';
 import PageHeader from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,34 +9,12 @@ import { Plus, Wallet, X } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-type PaymentMethod = 'check' | 'cash' | 'venmo' | 'zelle' | 'ach' | 'other';
-
-interface PayOut {
-  id: string;
-  workerName: string;
-  amount: number;
-  date: string;
-  jobRef?: string;
-  periodStart?: string;
-  periodEnd?: string;
-  method?: PaymentMethod;
-  notes?: string;
-  createdAt: string;
-}
-
-// ── Storage helpers ────────────────────────────────────────────────────────
-
-function storageKey(uid: string) { return `av-payouts-${uid}`; }
-function loadList(key: string): PayOut[] {
-  try { return JSON.parse(localStorage.getItem(key) ?? '[]'); } catch { return []; }
-}
-function saveList(key: string, list: PayOut[]) {
-  localStorage.setItem(key, JSON.stringify(list));
-}
+// Crew payments live in the ledger now, alongside everything else, so they
+// back up, restore and sync — and save when signed out, which they used not to.
+type PaymentMethod = PayOutMethod;
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -55,8 +35,8 @@ const METHOD_COLORS: Record<PaymentMethod, string> = {
 // ── Component ──────────────────────────────────────────────────────────────
 
 export default function PayOutsPage() {
-  const [uid, setUid] = useState<string | null>(null);
-  const [payouts, setPayouts] = useState<PayOut[]>([]);
+  const { data, addPayout: savePayout, deletePayout } = useData();
+  const payouts = data.payouts ?? [];
   const [dialog, setDialog] = useState(false);
 
   // Form state
@@ -69,24 +49,9 @@ export default function PayOutsPage() {
   const [method, setMethod] = useState<PaymentMethod>('check');
   const [notes, setNotes] = useState('');
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const id = session?.user?.id;
-      if (!id) return;
-      setUid(id);
-      setPayouts(loadList(storageKey(id)));
-    });
-  }, []);
-
-  const persist = (next: PayOut[]) => {
-    setPayouts(next);
-    if (uid) saveList(storageKey(uid), next);
-  };
-
   const addPayout = () => {
     if (!worker.trim() || !amount || !date) return;
-    const payout: PayOut = {
-      id: crypto.randomUUID(),
+    const payout = {
       workerName: worker.trim(),
       amount: parseFloat(amount),
       date,
@@ -95,9 +60,8 @@ export default function PayOutsPage() {
       periodEnd: periodEnd || undefined,
       method,
       notes: notes.trim() || undefined,
-      createdAt: new Date().toISOString(),
     };
-    persist([payout, ...payouts]);
+    void savePayout(payout);
     setWorker(''); setAmount(''); setDate(format(new Date(), 'yyyy-MM-dd'));
     setJobRef(''); setPeriodStart(''); setPeriodEnd(''); setNotes('');
     setMethod('check');
@@ -105,7 +69,7 @@ export default function PayOutsPage() {
     toast.success(`$${parseFloat(amount).toLocaleString()} recorded for ${payout.workerName}`);
   };
 
-  const remove = (id: string) => persist(payouts.filter(p => p.id !== id));
+  const remove = (id: string) => { void deletePayout(id); };
 
   // Summary stats
   const stats = useMemo(() => {
