@@ -211,6 +211,8 @@ export type Database = {
           created_at: string
           daily_doubletime_threshold_hours: number | null
           daily_overtime_threshold_hours: number | null
+          day_rate_hours: number | null
+          default_day_rate: number | null
           default_hourly_rate: number | null
           dismissed_suggestions: Json | null
           doubletime_multiplier: number | null
@@ -238,6 +240,8 @@ export type Database = {
           created_at?: string
           daily_doubletime_threshold_hours?: number | null
           daily_overtime_threshold_hours?: number | null
+          day_rate_hours?: number | null
+          default_day_rate?: number | null
           default_hourly_rate?: number | null
           dismissed_suggestions?: Json | null
           doubletime_multiplier?: number | null
@@ -265,6 +269,8 @@ export type Database = {
           created_at?: string
           daily_doubletime_threshold_hours?: number | null
           daily_overtime_threshold_hours?: number | null
+          day_rate_hours?: number | null
+          default_day_rate?: number | null
           default_hourly_rate?: number | null
           dismissed_suggestions?: Json | null
           doubletime_multiplier?: number | null
@@ -652,6 +658,8 @@ export type Database = {
           client: string
           created_at: string
           date: string
+          day_rate: number | null
+          day_rate_hours: number | null
           end_time: string | null
           has_6th_7th_day_rule: boolean
           has_vacation_pay: boolean
@@ -695,6 +703,8 @@ export type Database = {
           client?: string
           created_at?: string
           date: string
+          day_rate?: number | null
+          day_rate_hours?: number | null
           end_time?: string | null
           has_6th_7th_day_rule?: boolean
           has_vacation_pay?: boolean
@@ -738,6 +748,8 @@ export type Database = {
           client?: string
           created_at?: string
           date?: string
+          day_rate?: number | null
+          day_rate_hours?: number | null
           end_time?: string | null
           has_6th_7th_day_rule?: boolean
           has_vacation_pay?: boolean

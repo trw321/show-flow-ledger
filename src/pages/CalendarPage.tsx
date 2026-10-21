@@ -1123,7 +1123,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           {(startTime || job.startTime) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Start</span><span className="font-medium text-xs text-mono">{startTime || job.startTime}{endTime ? ` – ${endTime}` : ''}</span></div>}
           {actualHours > 0 && mealDeductionHours > 0 && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Clocked</span><span className="font-medium text-xs text-mono text-muted-foreground">{actualHours}h</span></div>}
           {actualHours > 0 && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Hours Worked</span><span className="font-medium text-xs text-mono">{paidHours}h</span></div>}
-          {rate > 0 && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Rate</span><span className="font-medium text-xs text-mono">${rate}/hr</span></div>}
+          {job.dayRate
+            ? <div className="flex justify-between"><span className="text-muted-foreground text-xs">Day rate</span><span className="font-medium text-xs text-mono">${job.dayRate} · covers {job.dayRateHours ?? 10}h</span></div>
+            : rate > 0 && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Rate</span><span className="font-medium text-xs text-mono">${rate}/hr</span></div>}
         </div>
         {payPreview && (
           <div className={cn("rounded-md border p-3 space-y-1.5", minimumApplied ? "border-accent/40 bg-accent/5" : "border-success/30 bg-success/5")}>

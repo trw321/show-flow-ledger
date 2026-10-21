@@ -190,3 +190,34 @@ describe('each side of a split keeps its own minimum call', () => {
     expect(jobPayBreakdown(only, [only], [], EMPTY_PROFILE).gross).toBe(5 * 50);
   });
 });
+
+describe('a day-rate shift through the engine', () => {
+  const dayShift = (extra: Partial<Job> = {}): Job => ({
+    id: 'd1', name: 'Corporate', client: 'Odeum', date: '2026-09-10',
+    status: 'completed', hoursWorked: 12, dayRate: 400, dayRateHours: 10,
+    has6th7thDayRule: false, ...extra,
+  } as Job);
+
+  it('pays the day rate plus overtime past it, with no hourly rate on the shift', async () => {
+    const { jobPayBreakdown } = await import('./payCalc');
+    const s = dayShift();
+    // $400 covers 10h; 2h past at $40 x 1.5 = $120.
+    expect(jobPayBreakdown(s, [s], [], EMPTY_PROFILE).gross).toBe(520);
+  });
+
+  it('pays a meal penalty at the day rate\'s hourly equivalent', async () => {
+    const { jobPayBreakdown } = await import('./payCalc');
+    const s = dayShift({ hoursWorked: 10, mealPenalties: 1 });
+    // No hourly rate set, so an hour is $400 / 10 = $40.
+    expect(jobPayBreakdown(s, [s], [], EMPTY_PROFILE).gross).toBe(440);
+  });
+
+  it('agrees with what the Money page reconciles against', async () => {
+    const { jobPayBreakdown, calculateExpectedPay } = await import('./payCalc');
+    const s = dayShift();
+    const perShift = jobPayBreakdown(s, [s], [], EMPTY_PROFILE).gross;
+    const expected = calculateExpectedPay([s], s, [s]).total;
+    // Two paths to one figure: they must not disagree about the same day.
+    expect(expected).toBeCloseTo(perShift, 2);
+  });
+});

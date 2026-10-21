@@ -1,4 +1,5 @@
 import { Calendar } from '@/components/ui/calendar';
+import { resolveEmployer } from '@/lib/employerMatch';
 import { logParseFailure } from '@/lib/parseFailures';
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { useData } from '@/lib/DataContext';
@@ -562,10 +563,17 @@ export default function NewGigPage({ onComplete, startAs }: {
       // leaving it blank, but it IS an assumption, so the shift gets flagged
       // for review rather than quietly presented as something you were told.
       const payrollAssumed = !j.payrollCompany?.trim() && !!j.client?.trim();
+      // A day-rate employer's new shift starts on their day rate — but only
+      // when the offer itself named no hourly rate. A rate on the offer is the
+      // contract for that job and wins over any default.
+      const employerRecord = resolveEmployer(j.client, data.employers);
+      const startsOnDayRate = !j.hourlyRate && !!employerRecord?.defaultDayRate;
       const draft = {
         jobNumber: j.jobNumber, name: j.name, client: j.client, venue: j.venue,
         date: j.date, startTime: j.startTime, endTime: j.endTime, status: j.status,
         payrollCompany: j.payrollCompany?.trim() || j.client,
+        dayRate: startsOnDayRate ? employerRecord?.defaultDayRate : undefined,
+        dayRateHours: startsOnDayRate ? employerRecord?.dayRateHours : undefined,
         local: j.local, needsReview: payrollAssumed || undefined,
         hourlyRate: j.hourlyRate, steward: j.steward,
         parkingCost: j.parkingCost, notes: j.notes || '',

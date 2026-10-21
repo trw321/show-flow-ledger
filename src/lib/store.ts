@@ -27,6 +27,10 @@ export interface Job {
   mealDuration?: 0 | 30 | 45 | 60;
   /** true = paid/on the clock (no hours deduction), false = unpaid/off the clock (mealDuration is deducted). Irrelevant when mealDuration is 0. */
   mealOnClock?: boolean;
+  /** Paid by the day rather than the hour: a flat amount covering dayRateHours, paid in full however short the day. Set per shift because every project is its own contract. */
+  dayRate?: number;
+  /** How many hours the day rate covers before overtime. Default 10. */
+  dayRateHours?: number;
   /** Which kind of photo is on this shift: a pay stub (the breakdown) or the cheque itself. They prove different things — a stub says what was earned and deducted, a cheque only says what arrived — so they are marked differently. */
   payStubKind?: 'stub' | 'check';
   /** Hours filled in before the shift happened. They are a plan, not a timesheet: nothing counts them as worked or earned until the shift is confirmed on or after the day. Cleared on confirmation. Absent on anything logged after the fact. */
@@ -137,6 +141,10 @@ export interface Employer {
   nightPremiumStartHour?: number; // 0-23, default 0 (midnight)
   nightPremiumEndHour?: number;   // 0-23, optional — undefined means "until end of shift"
   nightPremiumMultiplier?: number; // default 2.0
+  /** The day rate a new shift for this employer starts from, when they pay by the day. A default only — the shift can say otherwise. */
+  defaultDayRate?: number;
+  /** How many hours this employer's day rate covers. Default 10. */
+  dayRateHours?: number;
   /** Employers like Odeum match into a retirement plan — a percentage of gross they owe on top of the pay, to the plan rather than to you. Tracked so a missing one is visible; never part of take-home. */
   retirementMatchPercent?: number;
   /** Union hours "break the hour": any part of an hour worked bills as a whole hour, so 6h06m pays 7. Off by default — not every contract rounds. */

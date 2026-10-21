@@ -64,9 +64,12 @@ interface EmployerFormState {
   estimatedTaxPercent: string;
   vacationPercent: string;
   retirementMatchPercent: string;
+  payBy: 'hour' | 'day';
+  defaultDayRate: string;
+  dayRateHours: string;
 }
 
-const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '', nightPremiumEnabled: true, unionDuesPercent: '', unionLocal: '', estimatedTaxPercent: '', vacationPercent: '', retirementMatchPercent: '' };
+const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '', nightPremiumEnabled: true, unionDuesPercent: '', unionLocal: '', estimatedTaxPercent: '', vacationPercent: '', retirementMatchPercent: '', payBy: 'hour', defaultDayRate: '', dayRateHours: '' };
 
 function employerToForm(e: Employer): EmployerFormState {
   return {
@@ -81,6 +84,9 @@ function employerToForm(e: Employer): EmployerFormState {
     estimatedTaxPercent: e.estimatedTaxPercent?.toString() ?? '',
     vacationPercent: e.vacationPercent?.toString() ?? '',
     retirementMatchPercent: e.retirementMatchPercent?.toString() ?? '',
+    payBy: e.defaultDayRate ? 'day' : 'hour',
+    defaultDayRate: e.defaultDayRate?.toString() ?? '',
+    dayRateHours: e.dayRateHours?.toString() ?? '',
   };
 }
 
@@ -99,6 +105,56 @@ function EmployerForm({ initial, onSave, onCancel }: {
         className="h-8 text-sm"
         autoFocus
       />
+      {/* How this employer pays. A day rate is a flat amount for the day,
+          paid in full however short it was, with overtime past the hours it
+          covers — common enough in corporate AV that it needs its own shape
+          rather than being faked as an hourly rate. */}
+      <div className="grid grid-cols-2 gap-1.5">
+        {([
+          { by: 'hour' as const, label: 'By the hour' },
+          { by: 'day' as const, label: 'Day rate' },
+        ]).map(({ by, label }) => (
+          <button
+            key={by}
+            type="button"
+            aria-pressed={form.payBy === by}
+            onClick={() => setForm(f => ({ ...f, payBy: by }))}
+            className={cn(
+              'pixel-button py-1.5 text-[11px] font-bold',
+              form.payBy === by ? 'bg-primary/20 border-primary text-primary' : 'bg-card text-muted-foreground',
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {form.payBy === 'day' && (
+        <div className="grid grid-cols-2 gap-2">
+          <Input
+            type="number"
+            step="0.01"
+            placeholder="Day rate ($)"
+            value={form.defaultDayRate}
+            onChange={e => setForm(f => ({ ...f, defaultDayRate: e.target.value }))}
+            className="h-8 text-xs"
+          />
+          <Input
+            type="number"
+            step="0.5"
+            placeholder="Covers (hours) — 10"
+            value={form.dayRateHours}
+            onChange={e => setForm(f => ({ ...f, dayRateHours: e.target.value }))}
+            className="h-8 text-xs"
+            title="How many hours the day rate covers. Past that is overtime at 1.5× the hourly equivalent."
+          />
+          <p className="col-span-2 text-[10px] text-muted-foreground">
+            Paid in full however short the day. Past {form.dayRateHours || '10'} hours is overtime at
+            1.5× {form.defaultDayRate
+              ? '$' + (parseFloat(form.defaultDayRate) / (parseFloat(form.dayRateHours) || 10)).toFixed(2) + '/hr'
+              : 'the hourly equivalent'}.
+          </p>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-2">
         <Input
           type="number"
@@ -106,7 +162,7 @@ function EmployerForm({ initial, onSave, onCancel }: {
           placeholder="Rate ($/hr)"
           value={form.defaultHourlyRate}
           onChange={e => setForm(f => ({ ...f, defaultHourlyRate: e.target.value }))}
-          className="h-8 text-xs"
+          className={cn('h-8 text-xs', form.payBy === 'day' && 'hidden')}
         />
         <Select value={form.overtimeRule} onValueChange={v => setForm(f => ({ ...f, overtimeRule: v as Employer['overtimeRule'], threshold: '' }))}>
           <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
@@ -382,6 +438,10 @@ export default function SettingsPage() {
       estimatedTaxPercent: form.estimatedTaxPercent ? parseFloat(form.estimatedTaxPercent) : undefined,
       vacationPercent: form.vacationPercent ? parseFloat(form.vacationPercent) : undefined,
       retirementMatchPercent: form.retirementMatchPercent ? parseFloat(form.retirementMatchPercent) : undefined,
+      // Only one of the two is the employer's way of paying; the other is
+      // cleared so a stale hourly rate cannot sit behind a day rate.
+      defaultDayRate: form.payBy === 'day' && form.defaultDayRate ? parseFloat(form.defaultDayRate) : undefined,
+      dayRateHours: form.payBy === 'day' && form.dayRateHours ? parseFloat(form.dayRateHours) : undefined,
     });
     setAddingEmployer(false);
   };
@@ -401,6 +461,10 @@ export default function SettingsPage() {
       estimatedTaxPercent: form.estimatedTaxPercent ? parseFloat(form.estimatedTaxPercent) : undefined,
       vacationPercent: form.vacationPercent ? parseFloat(form.vacationPercent) : undefined,
       retirementMatchPercent: form.retirementMatchPercent ? parseFloat(form.retirementMatchPercent) : undefined,
+      // Only one of the two is the employer's way of paying; the other is
+      // cleared so a stale hourly rate cannot sit behind a day rate.
+      defaultDayRate: form.payBy === 'day' && form.defaultDayRate ? parseFloat(form.defaultDayRate) : undefined,
+      dayRateHours: form.payBy === 'day' && form.dayRateHours ? parseFloat(form.dayRateHours) : undefined,
     });
     setEditingEmployerId(null);
   };

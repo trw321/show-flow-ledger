@@ -459,3 +459,47 @@ describe('minimum-call padding is straight time', () => {
     expect(calculateDayPay(10, 50, 0, 0, 1).totalPay).toBe(8 * 50 + 2 * 75);
   });
 });
+
+describe('a day rate', () => {
+  const day = (opts: Record<string, unknown> = {}) => ({ dayRate: 400, dayRateHours: 10, ...opts });
+
+  it('pays the full rate for a full day', () => {
+    expect(calculateDayPay(10, 0, 0, 0, 1, undefined, day()).totalPay).toBe(400);
+  });
+
+  it('pays the full rate for a short day — that is what a day rate is', () => {
+    expect(calculateDayPay(4, 0, 0, 0, 1, undefined, day()).totalPay).toBe(400);
+  });
+
+  it('pays overtime past the hours it covers, at 1.5x the hourly equivalent', () => {
+    // $400 / 10h = $40/h, so each hour past ten is $60.
+    expect(calculateDayPay(12, 0, 0, 0, 1, undefined, day()).totalPay).toBe(400 + 2 * 60);
+  });
+
+  it('covers ten hours when the contract does not say', () => {
+    expect(calculateDayPay(11, 0, 0, 0, 1, undefined, { dayRate: 400 }).totalPay).toBe(400 + 1 * 60);
+  });
+
+  it('respects a contract that covers a twelve-hour day', () => {
+    // $480 / 12h = $40/h; hour 13 is $60.
+    expect(calculateDayPay(13, 0, 0, 0, 1, undefined, day({ dayRate: 480, dayRateHours: 12 })).totalPay).toBe(480 + 60);
+  });
+
+  it('does not pay a minimum call on top of the day rate', () => {
+    expect(calculateDayPay(2, 0, 8, 0, 1, undefined, day()).totalPay).toBe(400);
+  });
+
+  it('does not pay night hours twice', () => {
+    const r = calculateDayPay(10, 0, 0, 0, 1, undefined, day({ nightHours: 4, nightMultiplier: 2 }));
+    expect(r.totalPay).toBe(400);
+  });
+
+  it('still stacks meal penalties on top', () => {
+    const r = calculateDayPay(10, 50, 0, 2, 1, undefined, day());
+    expect(r.totalPay).toBe(400 + 2 * 50);
+  });
+
+  it('leaves an hourly day exactly as it was when no day rate is set', () => {
+    expect(calculateDayPay(10, 50, 0, 0, 1).totalPay).toBe(8 * 50 + 2 * 75);
+  });
+});
