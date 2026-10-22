@@ -212,6 +212,21 @@
     box-shadow: none;
   }
 
+  /* A chosen option. Not the gel's primary: surfaces are tinted with the
+     gel's own hue, so a primary highlight on a primary-tinted card barely
+     showed. The warm white of the text stands off every gel. */
+  .pick-on {
+    border-color: hsl(var(--foreground));
+    background-color: hsl(var(--foreground) / 0.16);
+    color: hsl(var(--foreground));
+    box-shadow: inset 0 0 0 1px hsl(var(--foreground)), 2px 2px 0 hsl(var(--base-h) 60% 6% / 0.6);
+  }
+  .pick-off {
+    border-color: hsl(var(--border));
+    background-color: hsl(var(--card));
+    color: hsl(var(--muted-foreground));
+  }
+
   /* A segmented bar: discrete lit blocks, not a smooth fill. Set --segments
      and --lit, and colour it with --seg-on. */
   .pixel-meter {

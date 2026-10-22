@@ -392,6 +392,18 @@ export function jobPayBreakdown(
   const rate = job.hourlyRate
     ?? (job.dayRate ? job.dayRate / (job.dayRateHours ?? 10) : 0);
 
+  // Paid time off is paid, not worked: its hours at straight time, and
+  // nothing a worked day earns on top. Dues and withholding come out of it
+  // like any wages; vacation and a retirement match are on work.
+  if (job.pto) {
+    const ptoEmployer = resolveEmployer(job.client, employers);
+    const ptoRates = ratesForShift(job, ptoEmployer, payer);
+    const r = calculateDayPay(hours, rate, 0, 0, 1, undefined, {
+      rule: 'none', unionDuesPercent: ptoRates.unionDuesPercent, estimatedTaxPercent: ptoRates.estimatedTaxPercent,
+    });
+    return { gross: r.totalPay + r.duesAmount + r.taxAmount, net: r.totalPay, dues: r.duesAmount, tax: r.taxAmount, vacation: 0, retirementMatch: 0 };
+  }
+
   // A split day is ONE day. Both halves share the same overtime ladder, so the
   // evening call carries on from where the morning left off — five hours and
   // five hours is a ten-hour day with two of them at time and a half, not two
@@ -402,6 +414,7 @@ export function jobPayBreakdown(
     other =>
       other.date === job.date &&
       (other.client ?? '') === (job.client ?? '') &&
+      !other.pto &&
       effectiveHoursWorked(other) > 0,
   );
   const isSplitDay = dayShifts.length > 1;
@@ -606,8 +619,9 @@ export function getConsecutiveDayStreak(
 ): number {
   const targetDate = startOfDay(parseISO(entryDate));
 
+  // A day off, paid or not, breaks a run of days worked.
   const relevantJobs = allJobs.filter(
-    j => j.client === client && effectiveHoursWorked(j) > 0
+    j => j.client === client && !j.pto && effectiveHoursWorked(j) > 0
   );
 
   const workDates = [...new Set(relevantJobs.map(j => j.date))]
@@ -712,15 +726,25 @@ export function calculateExpectedPay(
     nightMultiplier: employer?.nightPremiumMultiplier ?? 2.0,
     roundUpToWholeHours: employer?.roundUpToWholeHours,
     unionDuesPercent: employer?.unionDuesPercent,
-    estimatedTaxPercent: employer?.estimatedTaxPercent,
+    // A 1099 employer withholds nothing, so nothing comes off what it sends.
+    estimatedTaxPercent: employer?.workerStatus === '1099' ? 0 : employer?.estimatedTaxPercent,
   };
 
   // Group by date
   const byDate = new Map<string, { hours: number; mealPenalties: number; rate: number; offClockMealMinutes: number; postMealPadding: number; dayRate?: number; dayRateHours?: number; mealDuration?: 0 | 30 | 45 | 60; mealOnClock?: boolean; sides: Job[] }>();
+  let ptoPay = 0;
   for (const job of jobs) {
     const hours = effectiveHoursWorked(job);
     if (hours <= 0) continue;
     const rate = job.hourlyRate || referenceJob.hourlyRate || 0;
+    if (job.pto) {
+      // Paid time off: straight time, after dues and withholding, and kept out
+      // of the day groups and the vacation base — see jobPayBreakdown.
+      const r = calculateDayPay(hours, rate, 0, 0, 1, undefined, { rule: 'none', unionDuesPercent: overtimeOptions.unionDuesPercent, estimatedTaxPercent: overtimeOptions.estimatedTaxPercent });
+      ptoPay += r.totalPay;
+      details.push({ date: job.date, hours, pay: r.totalPay, breakdown: [`PTO ${hours}h × $${rate.toFixed(2)}`, ...r.breakdown] });
+      continue;
+    }
     const existing = byDate.get(job.date) || { hours: 0, mealPenalties: 0, rate, offClockMealMinutes: 0, postMealPadding: 0, mealDuration: job.mealDuration, mealOnClock: job.mealOnClock, sides: [] };
     existing.hours += hours;
     existing.sides.push(job);
@@ -779,6 +803,9 @@ export function calculateExpectedPay(
       breakdown: [`Vacation pay (${vacationPercent}% of gross) = $${vacPay.toFixed(2)}`],
     });
   }
+
+  // After vacation, which is earned on work and not on time off.
+  total += ptoPay;
 
   return { total, details };
 }

@@ -66,7 +66,9 @@ export function ratesForShift(
     // Exempt stops federal income tax withholding. It does not stop Social
     // Security or Medicare — those are not modelled per shift, they are in
     // the year-end estimate, which says so plainly.
-    estimatedTaxPercent: profile.tax?.federalExempt
+    // A 1099 employer withholds nothing; what is owed on it shows in the
+    // year-end estimate instead. Exempt stops federal withholding too.
+    estimatedTaxPercent: employer?.workerStatus === '1099' || profile.tax?.federalExempt
       ? 0
       : profile.tax?.federalEffectivePercent ?? employer?.estimatedTaxPercent,
   };

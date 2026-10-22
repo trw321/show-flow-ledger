@@ -64,6 +64,11 @@ export interface TaxEstimate {
   medicare: number;
   state: number;
   stateDisability: number;
+  /** 1099 earnings so far — nothing withheld from them. */
+  selfEmployedYearToDate: number;
+  /** Self-employment tax on the 1099 earnings: both halves of Social
+   *  Security and Medicare, which an employer would otherwise split with you. */
+  selfEmployment: number;
   /** Everything above, which is what the year is expected to cost. */
   totalOwed: number;
   /** What the stubs say has actually been withheld, where they are known. */
@@ -83,13 +88,23 @@ export interface TaxEstimate {
  * wrong the moment it was not, whereas an effective rate can be read off a
  * stub and corrected in a second.
  */
+/** Self-employment tax: the share of 1099 earnings it is charged on, and its two parts. */
+export const SE_EARNINGS_SHARE = 0.9235;
+export const SE_SOCIAL_SECURITY_RATE = 0.124;
+export const SE_MEDICARE_RATE = 0.029;
+
 export function estimateTaxForYear(
   grossYearToDate: number,
   withheldYearToDate: number,
   profile: TaxProfile,
+  /** 1099 earnings, kept apart because nothing was withheld from them. */
+  selfEmployedYearToDate = 0,
 ): TaxEstimate {
   const notes: string[] = [];
   const gross = Math.max(0, grossYearToDate);
+  const selfEmployed = Math.max(0, selfEmployedYearToDate);
+  // Income tax is on everything earned, W2 and 1099 alike.
+  const taxable = gross + selfEmployed;
 
   const wageBase = profile.socialSecurityWageBase ?? 0;
   const ssWages = wageBase > 0 ? Math.min(gross, wageBase) : gross;
@@ -110,27 +125,39 @@ export function estimateTaxForYear(
     notes.push('Over the additional Medicare threshold — an extra 0.9% applies above it.');
   }
 
+  // On 1099 work you are the employer too: both halves of Social Security
+  // (12.4%) and Medicare (2.9%), on 92.35% of the earnings. Social Security
+  // stops at the wage base, which W2 wages use up first.
+  const seBase = selfEmployed * SE_EARNINGS_SHARE;
+  const ssRoom = wageBase > 0 ? Math.max(0, wageBase - ssWages) : Infinity;
+  const selfEmployment = Math.min(seBase, ssRoom) * SE_SOCIAL_SECURITY_RATE + seBase * SE_MEDICARE_RATE;
+  if (selfEmployed > 0) {
+    notes.push('1099 income has nothing withheld, and carries self-employment tax — both halves of Social Security and Medicare.');
+  }
+
   const credits = (profile.dependentsUnder17 ?? 0) * (profile.creditPerChild ?? 0)
     + (profile.otherDependents ?? 0) * (profile.creditPerOtherDependent ?? 0);
 
-  let federal = 0;
+  // Exempt stops federal WITHHOLDING, not the tax: whatever is owed on the
+  // year is still due when you file, which is the point of an estimate made
+  // for the end of the year. It used to read zero here, as if exempt meant
+  // owing nothing.
+  const rate = (profile.federalEffectivePercent ?? 0) / 100;
+  const federal = Math.max(0, taxable * rate - credits);
   if (profile.federalExempt) {
-    notes.push('W-4 filed exempt: no federal income tax withheld. Social Security and Medicare still come out.');
-  } else {
-    const rate = (profile.federalEffectivePercent ?? 0) / 100;
-    federal = Math.max(0, gross * rate - credits);
-    if (!profile.federalEffectivePercent) {
-      notes.push('No federal rate set, so the federal line reads zero — upload a stub and it can be worked out.');
-    }
+    notes.push('W-4 filed exempt: no federal income tax is withheld, but it is still owed when you file — it is counted here. Social Security and Medicare still come out.');
+  }
+  if (!profile.federalEffectivePercent) {
+    notes.push('No federal rate set, so the federal line reads zero — upload a stub and it can be worked out.');
   }
 
-  const state = gross * ((profile.stateTaxPercent ?? 0) / 100);
+  const state = taxable * ((profile.stateTaxPercent ?? 0) / 100);
   const stateDisability = gross * ((profile.stateDisabilityPercent ?? 0) / 100);
   if (!profile.stateTaxPercent && profile.state) {
     notes.push(`No rate set for ${profile.state}, so the state line reads zero.`);
   }
 
-  const totalOwed = federal + socialSecurity + medicare + state + stateDisability;
+  const totalOwed = federal + socialSecurity + medicare + selfEmployment + state + stateDisability;
   return {
     grossYearToDate: gross,
     federal,
@@ -138,10 +165,27 @@ export function estimateTaxForYear(
     medicare,
     state,
     stateDisability,
+    selfEmployedYearToDate: selfEmployed,
+    selfEmployment,
     totalOwed,
     withheld: withheldYearToDate,
     stillOwed: totalOwed - withheldYearToDate,
-    dependentCredits: Math.min(credits, (profile.federalEffectivePercent ?? 0) / 100 * gross),
+    dependentCredits: Math.min(credits, (profile.federalEffectivePercent ?? 0) / 100 * taxable),
     notes,
   };
+}
+
+/**
+ * The year from earnings alone, when what was withheld is not known stub by
+ * stub. A W2 employer withholds what is due on W2 wages as it goes — Social
+ * Security, Medicare and state, and federal too unless the W-4 says exempt —
+ * so what is still owed at the end of the year is the tax on 1099 work, plus
+ * federal on W2 wages filed exempt.
+ */
+export function estimateYearFromEarnings(w2Gross: number, selfEmployedGross: number, profile: TaxProfile): TaxEstimate {
+  const onWagesAlone = estimateTaxForYear(w2Gross, 0, profile);
+  const withheldOnWages = onWagesAlone.socialSecurity + onWagesAlone.medicare
+    + onWagesAlone.state + onWagesAlone.stateDisability
+    + (profile.federalExempt ? 0 : onWagesAlone.federal);
+  return estimateTaxForYear(w2Gross, withheldOnWages, profile, selfEmployedGross);
 }

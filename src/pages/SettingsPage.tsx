@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { Briefcase, FileText, Crown, SlidersHorizontal, Trash2, Plus, Pencil, X, CloudOff, CloudUpload, ChevronRight } from 'lucide-react';
 import { clearAllData } from '@/lib/store';
 import type { Employer } from '@/lib/store';
+import { ptoBalance } from '@/lib/pto';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -67,9 +68,17 @@ interface EmployerFormState {
   payBy: 'hour' | 'day';
   defaultDayRate: string;
   dayRateHours: string;
+  workerStatus: 'w2' | '1099';
+  breakTheHour: boolean;
+  roles: { name: string; rate: string }[];
+  ptoEarnHours: string;
+  ptoPerHoursWorked: string;
+  ptoStartingHours: string;
 }
 
-const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '', nightPremiumEnabled: true, unionDuesPercent: '', unionLocal: '', estimatedTaxPercent: '', vacationPercent: '', retirementMatchPercent: '', payBy: 'hour', defaultDayRate: '', dayRateHours: '' };
+const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '', nightPremiumEnabled: true, unionDuesPercent: '', unionLocal: '', estimatedTaxPercent: '', vacationPercent: '', retirementMatchPercent: '', payBy: 'hour', defaultDayRate: '', dayRateHours: '',
+  // Union work breaks the hour, so a new employer starts with it on.
+  workerStatus: 'w2', breakTheHour: true, roles: [], ptoEarnHours: '', ptoPerHoursWorked: '', ptoStartingHours: '' };
 
 function employerToForm(e: Employer): EmployerFormState {
   return {
@@ -87,6 +96,29 @@ function employerToForm(e: Employer): EmployerFormState {
     payBy: e.defaultDayRate ? 'day' : 'hour',
     defaultDayRate: e.defaultDayRate?.toString() ?? '',
     dayRateHours: e.dayRateHours?.toString() ?? '',
+    workerStatus: e.workerStatus ?? 'w2',
+    breakTheHour: e.roundUpToWholeHours ?? false,
+    roles: (e.roles ?? []).map(r => ({ name: r.name, rate: (r.hourlyRate ?? r.dayRate)?.toString() ?? '' })),
+    ptoEarnHours: e.ptoEarnHours?.toString() ?? '',
+    ptoPerHoursWorked: e.ptoPerHoursWorked?.toString() ?? '',
+    ptoStartingHours: e.ptoStartingHours?.toString() ?? '',
+  };
+}
+
+/** The employer's terms from the form — shared by adding and editing, so the two cannot drift. */
+function formTerms(form: EmployerFormState): Partial<Employer> {
+  const num = (v: string) => (v.trim() ? parseFloat(v) : undefined);
+  return {
+    workerStatus: form.workerStatus,
+    roundUpToWholeHours: form.breakTheHour,
+    roles: form.roles
+      .filter(r => r.name.trim())
+      .map(r => (form.payBy === 'day'
+        ? { name: r.name.trim(), dayRate: num(r.rate) }
+        : { name: r.name.trim(), hourlyRate: num(r.rate) })),
+    ptoEarnHours: num(form.ptoEarnHours),
+    ptoPerHoursWorked: num(form.ptoPerHoursWorked),
+    ptoStartingHours: num(form.ptoStartingHours),
   };
 }
 
@@ -105,6 +137,21 @@ function EmployerForm({ initial, onSave, onCancel }: {
         className="h-8 text-sm"
         autoFocus
       />
+      {/* W2 takes tax out of each check; 1099 takes nothing, and it is all
+          still owed at the year end, self-employment tax included. */}
+      <div className="grid grid-cols-2 gap-1.5">
+        {(['w2', '1099'] as const).map(status => (
+          <button
+            key={status}
+            type="button"
+            aria-pressed={form.workerStatus === status}
+            onClick={() => setForm(f => ({ ...f, workerStatus: status }))}
+            className={cn('pixel-button py-1.5 text-[11px] font-bold', form.workerStatus === status ? 'pick-on' : 'pick-off')}
+          >
+            {status === 'w2' ? 'W2 — tax withheld' : '1099 — nothing withheld'}
+          </button>
+        ))}
+      </div>
       {/* How this employer pays. A day rate is a flat amount for the day,
           paid in full however short it was, with overtime past the hours it
           covers — common enough in corporate AV that it needs its own shape
@@ -121,7 +168,7 @@ function EmployerForm({ initial, onSave, onCancel }: {
             onClick={() => setForm(f => ({ ...f, payBy: by }))}
             className={cn(
               'pixel-button py-1.5 text-[11px] font-bold',
-              form.payBy === by ? 'bg-primary/20 border-primary text-primary' : 'bg-card text-muted-foreground',
+              form.payBy === by ? 'pick-on' : 'pick-off',
             )}
           >
             {label}
@@ -189,6 +236,16 @@ function EmployerForm({ initial, onSave, onCancel }: {
         className="h-8 text-xs"
       />
       <div className="flex items-center justify-between gap-2 pt-1">
+        <span className="text-xs">
+          Break the hour
+          <span className="block text-[10px] text-muted-foreground">A part hour worked pays as a whole one — 8h15m pays 9.</span>
+        </span>
+        <Switch
+          checked={form.breakTheHour}
+          onCheckedChange={v => setForm(f => ({ ...f, breakTheHour: v }))}
+        />
+      </div>
+      <div className="flex items-center justify-between gap-2 pt-1">
         <span className="text-xs">Night premium (midnight = 2×)</span>
         <Switch
           checked={form.nightPremiumEnabled}
@@ -241,6 +298,59 @@ function EmployerForm({ initial, onSave, onCancel }: {
           className="h-8 text-xs"
           title="A percentage of gross this employer owes into your retirement plan. Owed to the plan, not to you, so it never counts as take-home — tracked so a missing one is visible."
         />
+      </div>
+      {/* Roles paid differently under the same employer — A1 at one rate,
+          stagehand at another. A shift picks its role and takes its rate. */}
+      <div className="space-y-1.5 pt-1">
+        <p className="text-xs">Roles with their own pay</p>
+        {form.roles.map((role, i) => (
+          <div key={i} className="flex items-center gap-1.5">
+            <Input
+              placeholder="Role (e.g. A1)"
+              value={role.name}
+              onChange={e => setForm(f => ({ ...f, roles: f.roles.map((r, ri) => ri === i ? { ...r, name: e.target.value } : r) }))}
+              className="h-8 text-xs flex-1"
+            />
+            <Input
+              type="number"
+              step="0.01"
+              placeholder={form.payBy === 'day' ? 'Day rate $' : 'Rate $/hr'}
+              value={role.rate}
+              onChange={e => setForm(f => ({ ...f, roles: f.roles.map((r, ri) => ri === i ? { ...r, rate: e.target.value } : r) }))}
+              className="h-8 text-xs w-28"
+            />
+            <button
+              type="button"
+              onClick={() => setForm(f => ({ ...f, roles: f.roles.filter((_, ri) => ri !== i) }))}
+              className="p-1.5 text-muted-foreground hover:text-destructive"
+              aria-label="Remove role"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => setForm(f => ({ ...f, roles: [...f.roles, { name: '', rate: '' }] }))}
+          className="text-[11px] text-foreground/80 underline"
+        >
+          + Add a role
+        </button>
+      </div>
+      {/* Paid time off earned with this employer, and what is banked. */}
+      <div className="space-y-1.5 pt-1">
+        <p className="text-xs">Paid time off (PTO)</p>
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span>Earn</span>
+          <Input type="number" step="0.1" min="0" placeholder="1" value={form.ptoEarnHours}
+            onChange={e => setForm(f => ({ ...f, ptoEarnHours: e.target.value }))} className="h-8 text-xs w-16" />
+          <span>h per</span>
+          <Input type="number" step="1" min="1" placeholder="30" value={form.ptoPerHoursWorked}
+            onChange={e => setForm(f => ({ ...f, ptoPerHoursWorked: e.target.value }))} className="h-8 text-xs w-16" />
+          <span>h worked</span>
+        </div>
+        <Input type="number" step="0.1" min="0" placeholder="Already banked (hours)" value={form.ptoStartingHours}
+          onChange={e => setForm(f => ({ ...f, ptoStartingHours: e.target.value }))} className="h-8 text-xs" />
       </div>
       <div className="flex gap-2 justify-end pt-1">
         <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
@@ -442,6 +552,7 @@ export default function SettingsPage() {
       // cleared so a stale hourly rate cannot sit behind a day rate.
       defaultDayRate: form.payBy === 'day' && form.defaultDayRate ? parseFloat(form.defaultDayRate) : undefined,
       dayRateHours: form.payBy === 'day' && form.dayRateHours ? parseFloat(form.dayRateHours) : undefined,
+      ...formTerms(form),
     });
     setAddingEmployer(false);
   };
@@ -465,6 +576,7 @@ export default function SettingsPage() {
       // cleared so a stale hourly rate cannot sit behind a day rate.
       defaultDayRate: form.payBy === 'day' && form.defaultDayRate ? parseFloat(form.defaultDayRate) : undefined,
       dayRateHours: form.payBy === 'day' && form.dayRateHours ? parseFloat(form.dayRateHours) : undefined,
+      ...formTerms(form),
     });
     setEditingEmployerId(null);
   };
@@ -495,12 +607,12 @@ export default function SettingsPage() {
                 className={cn(
                   "rounded-2xl border p-4 text-left transition-all",
                   isActive
-                    ? "border-primary bg-primary/10 ring-1 ring-primary/40"
-                    : "border-border bg-card hover:border-primary/40 hover:bg-primary/5"
+                    ? "pick-on"
+                    : "border-border bg-card hover:border-foreground/40"
                 )}
               >
-                <Icon size={18} className={isActive ? 'text-primary' : 'text-muted-foreground'} />
-                <p className={cn("text-sm font-semibold mt-2", isActive ? 'text-primary' : 'text-foreground')}>
+                <Icon size={18} className={isActive ? 'text-foreground' : 'text-muted-foreground'} />
+                <p className={cn("text-sm font-semibold mt-2", 'text-foreground')}>
                   {label}
                 </p>
                 <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{subtitle}</p>
@@ -628,6 +740,15 @@ export default function SettingsPage() {
                     {emp.overtimeRule === 'none' && ` · no overtime`}
                     {(emp.nightPremiumEnabled ?? true) && ` · night premium`}
                     {emp.timekeepingApp && ` · tracks time in ${emp.timekeepingApp}`}
+                  </p>
+                  <p className="text-[10px] text-mono text-foreground/75 mt-0.5">
+                    {emp.workerStatus === '1099' ? '1099' : 'W2'}
+                    {emp.roundUpToWholeHours && ' · breaks the hour'}
+                    {(emp.roles?.length ?? 0) > 0 && ` · ${emp.roles!.map(r => r.name).join(', ')}`}
+                    {(() => {
+                      const pto = ptoBalance(emp, data.jobs);
+                      return pto ? ` · PTO ${pto.banked}h banked` : '';
+                    })()}
                   </p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">

@@ -33,6 +33,7 @@ import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import EventIntake from '@/components/EventIntake';
 import NewGigPage from '@/pages/NewGigPage';
 import { localToday } from '@/lib/today';
+import { ptoBalance } from '@/lib/pto';
 
 const statusDot: Record<Job['status'], string> = {
   upcoming: 'bg-dot-upcoming',
@@ -63,6 +64,20 @@ function jobDotClass(job: Job, paidJobIds: Set<string>): string {
   if (paidJobIds.has(job.id)) return 'bg-dot-paid';
   if (isOverdueUpcoming(job)) return 'bg-dot-overdue';
   return statusDot[job.status];
+}
+
+/**
+ * Money in the colour of the dots, so green means paid wherever it appears.
+ * Expected pay used to be green everywhere, which read as money that had
+ * arrived. Paid once every worked shift is paid; amber if one still needs its
+ * hours; lavender while worked and waiting; light blue while still ahead.
+ */
+function moneyTone(jobs: Job[], paidJobIds: Set<string>): string {
+  const worked = jobs.filter(j => effectiveHoursWorked(j) > 0);
+  if (worked.length > 0 && worked.every(j => paidJobIds.has(j.id))) return 'text-dot-paid';
+  if (jobs.some(isOverdueUpcoming)) return 'text-dot-overdue';
+  if (worked.length > 0) return 'text-dot-pending';
+  return 'text-dot-upcoming';
 }
 
 // Card wash behind a shift — same status meaning as the dot, just readable
@@ -434,6 +449,20 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   const paidIncomeForJob = data.income.filter(i => i.jobId === job.id && i.status === 'paid');
 
   const employer = resolveEmployer(client, data.employers);
+  const employerRoles = employer?.roles ?? [];
+  const ptoHere = !!employer?.ptoEarnHours;
+  const ptoBank = employer && ptoHere ? ptoBalance(employer, data.jobs) : null;
+
+  // Picking a role sets the shift's rate from it. The form's rate box is set
+  // too, or saving the form afterwards would put the old rate back.
+  const pickRole = async (name: string) => {
+    const role = employerRoles.find(r => r.name === name);
+    const updates: Partial<Job> = { role: name || undefined };
+    if (role?.hourlyRate) { updates.hourlyRate = role.hourlyRate; setHourlyRate(role.hourlyRate.toString()); }
+    if (role?.dayRate) updates.dayRate = role.dayRate;
+    await updateJobDirect(job.id, updates);
+    if (role && (role.hourlyRate || role.dayRate)) toast.success(`${role.name} — rate set`);
+  };
   const rawNightHours = ((employer?.nightPremiumEnabled ?? true) && startTime && endTime)
     ? calculateNightHours(startTime, endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour)
     : 0;
@@ -1126,6 +1155,46 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             </span>
           </button>
         )}
+        {/* Saved as soon as they are picked, like the paid toggle above —
+            they change what the shift pays, not what was typed into it. */}
+        {(employerRoles.length > 0 || ptoHere || job.pto) && (
+          <div className="rounded-md border border-border p-3 space-y-2">
+            {employerRoles.length > 0 && (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-muted-foreground">Role</span>
+                <select
+                  value={job.role ?? ''}
+                  onChange={e => void pickRole(e.target.value)}
+                  className="h-8 max-w-[65%] border border-border bg-background px-2 text-xs"
+                  aria-label="Role worked"
+                >
+                  <option value="">No role</option>
+                  {employerRoles.map(r => (
+                    <option key={r.name} value={r.name}>
+                      {r.name}{r.hourlyRate ? ` · $${r.hourlyRate}/hr` : r.dayRate ? ` · $${r.dayRate}/day` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {(ptoHere || job.pto) && (
+              <label className="flex items-start gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={!!job.pto}
+                  onChange={e => void updateJobDirect(job.id, { pto: e.target.checked || undefined })}
+                  className="mt-0.5 shrink-0"
+                />
+                <span className="text-[11px] leading-tight">
+                  Paid time off — paid at straight time, not worked
+                  {ptoHere && ptoBank && (
+                    <span className="block text-[10px] text-muted-foreground">{ptoBank.banked}h banked with {employer?.name}</span>
+                  )}
+                </span>
+              </label>
+            )}
+          </div>
+        )}
         <div className="rounded-md border border-border bg-secondary/10 p-3 space-y-2">
           {job.name && <div className="flex justify-between gap-3"><span className="text-muted-foreground text-xs shrink-0">Project</span><span className="font-medium text-xs text-right">{job.name}</span></div>}
           {(client || job.client) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Employer</span><span className="font-medium text-xs">{client || job.client}</span></div>}
@@ -1801,6 +1870,17 @@ export default function CalendarPage() {
     return { totalJobs, totalHours, totalPay };
   }, [jobsByDate, payByDate, currentYear]);
 
+  // The shifts behind the month and year totals, so those totals take the
+  // colour their shifts' dots would.
+  const monthJobsInView = useMemo(
+    () => data.jobs.filter(j => j.date.startsWith(format(currentDate, 'yyyy-MM'))),
+    [data.jobs, currentDate],
+  );
+  const yearJobsInView = useMemo(
+    () => data.jobs.filter(j => j.date.startsWith(`${currentYear}-`)),
+    [data.jobs, currentYear],
+  );
+
   const today = new Date();
   const selectedJobs = selectedDate ? (jobsByDate[selectedDate] || []) : [];
   const selectedJob = selectedJobId ? data.jobs.find(j => j.id === selectedJobId) ?? null : null;
@@ -1965,7 +2045,7 @@ export default function CalendarPage() {
                         {dayJobs.slice(0, 3).map((job, j) => <span key={j} className={cn("w-1.5 h-1.5 rounded-full", jobDotClass(job, paidJobIds))} />)}
                         {dayJobs.length > 3 && <span className="text-[7px] text-muted-foreground text-mono">+{dayJobs.length - 3}</span>}
                       </div>
-                      {hasPay && <span className="text-[8px] text-mono text-success font-semibold leading-none mt-0.5">${payByDate[dateKey] >= 1000 ? `${(payByDate[dateKey] / 1000).toFixed(1)}k` : payByDate[dateKey].toFixed(0)}</span>}
+                      {hasPay && <span className={cn("text-[8px] text-mono font-semibold leading-none mt-0.5", moneyTone(dayJobs, paidJobIds))}>${payByDate[dateKey] >= 1000 ? `${(payByDate[dateKey] / 1000).toFixed(1)}k` : payByDate[dateKey].toFixed(0)}</span>}
                       {/* Plans underline the cell instead of taking a dot in the
                           job row — a recurring one then reads as a stripe down
                           the month, which a dot never did. */}
@@ -1994,7 +2074,7 @@ export default function CalendarPage() {
               <span className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground/50">{format(currentDate, 'MMMM')}</span>
               <div className="flex items-center gap-3">
                 {monthStats.totalHours > 0 ? <span className="text-[11px] text-mono font-semibold text-primary">{monthStats.totalHours.toFixed(1)}h</span> : <span className="text-[11px] text-mono text-muted-foreground/25">—</span>}
-                {monthStats.totalPay > 0 && <span className="text-[11px] text-mono font-bold text-success">${monthStats.totalPay >= 1000 ? `${(monthStats.totalPay / 1000).toFixed(1)}k` : monthStats.totalPay.toFixed(0)}</span>}
+                {monthStats.totalPay > 0 && <span className={cn("text-[11px] text-mono font-bold", moneyTone(monthJobsInView, paidJobIds))}>${monthStats.totalPay >= 1000 ? `${(monthStats.totalPay / 1000).toFixed(1)}k` : monthStats.totalPay.toFixed(0)}</span>}
               </div>
             </div>
           </div>
@@ -2008,9 +2088,11 @@ export default function CalendarPage() {
               const monthStart = new Date(currentYear, mi, 1);
               const monthPrefix = format(monthStart, 'yyyy-MM');
               let monthPay = 0, monthJobs = 0;
+              const monthShifts: Job[] = [];
               for (const [date, jobs] of Object.entries(jobsByDate)) {
                 if (!date.startsWith(monthPrefix)) continue;
                 monthJobs += jobs.length;
+                monthShifts.push(...jobs);
                 monthPay += payByDate[date] || 0;
               }
               const daysInMonth = new Date(currentYear, mi + 1, 0).getDate();
@@ -2025,7 +2107,7 @@ export default function CalendarPage() {
                 >
                   <div className="flex items-center justify-between mb-0.5">
                     <p className="text-[9px] font-body font-medium uppercase tracking-wider text-foreground/60">{format(monthStart, 'MMM')}</p>
-                    {monthPay > 0 && <span className="text-[7px] text-mono text-success font-semibold">${monthPay >= 1000 ? `${(monthPay / 1000).toFixed(1)}k` : monthPay.toFixed(0)}</span>}
+                    {monthPay > 0 && <span className={cn("text-[7px] text-mono font-semibold", moneyTone(monthShifts, paidJobIds))}>${monthPay >= 1000 ? `${(monthPay / 1000).toFixed(1)}k` : monthPay.toFixed(0)}</span>}
                   </div>
                   <div className="grid grid-cols-7 gap-px">
                     {cells.map((day, ci) => {
@@ -2040,7 +2122,7 @@ export default function CalendarPage() {
                         <div
                           key={ci}
                           onClick={(e) => { if (dayJobs.length > 0) { e.stopPropagation(); setSelectedDate(dateKey); } }}
-                          className={cn('h-3 flex items-center justify-center text-[6px] text-mono rounded-[2px] transition-colors select-none', dayJobs.length > 0 && 'cursor-pointer', hasPaid && 'bg-success/30 text-success font-semibold', !hasPaid && hasCompleted && 'bg-primary/25 text-primary', !hasPaid && !hasCompleted && hasUpcoming && 'bg-accent/20 text-accent', !dayJobs.length && 'text-muted-foreground/25', todayFlag && 'ring-1 ring-inset ring-primary/70')}
+                          className={cn('h-3 flex items-center justify-center text-[6px] text-mono rounded-[2px] transition-colors select-none', dayJobs.length > 0 && 'cursor-pointer', hasPaid && 'bg-dot-paid/30 text-dot-paid font-semibold', !hasPaid && hasCompleted && 'bg-dot-pending/25 text-dot-pending', !hasPaid && !hasCompleted && hasUpcoming && 'bg-dot-upcoming/20 text-dot-upcoming', !dayJobs.length && 'text-muted-foreground/25', todayFlag && 'ring-1 ring-inset ring-primary/70')}
                         >
                           {day}
                         </div>
@@ -2057,13 +2139,13 @@ export default function CalendarPage() {
               <span className="text-xs text-muted-foreground">{yearStats.totalJobs > 0 ? `${yearStats.totalJobs} job${yearStats.totalJobs !== 1 ? 's' : ''}` : 'No jobs yet'}</span>
               <div className="flex items-center gap-3">
                 {yearStats.totalHours > 0 && <span className="text-xs text-mono font-semibold text-primary">{yearStats.totalHours.toFixed(1)}h</span>}
-                {yearStats.totalPay > 0 && <span className="text-xs text-mono font-bold text-success">${yearStats.totalPay >= 1000 ? `${(yearStats.totalPay / 1000).toFixed(1)}k` : yearStats.totalPay.toFixed(0)}</span>}
+                {yearStats.totalPay > 0 && <span className={cn("text-xs text-mono font-bold", moneyTone(yearJobsInView, paidJobIds))}>${yearStats.totalPay >= 1000 ? `${(yearStats.totalPay / 1000).toFixed(1)}k` : yearStats.totalPay.toFixed(0)}</span>}
               </div>
             </div>
           </div>
           <div className="mt-2 flex items-center gap-3 px-1">
             <span className="text-[8px] text-muted-foreground/40 font-body uppercase tracking-wider">Legend</span>
-            {[{ color: 'bg-accent/20', label: 'Upcoming' }, { color: 'bg-primary/25', label: 'Completed' }, { color: 'bg-success/30', label: 'Paid' }].map(({ color, label }) => (
+            {[{ color: 'bg-dot-upcoming/20', label: 'Upcoming' }, { color: 'bg-dot-pending/25', label: 'Pending' }, { color: 'bg-dot-paid/30', label: 'Paid' }].map(({ color, label }) => (
               <div key={label} className="flex items-center gap-1">
                 <div className={cn('w-3 h-3 rounded-[2px]', color)} />
                 <span className="text-[8px] text-muted-foreground/50 font-body">{label}</span>
@@ -2085,18 +2167,18 @@ export default function CalendarPage() {
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Earned</span>
-                <span className="text-mono font-semibold text-primary">${period.expected.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                <span className="text-mono font-semibold text-foreground">${period.expected.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Paid</span>
-                <span className="text-mono font-semibold text-success">${period.paid.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                <span className="text-mono font-semibold text-dot-paid">${period.paid.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Unpaid</span>
                 {/* "All paid" used to show whenever the figure came to zero,
                     which included a month where nothing had been earned yet —
                     saying everything was settled when nothing was owed. */}
-                <span className={cn("text-mono font-semibold", period.unpaid > 0 ? "text-warning" : "text-muted-foreground")}>
+                <span className={cn("text-mono font-semibold", period.unpaid > 0 ? "text-dot-pending" : "text-muted-foreground")}>
                   {period.unpaid > 0
                     ? '$' + period.unpaid.toLocaleString(undefined, { maximumFractionDigits: 0 })
                     : period.expected > 0
@@ -2153,7 +2235,7 @@ export default function CalendarPage() {
                   return (
                     <div key={job.id} onClick={() => setSelectedJobId(job.id)} className={cn("rounded-md border p-3 space-y-1 cursor-pointer hover:opacity-90 transition-opacity", paid ? "bg-success/20 text-success border-success/30" : overdue ? "bg-warning/20 text-warning border-warning/30" : statusColors[job.status])}>
                       <div className="flex items-start justify-between">
-                        <div><p className="font-medium text-sm flex items-center gap-1.5"><CallbackMark job={job} />{job.needsReview && <span className="text-warning" title="Flagged to check later">⚑</span>}{job.name}<SplitMark job={job} allJobs={data.jobs} /></p><p className="text-xs opacity-70">{job.client}</p></div>
+                        <div><p className="font-medium text-sm flex items-center gap-1.5"><CallbackMark job={job} />{job.needsReview && <span className="text-warning" title="Flagged to check later">⚑</span>}{job.name}{job.role && <span className="opacity-70 font-normal">· {job.role}</span>}{job.pto && <span className="text-[10px] text-mono font-bold border border-current px-1">PTO</span>}<SplitMark job={job} allJobs={data.jobs} /></p><p className="text-xs opacity-70">{job.client}</p></div>
                         <span className="text-[10px] text-mono uppercase font-medium opacity-70">{paid ? 'Paid' : overdue ? 'Needs Hours' : job.status}</span>
                       </div>
                       {job.venue && <p className="text-xs opacity-60">{job.venue}</p>}
@@ -2182,7 +2264,7 @@ export default function CalendarPage() {
                 {payByDate[selectedDate!] && (
                   <div className="flex items-center justify-between pt-2 border-t border-border text-sm text-mono">
                     <span className="text-muted-foreground">Estimated pay</span>
-                    <span className="font-bold text-success">${payByDate[selectedDate!].toLocaleString()}</span>
+                    <span className={cn("font-bold", moneyTone(jobsByDate[selectedDate!] ?? [], paidJobIds))}>${payByDate[selectedDate!].toLocaleString()}</span>
                   </div>
                 )}
 
@@ -2357,6 +2439,8 @@ export default function CalendarPage() {
                           <p className="text-[13px] text-foreground/75 leading-snug truncate mt-1">
                             {jobs.some(j => j.needsReview) && <span className="text-warning mr-1" title="Flagged to check later">⚑</span>}
                             {first.name}
+                            {first.role && <span className="text-muted-foreground"> · {first.role}</span>}
+                            {jobs.some(j => j.pto) && <span className="ml-1.5 text-[10px] text-mono font-bold border border-foreground/50 px-1">PTO</span>}
                           </p>
                           <p className="text-[11px] text-muted-foreground truncate">{first.client}</p>
                         </div>
@@ -2364,7 +2448,7 @@ export default function CalendarPage() {
                             one thing sized to be read without stopping. */}
                         <div className="shrink-0 text-right">
                           {totalEarned > 0 ? (
-                            <p className="text-lg font-bold text-mono text-success leading-none">${Math.round(totalEarned).toLocaleString()}</p>
+                            <p className={cn("text-lg font-bold text-mono leading-none", moneyTone(jobs, paidJobIds))}>${Math.round(totalEarned).toLocaleString()}</p>
                           ) : (
                             <p className="text-[11px] text-mono text-muted-foreground leading-none">{statusLabel[first.status]}</p>
                           )}

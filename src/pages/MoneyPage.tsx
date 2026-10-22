@@ -22,6 +22,8 @@ import { DollarSign, Mic, MicOff, Trash2, Pencil, Clock, Scale, ChevronDown, Che
 import { format, differenceInDays, addDays, endOfMonth, parseISO, startOfWeek, isWithinInterval, endOfWeek, startOfMonth, differenceInCalendarDays } from 'date-fns';
 import { calculateExpectedPay, effectiveHoursWorked, netHoursWorked } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
+import { useUserPrefs } from '@/lib/UserPrefsContext';
+import { estimateYearFromEarnings } from '@/lib/taxEstimate';
 import type { Income, Job } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -712,7 +714,27 @@ function ReconciliationRowCard({
 export default function MoneyPage() {
   const { data, addIncome, updateIncome, deleteIncome, updateJob, updateEmployer, addJob } = useData();
   const navigate = useNavigate();
+  const { prefs } = useUserPrefs();
   const [editId, setEditId] = useState<string | null>(null);
+
+  // The year's tax so far: what W2 checks withhold as they go, and what is
+  // left for tax time — all of the tax on 1099 work, self-employment tax
+  // included, and federal on W2 wages if the W-4 was filed exempt.
+  const taxYear = useMemo(() => {
+    const year = String(new Date().getFullYear());
+    let w2 = 0;
+    let selfEmployed = 0;
+    for (const job of data.jobs) {
+      if (!job.date.startsWith(year)) continue;
+      const b = jobPayBreakdown(job, data.jobs, data.employers, prefs.payer);
+      if (b.gross <= 0) continue;
+      // Vacation is wages too.
+      const earned = b.gross + b.vacation;
+      if (resolveEmployer(job.client, data.employers)?.workerStatus === '1099') selfEmployed += earned;
+      else w2 += earned;
+    }
+    return { year, w2, selfEmployed, estimate: estimateYearFromEarnings(w2, selfEmployed, prefs.payer.tax ?? {}) };
+  }, [data.jobs, data.employers, prefs.payer]);
 
   // Reconciliation state (ported from the retired Pay page)
   const [filterJobClient, setFilterJobClient] = useState<string>('all');
@@ -1253,6 +1275,31 @@ export default function MoneyPage() {
           />
         </div>
       )}
+
+      {(taxYear.w2 > 0 || taxYear.selfEmployed > 0) && (() => {
+        const owed = taxYear.estimate.stillOwed;
+        const dollars = (n: number) => '$' + Math.round(n).toLocaleString();
+        return (
+          <div className="pixel-panel mt-6 p-3 space-y-1.5">
+            <p className="text-[10px] text-mono uppercase tracking-widest text-muted-foreground">Tax · {taxYear.year} estimate</p>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-xs text-muted-foreground">Still to pay at tax time</span>
+              <span className={cn('text-lg font-bold text-mono', owed > 1 ? 'text-dot-overdue' : 'text-dot-paid')}>
+                {owed > 1 ? dollars(owed) : owed < -1 ? `refund ~${dollars(-owed)}` : 'covered'}
+              </span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              W2 {dollars(taxYear.w2)}{taxYear.selfEmployed > 0 && <> · 1099 {dollars(taxYear.selfEmployed)} · self-employment tax {dollars(taxYear.estimate.selfEmployment)}</>}
+            </p>
+            {prefs.payer.tax?.federalExempt && (
+              <p className="text-[11px] text-warning">W-4 exempt: no federal tax is withheld from your checks — it's counted above.</p>
+            )}
+            {!prefs.payer.tax?.federalEffectivePercent && (
+              <p className="text-[11px] text-muted-foreground">Set your tax rate in Settings for a real figure.</p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── Reconciliation (ported from the retired Pay page) ──────────────── */}
       <div className="mt-8 mb-3 flex items-center justify-between gap-2">

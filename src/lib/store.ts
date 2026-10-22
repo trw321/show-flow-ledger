@@ -81,6 +81,10 @@ export interface Job {
     now: number;
     at: string;
   }[];
+  /** The role worked on this shift — "A1", "Stagehand" — when the employer pays roles differently. Picking one sets the shift's rate from it. */
+  role?: string;
+  /** Paid time off: the hours are paid at straight time but were not worked, so they earn nothing a worked day does — no overtime, night premium, meal penalty or minimum — and they come out of the PTO banked with this employer. */
+  pto?: boolean;
   notes: string;
   createdAt: string;
 }
@@ -124,9 +128,26 @@ export interface Equipment {
   createdAt: string;
 }
 
+/** A role this employer pays at its own rate. */
+export interface EmployerRole {
+  name: string;
+  hourlyRate?: number;
+  dayRate?: number;
+}
+
 export interface Employer {
   id: string;
   name: string;
+  /** How this employer pays you. 1099 withholds nothing — the tax on it is all still owed, self-employment tax included — where W2 takes it out of each check. Undefined is W2. */
+  workerStatus?: 'w2' | '1099';
+  /** Roles paid at different rates under the same employer. */
+  roles?: EmployerRole[];
+  /** Paid time off earned: this many hours… */
+  ptoEarnHours?: number;
+  /** …for every this many hours worked. California's sick-leave minimum is 1 per 30. */
+  ptoPerHoursWorked?: number;
+  /** PTO hours already banked before the shifts in this ledger. */
+  ptoStartingHours?: number;
   defaultHourlyRate?: number;
   payrollCompany?: string;
   timekeepingApp?: string;

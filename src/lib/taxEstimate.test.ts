@@ -42,9 +42,10 @@ describe('what the year is expected to cost', () => {
 });
 
 describe('claiming exempt', () => {
-  it('stops federal income tax and nothing else', () => {
+  it('stops federal withholding, not the federal tax owed at the year end', () => {
     const e = estimateTaxForYear(50_000, 0, { ...base, federalExempt: true });
-    expect(e.federal).toBe(0);
+    // Exempt is about what comes out of each check. The year still owes it.
+    expect(e.federal).toBeCloseTo(estimateTaxForYear(50_000, 0, base).federal, 2);
     // The part people get caught by: FICA is not optional.
     expect(e.socialSecurity).toBeCloseTo(50_000 * SOCIAL_SECURITY_RATE, 2);
     expect(e.medicare).toBeCloseTo(50_000 * MEDICARE_RATE, 2);
