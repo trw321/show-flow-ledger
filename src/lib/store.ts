@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import { isDuplicateJob } from './jobDedup';
+import { localToday } from './today';
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -266,10 +267,19 @@ function migrateJob(job: Job & { mealType?: 'YWA' | 'NWA' }): Job {
   //
   // Only ever touches a FUTURE date. A past shift marked completed is just a
   // shift that was worked, and is left alone.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   if (job.date > today && job.status === 'completed') {
     job.status = 'upcoming';
     if (job.hoursWorked && job.hoursPlanned === undefined) job.hoursPlanned = true;
+  }
+
+  // The other way round: a shift whose day has passed, with its call and wrap
+  // times, is already counted as worked — but an offer saved before the day
+  // kept saying "upcoming" for ever after, so its dot and label disagreed
+  // with its pay. Hours typed in ahead as a plan are left for you to confirm.
+  if (job.date < today && (job.status === 'upcoming' || job.status === 'in-progress')
+      && job.startTime && job.endTime && !job.hoursPlanned) {
+    job.status = 'completed';
   }
 
   return job;

@@ -160,12 +160,14 @@ describe('each side of a split keeps its own minimum call', () => {
     has6th7thDayRule: false,
   } as Job);
 
-  it('bills a short morning at its minimum, not the hours stood there', async () => {
+  it('bills a short morning at its minimum, the padding at straight time', async () => {
     const { jobPayBreakdown } = await import('./payCalc');
-    // 3h worked against a 4h minimum, then 5h at night: 4 + 5 = 9 billable.
+    // 3h worked against a 4h minimum, then 5h at night: 9 billable. The 8
+    // worked fill the straight-time ladder; the hour the minimum adds was
+    // never worked, so it is straight time too, not overtime.
     const day = [side('a', 3), side('b', 5)];
     const total = day.reduce((sum, j) => sum + jobPayBreakdown(j, day, [], EMPTY_PROFILE).gross, 0);
-    expect(total).toBeCloseTo(8 * 50 + 1 * 75, 2);
+    expect(total).toBeCloseTo(8 * 50 + 1 * 50, 2);
   });
 
   it('applies the minimum once per side, never to the whole day', async () => {

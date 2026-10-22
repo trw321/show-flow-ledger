@@ -18,7 +18,7 @@ import { parseDayTimeline, withGapOnClock, type DayTimeline } from '@/lib/dayTim
 import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO } from 'date-fns';
 import type { Job, CalendarEvent } from '@/lib/store';
-import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross } from '@/lib/payCalc';
+import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross, compareCalls } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { useSwipe } from '@/lib/useSwipe';
 import { cn } from '@/lib/utils';
@@ -1634,6 +1634,8 @@ export default function CalendarPage() {
   const jobsByDate = useMemo(() => {
     const map: Record<string, Job[]> = {};
     data.jobs.forEach(job => { if (!map[job.date]) map[job.date] = []; map[job.date].push(job); });
+    // A day's calls in the order they were worked, morning first.
+    for (const list of Object.values(map)) list.sort(compareCalls);
     return map;
   }, [data.jobs]);
 
@@ -2264,7 +2266,9 @@ export default function CalendarPage() {
 
       {(() => {
         const monthPrefix = format(currentDate, 'yyyy-MM');
-        const monthJobs = data.jobs.filter(job => job.date.startsWith(monthPrefix)).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
+        // Newest day first, but a day's own calls morning first.
+        const monthJobs = data.jobs.filter(job => job.date.startsWith(monthPrefix))
+          .sort((a, b) => a.date === b.date ? compareCalls(a, b) : b.date.localeCompare(a.date)).slice(0, 10);
         if (monthJobs.length === 0) return null;
         const loggedGroups: Record<string, Job[]> = {};
         for (const job of monthJobs) {
@@ -2284,7 +2288,9 @@ export default function CalendarPage() {
                 const totalHours = jobs.reduce((s, j) => s + netHoursWorked(j), 0);
                 const totalEarned = jobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers), 0);
                 const last = jobs[jobs.length - 1];
-                const dateRange = jobs.length > 1 ? `${format(new Date(last.date + 'T12:00:00'), 'MMM d')} – ${format(new Date(first.date + 'T12:00:00'), 'MMM d')}` : format(new Date(first.date + 'T12:00:00'), 'MMM d');
+                // A split is two calls on one day, not two days.
+                const dayCount = new Set(jobs.map(j => j.date)).size;
+                const dateRange = dayCount > 1 ? `${format(new Date(last.date + 'T12:00:00'), 'MMM d')} – ${format(new Date(first.date + 'T12:00:00'), 'MMM d')}` : format(new Date(first.date + 'T12:00:00'), 'MMM d');
                 const isGroup = jobs.length > 1;
                 const expanded = expandedGroupKey === key;
                 const openJob = (job: Job) => { setSelectedDate(job.date); setSelectedJobId(job.id); };
@@ -2320,7 +2326,7 @@ export default function CalendarPage() {
                       </div>
                       <div className="mt-2.5 flex items-center gap-1.5">
                         <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", jobDotClass(first, paidJobIds))} />
-                        {isGroup && <span className="text-[10px] text-mono bg-foreground/10 text-foreground/70 px-1.5 py-0.5 rounded-full">{jobs.length} days</span>}
+                        {isGroup && <span className="text-[10px] text-mono bg-foreground/10 text-foreground/70 px-1.5 py-0.5 rounded-full">{dayCount > 1 ? `${dayCount} days` : `${jobs.length} calls`}</span>}
                         {first.jobNumber && <span className="text-[10px] text-mono text-muted-foreground/60">#{first.jobNumber}</span>}
                         <span className="flex-1" />
                         {totalHours > 0 && (

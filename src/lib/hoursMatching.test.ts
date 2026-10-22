@@ -1,7 +1,9 @@
+import { localToday } from './today';
 import { describe, it, expect } from 'vitest';
 import { hourUpdateToEntry, matchEntries, isCallbackShift, type SmartImportHourUpdate, type HoursEntry } from './hoursMatching';
 import { calculateDayPay, offClockMealMinutes, netHoursWorked, jobPayBreakdown, effectiveHoursWorked } from './payCalc';
-import type { Job } from './store';
+import type { Employer, Job } from './store';
+import { EMPTY_PROFILE } from './payerProfile';
 
 // smart-import hands back hours already net of an off-the-clock meal, while
 // the rest of the app treats job.hoursWorked as the raw clocked span and lets
@@ -283,6 +285,58 @@ describe('union hours break the hour', () => {
   it('is off unless the contract says otherwise', () => {
     expect(calculateDayPay(8.25, 50, 0, 0, 1).billableHours).toBe(8.25);
   });
+
+  it('pays the broken hour as worked time, so it climbs the ladder', () => {
+    // 8h15m worked is nine hours worked: eight straight and one at time and a
+    // half — not 8.25 worked and three quarters of an hour of padding.
+    const r = calculateDayPay(8.25, 50, 0, 0, 1, undefined, { roundUpToWholeHours: true });
+    expect(r.totalPay).toBe(8 * 50 + 1 * 75);
+  });
+
+  it('pays a broken hour after midnight at the night rate', () => {
+    // 6:00 PM to 12:15 AM: the quarter hour past midnight bills a whole hour,
+    // and that hour is night time.
+    const r = calculateDayPay(6.25, 50, 0, 0, 1, undefined, {
+      roundUpToWholeHours: true, nightHours: 0.25, nightLeftAtEnd: Infinity, nightMultiplier: 2,
+    });
+    expect(r.nightHours).toBe(1);
+    expect(r.totalPay).toBe(6 * 50 + 1 * 100);
+  });
+
+  it('keeps the broken hour out of the night when the night window has closed', () => {
+    // Ending exactly as the window closes, the rounded-up time is daytime.
+    const r = calculateDayPay(8.25, 50, 0, 0, 1, undefined, {
+      roundUpToWholeHours: true, nightHours: 6, nightLeftAtEnd: 0, nightMultiplier: 2,
+    });
+    expect(r.nightHours).toBe(6);
+  });
+});
+
+describe('a split day that runs past midnight', () => {
+  // Palace of Fine Arts: a morning call, then an evening call to 12:15 AM.
+  const employer = { id: 'e', name: 'Palace', overtimeRule: 'daily', roundUpToWholeHours: true, nightPremiumEnabled: true, nightPremiumMultiplier: 2, createdAt: 'x' } as Employer;
+  const call = (id: string, start: string, end: string, hours: number) => ({
+    id, name: 'Palace', client: 'Palace', venue: 'Palace of Fine Arts', date: '2026-10-10', jobNumber: 'P-1',
+    status: 'completed', startTime: start, endTime: end, hoursWorked: hours, hourlyRate: 50,
+    has6th7thDayRule: false, notes: '', createdAt: 'x',
+  } as Job);
+  // Listed second call first — the order new shifts used to land in.
+  const day = [call('pm', '06:00 PM', '12:15 AM', 6.25), call('am', '08:00 AM', '12:00 PM', 4)];
+
+  it('bills the quarter hour past midnight as a whole night hour', async () => {
+    const { jobPayBreakdown } = await import('./payCalc');
+    const total = day.reduce((sum, j) => sum + jobPayBreakdown(j, day, [employer], EMPTY_PROFILE).gross, 0);
+    // 10.25 worked rounds to 11: one is the night hour, ten climb the ladder.
+    expect(total).toBeCloseTo(8 * 50 + 2 * 75 + 1 * 100, 2);
+  });
+
+  it('agrees with the Money page, whichever call is listed first', async () => {
+    const { jobPayBreakdown, calculateExpectedPay } = await import('./payCalc');
+    const perShift = day.reduce((sum, j) => sum + jobPayBreakdown(j, day, [employer], EMPTY_PROFILE).gross, 0);
+    expect(calculateExpectedPay(day, day[0], day, employer).total).toBeCloseTo(perShift, 2);
+    const flipped = [...day].reverse();
+    expect(calculateExpectedPay(flipped, flipped[0], flipped, employer).total).toBeCloseTo(perShift, 2);
+  });
 });
 
 describe('the two hours guaranteed after a meal reach the pay', () => {
@@ -364,7 +418,7 @@ describe('a shift that has not happened yet', () => {
   const dayOffset = (n: number) => {
     const d = new Date();
     d.setDate(d.getDate() + n);
-    return d.toISOString().slice(0, 10);
+    return localToday(d);
   };
   const scheduled = (date: string, extra: Partial<Job> = {}): Job => ({
     id: 'j1', name: 'Load in', client: 'Acme', date,

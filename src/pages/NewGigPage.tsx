@@ -20,6 +20,7 @@ import {
   type HoursEntry, type MatchResult as HoursMatchResult, type SmartImportHourUpdate,
 } from '@/lib/hoursMatching';
 import { useSwipe } from '@/lib/useSwipe';
+import { localToday } from '@/lib/today';
 import {
   type ParsedJob, splitJobRecords, expandCBRecord, expandThruNotesForBatch,
 } from '@/lib/dispatchParsing';
@@ -568,9 +569,15 @@ export default function NewGigPage({ onComplete, startAs }: {
       // contract for that job and wins over any default.
       const employerRecord = resolveEmployer(j.client, data.employers);
       const startsOnDayRate = !j.hourlyRate && !!employerRecord?.defaultDayRate;
+      // A shift whose day has already passed, entered with its call and wrap
+      // times, is a record of work done — saving after the day is what
+      // confirms hours. Left "upcoming", one half of a past split said
+      // upcoming and the other said needs hours. Today's stays a plan.
+      const alreadyWorked = j.date < localToday() && !!j.startTime && !!j.endTime;
       const draft = {
         jobNumber: j.jobNumber, name: j.name, client: j.client, venue: j.venue,
-        date: j.date, startTime: j.startTime, endTime: j.endTime, status: j.status,
+        date: j.date, startTime: j.startTime, endTime: j.endTime,
+        status: alreadyWorked && j.status !== 'cancelled' ? 'completed' as const : j.status,
         payrollCompany: j.payrollCompany?.trim() || j.client,
         dayRate: startsOnDayRate ? employerRecord?.defaultDayRate : undefined,
         dayRateHours: startsOnDayRate ? employerRecord?.dayRateHours : undefined,

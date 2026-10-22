@@ -1,3 +1,4 @@
+import { localToday } from './today';
 import { describe, it, expect } from 'vitest';
 import { parseDayTimeline, withGapOnClock } from './dayTimeline';
 import { calculateDayPay, offClockMealMinutes, netHoursWorked } from './payCalc';
@@ -350,7 +351,7 @@ describe('a planned shift waiting to be confirmed', () => {
   const yesterday = () => {
     const d = new Date();
     d.setDate(d.getDate() - 1);
-    return d.toISOString().slice(0, 10);
+    return localToday(d);
   };
 
   it('is still asking to be dealt with', () => {

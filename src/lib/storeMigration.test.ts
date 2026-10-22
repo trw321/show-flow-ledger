@@ -1,3 +1,4 @@
+import { localToday } from './today';
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { Job } from './store';
 
@@ -10,7 +11,7 @@ const { migrateJob } = __testables;
 const dayOffset = (n: number) => {
   const d = new Date();
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  return localToday(d);
 };
 
 const job = (over: Partial<Job>): Job => ({
@@ -51,6 +52,26 @@ describe('repairing shifts that marked themselves done before the day', () => {
   it('does not override a shift already confirmed as planned or not', () => {
     const fixed = migrateJob(job({ date: dayOffset(7), status: 'completed', hoursWorked: 9, hoursPlanned: false }));
     expect(fixed.hoursPlanned).toBe(false);
+  });
+
+  it('marks a past shift with its times as worked, instead of upcoming for ever', () => {
+    const fixed = migrateJob(job({ date: dayOffset(-2), status: 'upcoming', startTime: '06:00 PM', endTime: '12:15 AM' }));
+    expect(fixed.status).toBe('completed');
+  });
+
+  it('leaves a past shift with no wrap time asking for its hours', () => {
+    const fixed = migrateJob(job({ date: dayOffset(-2), status: 'upcoming', startTime: '08:00 AM' }));
+    expect(fixed.status).toBe('upcoming');
+  });
+
+  it('leaves hours typed in ahead for you to confirm', () => {
+    const fixed = migrateJob(job({ date: dayOffset(-2), status: 'upcoming', startTime: '08:00 AM', endTime: '05:00 PM', hoursWorked: 9, hoursPlanned: true }));
+    expect(fixed.status).toBe('upcoming');
+  });
+
+  it('leaves today alone, even with times', () => {
+    const fixed = migrateJob(job({ date: dayOffset(0), status: 'upcoming', startTime: '08:00 AM', endTime: '05:00 PM' }));
+    expect(fixed.status).toBe('upcoming');
   });
 
   it('still converts the retired meal codes', () => {
