@@ -144,6 +144,68 @@ function namesMatch(a?: string, b?: string): boolean {
   return false;
 }
 
+/** What the shifts in a row were: the project names, so two projects for the same employer read apart. */
+function projectLabel(row: { jobName: string; jobs: Job[] }): string {
+  const names = [...new Set(row.jobs.map(j => j.name?.trim()).filter(Boolean))];
+  if (names.length === 0) return row.jobName;
+  const number = names.length === 1 ? row.jobs.find(j => j.jobNumber?.trim())?.jobNumber?.trim() : undefined;
+  return names.join(' · ') + (number ? ` #${number}` : '');
+}
+
+/** "Oct 13" or "Oct 13 – Oct 15": when the row's work was. */
+function workSpan(row: { jobs: Job[]; periodEnd: string }): string {
+  const dates = row.jobs.map(j => j.date).sort();
+  if (dates.length === 0) return format(parseISO(row.periodEnd), 'MMM d');
+  const first = format(parseISO(dates[0]), 'MMM d');
+  const last = format(parseISO(dates[dates.length - 1]), 'MMM d');
+  return first === last ? first : `${first} – ${last}`;
+}
+
+interface RowCandidate {
+  referenceJob: Job;
+  periodJobs: Job[];
+  expected: number;
+  workStart: string;
+  workEnd: string;
+}
+
+const lexLess = (a: number[], b: number[]) => {
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] < b[i];
+  return false;
+};
+
+/**
+ * The one row a payment not tied to a shift most likely paid. It used to
+ * count toward every row with a matching employer name, so one cheque from a
+ * company you did two projects for showed as paid on both — and counted
+ * twice in the totals.
+ *
+ * Eligible: the same employer or payroll company, arriving no earlier than
+ * the work began and within three months of it ending. Then, in order: a row
+ * with hours worked, one not already paid by a payment tied to it, the
+ * closest expected amount, and the shortest wait.
+ */
+function bestRowForPayment(payment: Income, rows: RowCandidate[], alreadyPaid: Set<number>): number | undefined {
+  let best: number | undefined;
+  let bestKey: number[] | undefined;
+  rows.forEach((r, idx) => {
+    const ref = r.referenceJob;
+    if (!namesMatch(payment.client, ref.client) && !namesMatch(payment.client, ref.payrollCompany)) return;
+    const paid = parseISO(payment.date);
+    const sinceStart = differenceInDays(paid, parseISO(r.workStart));
+    const sinceEnd = differenceInDays(paid, parseISO(r.workEnd));
+    if (sinceStart < -3 || sinceEnd > 90) return;
+    const key = [
+      r.periodJobs.length > 0 ? 0 : 1,
+      alreadyPaid.has(idx) ? 1 : 0,
+      r.expected > 0 ? Math.abs(r.expected - payment.amount) / Math.max(payment.amount, 1) : 1,
+      Math.abs(sinceEnd),
+    ];
+    if (!bestKey || lexLess(key, bestKey)) { best = idx; bestKey = key; }
+  });
+  return best;
+}
+
 interface ReconciliationRow {
   jobId: string;
   jobName: string;
@@ -163,6 +225,7 @@ interface ReconciliationRow {
   jobs: Job[];
   timeEntryDetails: { date: string; hours: number; pay: number; breakdown: string[] }[];
   incomeDetails: {
+    id: string;
     date: string;
     amount: number;
     description: string;
@@ -373,7 +436,7 @@ function IncomeMadlib({ jobs, onAdd }: {
 
 function ReconciliationRowCard({
   row, isExpanded, isEditing, isToggling, editState, setEditState, paidJobIds, navigate,
-  onToggleExpand, onStartEdit, onCancelEdit, onSaveEdit, onPaidToggle, onShowImport,
+  onToggleExpand, onStartEdit, onCancelEdit, onSaveEdit, onPaidToggle, onShowImport, onDeleteIncome,
 }: {
   row: ReconciliationRow;
   isExpanded: boolean;
@@ -389,7 +452,10 @@ function ReconciliationRowCard({
   onSaveEdit: () => void;
   onPaidToggle: () => void;
   onShowImport: () => void;
+  onDeleteIncome: (id: string) => void;
 }) {
+  // A payment line takes two taps to remove: one to ask, one to confirm.
+  const [removing, setRemoving] = useState<string | null>(null);
   const isMatch = Math.abs(row.difference) < 0.01;
   const isOver = row.difference > 0;
   // A multi-shift "project" row only needs SOME linked income to flip
@@ -436,8 +502,11 @@ function ReconciliationRowCard({
               💰
             </button>
           </div>
+          {/* The project, so two jobs for the same employer — and the
+              cheques for each — read apart. */}
+          <p className="text-xs text-foreground/85 mt-0.5 truncate">{projectLabel(row)}</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {row.periodLabel}
+            {row.periodLabel === 'Full project' ? workSpan(row) : row.periodLabel}
             {row.payrollCompany ? ` · via ${row.payrollCompany}` : ''}
           </p>
           <p className="text-[10px] text-mono text-muted-foreground mt-1">
@@ -526,6 +595,7 @@ function ReconciliationRowCard({
                 <div className="space-y-1.5">
                   {row.timeEntryDetails.map((t, j) => {
                     const jobForDate = row.jobs.find(job => job.date === t.date);
+                    const mixed = new Set(row.jobs.map(job => job.name)).size > 1;
                     const paid = jobForDate ? paidJobIds.has(jobForDate.id) : false;
                     return (
                       <button
@@ -541,7 +611,10 @@ function ReconciliationRowCard({
                         )}
                       >
                         <div className="flex justify-between items-center">
-                          <span className={paid ? 'text-foreground' : undefined}>{format(parseISO(t.date), 'MMM d')} — {t.hours}h</span>
+                          <span className={paid ? 'text-foreground' : undefined}>
+                            {format(parseISO(t.date), 'MMM d')} — {t.hours}h
+                            {mixed && jobForDate && <span className="text-muted-foreground"> · {jobForDate.name}</span>}
+                          </span>
                           <span className={cn('text-mono font-medium', paid ? 'text-success' : 'text-foreground')}>${t.pay.toFixed(2)}</span>
                         </div>
                         {t.breakdown.length > 0 && (
@@ -582,7 +655,28 @@ function ReconciliationRowCard({
                             <span>{format(parseISO(inc.date), 'MMM d')}</span>
                             {inc.description && <span className="text-muted-foreground"> — {inc.description}</span>}
                           </div>
-                          <span className="text-mono font-medium text-success shrink-0">+${inc.amount.toFixed(2)}</span>
+                          <span className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-mono font-medium text-success">+${inc.amount.toFixed(2)}</span>
+                            {removing === inc.id ? (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); setRemoving(null); onDeleteIncome(inc.id); }}
+                                className="text-[10px] text-mono font-bold text-destructive border border-destructive/40 px-1.5 py-0.5"
+                              >
+                                remove
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); setRemoving(inc.id); }}
+                                aria-label="Remove this payment"
+                                title="Remove this payment — for one counted twice"
+                                className="p-0.5 text-muted-foreground hover:text-destructive"
+                              >
+                                <X size={12} />
+                              </button>
+                            )}
+                          </span>
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
                           {inc.paymentMethod && (
@@ -661,12 +755,15 @@ export default function MoneyPage() {
     return set;
   }, [data.income]);
 
-  const reconciliation = useMemo<ReconciliationRow[]>(() => {
+  // Every shift grouped into the rows below, and which row each payment
+  // belongs to. Worked out across all employers at once — the filter only
+  // hides rows — so a payment never looks unclaimed because its row is
+  // filtered out.
+  const ledgerRows = useMemo(() => {
     const rows: ReconciliationRow[] = [];
     const productions: Record<string, Job[]> = {};
 
     for (const job of data.jobs) {
-      if (filterJobClient !== 'all' && job.client !== filterJobClient) continue;
       // A job on an actual recurring pay schedule (weekly/bi-weekly/etc) needs
       // every shift for that employer grouped together so the period math can
       // work. But most one-off gig work has no paySchedule set (or is
@@ -685,51 +782,53 @@ export default function MoneyPage() {
 
     const todayStr = format(new Date(), 'yyyy-MM-dd');
 
-    for (const prodJobs of Object.values(productions)) {
+    const candidates = Object.values(productions).map(prodJobs => {
       const referenceJob = prodJobs[0];
-      const periods = getPayPeriods(referenceJob);
+      const period = getPayPeriods(referenceJob)[0];
+      const periodJobs = prodJobs.filter(j => {
+        if (effectiveHoursWorked(j) <= 0) return false;
+        // A dispatch offer often already states a call time and an
+        // anticipated wrap time before the shift has even happened —
+        // effectiveHoursWorked derives hours from those clock times when
+        // no explicit hoursWorked is set, which made an upcoming shift
+        // look "worked" and show up here to be reconciled before it was
+        // actually worked. An explicit hoursWorked is a real confirmation
+        // (logged after the fact) and counts regardless of date; clock
+        // times alone only count once the shift's date has passed, since
+        // hours worked can easily differ from what was originally offered.
+        if (j.hoursWorked) return true;
+        return j.date < todayStr;
+      });
+      const employer = resolveEmployer(referenceJob.client, data.employers);
+      const payResult = calculateExpectedPay(periodJobs, referenceJob, data.jobs, employer);
+      const dates = (periodJobs.length > 0 ? periodJobs : prodJobs).map(j => j.date).sort();
+      return { referenceJob, period, prodJobs, periodJobs, payResult, expected: payResult.total, workStart: dates[0], workEnd: dates[dates.length - 1] };
+    });
 
-      for (const period of periods) {
-        const periodJobs = prodJobs.filter(j => {
-          if (effectiveHoursWorked(j) <= 0) return false;
-          // A dispatch offer often already states a call time and an
-          // anticipated wrap time before the shift has even happened —
-          // effectiveHoursWorked derives hours from those clock times when
-          // no explicit hoursWorked is set, which made an upcoming shift
-          // look "worked" and show up here to be reconciled before it was
-          // actually worked. An explicit hoursWorked is a real confirmation
-          // (logged after the fact) and counts regardless of date; clock
-          // times alone only count once the shift's date has passed, since
-          // hours worked can easily differ from what was originally offered.
-          if (j.hoursWorked) return true;
-          return j.date < todayStr;
-        });
-        const paymentWindow = addDays(period.end, 90);
+    // Each payment belongs to exactly one row. Tied to a shift, it is that
+    // shift's row — any shift in it, not only the first. Otherwise it goes to
+    // the one row it most likely paid (see bestRowForPayment).
+    const owner = new Map<string, number>();
+    const rowOfJob = new Map<string, number>();
+    candidates.forEach((c, idx) => c.prodJobs.forEach(j => rowOfJob.set(j.id, idx)));
+    const paidByLink = new Set<number>();
+    for (const i of data.income) {
+      if (!i.jobId) continue;
+      const idx = rowOfJob.get(i.jobId);
+      if (idx === undefined) continue;
+      owner.set(i.id, idx);
+      if (i.status === 'paid') paidByLink.add(idx);
+    }
+    for (const i of data.income) {
+      if (i.jobId) continue;
+      const idx = bestRowForPayment(i, candidates, paidByLink);
+      if (idx !== undefined) owner.set(i.id, idx);
+    }
 
-        const periodIncome = data.income.filter(i => {
-          // Money tied to this shift counts whenever it arrived. The window
-          // below is only there to stop UNLINKED payments drifting onto the
-          // wrong period — applying it to linked ones meant that marking a
-          // shift paid more than 90 days after it ended created income the
-          // row could not see, so the money bag never lit and tapping again
-          // paid it a second time.
-          if (i.jobId) return i.jobId === referenceJob.id;
-          const d = parseISO(i.date);
-          if (d > paymentWindow) return false;
-          // Income already linked to a specific job only ever counts toward
-          // that job's own row — falling through to the name match here was
-          // letting a payment tied to one shift also show as "paid" on every
-          // other row for the same employer, since they legitimately share
-          // the same client name. The name-match fallback is for genuinely
-          // unlinked income (e.g. an imported bank statement not yet tied to
-          // a specific job) only.
-          return namesMatch(i.client, referenceJob.client) || namesMatch(i.client, referenceJob.payrollCompany);
-        });
-
+    candidates.forEach(({ referenceJob, period, periodJobs, payResult }, idx) => {
+        const periodIncome = data.income.filter(i => owner.get(i.id) === idx);
         const paidIncome = periodIncome.filter(i => i.status === 'paid');
         const totalHours = periodJobs.reduce((s, j) => s + netHoursWorked(j), 0);
-        const employer = resolveEmployer(referenceJob.client, data.employers);
-        const payResult = calculateExpectedPay(periodJobs, referenceJob, data.jobs, employer);
         const expectedPay = payResult.total;
         const actualPaid = paidIncome.reduce((s, i) => s + i.amount, 0);
         const isPaid = paidIncome.length > 0;
@@ -756,6 +855,7 @@ export default function MoneyPage() {
             incomeDetails: paidIncome.map(i => {
               const lagDays = differenceInDays(parseISO(i.date), period.end);
               return {
+                id: i.id,
                 date: i.date,
                 amount: i.amount,
                 description: i.description,
@@ -768,11 +868,15 @@ export default function MoneyPage() {
             }),
           });
         }
-      }
-    }
+    });
 
-    return rows;
-  }, [data, filterJobClient]);
+    return { rows, owner };
+  }, [data]);
+
+  const reconciliation = useMemo(
+    () => filterJobClient === 'all' ? ledgerRows.rows : ledgerRows.rows.filter(r => r.client === filterJobClient),
+    [ledgerRows, filterJobClient],
+  );
 
   const totalExpected = reconciliation.reduce((s, r) => s + r.expectedPay, 0);
   const totalActual = reconciliation.reduce((s, r) => s + r.actualPaid, 0);
@@ -797,10 +901,10 @@ export default function MoneyPage() {
   // Payments no shift claimed — no job linked, and no shift for that employer
   // in a window it could belong to. They counted toward what was logged and
   // nothing else, with nowhere on the page to find them.
-  const unmatchedIncome = useMemo(() => {
-    const claimed = new Set(reconciliation.flatMap(r => r.relatedIncomeIds));
-    return data.income.filter(i => i.status === 'paid' && !claimed.has(i.id));
-  }, [data.income, reconciliation]);
+  const unmatchedIncome = useMemo(
+    () => data.income.filter(i => i.status === 'paid' && !ledgerRows.owner.has(i.id)),
+    [data.income, ledgerRows],
+  );
 
   /**
    * Turn a payment with no shift behind it into one. The payment is the
@@ -925,6 +1029,7 @@ export default function MoneyPage() {
       key: `${r.client}-${r.periodLabel}-${r.jobId}`,
       jobId: r.jobId,
       client: r.client,
+      projectName: projectLabel(r),
       periodLabel: r.periodLabel,
       periodEnd: r.periodEnd,
       expectedPay: r.expectedPay,
@@ -937,7 +1042,7 @@ export default function MoneyPage() {
   };
 
   const handlePaidToggle = async (row: ReconciliationRow) => {
-    const key = `${row.client}-${row.periodLabel}`;
+    const key = `${row.client}-${row.periodLabel}-${row.jobId}`;
     setTogglingKey(key);
     try {
       // Fully paid already — the tap means undo.
@@ -1217,7 +1322,10 @@ export default function MoneyPage() {
         <div className="flex flex-col gap-3 mb-8">
           {reconciliationGroups.map(group => {
             const rowProps = (row: ReconciliationRow) => {
-              const key = `${row.client}-${row.periodLabel}`;
+              // jobId too: every one-off project for an employer is "Full
+              // project", so client and period alone made two projects one row
+              // — opening, editing or paying one did it to both.
+              const key = `${row.client}-${row.periodLabel}-${row.jobId}`;
               return {
                 key,
                 row,
@@ -1234,6 +1342,7 @@ export default function MoneyPage() {
                 onSaveEdit: () => saveEdit(row),
                 onPaidToggle: () => handlePaidToggle(row),
                 onShowImport: () => setShowImport(true),
+                onDeleteIncome: (id: string) => { deleteIncome(id); toast.success('Payment removed'); },
               };
             };
 

@@ -1115,6 +1115,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           </button>
         )}
         <div className="rounded-md border border-border bg-secondary/10 p-3 space-y-2">
+          {job.name && <div className="flex justify-between gap-3"><span className="text-muted-foreground text-xs shrink-0">Project</span><span className="font-medium text-xs text-right">{job.name}</span></div>}
           {(client || job.client) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Employer</span><span className="font-medium text-xs">{client || job.client}</span></div>}
           {job.local && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Client</span><span className="font-medium text-xs">{job.local}</span></div>}
           {(job.payrollCompany || payrollCompany) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Payroll company</span><span className="font-medium text-xs">{payrollCompany || job.payrollCompany}</span></div>}

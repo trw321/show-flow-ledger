@@ -5,8 +5,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Upload, Loader2, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import type { Job } from '@/lib/store';
+import type { Income, Job } from '@/lib/store';
 import { resizeImageToBase64 } from '@/lib/imageResize';
+import { alreadyRecorded, repeatsInUpload } from '@/lib/paymentRepeats';
+
+/** Why a payment read off the image starts out left out. */
+interface LeftOut {
+  /** Index of the earlier payment it repeats. */
+  repeatOf?: number;
+  /** The payment already in the ledger that it matches. */
+  recorded?: Income;
+}
 
 interface ParsedIncome {
   client: string;
@@ -75,6 +84,7 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
   const [transactions, setTransactions] = useState<ParsedIncome[]>([]);
   const [linkedJobs, setLinkedJobs] = useState<(Job | null)[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [leftOut, setLeftOut] = useState<LeftOut[]>([]);
   const [preview, setPreview] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const dragCounter = useRef(0);
@@ -111,22 +121,37 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
 
       const responseData = await resp.json();
       const txns: ParsedIncome[] = responseData.transactions || [];
+      // The same money read twice — a stub and the check stapled to it — or
+      // already in the ledger starts out unticked, so adding everything that
+      // was found cannot count one paycheck twice.
+      const repeats = repeatsInUpload(txns);
+      const flags: LeftOut[] = txns.map((t, i) => ({
+        repeatOf: repeats[i],
+        recorded: repeats[i] === undefined ? alreadyRecorded(t, data.income) : undefined,
+      }));
       setTransactions(txns);
+      setLeftOut(flags);
       setLinkedJobs(txns.map(t => findLinkedJob(t.date, t.client, t.description, data.jobs)));
-      setSelected(new Set(txns.map((_, i) => i)));
-      toast[txns.length ? 'success' : 'info'](txns.length ? `Found ${txns.length} payment(s)` : 'No payments found in this image');
+      setSelected(new Set(txns.map((_, i) => i).filter(i => flags[i].repeatOf === undefined && !flags[i].recorded)));
+      const skipped = flags.filter(f => f.repeatOf !== undefined || f.recorded).length;
+      toast[txns.length ? 'success' : 'info'](
+        !txns.length ? 'No payments found in this image'
+          : skipped ? `Found ${txns.length} — left out ${skipped} that look like the same payment`
+          : `Found ${txns.length} payment(s)`
+      );
     } catch (err) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : 'Failed to parse statement');
     } finally {
       setLoading(false);
     }
-  }, [data.jobs]);
+  }, [data.jobs, data.income]);
 
   const toggleSelect = (idx: number) => {
     setSelected(prev => {
       const next = new Set(prev);
-      next.has(idx) ? next.delete(idx) : next.add(idx);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
       return next;
     });
   };
@@ -256,6 +281,17 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
                         </div>
                         {txn.description && <p className="text-xs text-muted-foreground mt-0.5">{txn.description}</p>}
                         <p className="text-[10px] text-mono text-muted-foreground mt-1">paid {txn.date}</p>
+                        {leftOut[i]?.repeatOf !== undefined && (
+                          <p className="mt-1.5 text-[11px] text-warning">
+                            Same amount as the one above — likely the stub and its check, which are one payment.
+                            Left out; tap to add it anyway.
+                          </p>
+                        )}
+                        {leftOut[i]?.recorded && (
+                          <p className="mt-1.5 text-[11px] text-warning">
+                            Already in your payments ({leftOut[i].recorded!.date}). Left out; tap to add it anyway.
+                          </p>
+                        )}
 
                         {/* Linked job match — deliberately loud (this is the whole point of
                             the feature: confirming the AI actually found the right shift) */}

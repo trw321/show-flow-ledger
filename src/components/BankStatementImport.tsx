@@ -7,6 +7,8 @@ import { differenceInDays, parseISO, format } from 'date-fns';
 import type { Income } from '@/lib/store';
 import { nameSimilarity } from '@/lib/employerMatch';
 import { resizeImageToBase64 } from '@/lib/imageResize';
+import { alreadyRecorded, repeatsInUpload } from '@/lib/paymentRepeats';
+import { useData } from '@/lib/DataContext';
 
 // OpenAI's vision API only accepts real images, not PDF bytes directly, so a
 // PDF has to be rendered to an image client-side first. Renders up to the
@@ -83,6 +85,8 @@ export interface ReconciliationRowInfo {
   key: string;
   jobId: string;
   client: string;
+  /** What the work was — tells two projects for the same employer apart. */
+  projectName?: string;
   periodLabel: string;
   periodEnd: string; // YYYY-MM-DD
   expectedPay: number;
@@ -103,6 +107,10 @@ interface DepositEntry {
   // covers several one-day "Full project" shifts at once (that's exactly
   // what a breakdown date match tells us).
   chosenRowKeys: string[];
+  /** Left out of the import: it repeats an earlier deposit here, or one already recorded. */
+  skipped?: boolean;
+  /** Why it was left out, in a few words. */
+  skipReason?: string;
 }
 
 function scoreMatch(deposit: ParsedDeposit, row: ReconciliationRowInfo): MatchResult {
@@ -164,8 +172,17 @@ function scoreMatch(deposit: ParsedDeposit, row: ReconciliationRowInfo): MatchRe
   return { row, score, confidence, reasons, breakdownDateMatch };
 }
 
-function buildEntries(deposits: ParsedDeposit[], rows: ReconciliationRowInfo[]): DepositEntry[] {
-  return deposits.map(deposit => {
+function buildEntries(deposits: ParsedDeposit[], rows: ReconciliationRowInfo[], income: Income[]): DepositEntry[] {
+  // A stub photographed with its check reads as two deposits of the same
+  // amount; one paycheck counted twice. Repeats, and anything already
+  // recorded, start out left out — flagged, so a real second deposit of the
+  // same amount can still be added.
+  const repeats = repeatsInUpload(deposits);
+  return deposits.map((deposit, index) => {
+    const recorded = repeats[index] === undefined ? alreadyRecorded(deposit, income) : undefined;
+    const skipReason = repeats[index] !== undefined
+      ? `Same amount as #${repeats[index]! + 1} — likely the stub and its check, which are one payment`
+      : recorded ? `Already in your payments (${recorded.date})` : undefined;
     const matches = rows
       .map(row => scoreMatch(deposit, row))
       .filter(m => m.score > 0)
@@ -179,7 +196,7 @@ function buildEntries(deposits: ParsedDeposit[], rows: ReconciliationRowInfo[]):
     const chosenRowKeys = breakdownMatches.length > 0
       ? breakdownMatches.map(m => m.row.key)
       : top?.confidence === 'high' ? [top.row.key] : [];
-    return { deposit, matches, chosenRowKeys };
+    return { deposit, matches, chosenRowKeys, skipped: !!skipReason, skipReason };
   });
 }
 
@@ -190,6 +207,7 @@ interface Props {
 }
 
 export default function BankStatementImport({ rows, onConfirm, onClose }: Props) {
+  const { data: ledger } = useData();
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [entries, setEntries] = useState<DepositEntry[]>([]);
@@ -255,16 +273,21 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
         return;
       }
 
-      const matched = buildEntries(deposits, rows);
+      const matched = buildEntries(deposits, rows, ledger.income);
       setEntries(matched);
       const autoMatched = matched.filter(e => e.chosenRowKeys.length > 0).length;
-      toast.success(`Found ${deposits.length} deposit(s) — ${autoMatched} auto-matched`);
+      const skipped = matched.filter(e => e.skipped).length;
+      toast.success(`Found ${deposits.length} deposit(s) — ${autoMatched} auto-matched${skipped ? `, ${skipped} left out as the same payment` : ''}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to parse statement');
     } finally {
       setLoading(false);
     }
-  }, [rows]);
+  }, [rows, ledger.income]);
+
+  const toggleSkip = (depIdx: number) => {
+    setEntries(prev => prev.map((e, i) => i === depIdx ? { ...e, skipped: !e.skipped } : e));
+  };
 
   const toggleChoice = (depIdx: number, rowKey: string) => {
     setEntries(prev => prev.map((e, i) => {
@@ -297,6 +320,7 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
   const confirmAll = () => {
     let count = 0;
     for (const entry of entries) {
+      if (entry.skipped) continue;
       const chosenRows = entry.chosenRowKeys
         .map(k => rows.find(r => r.key === k))
         .filter((r): r is ReconciliationRowInfo => !!r);
@@ -356,7 +380,17 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
 
         <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
           {entries.map((entry, i) => (
-            <div key={i} className="rounded-lg border border-border bg-card p-3">
+            <div key={i} className={`rounded-lg border bg-card p-3 ${entry.skipped ? 'border-warning/40 opacity-70' : 'border-border'}`}>
+              {entry.skipReason && (
+                <button
+                  type="button"
+                  onClick={() => toggleSkip(i)}
+                  className="mb-2 w-full rounded border border-warning/30 bg-warning/10 px-2.5 py-1.5 text-left text-[11px] text-warning"
+                >
+                  {entry.skipReason}.{' '}
+                  <span className="font-semibold underline">{entry.skipped ? 'Left out — add it anyway' : 'Will be added — leave it out'}</span>
+                </button>
+              )}
               <div className="flex flex-col gap-1.5 mb-2">
                 <Input
                   value={entry.deposit.description}
@@ -405,7 +439,7 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
                       >
                         <div className="flex justify-between items-center gap-2">
                           <span className="truncate">
-                            {m.row.client} · {m.row.periodLabel === 'Full project' ? format(parseISO(m.row.periodEnd), 'MMM d') : m.row.periodLabel}
+                            {m.row.client}{m.row.projectName ? ` · ${m.row.projectName}` : ''} · {m.row.periodLabel === 'Full project' ? format(parseISO(m.row.periodEnd), 'MMM d') : m.row.periodLabel}
                           </span>
                           <div className="flex items-center gap-2 shrink-0">
                             <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
@@ -456,7 +490,7 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
           </Button>
           <Button size="sm" onClick={confirmAll}>
             <Check size={14} className="mr-1" />
-            Add {entries.length} payment{entries.length !== 1 ? 's' : ''}
+            Add {entries.filter(e => !e.skipped).length} payment{entries.filter(e => !e.skipped).length !== 1 ? 's' : ''}
           </Button>
         </div>
       </div>
