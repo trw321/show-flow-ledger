@@ -21,6 +21,7 @@ import {
 } from '@/lib/hoursMatching';
 import { useSwipe } from '@/lib/useSwipe';
 import { localToday } from '@/lib/today';
+import { parseCopyRequest } from '@/lib/copyRequest';
 import {
   type ParsedJob, splitJobRecords, expandCBRecord, expandThruNotesForBatch,
 } from '@/lib/dispatchParsing';
@@ -231,6 +232,7 @@ export default function NewGigPage({ onComplete, startAs }: {
   const [manualOpen, setManualOpen] = useState(false);
   const [manual, setManual] = useState<ManualEntry>(EMPTY_MANUAL);
   const [extraDates, setExtraDates] = useState<string[]>([]);
+  const [pickingDays, setPickingDays] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
   const [hoursResults, setHoursResults] = useState<HoursMatchResult[]>([]);
   const [hoursAccepted, setHoursAccepted] = useState<Set<number>>(new Set());
@@ -391,6 +393,36 @@ export default function NewGigPage({ onComplete, startAs }: {
    */
   const handleParse = async (override?: { model: string; effort: ReasoningEffort }, forceType?: 'jobs' | 'hours') => {
     if (!text.trim()) { toast.error('Paste dispatch text first'); return; }
+
+    // "Add to today and yesterday the same Odeum shift I logged on Monday" is
+    // about a shift already here, which the parser never sees — it found
+    // nothing in it. Copied here instead, through the same review as any
+    // other new shift.
+    const copy = parseCopyRequest(text, data.jobs);
+    if (copy) {
+      const today = localToday();
+      const drafts: ParsedJob[] = copy.dates.flatMap(date => copy.sources.map(src => ({
+        jobNumber: src.jobNumber, name: src.name, client: src.client, venue: src.venue, date,
+        startTime: src.startTime, endTime: src.endTime, status: 'upcoming' as const,
+        payrollCompany: src.payrollCompany, local: src.local, hourlyRate: src.hourlyRate,
+        steward: src.steward, parkingCost: src.parkingCost, notes: src.notes,
+        mealDuration: src.mealDuration, mealOnClock: src.mealOnClock, minimumHours: src.minimumHours,
+        // Hours logged on the copied shift are that day's work; they carry to
+        // days that have happened, never to ones that have not.
+        hoursWorked: date <= today ? src.hoursWorked : undefined,
+      })));
+      setJobs(drafts);
+      setSelected(new Set(drafts.map((_, i) => i)));
+      setHasParsed(true);
+      setVortexPhase('flash');
+      setTimeout(() => {
+        setVortexPhase('settling');
+        setStep('review-jobs');
+        setTimeout(() => setVortexPhase('idle'), 1200);
+      }, 400);
+      toast.success(`Copying ${copy.sources[0].client} ${copy.sources.length > 1 ? `(${copy.sources.length} calls) ` : ''}to ${copy.dates.length} day${copy.dates.length === 1 ? '' : 's'}`);
+      return;
+    }
     const useModel = override?.model ?? parserModel;
     const useEffort = override?.effort ?? parserEffort;
     setIsParsing(true);
@@ -573,7 +605,8 @@ export default function NewGigPage({ onComplete, startAs }: {
       // times, is a record of work done — saving after the day is what
       // confirms hours. Left "upcoming", one half of a past split said
       // upcoming and the other said needs hours. Today's stays a plan.
-      const alreadyWorked = j.date < localToday() && !!j.startTime && !!j.endTime;
+      const alreadyWorked = (j.date < localToday() && !!j.startTime && !!j.endTime)
+        || (!!j.hoursWorked && j.date <= localToday());
       const draft = {
         jobNumber: j.jobNumber, name: j.name, client: j.client, venue: j.venue,
         date: j.date, startTime: j.startTime, endTime: j.endTime,
@@ -584,6 +617,8 @@ export default function NewGigPage({ onComplete, startAs }: {
         local: j.local, needsReview: payrollAssumed || undefined,
         hourlyRate: j.hourlyRate, steward: j.steward,
         parkingCost: j.parkingCost, notes: j.notes || '',
+        mealDuration: j.mealDuration, mealOnClock: j.mealOnClock,
+        minimumHours: j.minimumHours, hoursWorked: j.hoursWorked,
         has6th7thDayRule: false,
       };
       const key = getJobDedupKey(draft);
@@ -903,42 +938,55 @@ export default function NewGigPage({ onComplete, startAs }: {
                 </div>
               </div>
 
-              {/* Additional dates — bulk-create the same shift across multiple days */}
+              {/* More days for the same shift — tapped out on a calendar, as
+                  many as needed, rather than one date box at a time. */}
               <div className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">
-                    Additional dates {extraDates.length > 0 && <span className="text-lime-400">({extraDates.length})</span>}
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setExtraDates(prev => [...prev, ''])}
-                    className="text-[11px] text-primary hover:text-primary/80 transition-colors"
-                  >
-                    + Add another date
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setPickingDays(p => !p)}
+                  className={cn(
+                    'flex items-center justify-between rounded-md border px-3 py-2 text-left text-xs transition-colors',
+                    pickingDays ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border bg-background/40 text-foreground/80 hover:border-primary/40',
+                  )}
+                >
+                  <span>
+                    {extraDates.length > 0
+                      ? `+ ${extraDates.length} more day${extraDates.length === 1 ? '' : 's'}`
+                      : '+ More days — tap them on a calendar'}
+                  </span>
+                  <ChevronDown size={14} className={cn('transition-transform', pickingDays && 'rotate-180')} />
+                </button>
+                {pickingDays && (
+                  <Calendar
+                    mode="multiple"
+                    selected={extraDates.map(d => new Date(d + 'T12:00:00'))}
+                    onSelect={(days) => setExtraDates(
+                      [...new Set((days ?? []).map(d => format(d, 'yyyy-MM-dd')))]
+                        .filter(d => d !== manual.date)
+                        .sort(),
+                    )}
+                    className="self-center rounded-md border border-border"
+                  />
+                )}
                 {extraDates.length > 0 && (
-                  <div className="flex flex-col gap-1.5">
-                    {extraDates.map((d, i) => (
-                      <div key={i} className="flex items-center gap-1.5">
-                        <input
-                          type="date"
-                          value={d}
-                          onChange={e => setExtraDates(prev => prev.map((v, vi) => vi === i ? e.target.value : v))}
-                          className="flex-1 h-9 rounded-md bg-background/40 border border-border text-foreground/80 text-xs font-mono px-3 focus:outline-none focus:border-primary/40 [color-scheme:dark]"
-                        />
+                  <div className="flex flex-wrap gap-1.5">
+                    {extraDates.map(d => (
+                      <span key={d} className="inline-flex items-center gap-1 border border-border bg-background/40 px-2 py-1 text-[11px] text-mono">
+                        {format(new Date(d + 'T12:00:00'), 'EEE MMM d')}
                         <button
                           type="button"
-                          onClick={() => setExtraDates(prev => prev.filter((_, vi) => vi !== i))}
-                          className="text-muted-foreground hover:text-destructive transition-colors p-1.5"
-                          aria-label="Remove date"
+                          onClick={() => setExtraDates(prev => prev.filter(v => v !== d))}
+                          className="text-muted-foreground hover:text-destructive"
+                          aria-label={`Remove ${d}`}
                         >
-                          <X size={14} />
+                          <X size={11} />
                         </button>
-                      </div>
+                      </span>
                     ))}
-                    <p className="text-[10px] text-muted-foreground/60">Same employer, time, rate & details on each date — you'll be able to tweak any of them before saving.</p>
                   </div>
+                )}
+                {extraDates.length > 0 && (
+                  <p className="text-[10px] text-muted-foreground/60">Same employer, time, rate & details on each day — you can change any of them before saving.</p>
                 )}
               </div>
 

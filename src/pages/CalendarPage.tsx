@@ -32,6 +32,7 @@ import { resizeImageForStorage, readFileAsDataUrl } from '@/lib/imageResize';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import EventIntake from '@/components/EventIntake';
 import NewGigPage from '@/pages/NewGigPage';
+import { localToday } from '@/lib/today';
 
 const statusDot: Record<Job['status'], string> = {
   upcoming: 'bg-dot-upcoming',
@@ -301,6 +302,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   const [viewingStub, setViewingStub] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
+  const [dupWithTimes, setDupWithTimes] = useState(false);
   const [dupDates, setDupDates] = useState<string[]>(['']);
   const stubInputRef = useRef<HTMLInputElement>(null);
   // Arriving from a row's stub button means the camera is the only thing
@@ -446,15 +448,25 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     if (dates.length === 0) { toast.error('Pick at least one date'); return; }
     for (const date of dates) {
       await addJob({
+        // The job number keeps the copies in the same project — without it
+        // they split off from it, and from its pay row.
+        jobNumber: job.jobNumber,
         name: job.name,
         client: job.client,
         venue: job.venue,
+        local: job.local,
         date,
-        // Deliberately no startTime, endTime or hoursWorked. A duplicate is
-        // the same booking on another day — the times it was actually worked
-        // belong to the day it was worked, and carrying them over means every
-        // copy arrives pre-filled with hours nobody has done yet.
-        status: 'upcoming',
+        // No hoursWorked, and no times unless asked for. A duplicate is the
+        // same booking on another day — the hours it was worked belong to the
+        // day it was worked, and carrying them over means every copy arrives
+        // pre-filled with hours nobody has done yet. The call times are a
+        // choice: the same call on each day is common.
+        startTime: dupWithTimes ? job.startTime : undefined,
+        endTime: dupWithTimes ? job.endTime : undefined,
+        // A day already gone, with its times, is a record of work done.
+        status: dupWithTimes && job.startTime && job.endTime && date < localToday() ? 'completed' : 'upcoming',
+        dayRate: job.dayRate,
+        dayRateHours: job.dayRateHours,
         paySchedule: job.paySchedule,
         payrollCompany: job.payrollCompany,
         hourlyRate: job.hourlyRate,
@@ -1408,8 +1420,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           </div>
         )}
 
-        {editing && (
-        <>
+        {/* Always here, not only while editing — it was tucked inside the edit
+            section, where nobody looking for it would find it. */}
         <div className="rounded-md border border-border overflow-hidden">
           <button
             type="button"
@@ -1423,8 +1435,14 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           {duplicating && (
             <div className="border-t border-border p-3 space-y-2">
               <p className="text-[10px] text-muted-foreground">
-                Same employer, venue, time & rate — creates a new shift per date.
+                Same project, employer, venue and rate — a new shift per date.
               </p>
+              {(job.startTime || job.endTime) && (
+                <label className="flex items-center gap-2 text-[11px] cursor-pointer select-none">
+                  <input type="checkbox" checked={dupWithTimes} onChange={e => setDupWithTimes(e.target.checked)} className="accent-primary" />
+                  Same call times too ({job.startTime || '?'}{job.endTime ? ` – ${job.endTime}` : ''})
+                </label>
+              )}
               {dupDates.map((d, i) => (
                 <div key={i} className="flex items-center gap-1.5">
                   <input
@@ -1457,6 +1475,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           )}
         </div>
 
+        {editing && (
+        <>
         <div className="space-y-3">
           <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/50 uppercase">Update Job</p>
           <div className="space-y-1">
@@ -1594,6 +1614,10 @@ export default function CalendarPage() {
   // Shifts whose date has passed with no hours on them. This used to be the
   // Dashboard's hero card; it is about shifts, so it belongs here.
   const { jobsNeedingHours, oldestDays } = useNeedsHours(data.jobs);
+  const flaggedJobs = useMemo(
+    () => data.jobs.filter(j => j.needsReview && j.status !== 'cancelled').sort(compareCalls),
+    [data.jobs],
+  );
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   // Set when a row's stub button was what opened the job, so the detail view
@@ -1836,6 +1860,26 @@ export default function CalendarPage() {
             </p>
             <p className="text-xs font-body mt-0.5 text-muted-foreground truncate">
               {jobsNeedingHours[0].name} · {oldestDays === 0 ? 'today' : `${oldestDays}d ago`}
+            </p>
+          </div>
+        </button>
+      )}
+
+      {/* "Check this one later" used to set a flag nothing else ever showed.
+          This is where it comes back: the oldest flagged shift, one tap away,
+          until the box is unticked. */}
+      {flaggedJobs.length > 0 && (
+        <button
+          onClick={() => { setSelectedDate(flaggedJobs[0].date); setSelectedJobId(flaggedJobs[0].id); }}
+          className="pixel-button w-full mb-3 flex items-center gap-3 border-warning/60 bg-warning/10 px-3 py-2.5 text-left"
+        >
+          <span className="text-lg leading-none text-warning shrink-0" aria-hidden>⚑</span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-warning">
+              Check later{flaggedJobs.length > 1 ? ` — ${flaggedJobs.length} shifts` : ''}
+            </p>
+            <p className="text-xs font-body mt-0.5 text-muted-foreground truncate">
+              {flaggedJobs[0].name} · {format(new Date(flaggedJobs[0].date + 'T12:00:00'), 'MMM d')}
             </p>
           </div>
         </button>
@@ -2109,7 +2153,7 @@ export default function CalendarPage() {
                   return (
                     <div key={job.id} onClick={() => setSelectedJobId(job.id)} className={cn("rounded-md border p-3 space-y-1 cursor-pointer hover:opacity-90 transition-opacity", paid ? "bg-success/20 text-success border-success/30" : overdue ? "bg-warning/20 text-warning border-warning/30" : statusColors[job.status])}>
                       <div className="flex items-start justify-between">
-                        <div><p className="font-medium text-sm flex items-center gap-1.5"><CallbackMark job={job} />{job.name}<SplitMark job={job} allJobs={data.jobs} /></p><p className="text-xs opacity-70">{job.client}</p></div>
+                        <div><p className="font-medium text-sm flex items-center gap-1.5"><CallbackMark job={job} />{job.needsReview && <span className="text-warning" title="Flagged to check later">⚑</span>}{job.name}<SplitMark job={job} allJobs={data.jobs} /></p><p className="text-xs opacity-70">{job.client}</p></div>
                         <span className="text-[10px] text-mono uppercase font-medium opacity-70">{paid ? 'Paid' : overdue ? 'Needs Hours' : job.status}</span>
                       </div>
                       {job.venue && <p className="text-xs opacity-60">{job.venue}</p>}
@@ -2310,7 +2354,10 @@ export default function CalendarPage() {
                           {/* Date leads — it's how a shift gets identified,
                               and it keeps the card reading like a card. */}
                           <p className="text-[17px] font-bold text-mono tracking-tight leading-none text-white">{dateRange}</p>
-                          <p className="text-[13px] text-foreground/75 leading-snug truncate mt-1">{first.name}</p>
+                          <p className="text-[13px] text-foreground/75 leading-snug truncate mt-1">
+                            {jobs.some(j => j.needsReview) && <span className="text-warning mr-1" title="Flagged to check later">⚑</span>}
+                            {first.name}
+                          </p>
                           <p className="text-[11px] text-muted-foreground truncate">{first.client}</p>
                         </div>
                         {/* Pay is the reason this list gets opened, so it's the

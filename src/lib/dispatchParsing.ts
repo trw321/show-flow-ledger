@@ -27,6 +27,11 @@ export interface ParsedJob {
   steward?: string;
   parkingCost?: number;
   notes?: string;
+  /** Carried when a shift already logged is copied to other days. */
+  mealDuration?: Job['mealDuration'];
+  mealOnClock?: boolean;
+  minimumHours?: number;
+  hoursWorked?: number;
 }
 
 function toAmPm(s: string): string {
