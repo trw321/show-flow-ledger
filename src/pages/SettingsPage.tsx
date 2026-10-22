@@ -4,9 +4,8 @@ import ThemePicker from '@/components/ThemePicker';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/AuthContext';
-import { backupToCloud, fetchFromCloud, lastBackupAt, type RestoreResult } from '@/lib/cloudSync';
 import { useUserPrefs, TAB_LABELS, WORKER_PRESETS, type TabKey, type WorkerType } from '@/lib/UserPrefsContext';
-import { useData } from '@/lib/DataContext';
+import { useData, useSync } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
 import PageHeader from '@/components/PageHeader';
 import { Switch } from '@/components/ui/switch';
@@ -14,8 +13,8 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { Briefcase, FileText, Crown, SlidersHorizontal, Trash2, Plus, Pencil, X, CloudOff, CloudUpload, ChevronRight } from 'lucide-react';
-import { clearAllData } from '@/lib/store';
+import { Briefcase, FileText, Crown, SlidersHorizontal, Trash2, Plus, Pencil, X, CloudOff, Cloud, RefreshCw, AlertTriangle, ChevronRight } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
 import type { Employer } from '@/lib/store';
 import { ptoBalance } from '@/lib/pto';
 import {
@@ -362,131 +361,100 @@ function EmployerForm({ initial, onSave, onCancel }: {
 }
 
 // Signing in is optional and changes nothing about how the app works — it
-// only turns on cloud backup. Until then everything lives in this browser,
-// which is worth saying plainly rather than leaving the user to find out.
+// adds sync. Until then everything lives in this browser, which is worth
+// saying plainly rather than leaving the user to find out.
 function AccountSection() {
   const { user, loading, signOut } = useAuth();
-  const { data, replaceAllData } = useData();
+  const { deviceLedgerCount, addDeviceDataToAccount } = useData();
+  const sync = useSync();
   const navigate = useNavigate();
-  const [backingUp, setBackingUp] = useState(false);
-  const [lastBackup, setLastBackup] = useState(lastBackupAt);
-  const [restoring, setRestoring] = useState(false);
-  const [pendingRestore, setPendingRestore] = useState<RestoreResult | null>(null);
-  const localTotal = data.jobs.length + data.expenses.length + data.income.length + data.equipment.length + data.employers.length + (data.events?.length ?? 0);
-
-  const runBackup = async () => {
-    if (!user) return;
-    setBackingUp(true);
-    try {
-      const result = await backupToCloud(data, user.id);
-      if (!result.ok) { toast.error(`Backup failed — ${result.error}`); return; }
-      const total = Object.values(result.counts).reduce((a, b) => a + b, 0);
-      setLastBackup(lastBackupAt());
-      toast.success(`Backed up ${total} record${total === 1 ? '' : 's'}`);
-    } finally {
-      setBackingUp(false);
-    }
-  };
-
-  // Fetch first, then ask — the confirmation can only be honest about what's
-  // in the backup if it has actually looked.
-  const startRestore = async () => {
-    if (!user) return;
-    setRestoring(true);
-    try {
-      const result = await fetchFromCloud();
-      if (!result.ok) { toast.error(`Couldn't read the backup — ${result.error}`); return; }
-      const total = Object.values(result.counts ?? {}).reduce((a, b) => a + b, 0);
-      if (total === 0) { toast.info('That account has no backup yet — try Back up now first'); return; }
-      setPendingRestore(result);
-    } finally {
-      setRestoring(false);
-    }
-  };
-
-  const confirmRestore = async () => {
-    if (!pendingRestore?.data) return;
-    await replaceAllData(pendingRestore.data);
-    const total = Object.values(pendingRestore.counts ?? {}).reduce((a, b) => a + b, 0);
-    setPendingRestore(null);
-    toast.success(`Restored ${total} record${total === 1 ? '' : 's'} from the cloud`);
-  };
+  const [signingOut, setSigningOut] = useState(false);
+  const [adding, setAdding] = useState(false);
 
   if (loading) return null;
+
+  // Whatever has not gone up yet goes first. Nothing is lost if it can't —
+  // unsent changes stay on this device under the account and go up the next
+  // time it signs in here — but leaving with them sent is better.
+  const leave = async () => {
+    setSigningOut(true);
+    await Promise.race([sync.syncNow(), new Promise(resolve => setTimeout(resolve, 5000))]);
+    await signOut();
+  };
+
+  const addThem = async () => {
+    setAdding(true);
+    try {
+      if (await addDeviceDataToAccount()) toast.success('Added — syncing it to your account');
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const status =
+    sync.status === 'syncing' ? { text: 'Syncing…', tone: 'text-muted-foreground', Icon: RefreshCw }
+    : sync.status === 'offline' ? { text: 'Offline — changes sync when you’re back', tone: 'text-warning', Icon: CloudOff }
+    : sync.status === 'error' ? { text: 'Couldn’t sync', tone: 'text-destructive', Icon: AlertTriangle }
+    : {
+      text: sync.lastSyncedAt
+        ? `Synced ${formatDistanceToNow(new Date(sync.lastSyncedAt), { addSuffix: true })}`
+        : 'Ready to sync',
+      tone: 'text-success',
+      Icon: Cloud,
+    };
 
   return (
     <section>
       <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/60 uppercase mb-3">
-        Backup
+        Sync
       </p>
       {user ? (
         <div className="rounded-2xl border border-success/30 bg-success/5 p-4 space-y-2">
           <div className="flex items-center gap-2">
-            <CloudUpload size={16} className="text-success shrink-0" />
-            <p className="text-sm font-semibold">Signed in</p>
+            <status.Icon size={16} className={cn('shrink-0', status.tone, sync.status === 'syncing' && 'animate-spin')} />
+            <p className={cn('text-sm font-semibold', status.tone)}>{status.text}</p>
           </div>
           <p className="text-[11px] text-mono text-muted-foreground break-all">{user.email}</p>
-          <p className="text-[11px] text-muted-foreground">
-            {lastBackup
-              ? `Last backed up ${new Date(lastBackup).toLocaleString()}.`
-              : 'Not backed up yet — this copies everything on this device to your account.'}
+          {sync.error && <p className="text-[11px] text-destructive break-words">{sync.error}</p>}
+          {sync.pending > 0 && sync.status !== 'syncing' && (
+            <p className="text-[11px] text-muted-foreground">
+              {sync.pending} change{sync.pending === 1 ? '' : 's'} waiting to go up.
+            </p>
+          )}
+          <p className="text-[10px] text-muted-foreground/70">
+            Changes sync by themselves to every device signed in to this account — your phone and
+            your computer both.
           </p>
-          <Button size="sm" className="w-full" disabled={backingUp || restoring} onClick={runBackup}>
-            {backingUp ? 'Backing up…' : 'Back up now'}
-          </Button>
           <Button
             size="sm"
             variant="outline"
             className="w-full"
-            disabled={backingUp || restoring}
-            onClick={startRestore}
+            disabled={sync.status === 'syncing' || signingOut}
+            onClick={() => void sync.syncNow()}
           >
-            {restoring ? 'Checking backup…' : 'Restore from backup'}
+            Sync now
           </Button>
-          <p className="text-[10px] text-muted-foreground/70">
-            Back up copies this device to the cloud. Restore pulls the cloud copy down — use it
-            on a new phone, or if something here went wrong.
-          </p>
 
-          {/* A restore replaces what's on the device, so it says exactly what it
-              is about to do rather than just asking "are you sure?". */}
-          <AlertDialog open={!!pendingRestore} onOpenChange={o => !o && setPendingRestore(null)}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Replace this device with the backup?</AlertDialogTitle>
-                <AlertDialogDescription asChild>
-                  <div className="space-y-2">
-                    <p>
-                      The backup holds{' '}
-                      <span className="font-semibold text-foreground">
-                        {pendingRestore ? Object.values(pendingRestore.counts ?? {}).reduce((a, b) => a + b, 0) : 0} records
-                      </span>{' '}
-                      ({pendingRestore?.counts?.jobs ?? 0} shifts).
-                    </p>
-                    <p>
-                      This device currently has{' '}
-                      <span className="font-semibold text-foreground">{localTotal} records</span>{' '}
-                      ({data.jobs.length} shifts). They will be replaced.
-                    </p>
-                    {localTotal > 0 && (
-                      <p className="text-warning">
-                        Anything here that was never backed up will be lost. Back up first if you're unsure.
-                      </p>
-                    )}
-                  </div>
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={confirmRestore}>Replace and restore</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          {/* Data saved here before signing in sits in the device's own
+              ledger, which this account can't see until it is added. */}
+          {deviceLedgerCount > 0 && (
+            <div className="border-t border-border pt-2 space-y-1.5">
+              <p className="text-[11px] text-muted-foreground">
+                This device also has {deviceLedgerCount} record{deviceLedgerCount === 1 ? '' : 's'} from
+                before you signed in that aren't in your account.
+              </p>
+              <Button size="sm" className="w-full" disabled={adding} onClick={addThem}>
+                {adding ? 'Adding…' : 'Add them to my account'}
+              </Button>
+            </div>
+          )}
+
           <button
-            onClick={signOut}
+            onClick={leave}
+            disabled={signingOut}
             className="text-[11px] text-mono text-muted-foreground hover:text-destructive transition-colors underline"
           >
-            Sign out
+            {signingOut ? 'Signing out…' : 'Sign out'}
           </button>
         </div>
       ) : (
@@ -497,8 +465,8 @@ function AccountSection() {
           </div>
           <p className="text-[11px] text-muted-foreground">
             Everything you've logged lives only in this browser. Clearing your browser data or
-            switching phones would lose it. An account keeps a copy and lets you use the app on
-            more than one device.
+            switching phones would lose it. An account keeps it safe, and in sync across your
+            phone and computer.
           </p>
           <button
             onClick={() => navigate('/auth')}
@@ -528,7 +496,8 @@ function AccountSection() {
 
 export default function SettingsPage() {
   const { prefs, setWorkerType, setTabEnabled } = useUserPrefs();
-  const { data, addEmployer, updateEmployer, deleteEmployer } = useData();
+  const { data, addEmployer, updateEmployer, deleteEmployer, deleteEverything } = useData();
+  const { user } = useAuth();
   const [addingEmployer, setAddingEmployer] = useState(false);
   const [editingEmployerId, setEditingEmployerId] = useState<string | null>(null);
 
@@ -799,7 +768,9 @@ export default function SettingsPage() {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Clear All Data</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Permanently delete all jobs, income, expenses, and equipment</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              Permanently delete all jobs, income, expenses, and equipment{user ? ' — on every device signed in to this account' : ''}
+            </p>
           </div>
           <AlertDialog>
             <AlertDialogTrigger asChild>
@@ -811,12 +782,14 @@ export default function SettingsPage() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Clear all data?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will permanently delete all jobs, expenses, income, and equipment. This cannot be undone.
+                  {user
+                    ? 'This deletes everything from your account, and from every device signed in to it. This cannot be undone.'
+                    : 'This will permanently delete all jobs, expenses, income, and equipment. This cannot be undone.'}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={() => clearAllData()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                <AlertDialogAction onClick={async () => { await deleteEverything(); toast.success('Everything deleted'); }} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                   Delete Everything
                 </AlertDialogAction>
               </AlertDialogFooter>

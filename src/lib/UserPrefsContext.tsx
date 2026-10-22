@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { EMPTY_PROFILE, type PayerProfile } from '@/lib/payerProfile';
 import { supabase } from '@/integrations/supabase/client';
+import { prefsKeyFor } from '@/lib/store';
+import { PREFS_CHANGED_EVENT, PREFS_SYNCED_EVENT } from '@/lib/sync';
 
 // Calendar/log/reconciliation/equipment/taxes/discover/scheduling used to be
 // keys here too, but nothing in the app ever actually read those tabs (only
@@ -32,13 +34,9 @@ export const WORKER_PRESETS: Record<'w2' | '1099' | 'boss', Record<TabKey, boole
 
 const DEFAULT_PREFS: UserPrefs = { workerType: '1099', tabs: WORKER_PRESETS['1099'], payer: EMPTY_PROFILE };
 
-function prefsKey(uid?: string | null) {
-  return uid ? `av-prefs-${uid}` : 'av-prefs';
-}
-
 function loadPrefs(uid?: string | null): UserPrefs {
   try {
-    const raw = localStorage.getItem(prefsKey(uid));
+    const raw = localStorage.getItem(prefsKeyFor(uid));
     if (!raw) return DEFAULT_PREFS;
     const parsed = JSON.parse(raw);
     return {
@@ -53,8 +51,15 @@ function loadPrefs(uid?: string | null): UserPrefs {
   }
 }
 
+// Stamped with the time so that, signed in, the newest change wins on every
+// device — and announced so the sync sends it up.
 function savePrefs(prefs: UserPrefs, uid?: string | null) {
-  localStorage.setItem(prefsKey(uid), JSON.stringify(prefs));
+  try {
+    localStorage.setItem(prefsKeyFor(uid), JSON.stringify({ ...prefs, modifiedAt: new Date().toISOString() }));
+  } catch {
+    return;
+  }
+  window.dispatchEvent(new Event(PREFS_CHANGED_EVENT));
 }
 
 interface UserPrefsContextValue {
@@ -83,6 +88,13 @@ export function UserPrefsProvider({ children }: { children: React.ReactNode }) {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // Settings changed on another device, and the sync has just saved them here.
+  useEffect(() => {
+    const reload = () => setPrefsState(loadPrefs(userId));
+    window.addEventListener(PREFS_SYNCED_EVENT, reload);
+    return () => window.removeEventListener(PREFS_SYNCED_EVENT, reload);
+  }, [userId]);
 
   const update = (next: UserPrefs) => {
     setPrefsState(next);

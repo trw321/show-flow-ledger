@@ -1700,7 +1700,7 @@ function EventForm({ initial, onSave, onCancel }: {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function CalendarPage() {
-  const { data, updateJob, deleteJob, addEvent, updateEvent, deleteEvent } = useData();
+  const { data, authReady, updateJob, deleteJob, addEvent, updateEvent, deleteEvent } = useData();
   const [currentDate, setCurrentDate] = useState(new Date());
   // Shifts whose date has passed with no hours on them. This used to be the
   // Dashboard's hero card; it is about shifts, so it belongs here.
@@ -1728,14 +1728,16 @@ export default function CalendarPage() {
   // shift's detail view instead of making the user hunt for it on the grid.
   useEffect(() => {
     const jobId = searchParams.get('job');
-    if (!jobId) return;
+    // Until the ledger has loaded every link looks broken, and clearing it
+    // then would throw away a perfectly good one.
+    if (!jobId || !authReady) return;
     const job = data.jobs.find(j => j.id === jobId);
     if (job) {
       setSelectedDate(job.date);
       setSelectedJobId(job.id);
     }
     setSearchParams(prev => { prev.delete('job'); return prev; }, { replace: true });
-  }, [searchParams, data.jobs, setSearchParams]);
+  }, [searchParams, data.jobs, authReady, setSearchParams]);
 
   // Shifts whose only evidence is somebody saying so.
   const paidByHandJobIds = useMemo(() => {

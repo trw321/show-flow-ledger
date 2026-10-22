@@ -1,25 +1,10 @@
-import { supabase } from '@/integrations/supabase/client';
 import type { AppData, Job, Expense, Income, Equipment, Employer, CalendarEvent, PayOut } from './store';
+import type { LedgerTable } from './ledgerDiff';
 
-// One-way backup: local is the source of truth and the cloud is a copy of it.
-// Nothing is read back or merged here — that's a later step — so this can never
-// overwrite something on the device with something older from the server.
-
-export interface BackupResult {
-  ok: boolean;
-  counts: Record<string, number>;
-  error?: string;
-}
-
-const LAST_BACKUP_KEY = 'showflow-last-backup';
-
-export const lastBackupAt = (): string | null => {
-  try { return localStorage.getItem(LAST_BACKUP_KEY); } catch { return null; }
-};
-
-const setLastBackupAt = (iso: string) => {
-  try { localStorage.setItem(LAST_BACKUP_KEY, iso); } catch { /* nothing to do */ }
-};
+// The mapping between the ledger and the database, in both directions. Kept
+// apart from the network so the part that silently loses data when it's
+// wrong — a field left off, a null where undefined belongs — can be tested
+// without a session. The sync itself is in sync.ts.
 
 // Postgres rejects '' where it wants a date, and undefined where it wants null.
 // Only ever use this for a NULLABLE column: an explicit null overrides a
@@ -30,6 +15,18 @@ const orNull = <T>(v: T | undefined | '') => (v === undefined || v === '' ? null
 /** For NOT NULL columns — supplies the value the database would have defaulted
  *  to, rather than a null that would be rejected. */
 const orDefault = <T>(v: T | undefined | null, fallback: T): T => (v ?? fallback);
+
+/**
+ * The two columns every synced table carries. A record never edited since it
+ * was made reports its creation time, so the server can still tell which of
+ * two versions is newer. A row being written is never a deletion — those are
+ * a separate update — so deleted_at is cleared, which is also what lets a
+ * newer edit bring back a record deleted elsewhere.
+ */
+const syncColumns = (r: { modifiedAt?: string; createdAt: string }) => ({
+  modified_at: orNull(r.modifiedAt ?? r.createdAt),
+  deleted_at: null,
+});
 
 const jobRow = (j: Job, userId: string) => ({
   id: j.id,
@@ -72,12 +69,14 @@ const jobRow = (j: Job, userId: string) => ({
   attachments: j.attachments ?? [],
   notes: j.notes ?? '',
   created_at: j.createdAt,
+  ...syncColumns(j),
 });
 
 const expenseRow = (e: Expense, userId: string) => ({
   id: e.id, user_id: userId, job_id: orNull(e.jobId), category: e.category,
   description: e.description, amount: e.amount, date: e.date,
   receipt: orNull(e.receipt), created_at: e.createdAt,
+  ...syncColumns(e),
 });
 
 const incomeRow = (i: Income, userId: string) => ({
@@ -85,6 +84,7 @@ const incomeRow = (i: Income, userId: string) => ({
   description: i.description, amount: i.amount, date: i.date, status: i.status,
   invoice_number: orNull(i.invoiceNumber), entered_by_hand: orNull(i.enteredByHand),
   created_at: i.createdAt,
+  ...syncColumns(i),
 });
 
 const equipmentRow = (q: Equipment, userId: string) => ({
@@ -92,6 +92,7 @@ const equipmentRow = (q: Equipment, userId: string) => ({
   serial_number: orNull(q.serialNumber), purchase_date: orNull(q.purchaseDate),
   value: orNull(q.value), status: q.status, assigned_job_id: orNull(q.assignedJobId),
   notes: orDefault(q.notes, ''), created_at: q.createdAt,
+  ...syncColumns(q),
 });
 
 const employerRow = (e: Employer, userId: string) => ({
@@ -119,27 +120,25 @@ const employerRow = (e: Employer, userId: string) => ({
   dismissed_suggestions: orNull(e.dismissedSuggestions),
   notes: orNull(e.notes),
   created_at: e.createdAt,
+  ...syncColumns(e),
 });
 
 const eventRow = (v: CalendarEvent, userId: string) => ({
   id: v.id, user_id: userId, title: v.title, date: v.date,
   start_time: orNull(v.startTime), end_time: orNull(v.endTime),
   location: orNull(v.location), notes: orNull(v.notes), created_at: v.createdAt,
+  ...syncColumns(v),
 });
 
 const payoutRow = (o: PayOut, userId: string) => ({
   id: o.id, user_id: userId, worker_name: o.workerName, amount: o.amount, date: o.date,
   job_ref: orNull(o.jobRef), period_start: orNull(o.periodStart), period_end: orNull(o.periodEnd),
   method: orNull(o.method), notes: orNull(o.notes), created_at: o.createdAt,
+  ...syncColumns(o),
 });
 
-/** The whole local ledger as database rows, in insert order. Separated from the
- *  network call so the field mapping — the part that silently loses data when
- *  it's wrong — can be tested without a session. */
-/** The tables a backup writes, named so supabase.from() will accept them. */
-export type BackupTable = 'jobs' | 'expenses' | 'income' | 'equipment' | 'employers' | 'events' | 'payouts';
-
-export function buildRows(data: AppData, userId: string): [BackupTable, Record<string, unknown>[]][] {
+/** The whole local ledger as database rows, in insert order. */
+export function buildRows(data: AppData, userId: string): [LedgerTable, Record<string, unknown>[]][] {
   return [
     // Employers and jobs first: expenses, income and equipment reference jobs.
     ['employers', data.employers.map(e => employerRow(e, userId))],
@@ -163,6 +162,16 @@ type Row = Record<string, unknown>;
 
 /** null means "not set" on the way back, which is `undefined` in app types. */
 const und = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
+
+/**
+ * When the record was last edited. A row whose edit time is its creation time
+ * was never edited, so it comes back without one — exactly as it went up.
+ */
+const editedAt = (r: Row): string | undefined => {
+  const at = Date.parse(r.modified_at as string);
+  if (Number.isNaN(at) || at === Date.parse(r.created_at as string)) return undefined;
+  return new Date(at).toISOString();
+};
 
 const toJob = (r: Row): Job => ({
   id: r.id as string,
@@ -204,12 +213,14 @@ const toJob = (r: Row): Job => ({
   attachments: und(r.attachments as string[]),
   notes: (r.notes as string) ?? '',
   createdAt: r.created_at as string,
+  modifiedAt: editedAt(r),
 });
 
 const toExpense = (r: Row): Expense => ({
   id: r.id as string, jobId: und(r.job_id as string), category: r.category as string,
   description: r.description as string, amount: r.amount as number, date: r.date as string,
   receipt: und(r.receipt as string), createdAt: r.created_at as string,
+  modifiedAt: editedAt(r),
 });
 
 const toIncome = (r: Row): Income => ({
@@ -218,6 +229,7 @@ const toIncome = (r: Row): Income => ({
   status: r.status as Income['status'], invoiceNumber: und(r.invoice_number as string),
   enteredByHand: und(r.entered_by_hand as boolean),
   createdAt: r.created_at as string,
+  modifiedAt: editedAt(r),
 });
 
 const toEquipment = (r: Row): Equipment => ({
@@ -226,6 +238,7 @@ const toEquipment = (r: Row): Equipment => ({
   value: und(r.value as number), status: r.status as Equipment['status'],
   assignedJobId: und(r.assigned_job_id as string), notes: (r.notes as string) ?? '',
   createdAt: r.created_at as string,
+  modifiedAt: editedAt(r),
 });
 
 const toEmployer = (r: Row): Employer => ({
@@ -253,6 +266,7 @@ const toEmployer = (r: Row): Employer => ({
   dismissedSuggestions: und(r.dismissed_suggestions as Employer['dismissedSuggestions']),
   notes: und(r.notes as string),
   createdAt: r.created_at as string,
+  modifiedAt: editedAt(r),
 });
 
 const toEvent = (r: Row): CalendarEvent => ({
@@ -260,27 +274,19 @@ const toEvent = (r: Row): CalendarEvent => ({
   startTime: und(r.start_time as string), endTime: und(r.end_time as string),
   location: und(r.location as string), notes: und(r.notes as string),
   createdAt: r.created_at as string,
+  modifiedAt: editedAt(r),
 });
 
-export interface RestoreResult {
-  ok: boolean;
-  data?: AppData;
-  counts?: Record<string, number>;
-  error?: string;
-}
-
-/** Everything in the account, as app data. Read-only: the caller decides what
- *  to do with it, so nothing local is touched unless they say so. */
-/** Database rows back into app data. Separated from the network call so the
- *  mapping can be round-tripped against buildRows in a test. */
 const toPayout = (r: Row): PayOut => ({
   id: r.id as string, workerName: r.worker_name as string, amount: Number(r.amount),
   date: r.date as string, jobRef: und(r.job_ref as string),
   periodStart: und(r.period_start as string), periodEnd: und(r.period_end as string),
   method: und(r.method as PayOut['method']), notes: und(r.notes as string),
   createdAt: r.created_at as string,
+  modifiedAt: editedAt(r),
 });
 
+/** Database rows back into app data. */
 export function fromRows(raw: Record<string, Row[]>): AppData {
   return {
     payouts: (raw.payouts ?? []).map(toPayout),
@@ -293,47 +299,22 @@ export function fromRows(raw: Record<string, Row[]>): AppData {
   };
 }
 
-export async function fetchFromCloud(): Promise<RestoreResult> {
-  const tables = ['jobs', 'expenses', 'income', 'equipment', 'employers', 'events', 'payouts'] as const;
-  const raw: Record<string, Row[]> = {};
+const BUILDERS: { [T in LedgerTable]: (record: never, userId: string) => Record<string, unknown> } = {
+  jobs: jobRow, expenses: expenseRow, income: incomeRow, equipment: equipmentRow,
+  employers: employerRow, events: eventRow, payouts: payoutRow,
+};
 
-  for (const t of tables) {
-    const { data, error } = await supabase.from(t).select('*');
-    if (error) return { ok: false, error: `${t}: ${error.message}` };
-    raw[t] = (data ?? []) as Row[];
-  }
+const READERS: { [T in LedgerTable]: (row: Row) => unknown } = {
+  jobs: toJob, expenses: toExpense, income: toIncome, equipment: toEquipment,
+  employers: toEmployer, events: toEvent, payouts: toPayout,
+};
 
-  return {
-    ok: true,
-    data: fromRows(raw),
-    counts: Object.fromEntries(tables.map(t => [t, raw[t].length])),
-  };
+/** One ledger record as the row that stores it. */
+export function rowForRecord(table: LedgerTable, record: unknown, userId: string): Record<string, unknown> {
+  return BUILDERS[table](record as never, userId);
 }
 
-/**
- * Copies everything on this device up to the user's account. Upserts by id, so
- * running it twice is the same as running it once, and a partial failure can be
- * retried without creating duplicates.
- */
-export async function backupToCloud(data: AppData, userId: string): Promise<BackupResult> {
-  const counts: Record<string, number> = {};
-  const tables = buildRows(data, userId);
-
-  for (const [table, rows] of tables) {
-    counts[table] = rows.length;
-    if (rows.length === 0) continue;
-    // Chunked so a large ledger doesn't hit the request size limit.
-    for (let i = 0; i < rows.length; i += 200) {
-      // buildRows produces one row shape per table, but the loop sees them all
-      // as the same generic record, so the per-table Insert types cannot line up
-      // here. The shapes themselves are covered by the round-trip tests.
-      const batch = rows.slice(i, i + 200) as never;
-      const { error } = await supabase.from(table).upsert(batch, { onConflict: 'id' });
-      if (error) return { ok: false, counts, error: `${table}: ${error.message}` };
-    }
-  }
-
-  const now = new Date().toISOString();
-  setLastBackupAt(now);
-  return { ok: true, counts };
+/** One stored row back as the ledger record it came from. */
+export function recordFromRow(table: LedgerTable, row: Row): unknown {
+  return READERS[table](row);
 }

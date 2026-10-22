@@ -7,7 +7,8 @@ interface AuthContextValue {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signUp: (email: string, password: string) => Promise<{ error: string | null }>;
+  /** `signedIn` is false when the project wants the email confirmed first. */
+  signUp: (email: string, password: string) => Promise<{ error: string | null; signedIn: boolean }>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
@@ -42,12 +43,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { emailRedirectTo: undefined },
     });
-    return { error: error?.message ?? null };
+    // Accounts here are confirmed on creation, so sign-up usually signs you
+    // straight in. Only when it does not is there an email to go and click.
+    return { error: error?.message ?? null, signedIn: !!data.session };
   };
 
   const signIn = async (email: string, password: string) => {

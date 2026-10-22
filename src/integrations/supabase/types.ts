@@ -214,10 +214,12 @@ export type Database = {
           day_rate_hours: number | null
           default_day_rate: number | null
           default_hourly_rate: number | null
+          deleted_at: string | null
           dismissed_suggestions: Json | null
           doubletime_multiplier: number | null
           estimated_tax_percent: number | null
           id: string
+          modified_at: string | null
           name: string
           night_premium_enabled: boolean | null
           night_premium_end_hour: number | null
@@ -243,10 +245,12 @@ export type Database = {
           day_rate_hours?: number | null
           default_day_rate?: number | null
           default_hourly_rate?: number | null
+          deleted_at?: string | null
           dismissed_suggestions?: Json | null
           doubletime_multiplier?: number | null
           estimated_tax_percent?: number | null
           id?: string
+          modified_at?: string | null
           name: string
           night_premium_enabled?: boolean | null
           night_premium_end_hour?: number | null
@@ -272,10 +276,12 @@ export type Database = {
           day_rate_hours?: number | null
           default_day_rate?: number | null
           default_hourly_rate?: number | null
+          deleted_at?: string | null
           dismissed_suggestions?: Json | null
           doubletime_multiplier?: number | null
           estimated_tax_percent?: number | null
           id?: string
+          modified_at?: string | null
           name?: string
           night_premium_enabled?: boolean | null
           night_premium_end_hour?: number | null
@@ -301,7 +307,9 @@ export type Database = {
           assigned_job_id: string | null
           category: string
           created_at: string
+          deleted_at: string | null
           id: string
+          modified_at: string | null
           name: string
           notes: string
           purchase_date: string | null
@@ -315,7 +323,9 @@ export type Database = {
           assigned_job_id?: string | null
           category?: string
           created_at?: string
+          deleted_at?: string | null
           id?: string
+          modified_at?: string | null
           name: string
           notes?: string
           purchase_date?: string | null
@@ -329,7 +339,9 @@ export type Database = {
           assigned_job_id?: string | null
           category?: string
           created_at?: string
+          deleted_at?: string | null
           id?: string
+          modified_at?: string | null
           name?: string
           notes?: string
           purchase_date?: string | null
@@ -353,9 +365,11 @@ export type Database = {
         Row: {
           created_at: string
           date: string
+          deleted_at: string | null
           end_time: string | null
           id: string
           location: string | null
+          modified_at: string | null
           notes: string | null
           start_time: string | null
           title: string
@@ -365,9 +379,11 @@ export type Database = {
         Insert: {
           created_at?: string
           date: string
+          deleted_at?: string | null
           end_time?: string | null
           id?: string
           location?: string | null
+          modified_at?: string | null
           notes?: string | null
           start_time?: string | null
           title: string
@@ -377,9 +393,11 @@ export type Database = {
         Update: {
           created_at?: string
           date?: string
+          deleted_at?: string | null
           end_time?: string | null
           id?: string
           location?: string | null
+          modified_at?: string | null
           notes?: string | null
           start_time?: string | null
           title?: string
@@ -394,9 +412,11 @@ export type Database = {
           category: string
           created_at: string
           date: string
+          deleted_at: string | null
           description: string
           id: string
           job_id: string | null
+          modified_at: string | null
           receipt: string | null
           updated_at: string
           user_id: string
@@ -406,9 +426,11 @@ export type Database = {
           category?: string
           created_at?: string
           date: string
+          deleted_at?: string | null
           description?: string
           id?: string
           job_id?: string | null
+          modified_at?: string | null
           receipt?: string | null
           updated_at?: string
           user_id: string
@@ -418,9 +440,11 @@ export type Database = {
           category?: string
           created_at?: string
           date?: string
+          deleted_at?: string | null
           description?: string
           id?: string
           job_id?: string | null
+          modified_at?: string | null
           receipt?: string | null
           updated_at?: string
           user_id?: string
@@ -603,11 +627,13 @@ export type Database = {
           client: string
           created_at: string
           date: string
+          deleted_at: string | null
           description: string
           entered_by_hand: boolean | null
           id: string
           invoice_number: string | null
           job_id: string | null
+          modified_at: string | null
           status: string
           updated_at: string
           user_id: string
@@ -617,11 +643,13 @@ export type Database = {
           client?: string
           created_at?: string
           date: string
+          deleted_at?: string | null
           description?: string
           entered_by_hand?: boolean | null
           id?: string
           invoice_number?: string | null
           job_id?: string | null
+          modified_at?: string | null
           status?: string
           updated_at?: string
           user_id: string
@@ -631,11 +659,13 @@ export type Database = {
           client?: string
           created_at?: string
           date?: string
+          deleted_at?: string | null
           description?: string
           entered_by_hand?: boolean | null
           id?: string
           invoice_number?: string | null
           job_id?: string | null
+          modified_at?: string | null
           status?: string
           updated_at?: string
           user_id?: string
@@ -660,6 +690,7 @@ export type Database = {
           date: string
           day_rate: number | null
           day_rate_hours: number | null
+          deleted_at: string | null
           end_time: string | null
           has_6th_7th_day_rule: boolean
           has_vacation_pay: boolean
@@ -676,6 +707,7 @@ export type Database = {
           meal2_duration: number | null
           meal2_on_clock: boolean | null
           minimum_hours: number | null
+          modified_at: string | null
           name: string
           needs_review: boolean | null
           night_premium_actual_hours: number | null
@@ -705,6 +737,7 @@ export type Database = {
           date: string
           day_rate?: number | null
           day_rate_hours?: number | null
+          deleted_at?: string | null
           end_time?: string | null
           has_6th_7th_day_rule?: boolean
           has_vacation_pay?: boolean
@@ -721,6 +754,7 @@ export type Database = {
           meal2_duration?: number | null
           meal2_on_clock?: boolean | null
           minimum_hours?: number | null
+          modified_at?: string | null
           name: string
           needs_review?: boolean | null
           night_premium_actual_hours?: number | null
@@ -750,6 +784,7 @@ export type Database = {
           date?: string
           day_rate?: number | null
           day_rate_hours?: number | null
+          deleted_at?: string | null
           end_time?: string | null
           has_6th_7th_day_rule?: boolean
           has_vacation_pay?: boolean
@@ -766,6 +801,7 @@ export type Database = {
           meal2_duration?: number | null
           meal2_on_clock?: boolean | null
           minimum_hours?: number | null
+          modified_at?: string | null
           name?: string
           needs_review?: boolean | null
           night_premium_actual_hours?: number | null
@@ -1069,12 +1105,15 @@ export type Database = {
           amount: number
           created_at: string
           date: string
+          deleted_at: string | null
           id: string
           job_ref: string | null
           method: string | null
+          modified_at: string | null
           notes: string | null
           period_end: string | null
           period_start: string | null
+          updated_at: string
           user_id: string
           worker_name: string
         }
@@ -1082,12 +1121,15 @@ export type Database = {
           amount: number
           created_at?: string
           date: string
+          deleted_at?: string | null
           id: string
           job_ref?: string | null
           method?: string | null
+          modified_at?: string | null
           notes?: string | null
           period_end?: string | null
           period_start?: string | null
+          updated_at?: string
           user_id: string
           worker_name: string
         }
@@ -1095,14 +1137,38 @@ export type Database = {
           amount?: number
           created_at?: string
           date?: string
+          deleted_at?: string | null
           id?: string
           job_ref?: string | null
           method?: string | null
+          modified_at?: string | null
           notes?: string | null
           period_end?: string | null
           period_start?: string | null
+          updated_at?: string
           user_id?: string
           worker_name?: string
+        }
+        Relationships: []
+      }
+      user_prefs: {
+        Row: {
+          modified_at: string | null
+          prefs: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          modified_at?: string | null
+          prefs?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          modified_at?: string | null
+          prefs?: Json
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }

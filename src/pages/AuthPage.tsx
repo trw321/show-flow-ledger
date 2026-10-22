@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +7,8 @@ import { Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function AuthPage() {
-  const { signIn, signUp } = useAuth();
+  const { user, signIn, signUp } = useAuth();
+  const navigate = useNavigate();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -14,19 +16,25 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [signupSuccess, setSignupSuccess] = useState(false);
 
+  // Signed in, by this form or already when it opened: back to Settings,
+  // where the sync shows it has started. Staying here left a filled-in login
+  // form on screen with no sign that it had worked.
+  useEffect(() => {
+    if (user) navigate('/settings', { replace: true });
+  }, [user, navigate]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    const result = mode === 'login'
-      ? await signIn(email, password)
-      : await signUp(email, password);
-
-    if (result.error) {
-      setError(result.error);
-    } else if (mode === 'signup') {
-      setSignupSuccess(true);
+    if (mode === 'login') {
+      const { error: failed } = await signIn(email, password);
+      if (failed) setError(failed);
+    } else {
+      const { error: failed, signedIn } = await signUp(email, password);
+      if (failed) setError(failed);
+      else if (!signedIn) setSignupSuccess(true);
     }
     setLoading(false);
   };
