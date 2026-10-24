@@ -17,7 +17,10 @@ import {
 import { parseDayTimeline, withGapOnClock, type DayTimeline } from '@/lib/dayTimeline';
 import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO } from 'date-fns';
-import type { Job, CalendarEvent } from '@/lib/store';
+import type { Job, CalendarEvent, Income } from '@/lib/store';
+import { matchPaymentToProject, betterProject, projectOf, type FoundPayment } from '@/lib/paymentMatch';
+import { alreadyRecorded } from '@/lib/paymentRepeats';
+import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross, compareCalls } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { useSwipe } from '@/lib/useSwipe';
@@ -232,6 +235,14 @@ function SplitMark({ job, allJobs }: { job: Job; allJobs: Job[] }) {
  * a cheque only shows what arrived, and a figure typed in by hand has had
  * nothing checked against a document at all — so they cannot be the same mark.
  */
+/** How a payment came in, as the money icon it is shown with. */
+function paymentIcon(i: Income): { icon: string; label: string } {
+  if (i.enteredByHand) return { icon: '✏️', label: 'Added by hand' };
+  if (i.paymentMethod === 'check' || /\b(check|cheque)\b/i.test(i.description ?? '')) return { icon: '💵', label: 'Check' };
+  if (/stub/i.test(i.description ?? '')) return { icon: '🧾', label: 'Pay stub' };
+  return { icon: '💰', label: 'Payment' };
+}
+
 function StubMark({ job, paidByHand }: { job: Job; paidByHand?: boolean }) {
   const mark = job.payStub
     ? job.payStubKind === 'check'
@@ -291,7 +302,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   openStubOnMount?: boolean;
   onStubOpened?: () => void;
 }) {
-  const { data, addJob, updateJob: updateJobDirect, updateIncome, updateEmployer } = useData();
+  const { data, addJob, updateJob: updateJobDirect, updateIncome, updateEmployer, addIncome, deleteIncome } = useData();
+  const { prefs } = useUserPrefs();
   const { user } = useAuth();
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -328,6 +340,16 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   // The picked photo, held while it is cropped and blacked out.
   const [editingStub, setEditingStub] = useState<string | null>(null);
   const [pendingStubKind, setPendingStubKind] = useState<'stub' | 'check'>('stub');
+  // Add pay: how a payment for this shift gets in — typed, or read off a stub
+  // or a check — and then matched against the shift's project, with the
+  // reasons, before anything is saved.
+  const [payOpen, setPayOpen] = useState(false);
+  const [payMode, setPayMode] = useState<'manual' | null>(null);
+  const [payFound, setPayFound] = useState<{ kind: 'stub' | 'check'; payment: FoundPayment } | null>(null);
+  const [payAmount, setPayAmount] = useState('');
+  const [payDate, setPayDate] = useState(localToday());
+  const [payMethod, setPayMethod] = useState<Income['paymentMethod']>('direct_deposit');
+  const [removingPay, setRemovingPay] = useState<string | null>(null);
   const [parsingStub, setParsingStub] = useState(false);
   const [viewingStub, setViewingStub] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -422,21 +444,42 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
         return;
       }
 
-      try {
-        const resp = await fetch(`${supabaseUrl}/functions/v1/parse-statement`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${supabaseKey}` },
-          body: JSON.stringify({ imageBase64: dataUrl.split(',')[1], mimeType: 'image/jpeg', type: 'paystub' }),
+      // Two readings at once: the payment itself — amount, date, payer, the
+      // days it lists hours for — which is what gets matched and recorded, and
+      // for a stub the full breakdown it is checked against. A check has no
+      // breakdown to read.
+      const read = (type: 'paystub' | 'income') => fetch(`${supabaseUrl}/functions/v1/parse-statement`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${supabaseKey}` },
+        body: JSON.stringify({ imageBase64: dataUrl.split(',')[1], mimeType: 'image/jpeg', type }),
+      }).then(async r => (r.ok ? r.json() : Promise.reject(new Error((await r.json().catch(() => ({}))).error || 'Could not read it'))));
+      const kind = pendingStubKind;
+      const [stubRead, paymentRead] = await Promise.allSettled([
+        kind === 'stub' ? read('paystub') : Promise.resolve(null),
+        read('income'),
+      ]);
+      const paystub = stubRead.status === 'fulfilled' ? stubRead.value?.paystub : undefined;
+      if (paystub) setStubParsed(paystub);
+      await updateJobDirect(job.id, { payStub: stubValue, payStubKind: kind, ...(paystub ? { stubParsed: paystub } : {}) });
+
+      const txn = paymentRead.status === 'fulfilled' ? paymentRead.value?.transactions?.[0] : undefined;
+      const amount = Math.abs(Number(txn?.amount ?? paystub?.netPay ?? 0));
+      if (amount > 0) {
+        setPayFound({
+          kind,
+          payment: {
+            amount,
+            date: txn?.date ?? paystub?.payPeriodEnd ?? localToday(),
+            payer: txn?.client ?? paystub?.employer,
+            hoursOn: (txn?.breakdown ?? paystub?.hoursBreakdown ?? []).map((b: { date: string }) => b.date),
+          },
         });
-        if (!resp.ok) throw new Error((await resp.json()).error || 'Failed to read pay stub');
-        const { paystub } = await resp.json();
-        setStubParsed(paystub);
-        await updateJobDirect(job.id, { payStub: stubValue, payStubKind: pendingStubKind, stubParsed: paystub });
-        toast.success('Pay stub read — net $' + (paystub.netPay ?? '?'));
-      } catch (err) {
-        // Attachment is still worth keeping; parsing failure isn't fatal.
-        await updateJobDirect(job.id, { payStub: stubValue, payStubKind: pendingStubKind });
-        toast.error(err instanceof Error ? err.message : 'Could not read the pay stub — saved as attachment only');
+        setPayAmount(amount.toFixed(2));
+        setPayDate(txn?.date ?? paystub?.payPeriodEnd ?? localToday());
+      } else {
+        // Kept as an attachment either way; there was just no amount to record.
+        toast.error(kind === 'check' ? 'Could not read an amount off the check — add it by hand' : 'Could not read the net pay — add it by hand');
+        setPayMode('manual');
       }
     } finally {
       setParsingStub(false);
@@ -462,6 +505,61 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   const handleDelete = () => setConfirmingDelete(true);
 
   const paidIncomeForJob = data.income.filter(i => i.jobId === job.id && i.status === 'paid');
+
+  // A payment usually covers the whole project, and may have been recorded
+  // against any of its days, so the project is what pay is matched against
+  // and what its payments are listed for.
+  const project = useMemo(() => projectOf(job, data.jobs), [job, data.jobs]);
+  const projectPayments = useMemo(() => {
+    const ids = new Set(project.map(j => j.id));
+    return data.income.filter(i => i.jobId && ids.has(i.jobId) && i.status === 'paid').sort((a, b) => a.date.localeCompare(b.date));
+  }, [project, data.income]);
+  const matchCtx = useMemo(() => ({
+    allJobs: data.jobs,
+    employers: data.employers,
+    payer: prefs.payer,
+    paidJobIds: new Set(data.income.filter(i => i.status === 'paid' && i.jobId).map(i => i.jobId!)),
+  }), [data.jobs, data.employers, data.income, prefs.payer]);
+  const pendingPayment: FoundPayment | null = (payFound || payMode === 'manual') && parseFloat(payAmount) > 0
+    ? { ...(payFound?.payment ?? {}), amount: parseFloat(payAmount), date: payDate }
+    : null;
+  const payMatch = pendingPayment ? matchPaymentToProject(pendingPayment, project, matchCtx) : null;
+  const payElsewhere = pendingPayment && payFound ? betterProject(pendingPayment, job, matchCtx) : null;
+  const payDuplicate = pendingPayment ? alreadyRecorded({ ...pendingPayment, client: pendingPayment.payer }, data.income) : undefined;
+  const showPay = payOpen || !!editingStub || parsingStub || !!payFound || payMode !== null;
+
+  const closePay = () => { setPayOpen(false); setPayMode(null); setPayFound(null); setPayAmount(''); setEditingStub(null); };
+  const startPayPhoto = (kind: 'stub' | 'check') => {
+    setPendingStubKind(kind);
+    setPayMode(null);
+    setPayFound(null);
+    stubInputRef.current?.click();
+  };
+  const startManualPay = () => {
+    setPayFound(null);
+    setPayMode('manual');
+    setPayDate(localToday());
+    // What the project's unpaid days were expected to pay, as a starting point.
+    const expected = matchPaymentToProject({ amount: 0, date: localToday() }, project, matchCtx).expected;
+    setPayAmount(expected > 0 ? expected.toFixed(2) : '');
+  };
+  const savePayment = async (target: Job) => {
+    const amount = parseFloat(payAmount);
+    if (!(amount > 0)) { toast.error('Enter the amount'); return; }
+    const kind = payFound?.kind;
+    await addIncome({
+      jobId: target.id,
+      client: target.client,
+      description: kind === 'stub' ? 'Pay stub' : kind === 'check' ? 'Check' : 'Added by hand',
+      amount,
+      date: payDate,
+      status: 'paid',
+      paymentMethod: kind === 'check' ? 'check' : kind ? undefined : payMethod,
+      enteredByHand: kind ? undefined : true,
+    });
+    toast.success(`💰 $${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} recorded for ${target.name}`);
+    closePay();
+  };
 
   const employer = resolveEmployer(client, data.employers);
   const employerRoles = employer?.roles ?? [];
@@ -797,6 +895,153 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
         <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold text-mono uppercase tracking-wider border", isOverdueUpcoming(job) ? "bg-warning/20 text-warning border-warning/30" : statusColors[job.status])}>
           {isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
         </span>
+
+        {/* Pay, first thing: what has come in for this project, and the one
+            way to add more — typed, or read off a stub or a check. */}
+        <input ref={stubInputRef} id={`stub-input-${job.id}`} type="file" accept="image/*,.pdf" className="hidden" onChange={handleStubUpload} disabled={parsingStub} />
+        {(job.date <= localToday() || projectPayments.length > 0) && (
+          <div className="pixel-panel p-3 space-y-2">
+            {projectPayments.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground">Paid{project.length > 1 ? ' · this project' : ''}</p>
+                {projectPayments.map(i => {
+                  const how = paymentIcon(i);
+                  return (
+                    <div key={i.id} className="flex items-center gap-2 text-xs">
+                      <span role="img" aria-label={how.label} title={how.label}>{how.icon}</span>
+                      <span className="font-bold text-mono text-dot-paid">${i.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      <span className="text-muted-foreground text-mono">{format(new Date(i.date + 'T12:00:00'), 'MMM d')}</span>
+                      <span className="flex-1" />
+                      {removingPay === i.id ? (
+                        <button type="button" onClick={() => { setRemovingPay(null); void deleteIncome(i.id); toast.success('Payment removed'); }}
+                          className="text-[10px] text-mono font-bold text-destructive border border-destructive/40 px-1.5 py-0.5">remove</button>
+                      ) : (
+                        <button type="button" onClick={() => setRemovingPay(i.id)} aria-label="Remove this payment"
+                          className="p-0.5 text-muted-foreground hover:text-destructive"><X size={12} /></button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {!showPay ? (
+              job.date <= localToday() && (
+                <button type="button" onClick={() => setPayOpen(true)} className="pixel-button pick-on w-full py-2 text-sm font-bold">
+                  💰 Add pay
+                </button>
+              )
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground">Add pay</p>
+                  <button type="button" onClick={closePay} aria-label="Close add pay" className="p-1 text-muted-foreground hover:text-foreground"><X size={14} /></button>
+                </div>
+
+                {!payMode && !payFound && !editingStub && !parsingStub && (
+                  <div className="grid grid-cols-3 gap-2">
+                    {([
+                      { id: 'manual', icon: '✏️', label: 'Manual', go: startManualPay },
+                      { id: 'stub', icon: '🧾', label: 'Pay stub', go: () => startPayPhoto('stub') },
+                      { id: 'check', icon: '💵', label: 'Check', go: () => startPayPhoto('check') },
+                    ] as const).map(o => (
+                      <button key={o.id} type="button" onClick={o.go} className="pixel-button pick-off flex flex-col items-center gap-1 py-2.5 text-[11px] font-bold">
+                        <span className="text-lg leading-none" aria-hidden>{o.icon}</span>{o.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {editingStub && (
+                  <StubEditor
+                    source={editingStub}
+                    onCancel={() => setEditingStub(null)}
+                    onDone={async (edited) => {
+                      setEditingStub(null);
+                      const res = await fetch(edited);
+                      const blob = await res.blob();
+                      // Named so the rest of the path can treat it as a picked photo.
+                      await ingestStub(new File([blob], `stub-${job.id}.jpg`, { type: blob.type || 'image/jpeg' }));
+                    }}
+                  />
+                )}
+
+                {parsingStub && (
+                  <p className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 size={14} className="animate-spin" /> Reading the {pendingStubKind === 'check' ? 'check' : 'pay stub'}…</p>
+                )}
+
+                {(payMode === 'manual' || payFound) && (
+                  <div className="space-y-2">
+                    {payFound && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Read from the {payFound.kind === 'check' ? 'check' : 'stub'}
+                        {payFound.payment.payer ? <> · paid by <span className="text-foreground font-medium">{payFound.payment.payer}</span></> : null}
+                        {payFound.payment.hoursOn?.length ? <> · hours on {[...new Set(payFound.payment.hoursOn)].sort().map(d => format(new Date(d + 'T12:00:00'), 'MMM d')).join(', ')}</> : null}
+                      </p>
+                    )}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-mono uppercase text-muted-foreground" htmlFor={`pay-amount-${job.id}`}>Amount</label>
+                        <Input id={`pay-amount-${job.id}`} type="number" step="0.01" inputMode="decimal" value={payAmount} onChange={e => setPayAmount(e.target.value)} className="h-9 text-sm text-mono" placeholder="0.00" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-mono uppercase text-muted-foreground" htmlFor={`pay-date-${job.id}`}>Paid on</label>
+                        <Input id={`pay-date-${job.id}`} type="date" value={payDate} onChange={e => setPayDate(e.target.value)} className="h-9 text-xs text-mono" />
+                      </div>
+                    </div>
+                    {payMode === 'manual' && (
+                      <select value={payMethod} onChange={e => setPayMethod(e.target.value as Income['paymentMethod'])} aria-label="How it was paid"
+                        className="h-9 w-full border border-border bg-background px-2 text-xs">
+                        <option value="direct_deposit">Direct deposit</option>
+                        <option value="check">Check</option>
+                        <option value="cash">Cash</option>
+                        <option value="other">Other</option>
+                      </select>
+                    )}
+
+                    {payMatch && (
+                      <div className="border border-border p-2 space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground truncate">
+                            Matches {job.name}{job.jobNumber ? ` #${job.jobNumber}` : ''}
+                          </p>
+                          <span className={cn('shrink-0 text-[10px] text-mono font-bold uppercase', payMatch.level === 'high' ? 'text-dot-paid' : payMatch.level === 'medium' ? 'text-dot-overdue' : 'text-destructive')}>
+                            {payMatch.level} · {payMatch.percent}%
+                          </span>
+                        </div>
+                        <div className="h-1.5 bg-secondary" aria-hidden>
+                          <div className={cn('h-full', payMatch.level === 'high' ? 'bg-dot-paid' : payMatch.level === 'medium' ? 'bg-dot-overdue' : 'bg-destructive')} style={{ width: `${payMatch.percent}%` }} />
+                        </div>
+                        <ul className="space-y-0.5 text-[11px]">
+                          {payMatch.reasons.map(r => (
+                            <li key={r.text} className={r.good ? 'text-foreground/85' : 'text-warning'}>{r.good ? '✓' : '✗'} {r.text}</li>
+                          ))}
+                        </ul>
+                        {payElsewhere && (
+                          <p className="text-[11px] text-warning">
+                            Looks more like {payElsewhere.project[0].name} · {format(new Date(payElsewhere.project[0].date + 'T12:00:00'), 'MMM d')} ({payElsewhere.match.level} · {payElsewhere.match.percent}%).
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {payDuplicate && (
+                      <p className="text-[11px] text-warning">Already in your payments ({payDuplicate.date}) — adding it again counts it twice.</p>
+                    )}
+
+                    <Button size="sm" className="w-full" disabled={!(parseFloat(payAmount) > 0)} onClick={() => void savePayment(job)}>
+                      Add {parseFloat(payAmount) > 0 ? `$${parseFloat(payAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'payment'} to this project
+                    </Button>
+                    {payElsewhere && (
+                      <Button size="sm" variant="outline" className="w-full" onClick={() => void savePayment(payElsewhere.project[0])}>
+                        Add it to {payElsewhere.project[0].name} instead
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Always front-and-center — no "Edit shift" tap required to log the
             one thing this dialog usually gets opened for. Flat, accent-bordered
@@ -1161,22 +1406,6 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           </Button>
         </div>
 
-        {paidIncomeForJob.length > 0 && (
-          <button
-            type="button"
-            onClick={async () => {
-              for (const inc of paidIncomeForJob) await updateIncome(inc.id, { status: 'pending' });
-              toast.success('Marked unpaid');
-            }}
-            className="flex items-center gap-2.5 rounded-md border border-success/40 bg-success/10 p-3 w-full text-left"
-          >
-            <span className="text-lg shrink-0">💰</span>
-            <span className="flex-1 text-xs">
-              <span className="font-medium block">Marked paid — ${paidIncomeForJob.reduce((s, i) => s + i.amount, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-              <span className="text-[11px] text-muted-foreground">Didn't confirm this yourself? Tap to undo.</span>
-            </span>
-          </button>
-        )}
         {/* Saved as soon as they are picked, like the paid toggle above —
             they change what the shift pays, not what was typed into it. */}
         {(employerRoles.length > 0 || ptoHere || job.pto) && (
@@ -1261,7 +1490,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           </button>
         )}
 
-        <label className={cn(
+        {payStub && (
+        <label htmlFor={`stub-input-${job.id}`} className={cn(
           "flex items-center gap-2.5 rounded-md border p-3 cursor-pointer transition-colors",
           payStub ? "border-success/40 bg-success/5" : "border-dashed border-border bg-secondary/10 hover:border-primary/30"
         )}>
@@ -1309,43 +1539,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
               <X size={14} />
             </button>
           )}
-          <input ref={stubInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleStubUpload} disabled={parsingStub} />
-          {editingStub && (
-            <div className="pixel-panel p-3 space-y-2">
-              <p className="text-[10px] text-mono uppercase tracking-widest text-muted-foreground">Before it leaves your phone</p>
-              <div className="grid grid-cols-2 gap-2">
-                {([
-                  { kind: 'stub' as const, icon: '🧾', label: 'Pay stub' },
-                  { kind: 'check' as const, icon: '💵', label: 'Cheque' },
-                ]).map(({ kind, icon, label }) => (
-                  <button
-                    key={kind}
-                    type="button"
-                    aria-pressed={pendingStubKind === kind}
-                    onClick={() => setPendingStubKind(kind)}
-                    className={cn(
-                      'pixel-button flex items-center justify-center gap-1.5 py-2 text-xs font-bold',
-                      pendingStubKind === kind ? 'bg-primary/20 border-primary text-primary' : 'bg-card text-muted-foreground',
-                    )}
-                  >
-                    <span aria-hidden="true">{icon}</span> {label}
-                  </button>
-                ))}
-              </div>
-              <StubEditor
-                source={editingStub}
-                onCancel={() => setEditingStub(null)}
-                onDone={async (edited) => {
-                  setEditingStub(null);
-                  const res = await fetch(edited);
-                  const blob = await res.blob();
-                  // Named so the rest of the path can treat it as a picked photo.
-                  await ingestStub(new File([blob], `stub-${job.id}.jpg`, { type: blob.type || 'image/jpeg' }));
-                }}
-              />
-            </div>
-          )}
         </label>
+        )}
 
         {/* Storing a stub nobody can look at is just a boolean with a storage
             bill — the point of keeping it is being able to check it later. */}
@@ -2069,7 +2264,7 @@ export default function CalendarPage() {
                         {dayJobs.slice(0, 3).map((job, j) => <span key={j} className={cn("w-1.5 h-1.5 rounded-full", jobDotClass(job, paidJobIds))} />)}
                         {dayJobs.length > 3 && <span className="text-[7px] text-muted-foreground text-mono">+{dayJobs.length - 3}</span>}
                       </div>
-                      {hasPay && <span className={cn("text-[8px] text-mono font-semibold leading-none mt-0.5", moneyTone(dayJobs, paidJobIds))}>${payByDate[dateKey] >= 1000 ? `${(payByDate[dateKey] / 1000).toFixed(1)}k` : payByDate[dateKey].toFixed(0)}</span>}
+                      {hasPay && <span className={cn("text-[8px] text-mono font-semibold leading-none mt-0.5", moneyTone(dayJobs, paidJobIds))}>{dayJobs.some(j => paidJobIds.has(j.id)) && <span role="img" aria-label="Paid">💰</span>}${payByDate[dateKey] >= 1000 ? `${(payByDate[dateKey] / 1000).toFixed(1)}k` : payByDate[dateKey].toFixed(0)}</span>}
                       {/* Plans underline the cell instead of taking a dot in the
                           job row — a recurring one then reads as a stripe down
                           the month, which a dot never did. */}
@@ -2260,7 +2455,7 @@ export default function CalendarPage() {
                     <div key={job.id} onClick={() => setSelectedJobId(job.id)} className={cn("rounded-md border p-3 space-y-1 cursor-pointer hover:opacity-90 transition-opacity", paid ? "bg-success/20 text-success border-success/30" : overdue ? "bg-warning/20 text-warning border-warning/30" : statusColors[job.status])}>
                       <div className="flex items-start justify-between">
                         <div><p className="font-medium text-sm flex items-center gap-1.5"><CallbackMark job={job} />{job.needsReview && <span className="text-warning" title="Flagged to check later">⚑</span>}{job.name}{job.role && <span className="opacity-70 font-normal">· {job.role}</span>}{job.pto && <span className="text-[10px] text-mono font-bold border border-current px-1">PTO</span>}<SplitMark job={job} allJobs={data.jobs} /></p><p className="text-xs opacity-70">{job.client}</p></div>
-                        <span className="text-[10px] text-mono uppercase font-medium opacity-70">{paid ? 'Paid' : overdue ? 'Needs Hours' : job.status}</span>
+                        <span className="text-[10px] text-mono uppercase font-medium opacity-70">{paid ? '💰 Paid' : overdue ? 'Needs Hours' : job.status}</span>
                       </div>
                       {job.venue && <p className="text-xs opacity-60">{job.venue}</p>}
                       <div className="flex items-center gap-3 text-xs text-mono">
@@ -2472,7 +2667,7 @@ export default function CalendarPage() {
                             one thing sized to be read without stopping. */}
                         <div className="shrink-0 text-right">
                           {totalEarned > 0 ? (
-                            <p className={cn("text-lg font-bold text-mono leading-none", moneyTone(jobs, paidJobIds))}>${Math.round(totalEarned).toLocaleString()}</p>
+                            <p className={cn("text-lg font-bold text-mono leading-none", moneyTone(jobs, paidJobIds))}>{jobs.some(j => paidJobIds.has(j.id)) && <span role="img" aria-label="Paid" className="mr-1 text-base">💰</span>}${Math.round(totalEarned).toLocaleString()}</p>
                           ) : (
                             <p className="text-[11px] text-mono text-muted-foreground leading-none">{statusLabel[first.status]}</p>
                           )}
