@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useMemo } from 'react';
 import { toast } from 'sonner';
 import { isDuplicateJob } from './jobDedup';
 import { localToday } from './today';
-import { stampChanges, type LedgerChange } from './ledgerDiff';
+import { stampChanges, stampNow, type LedgerChange } from './ledgerDiff';
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -275,6 +275,28 @@ export function prefsKeyFor(userId: string | null | undefined): string {
   return userId ? `av-prefs-${userId}` : 'av-prefs';
 }
 
+/** The account a ledger key belongs to, or null for the device's own. */
+export function userOfLedgerKey(key: string | null): string | null {
+  return key && key.startsWith(DEVICE_LEDGER_KEY + ':') ? key.slice(DEVICE_LEDGER_KEY.length + 1) : null;
+}
+
+/**
+ * The account this device was last signed in to, until someone signs out on
+ * purpose. A sign-in can lapse without anyone signing out — it expires while
+ * the phone is offline — and the shifts must not vanish from the screen when
+ * it does.
+ */
+const LAST_USER_KEY = 'showflow-last-user';
+export const rememberedUser = (): string | null => {
+  try { return localStorage.getItem(LAST_USER_KEY); } catch { return null; }
+};
+export const rememberUser = (userId: string) => {
+  try { localStorage.setItem(LAST_USER_KEY, userId); } catch { /* only matters if the session lapses */ }
+};
+export const forgetUser = () => {
+  try { localStorage.removeItem(LAST_USER_KEY); } catch { /* nothing to forget */ }
+};
+
 /** Where an account's sync bookkeeping lives: how far it has read, and what it has yet to send. */
 export function syncMetaKeyFor(userId: string): string {
   return `showflow-sync:${userId}`;
@@ -360,7 +382,7 @@ function markPayoutsAdopted(ledger: PayOut[]) {
 // Old jobs may still carry the retired mealType ('YWA'/'NWA') field instead of
 // mealDuration/mealOnClock. Convert on load so historical deduction behavior
 // (YWA = 1hr off-clock, NWA = 30min on-clock) stays exactly the same.
-function migrateJob(job: Job & { mealType?: 'YWA' | 'NWA' }): Job {
+export function migrateJob(job: Job & { mealType?: 'YWA' | 'NWA' }): Job {
   if (job.mealDuration === undefined && job.mealType) {
     if (job.mealType === 'YWA') { job.mealDuration = 60; job.mealOnClock = false; }
     else if (job.mealType === 'NWA') { job.mealDuration = 30; job.mealOnClock = true; }
@@ -503,7 +525,7 @@ export function useAppData(key: string | null, onLocalChange?: (changes: LedgerC
   const update = useCallback((updater: (prev: AppData) => AppData) => {
     // Taken once, outside the updater, so every record one save touches
     // carries the same time.
-    const now = new Date().toISOString();
+    const now = stampNow();
     setState(prev => {
       if (!prev.key) return prev;
       const next = updater(prev.data);

@@ -289,3 +289,39 @@ describe('crew payments back up with everything else', () => {
     expect(fromRows({} as never).payouts).toEqual([]);
   });
 });
+
+// Every field the app keeps has to have somewhere to go in the database, or
+// a sync quietly loses it: a payment's method, four employer settings and a
+// shift's role and PTO all went missing this way before anyone noticed.
+describe('every field survives the trip to the database and back', () => {
+  const job: AppData['jobs'][number] = {
+    id: 'j1', jobNumber: '2026-1', name: 'Gala', client: 'Odeum', venue: 'Hall', date: '2026-10-10',
+    startTime: '08:00 AM', endTime: '05:00 PM', status: 'completed', paySchedule: 'weekly', payPeriodStart: '2026-10-05',
+    payrollCompany: 'EP', hourlyRate: 52, minimumHours: 5, has6th7thDayRule: true, steward: 'Sam', parkingCost: 20,
+    hoursWorked: 9, mealDuration: 60, mealOnClock: false, dayRate: 400, dayRateHours: 10, payStubKind: 'check',
+    hoursPlanned: true, local: 'ia16', needsReview: true, callTimeline: '8-12, 1-5', callGapsOnClock: [false],
+    meal2Duration: 30, meal2OnClock: true, mealPenalties: 1, nightPremiumConfirmed: false, nightPremiumActualHours: 1.5,
+    attachments: ['a'], payStub: 'storage:x', stubParsed: { netPay: 400 }, stubCorrections: [{ field: 'net', was: 1, now: 2, at: 'x' }],
+    role: 'A1', pto: true, notes: 'n', createdAt: '2026-10-01T00:00:00.000Z', modifiedAt: '2026-10-02T00:00:00.000Z',
+  };
+  const employer: AppData['employers'][number] = {
+    id: 'e1', name: 'Odeum', workerStatus: '1099', roles: [{ name: 'A1', hourlyRate: 62 }], ptoEarnHours: 1,
+    ptoPerHoursWorked: 30, ptoStartingHours: 4, defaultHourlyRate: 50, payrollCompany: 'EP', timekeepingApp: 'Wrapbook',
+    paySchedule: 'weekly', overtimeRule: 'daily', dailyOvertimeThresholdHours: 8, dailyDoubletimeThresholdHours: 12,
+    weeklyOvertimeThresholdHours: 40, overtimeMultiplier: 1.5, doubletimeMultiplier: 2, nightPremiumEnabled: true,
+    nightPremiumStartHour: 0, nightPremiumEndHour: 6, nightPremiumMultiplier: 2, defaultDayRate: 400, dayRateHours: 10,
+    retirementMatchPercent: 6, roundUpToWholeHours: true, postMealMinimumHours: 2, mealPenaltyAfterHours: 5,
+    unionDuesPercent: 3.5, unionLocal: '16', estimatedTaxPercent: 20, vacationPercent: 8,
+    dismissedSuggestions: [{ field: 'x', skipsRemaining: 1, dismissedAt: 'x' }], notes: 'n',
+    createdAt: '2026-10-01T00:00:00.000Z', modifiedAt: '2026-10-02T00:00:00.000Z',
+  };
+  const income: AppData['income'][number] = {
+    id: 'i1', jobId: 'j1', client: 'Odeum', description: 'Check', amount: 400, date: '2026-10-12', status: 'paid',
+    paymentMethod: 'check', enteredByHand: true, invoiceNumber: '77', createdAt: '2026-10-01T00:00:00.000Z', modifiedAt: '2026-10-02T00:00:00.000Z',
+  };
+  const back = fromRows(Object.fromEntries(buildRows({ ...empty, jobs: [job], employers: [employer], income: [income] }, USER)));
+
+  it('keeps every field of a shift', () => expect(back.jobs[0]).toEqual(job));
+  it('keeps every field of an employer', () => expect(back.employers[0]).toEqual(employer));
+  it('keeps every field of a payment', () => expect(back.income[0]).toEqual(income));
+});

@@ -3,6 +3,7 @@ import { EMPTY_PROFILE, type PayerProfile } from '@/lib/payerProfile';
 import { supabase } from '@/integrations/supabase/client';
 import { prefsKeyFor } from '@/lib/store';
 import { PREFS_CHANGED_EVENT, PREFS_SYNCED_EVENT } from '@/lib/sync';
+import { stampNow } from '@/lib/ledgerDiff';
 
 // Calendar/log/reconciliation/equipment/taxes/discover/scheduling used to be
 // keys here too, but nothing in the app ever actually read those tabs (only
@@ -55,7 +56,7 @@ function loadPrefs(uid?: string | null): UserPrefs {
 // device — and announced so the sync sends it up.
 function savePrefs(prefs: UserPrefs, uid?: string | null) {
   try {
-    localStorage.setItem(prefsKeyFor(uid), JSON.stringify({ ...prefs, modifiedAt: new Date().toISOString() }));
+    localStorage.setItem(prefsKeyFor(uid), JSON.stringify({ ...prefs, modifiedAt: stampNow() }));
   } catch {
     return;
   }

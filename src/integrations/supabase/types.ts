@@ -219,6 +219,7 @@ export type Database = {
           doubletime_multiplier: number | null
           estimated_tax_percent: number | null
           id: string
+          meal_penalty_after_hours: number | null
           modified_at: string | null
           name: string
           night_premium_enabled: boolean | null
@@ -230,6 +231,13 @@ export type Database = {
           overtime_rule: string
           pay_schedule: string | null
           payroll_company: string | null
+          post_meal_minimum_hours: number | null
+          pto_earn_hours: number | null
+          pto_per_hours_worked: number | null
+          pto_starting_hours: number | null
+          retirement_match_percent: number | null
+          roles: Json | null
+          round_up_to_whole_hours: boolean | null
           timekeeping_app: string | null
           union_dues_percent: number | null
           union_local: string | null
@@ -237,6 +245,7 @@ export type Database = {
           user_id: string
           vacation_percent: number | null
           weekly_overtime_threshold_hours: number | null
+          worker_status: string | null
         }
         Insert: {
           created_at?: string
@@ -250,6 +259,7 @@ export type Database = {
           doubletime_multiplier?: number | null
           estimated_tax_percent?: number | null
           id?: string
+          meal_penalty_after_hours?: number | null
           modified_at?: string | null
           name: string
           night_premium_enabled?: boolean | null
@@ -261,6 +271,13 @@ export type Database = {
           overtime_rule?: string
           pay_schedule?: string | null
           payroll_company?: string | null
+          post_meal_minimum_hours?: number | null
+          pto_earn_hours?: number | null
+          pto_per_hours_worked?: number | null
+          pto_starting_hours?: number | null
+          retirement_match_percent?: number | null
+          roles?: Json | null
+          round_up_to_whole_hours?: boolean | null
           timekeeping_app?: string | null
           union_dues_percent?: number | null
           union_local?: string | null
@@ -268,6 +285,7 @@ export type Database = {
           user_id: string
           vacation_percent?: number | null
           weekly_overtime_threshold_hours?: number | null
+          worker_status?: string | null
         }
         Update: {
           created_at?: string
@@ -281,6 +299,7 @@ export type Database = {
           doubletime_multiplier?: number | null
           estimated_tax_percent?: number | null
           id?: string
+          meal_penalty_after_hours?: number | null
           modified_at?: string | null
           name?: string
           night_premium_enabled?: boolean | null
@@ -292,6 +311,13 @@ export type Database = {
           overtime_rule?: string
           pay_schedule?: string | null
           payroll_company?: string | null
+          post_meal_minimum_hours?: number | null
+          pto_earn_hours?: number | null
+          pto_per_hours_worked?: number | null
+          pto_starting_hours?: number | null
+          retirement_match_percent?: number | null
+          roles?: Json | null
+          round_up_to_whole_hours?: boolean | null
           timekeeping_app?: string | null
           union_dues_percent?: number | null
           union_local?: string | null
@@ -299,6 +325,7 @@ export type Database = {
           user_id?: string
           vacation_percent?: number | null
           weekly_overtime_threshold_hours?: number | null
+          worker_status?: string | null
         }
         Relationships: []
       }
@@ -634,6 +661,7 @@ export type Database = {
           invoice_number: string | null
           job_id: string | null
           modified_at: string | null
+          payment_method: string | null
           status: string
           updated_at: string
           user_id: string
@@ -650,6 +678,7 @@ export type Database = {
           invoice_number?: string | null
           job_id?: string | null
           modified_at?: string | null
+          payment_method?: string | null
           status?: string
           updated_at?: string
           user_id: string
@@ -666,6 +695,7 @@ export type Database = {
           invoice_number?: string | null
           job_id?: string | null
           modified_at?: string | null
+          payment_method?: string | null
           status?: string
           updated_at?: string
           user_id?: string
@@ -719,6 +749,8 @@ export type Database = {
           pay_stub: string | null
           pay_stub_kind: string | null
           payroll_company: string | null
+          pto: boolean | null
+          role: string | null
           start_time: string | null
           status: string
           steward: string | null
@@ -766,6 +798,8 @@ export type Database = {
           pay_stub?: string | null
           pay_stub_kind?: string | null
           payroll_company?: string | null
+          pto?: boolean | null
+          role?: string | null
           start_time?: string | null
           status?: string
           steward?: string | null
@@ -813,6 +847,8 @@ export type Database = {
           pay_stub?: string | null
           pay_stub_kind?: string | null
           payroll_company?: string | null
+          pto?: boolean | null
+          role?: string | null
           start_time?: string | null
           status?: string
           steward?: string | null

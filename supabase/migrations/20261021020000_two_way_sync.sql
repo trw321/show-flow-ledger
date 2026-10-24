@@ -80,3 +80,23 @@ create or replace trigger user_prefs_keep_newest
 create or replace trigger user_prefs_updated_at
   before update on public.user_prefs
   for each row execute function public.set_updated_at();
+
+-- Fields the app keeps that had nowhere to go in the database, so syncing
+-- would have quietly lost them: how a payment arrived, the employer terms
+-- added since the tables were made, and a shift's role and paid time off.
+alter table public.income add column if not exists payment_method text;
+
+alter table public.jobs
+  add column if not exists role text,
+  add column if not exists pto boolean;
+
+alter table public.employers
+  add column if not exists worker_status text check (worker_status in ('w2', '1099')),
+  add column if not exists roles jsonb,
+  add column if not exists pto_earn_hours numeric,
+  add column if not exists pto_per_hours_worked numeric,
+  add column if not exists pto_starting_hours numeric,
+  add column if not exists retirement_match_percent numeric,
+  add column if not exists round_up_to_whole_hours boolean,
+  add column if not exists post_meal_minimum_hours numeric,
+  add column if not exists meal_penalty_after_hours numeric;

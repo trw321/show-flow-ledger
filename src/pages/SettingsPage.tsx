@@ -365,7 +365,7 @@ function EmployerForm({ initial, onSave, onCancel }: {
 // saying plainly rather than leaving the user to find out.
 function AccountSection() {
   const { user, loading, signOut } = useAuth();
-  const { deviceLedgerCount, addDeviceDataToAccount } = useData();
+  const { deviceLedgerCount, addDeviceDataToAccount, sessionLapsed } = useData();
   const sync = useSync();
   const navigate = useNavigate();
   const [signingOut, setSigningOut] = useState(false);
@@ -455,6 +455,25 @@ function AccountSection() {
             className="text-[11px] text-mono text-muted-foreground hover:text-destructive transition-colors underline"
           >
             {signingOut ? 'Signing out…' : 'Sign out'}
+          </button>
+        </div>
+      ) : sessionLapsed ? (
+        // The sign-in ran out without anyone signing out — usually a phone
+        // that was offline too long. The shifts stay on screen and edits wait
+        // to go up; only the syncing has stopped.
+        <div className="rounded-2xl border border-warning/40 bg-warning/5 p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <CloudOff size={16} className="text-warning shrink-0" />
+            <p className="text-sm font-semibold">Signed out — sign in again to sync</p>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Your shifts are still here, and anything you change is kept to send once you sign back in.
+          </p>
+          <button
+            onClick={() => navigate('/auth')}
+            className="w-full rounded-xl border border-primary/40 bg-primary/10 text-primary py-2 text-xs font-medium hover:bg-primary/20 transition-colors"
+          >
+            Sign in again
           </button>
         </div>
       ) : (

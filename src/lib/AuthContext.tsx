@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import posthog from 'posthog-js';
+import { forgetUser, rememberUser } from './store';
 import type { User, Session } from '@supabase/supabase-js';
 
 interface AuthContextValue {
@@ -24,7 +25,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
       setUser(s?.user ?? null);
-      if (s?.user) posthog.identify(s.user.id, { email: s.user.email });
+      if (s?.user) { posthog.identify(s.user.id, { email: s.user.email }); rememberUser(s.user.id); }
       setLoading(false);
     });
 
@@ -33,6 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(s?.user ?? null);
       if (s?.user) {
         posthog.identify(s.user.id, { email: s.user.email });
+        rememberUser(s.user.id);
       } else {
         posthog.reset();
       }
@@ -59,6 +61,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    // Signing out on purpose is the one thing that stops this device showing
+    // the account's ledger; a session that merely lapses does not.
+    forgetUser();
     await supabase.auth.signOut();
     posthog.reset();
     window.location.href = '/';

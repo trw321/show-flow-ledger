@@ -5,12 +5,15 @@ import type { AppData, Job, Income } from './store';
 // rows that would be sent can be read back.
 const calls: { table: string; op: string; rows?: unknown; values?: unknown; ids?: unknown }[] = [];
 let failTable: string | null = null;
+let serverAheadMs = 0;
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
     from: (table: string) => ({
-      upsert: async (rows: unknown) => {
+      upsert: (rows: unknown) => {
         calls.push({ table, op: 'upsert', rows });
-        return { error: failTable === table ? { message: 'refused' } : null };
+        // The written rows come back with the server's clock on them.
+        const written = (rows as unknown[]).map(() => ({ updated_at: new Date(Date.now() + serverAheadMs).toISOString() }));
+        return { select: async () => (failTable === table ? { data: null, error: { message: 'refused' } } : { data: written, error: null }) };
       },
       update: (values: unknown) => ({
         eq: () => ({
@@ -238,6 +241,15 @@ describe('sending changes up', () => {
     const { pushed, error } = await pushChanges('u1', data, [{ table: 'jobs', id: 'j', at: 'x' }, { table: 'income', id: 'i', at: 'x' }]);
     expect(error).toContain('income');
     expect(pushed.map(p => p.id)).toEqual(['j']);
+  });
+
+  it('measures how far this device’s clock is from the server’s', async () => {
+    serverAheadMs = 3 * 60 * 60 * 1000;
+    const data = { ...empty(), jobs: [job('a')] };
+    const { clockOffsetMs } = await pushChanges('u1', data, [{ table: 'jobs', id: 'a', at: 'x' }]);
+    serverAheadMs = 0;
+    // Three hours, give or take the time the request took.
+    expect(Math.abs((clockOffsetMs ?? 0) - 3 * 60 * 60 * 1000)).toBeLessThan(2000);
   });
 
   it('splits a large ledger into batches', async () => {

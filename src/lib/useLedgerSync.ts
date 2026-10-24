@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ledgerKeyFor, type AppData } from './store';
-import type { LedgerChange } from './ledgerDiff';
+import { ledgerKeyFor, userOfLedgerKey, type AppData } from './store';
+import { setClockOffset, type LedgerChange } from './ledgerDiff';
 import {
   entryKey, FULL_PULL_EVERY_MS, loadSyncMeta, mergeRemote, OVERLAP_MS, PREFS_CHANGED_EVENT,
   pullChanges, pushChanges, queueChanges, saveSyncMeta, syncPrefs,
@@ -68,7 +68,9 @@ export function useLedgerSync(userId: string | null, active: boolean, ledger: Le
       const meta = loadSyncMeta(userId);
       const full = !meta.cursor || !meta.fullPullAt || Date.now() - Date.parse(meta.fullPullAt) > FULL_PULL_EVERY_MS;
       const since = full || !meta.cursor ? undefined : new Date(Date.parse(meta.cursor) - OVERLAP_MS).toISOString();
-      const pulled = await pullChanges(userId, since);
+      // Settings travel alongside the ledger rather than after it: a device
+      // signing in has both inside one round trip.
+      const [pulled] = await Promise.all([pullChanges(userId, since), syncPrefs(userId)]);
       if (!stillMine()) return;
 
       const saved = await ledgerRef.current.applyRemote(key, prev => {
@@ -93,6 +95,7 @@ export function useLedgerSync(userId: string | null, active: boolean, ledger: Le
         const data = ledgerRef.current.readLedger(key);
         if (!data) throw new Error('The ledger changed while syncing — trying again shortly');
         const result = await pushChanges(userId, data, queued);
+        if (result.clockOffsetMs !== undefined) setClockOffset(result.clockOffsetMs);
         const latest = loadSyncMeta(userId);
         for (const sent of result.pushed) {
           const k = entryKey(sent);
@@ -103,10 +106,6 @@ export function useLedgerSync(userId: string | null, active: boolean, ledger: Le
         saveSyncMeta(userId, latest);
         if (result.error) throw new Error(result.error);
       }
-
-      // 3. Settings.
-      await syncPrefs(userId);
-      if (!stillMine()) return;
 
       const done = loadSyncMeta(userId);
       done.lastSyncedAt = new Date().toISOString();
@@ -146,8 +145,13 @@ export function useLedgerSync(userId: string | null, active: boolean, ledger: Le
    * schedules — the count on screen is updated just after.
    */
   const noteLocalChanges = useCallback((changes: LedgerChange[], key: string) => {
-    if (!userId || !active || key !== ledgerKeyFor(userId)) return;
-    const pending = queueChanges(userId, changes);
+    // Queued for whichever account the ledger belongs to, signed in or not:
+    // an edit made while the sign-in has lapsed still has to reach the
+    // account later — a delete above all, which nothing else would recover.
+    const owner = userOfLedgerKey(key);
+    if (!owner) return;
+    const pending = queueChanges(owner, changes);
+    if (owner !== userId || !active) return;
     queueMicrotask(() => setInfo(s => ({ ...s, pending })));
     schedule();
   }, [userId, active, schedule]);

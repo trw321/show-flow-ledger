@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { toast } from 'sonner';
 import { useAuth } from './AuthContext';
 import {
-  useAppData, DEVICE_LEDGER_KEY, EMPTY_LEDGER, hasLedger, ledgerKeyFor, loadLedger, prefsKeyFor, saveLedger,
+  useAppData, DEVICE_LEDGER_KEY, EMPTY_LEDGER, hasLedger, ledgerKeyFor, loadLedger, prefsKeyFor, rememberedUser, saveLedger,
   type AppData,
 } from './store';
 import { recordCount, type LedgerChange } from './ledgerDiff';
@@ -20,6 +20,8 @@ type DataContextValue = AppDataReturn & {
   addDeviceDataToAccount: () => Promise<boolean>;
   /** Deletes every record. Signed in, that is from the account and every device on it. */
   deleteEverything: () => Promise<void>;
+  /** The account's ledger is on screen but its sign-in has lapsed: nothing syncs until it is signed in again. */
+  sessionLapsed: boolean;
 };
 
 type SyncContextValue = SyncInfo & { syncNow: () => Promise<void> };
@@ -82,18 +84,27 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [storageTick, setStorageTick] = useState(0);
   const [asking, setAsking] = useState<{ userId: string; device: AppData } | null>(null);
 
-  const accountKey = userId ? ledgerKeyFor(userId) : null;
+  // Whose ledger is shown: the signed-in account's — or, when the sign-in has
+  // lapsed without anyone signing out, the account this device was last
+  // signed in to. An expired session must not make the shifts vanish.
+  const remembered = !userId && !loading ? rememberedUser() : null;
+  const ledgerUserId = userId ?? remembered;
+  const accountKey = ledgerUserId ? ledgerKeyFor(ledgerUserId) : null;
   // Which ledger is on screen: none while the session loads or while asking
   // what to do with data from before signing in, then the account's own —
   // never the device's, which another account may have filled.
-  const key = loading ? null : !accountKey ? DEVICE_LEDGER_KEY : hasLedger(accountKey) ? accountKey : null;
+  const key = loading ? null
+    : !accountKey ? DEVICE_LEDGER_KEY
+    : hasLedger(accountKey) ? accountKey
+    : userId ? null : DEVICE_LEDGER_KEY;
+  const sessionLapsed = !userId && !!remembered && key === accountKey;
 
   // The sync needs the ledger and the ledger reports edits to the sync, so
   // one of them has to reach the other through a ref.
   const noteRef = useRef<(changes: LedgerChange[], key: string) => void>();
   const onLocalChange = useCallback((changes: LedgerChange[], k: string) => noteRef.current?.(changes, k), []);
   const appData = useAppData(key, onLocalChange);
-  const { info, syncNow, noteLocalChanges } = useLedgerSync(userId, key !== null && key === accountKey, appData);
+  const { info, syncNow, noteLocalChanges } = useLedgerSync(userId, !!userId && key === ledgerKeyFor(userId), appData);
   noteRef.current = noteLocalChanges;
 
   // First time this account signs in here.
@@ -166,7 +177,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     deviceLedgerCount,
     addDeviceDataToAccount,
     deleteEverything,
-  }), [appData, key, deviceLedgerCount, addDeviceDataToAccount, deleteEverything]);
+    sessionLapsed,
+  }), [appData, key, deviceLedgerCount, addDeviceDataToAccount, deleteEverything, sessionLapsed]);
 
   const syncValue = useMemo<SyncContextValue>(() => ({ ...info, syncNow }), [info, syncNow]);
 

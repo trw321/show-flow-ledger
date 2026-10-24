@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { Json } from '@/integrations/supabase/types';
-import { prefsKeyFor, syncMetaKeyFor, type AppData } from './store';
-import { LEDGER_TABLES, type LedgerChange, type LedgerTable } from './ledgerDiff';
+import { migrateJob, prefsKeyFor, syncMetaKeyFor, type AppData, type Job } from './store';
+import { LEDGER_TABLES, stampNow, type LedgerChange, type LedgerTable } from './ledgerDiff';
 import { recordFromRow, rowForRecord } from './cloudSync';
 import { normaliseLocal } from './payerProfile';
 
@@ -106,6 +106,14 @@ export interface MergeResult {
  * never synced goes up the first time, and how a change whose queue entry
  * was lost still reaches the account.
  */
+/** A row from the account as a record here, with the same load-time repairs a
+ *  record read from this device gets — a past shift with its times reads as
+ *  worked, not upcoming, whichever device it came from. */
+const fromAccount = (table: LedgerTable, row: Row): Versioned => {
+  const record = recordFromRow(table, row);
+  return (table === 'jobs' ? migrateJob(record as Job) : record) as Versioned;
+};
+
 export function mergeRemote(local: AppData, outbox: Outbox, remote: RemoteRows, full = false): MergeResult {
   let data = local;
   const box: Outbox = { ...outbox };
@@ -145,7 +153,7 @@ export function mergeRemote(local: AppData, outbox: Outbox, remote: RemoteRows, 
       if (mine) {
         const ours = versionOf(mine);
         if (theirs > ours) {
-          list[i!] = recordFromRow(table, row) as Versioned;
+          list[i!] = fromAccount(table, row);
           tableChanged = true;
           delete box[key];
         } else if (theirs < ours) {
@@ -157,13 +165,13 @@ export function mergeRemote(local: AppData, outbox: Outbox, remote: RemoteRows, 
       } else if (pending?.deleted) {
         if (theirs > time(pending.at)) {
           // Edited there after it was deleted here: the edit wins.
-          added.push(recordFromRow(table, row) as Versioned);
+          added.push(fromAccount(table, row));
           tableChanged = true;
           delete box[key];
         }
         // Otherwise the delete is newer, and goes up.
       } else {
-        added.push(recordFromRow(table, row) as Versioned);
+        added.push(fromAccount(table, row));
         tableChanged = true;
       }
     }
@@ -223,28 +231,35 @@ const MAX_IDS_PER_DELETE = 100;
 // all alike, and they all have the columns it touches.
 const from = (table: LedgerTable) => supabase.from(table as 'jobs');
 
+async function pullTable(table: LedgerTable, userId: string, since?: string): Promise<Row[]> {
+  const got: Row[] = [];
+  for (let start = 0; ; start += PAGE) {
+    let query = from(table).select('*').eq('user_id', userId);
+    if (since) query = query.gt('updated_at', since);
+    const { data, error } = await query
+      .order('updated_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(start, start + PAGE - 1);
+    if (error) throw new Error(`${table}: ${error.message}`);
+    const page = (data ?? []) as Row[];
+    got.push(...page);
+    if (page.length < PAGE) break;
+  }
+  return got;
+}
+
 export async function pullChanges(userId: string, since?: string): Promise<{ rows: RemoteRows; newest?: string }> {
+  // All the tables at once. One after another, at a round trip each, a
+  // first sign-in took five seconds before anything showed.
+  const pulled = await Promise.all(LEDGER_TABLES.map(table => pullTable(table, userId, since)));
   const rows: RemoteRows = {};
   let newest: string | undefined;
-  for (const table of LEDGER_TABLES) {
-    const got: Row[] = [];
-    for (let start = 0; ; start += PAGE) {
-      let query = from(table).select('*').eq('user_id', userId);
-      if (since) query = query.gt('updated_at', since);
-      const { data, error } = await query
-        .order('updated_at', { ascending: true })
-        .order('id', { ascending: true })
-        .range(start, start + PAGE - 1);
-      if (error) throw new Error(`${table}: ${error.message}`);
-      const page = (data ?? []) as Row[];
-      got.push(...page);
-      if (page.length < PAGE) break;
-    }
-    for (const r of got) {
+  LEDGER_TABLES.forEach((table, i) => {
+    rows[table] = pulled[i];
+    for (const r of pulled[i]) {
       if (time(r.updated_at) > time(newest)) newest = r.updated_at as string;
     }
-    rows[table] = got;
-  }
+  });
   return { rows, newest };
 }
 
@@ -293,8 +308,9 @@ export async function pushChanges(
   userId: string,
   data: AppData,
   entries: LedgerChange[],
-): Promise<{ pushed: LedgerChange[]; error?: string }> {
+): Promise<{ pushed: LedgerChange[]; error?: string; clockOffsetMs?: number }> {
   const pushed: LedgerChange[] = [];
+  let clockOffsetMs: number | undefined;
   const jobIds = new Set(data.jobs.map(j => j.id));
 
   for (const table of LEDGER_TABLES) {
@@ -309,8 +325,13 @@ export async function pushChanges(
     const live = edits.filter(e => records.has(e.id));
     const rows = live.map(e => withoutDeadJobRefs(rowForRecord(table, records.get(e.id), userId), jobIds));
     for (const batch of batches(rows)) {
-      const { error } = await from(table).upsert(batch as never, { onConflict: 'id' });
-      if (error) return { pushed, error: `${table}: ${error.message}` };
+      const sentAt = Date.now();
+      // The rows come back with the server's own time on them, which is how
+      // far this device's clock is out — see stampNow.
+      const { data: written, error } = await from(table).upsert(batch as never, { onConflict: 'id' }).select('updated_at');
+      if (error) return { pushed, error: `${table}: ${error.message}`, clockOffsetMs };
+      const serverAt = Math.max(...((written ?? []) as Row[]).map(r => time(r.updated_at)).filter(t => t > 0));
+      if (Number.isFinite(serverAt)) clockOffsetMs = serverAt - (sentAt + Date.now()) / 2;
       const sent = new Set(batch.map(r => r.id as string));
       pushed.push(...live.filter(e => sent.has(e.id)));
     }
@@ -325,13 +346,13 @@ export async function pushChanges(
           .update({ deleted_at: at, modified_at: at } as never)
           .eq('user_id', userId)
           .in('id', slice.map(e => e.id));
-        if (error) return { pushed, error: `${table}: ${error.message}` };
+        if (error) return { pushed, error: `${table}: ${error.message}`, clockOffsetMs };
         pushed.push(...slice);
       }
     }
   }
 
-  return { pushed };
+  return { pushed, clockOffsetMs };
 }
 
 // ── Settings ────────────────────────────────────────────────────────────────
@@ -430,7 +451,7 @@ export async function syncPrefs(userId: string): Promise<void> {
   if (error) throw new Error(`settings: ${error.message}`);
 
   const remote = row ? { prefs: (row.prefs ?? {}) as StoredPrefs, modifiedAt: row.modified_at ?? undefined } : null;
-  const { write, push } = decidePrefs(local, remote, new Date().toISOString());
+  const { write, push } = decidePrefs(local, remote, stampNow());
 
   if (write) {
     try {

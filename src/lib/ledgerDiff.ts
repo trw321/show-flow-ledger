@@ -53,3 +53,33 @@ export function stampChanges(prev: AppData, next: AppData, now: string): { data:
 export function recordCount(data: AppData): number {
   return LEDGER_TABLES.reduce((n, t) => n + (data[t]?.length ?? 0), 0);
 }
+
+// ── One clock for every device ──────────────────────────────────────────────
+// The newer edit wins, so edit times have to be comparable between devices.
+// A device whose clock is off would otherwise win every clash, or lose every
+// one — the test machine here ran three hours ahead of the server. The sync
+// measures how far this device is from the server's clock and every edit is
+// stamped on the server's time instead.
+
+const OFFSET_KEY = 'showflow-clock-offset';
+
+let clockOffsetMs = (() => {
+  try {
+    const saved = Number(localStorage.getItem(OFFSET_KEY));
+    return Number.isFinite(saved) ? saved : 0;
+  } catch {
+    return 0;
+  }
+})();
+
+/** Now, on the server's clock as best this device knows it. */
+export function stampNow(): string {
+  return new Date(Date.now() + clockOffsetMs).toISOString();
+}
+
+/** How far ahead the server's clock is of this device's. Measured by the sync. */
+export function setClockOffset(ms: number): void {
+  if (!Number.isFinite(ms)) return;
+  clockOffsetMs = ms;
+  try { localStorage.setItem(OFFSET_KEY, String(Math.round(ms))); } catch { /* used for this session only */ }
+}
