@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Crop, Highlighter, Undo2, Check, X, ZoomIn, ZoomOut, Move } from 'lucide-react';
+import { Crop, RectangleHorizontal, Undo2, Check, X, ZoomIn, ZoomOut, Move } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /**
@@ -160,7 +160,7 @@ export default function StubEditor({ source, onCancel, onDone }: Props) {
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
         {([
-          { id: 'redact' as const, label: 'Mark', icon: Highlighter },
+          { id: 'redact' as const, label: 'Black bar', icon: RectangleHorizontal },
           { id: 'crop' as const, label: 'Crop', icon: Crop },
           { id: 'pan' as const, label: 'Move', icon: Move },
         ]).map(({ id, label, icon: Icon }) => (
@@ -171,7 +171,7 @@ export default function StubEditor({ source, onCancel, onDone }: Props) {
             onClick={() => setTool(id)}
             className={cn(
               'pixel-button flex-1 flex items-center justify-center gap-1 py-2 text-[11px] font-bold uppercase tracking-wider',
-              tool === id ? 'bg-primary/20 border-primary text-primary' : 'bg-card text-muted-foreground',
+              tool === id ? 'pick-on' : 'pick-off',
             )}
           >
             <Icon size={13} /> {label}
@@ -224,10 +224,10 @@ export default function StubEditor({ source, onCancel, onDone }: Props) {
 
       <p className="text-[11px] text-muted-foreground">
         {tool === 'redact'
-          ? 'Zoom in, then drag over anything that should not leave your phone — a member number, an address. It is painted into the image, not laid over it.'
+          ? 'Zoom in, then drag a black bar over anything that should not leave your phone — an account or member number, an address, the last four of a social. It is painted into the image, not laid over it, and nothing is sent until you tap Use.'
           : tool === 'crop'
             ? 'Drag the part of the stub worth keeping.'
-            : 'Drag to move around the stub. Switch back to Mark or Crop to draw.'}
+            : 'Drag to move around the stub. Switch back to Black bar or Crop to draw.'}
       </p>
 
       {/* The frame scrolls; the canvas inside it is as wide as the zoom says.

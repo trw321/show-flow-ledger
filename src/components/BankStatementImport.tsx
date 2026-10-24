@@ -9,6 +9,7 @@ import { nameSimilarity } from '@/lib/employerMatch';
 import { resizeImageToBase64 } from '@/lib/imageResize';
 import { alreadyRecorded, repeatsInUpload } from '@/lib/paymentRepeats';
 import { useData } from '@/lib/DataContext';
+import StubEditor from '@/components/StubEditor';
 
 // OpenAI's vision API only accepts real images, not PDF bytes directly, so a
 // PDF has to be rendered to an image client-side first. Renders up to the
@@ -211,41 +212,50 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [entries, setEntries] = useState<DepositEntry[]>([]);
+  // The picked statement, held in the editor until it has been blacked out.
+  const [editing, setEditing] = useState<string | null>(null);
+  const [photoBig, setPhotoBig] = useState(false);
 
+  // A statement goes to the editor before anything else happens — a PDF is
+  // turned into an image first — so whatever is blacked out there never
+  // reaches the reader, or anywhere else.
   const handleFile = useCallback(async (file: File) => {
     const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
     if (!isPdf && !file.type.startsWith('image/')) { toast.error('Please upload an image or PDF file'); return; }
     if (file.size > 15 * 1024 * 1024) { toast.error('File too large (max 15MB)'); return; }
 
-    setLoading(true);
     setEntries([]);
-
+    setPreview(null);
     try {
-      let dataUrl: string;
-      let base64: string;
-      let mimeType: string;
-
       if (isPdf) {
+        setLoading(true);
         const { dataUrl: rendered, truncated } = await pdfToImageDataUrl(file);
         if (truncated) toast.warning(`Only the first ${MAX_PDF_PAGES} pages were analyzed`);
-        dataUrl = rendered;
-        base64 = dataUrl.split(',')[1];
-        mimeType = 'image/png';
+        setEditing(rendered);
       } else {
-        // A full-resolution phone photo (often 3000px+, several MB) makes
-        // the AI request slow and can trip payload/processing limits
-        // outright — downscale before sending, but keep the original for
-        // the on-screen preview thumbnail.
-        const resized = await resizeImageToBase64(file);
-        base64 = resized.base64;
-        mimeType = resized.mimeType;
-        dataUrl = await new Promise<string>((resolve, reject) => {
+        setEditing(await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result as string);
           reader.onerror = reject;
           reader.readAsDataURL(file);
-        });
+        }));
       }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not open that file');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const readStatement = useCallback(async (dataUrl: string) => {
+    setEditing(null);
+    setLoading(true);
+    try {
+      // A full-resolution phone photo (often 3000px+, several MB) makes the AI
+      // request slow and can trip payload limits outright — downscale before
+      // sending. What is shown is the edited image, as it was sent.
+      const blob = await (await fetch(dataUrl)).blob();
+      const { base64, mimeType } = await resizeImageToBase64(new File([blob], 'statement.jpg', { type: blob.type || 'image/jpeg' }));
 
       setPreview(dataUrl);
 
@@ -370,15 +380,23 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
   if (entries.length > 0) {
     return (
       <div className="space-y-4">
-        {preview && (
-          <img src={preview} alt="Statement" className="max-h-28 rounded-md border border-border" />
-        )}
         <p className="text-sm text-muted-foreground">
           {entries.length} deposit{entries.length !== 1 ? 's' : ''} found.
           Confirm or adjust each match before adding.
         </p>
 
-        <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
+        {/* The statement beside what was taken from it: what is being saved
+            and why it matches, laid against the image they came from. */}
+        <div className={`grid gap-3 items-start ${photoBig ? 'grid-cols-1' : 'grid-cols-[minmax(0,2fr)_minmax(0,3fr)]'}`}>
+        {preview && (
+          <button type="button" onClick={() => setPhotoBig(b => !b)} className="sm:sticky sm:top-0 text-left">
+            <img src={preview} alt="The statement, as it was read" className="w-full border border-border" />
+            <span className="mt-1 block text-[10px] text-muted-foreground">
+              As it was sent{photoBig ? ' · tap to shrink' : ' · tap to enlarge'}
+            </span>
+          </button>
+        )}
+        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1 min-w-0">
           {entries.map((entry, i) => (
             <div key={i} className={`rounded-lg border bg-card p-3 ${entry.skipped ? 'border-warning/40 opacity-70' : 'border-border'}`}>
               {entry.skipReason && (
@@ -392,6 +410,16 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
                 </button>
               )}
               <div className="flex flex-col gap-1.5 mb-2">
+                <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground">Read from the photo — fix anything it got wrong</p>
+                {entry.deposit.client && (
+                  <p className="text-[11px]"><span className="text-muted-foreground">Paid by</span> <span className="font-medium">{entry.deposit.client}</span></p>
+                )}
+                {entry.deposit.breakdown && entry.deposit.breakdown.length > 0 && (
+                  <p className="text-[11px]">
+                    <span className="text-muted-foreground">Hours</span>{' '}
+                    <span className="font-medium">{entry.deposit.breakdown.map(b => `${format(parseISO(b.date), 'MMM d')} ${b.hours} ${b.type}`).join(', ')}</span>
+                  </p>
+                )}
                 <Input
                   value={entry.deposit.description}
                   onChange={e => updateDeposit(i, 'description', e.target.value)}
@@ -422,8 +450,8 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
 
               {entry.matches.length > 0 ? (
                 <div className="space-y-1">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">
-                    Match to pay period{entry.chosenRowKeys.length > 1 ? 's (multiple selectable — one payment can cover several shifts)' : ''}
+                  <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground mb-1">
+                    Why it matches — tap the shift it paid{entry.chosenRowKeys.length > 1 ? ' (one payment can cover several)' : ''}
                   </p>
                   {entry.matches.slice(0, 3).map(m => {
                     const isChosen = entry.chosenRowKeys.includes(m.row.key);
@@ -483,6 +511,7 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
             </div>
           ))}
         </div>
+        </div>
 
         <div className="flex gap-2 justify-end pt-1 border-t border-border">
           <Button variant="ghost" size="sm" onClick={() => { setEntries([]); setPreview(null); }}>
@@ -498,6 +527,14 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
   }
 
   // ── Upload view ───────────────────────────────────────────────────────────
+  if (editing) {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm font-semibold">Black out anything private first</p>
+        <StubEditor source={editing} onCancel={() => setEditing(null)} onDone={edited => void readStatement(edited)} />
+      </div>
+    );
+  }
   return (
     <div className="space-y-4">
       {loading ? (
