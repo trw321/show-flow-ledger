@@ -80,6 +80,21 @@ function moneyTone(jobs: Job[], paidJobIds: Set<string>): string {
   return 'text-dot-upcoming';
 }
 
+/**
+ * Why a shift is flagged "check this one later", so the reminder can say what
+ * to check rather than just that something is wrong. You can set the flag by
+ * hand; the app sets it when it had to assume something.
+ */
+function reviewReason(job: Job): { kind: 'payment' | 'payroll' | 'manual'; text: string } {
+  if (job.notes?.startsWith('Made from a $')) {
+    return { kind: 'payment', text: 'made from a payment — set the day worked, the hours and the rate' };
+  }
+  if (job.payrollCompany && job.payrollCompany === job.client) {
+    return { kind: 'payroll', text: `payroll company taken to be ${job.client} — the offer didn't name one` };
+  }
+  return { kind: 'manual', text: 'flagged by you' };
+}
+
 // Card wash behind a shift — same status meaning as the dot, just readable
 // from across the list instead of a 6px dot.
 function cardTintClass(job: Job, paidJobIds: Set<string>): string {
@@ -643,7 +658,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     if (client.trim() !== (job.client ?? '')) updates.client = client.trim();
     if (startTime !== (job.startTime ?? '')) updates.startTime = startTime || undefined;
     if (endTime !== (job.endTime ?? '')) updates.endTime = endTime || undefined;
-    const isFuture = job.date > new Date().toISOString().slice(0, 10);
+    const isFuture = job.date > localToday();
     if (hoursWorked !== (job.hoursWorked?.toString() ?? '')) {
       const entered = parseFloat(hoursWorked);
       updates.hoursWorked = entered > 0 ? entered : undefined;
@@ -670,6 +685,13 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
       if (!isFuture) updates.status = 'completed';
     }
     if (needsReview !== (job.needsReview ?? false)) updates.needsReview = needsReview || undefined;
+    // A reminder goes once what it asked for is done: hours on a shift made
+    // from a payment, or the payroll company the app had assumed, changed.
+    if (job.needsReview && needsReview) {
+      const reason = reviewReason(job);
+      if (reason.kind === 'payment' && (updates.hoursWorked ?? 0) > 0) updates.needsReview = undefined;
+      if (reason.kind === 'payroll' && 'payrollCompany' in updates) updates.needsReview = undefined;
+    }
     // Hours put in before the day are a plan. They stay one until the shift is
     // confirmed, so filling in a schedule early never turns itself into a
     // timesheet when the date rolls past.
@@ -1113,8 +1135,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             />
             <span className="text-[11px] leading-tight">
               Check this one later
-              {job.payrollCompany && job.payrollCompany === job.client && (
-                <span className="block text-[10px] text-warning">Payroll company is the same as the employer — assumed, the offer did not say.</span>
+              {needsReview && reviewReason(job).kind !== 'manual' && (
+                <span className="block text-[10px] text-warning">Why: {reviewReason(job).text}.</span>
               )}
             </span>
           </label>
@@ -1959,7 +1981,7 @@ export default function CalendarPage() {
               Check later{flaggedJobs.length > 1 ? ` — ${flaggedJobs.length} shifts` : ''}
             </p>
             <p className="text-xs font-body mt-0.5 text-muted-foreground truncate">
-              {flaggedJobs[0].name} · {format(new Date(flaggedJobs[0].date + 'T12:00:00'), 'MMM d')}
+              {flaggedJobs[0].name} · {format(new Date(flaggedJobs[0].date + 'T12:00:00'), 'MMM d')} — {reviewReason(flaggedJobs[0]).text}
             </p>
           </div>
         </button>

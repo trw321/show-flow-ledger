@@ -77,8 +77,9 @@ interface EmployerFormState {
 }
 
 const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '', nightPremiumEnabled: true, unionDuesPercent: '', unionLocal: '', estimatedTaxPercent: '', vacationPercent: '', retirementMatchPercent: '', payBy: 'hour', defaultDayRate: '', dayRateHours: '',
-  // Union work breaks the hour, so a new employer starts with it on.
-  workerStatus: 'w2', breakTheHour: true, roles: [], ptoEarnHours: '', ptoPerHoursWorked: '', ptoStartingHours: '' };
+  // Breaking the hour is a union contract term. Some employers pay it and
+  // some (Odeum) do not, so a new employer starts without it.
+  workerStatus: 'w2', breakTheHour: false, roles: [], ptoEarnHours: '', ptoPerHoursWorked: '', ptoStartingHours: '' };
 
 function employerToForm(e: Employer): EmployerFormState {
   return {
@@ -237,8 +238,8 @@ function EmployerForm({ initial, onSave, onCancel }: {
       />
       <div className="flex items-center justify-between gap-2 pt-1">
         <span className="text-xs">
-          Break the hour
-          <span className="block text-[10px] text-muted-foreground">A part hour worked pays as a whole one — 8h15m pays 9.</span>
+          Break the hour (union contract)
+          <span className="block text-[10px] text-muted-foreground">A part hour worked pays as a whole one — 8h15m pays 9. Only if this employer's contract does.</span>
         </span>
         <Switch
           checked={form.breakTheHour}
