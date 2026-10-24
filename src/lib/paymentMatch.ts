@@ -167,7 +167,21 @@ export function matchPaymentToProject(payment: FoundPayment, project: Job[], ctx
  */
 export function betterProject(payment: FoundPayment, current: Job, ctx: MatchContext): { project: Job[]; match: ProjectMatch } | null {
   const here = matchPaymentToProject(payment, projectOf(current, ctx.allJobs), ctx);
-  const seen = new Set<string>([projectKey(current)]);
+  const best = bestOf(payment, ctx, projectKey(current));
+  return best && best.match.percent >= here.percent + 20 && best.match.level !== 'low' ? best : null;
+}
+
+/**
+ * The project a payment with no shift most likely paid — worked within a week
+ * after it or six weeks before it — if any fits better than poorly.
+ */
+export function bestProjectFor(payment: FoundPayment, ctx: MatchContext): { project: Job[]; match: ProjectMatch } | null {
+  const best = bestOf(payment, ctx);
+  return best && best.match.level !== 'low' ? best : null;
+}
+
+function bestOf(payment: FoundPayment, ctx: MatchContext, skipKey?: string): { project: Job[]; match: ProjectMatch } | null {
+  const seen = new Set<string>(skipKey ? [skipKey] : []);
   let best: { project: Job[]; match: ProjectMatch } | null = null;
   for (const job of ctx.allJobs) {
     const key = projectKey(job);
@@ -180,5 +194,5 @@ export function betterProject(payment: FoundPayment, current: Job, ctx: MatchCon
     const match = matchPaymentToProject(payment, project, ctx);
     if (!best || match.percent > best.match.percent) best = { project, match };
   }
-  return best && best.match.percent >= here.percent + 20 && best.match.level !== 'low' ? best : null;
+  return best;
 }

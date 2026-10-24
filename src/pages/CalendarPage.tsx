@@ -3,6 +3,7 @@ import { sameProject } from '@/lib/projectGrouping';
 import { isCallbackShift } from '@/lib/hoursMatching';
 import { projectSiblingsToRelabel } from '@/lib/projectGrouping';
 import StubEditor from '@/components/StubEditor';
+import MoneyRain from '@/components/MoneyRain';
 import { useNeedsHours } from '@/lib/useNeedsHours';
 import { useSearchParams } from 'react-router-dom';
 import { useData } from '@/lib/DataContext';
@@ -15,13 +16,14 @@ import {
   AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
 import { parseDayTimeline, withGapOnClock, type DayTimeline } from '@/lib/dayTimeline';
-import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO } from 'date-fns';
+import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle, Flame } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO, differenceInCalendarDays } from 'date-fns';
 import type { Job, CalendarEvent, Income } from '@/lib/store';
-import { matchPaymentToProject, betterProject, projectOf, type FoundPayment } from '@/lib/paymentMatch';
+import { matchPaymentToProject, betterProject, bestProjectFor, projectOf, type FoundPayment } from '@/lib/paymentMatch';
+import { getPayTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
 import { alreadyRecorded } from '@/lib/paymentRepeats';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
-import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross, compareCalls } from '@/lib/payCalc';
+import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross, jobPayBreakdown, compareCalls } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { useSwipe } from '@/lib/useSwipe';
 import { cn } from '@/lib/utils';
@@ -235,6 +237,11 @@ function SplitMark({ job, allJobs }: { job: Job; allJobs: Job[] }) {
  * a cheque only shows what arrived, and a figure typed in by hand has had
  * nothing checked against a document at all — so they cannot be the same mark.
  */
+/** One project: the same job number, or the same name and employer. */
+function projectGroupKey(j: Job): string {
+  return j.jobNumber?.trim() || `${j.name}__${j.client}`;
+}
+
 /** How a payment came in, as the money icon it is shown with. */
 function paymentIcon(i: Income): { icon: string; label: string } {
   if (i.enteredByHand) return { icon: '✏️', label: 'Added by hand' };
@@ -302,7 +309,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   openStubOnMount?: boolean;
   onStubOpened?: () => void;
 }) {
-  const { data, addJob, updateJob: updateJobDirect, updateIncome, updateEmployer, addIncome, deleteIncome } = useData();
+  const { data, addJob, updateJob: updateJobDirect, updateIncome, updateEmployer, addIncome, deleteIncome, restoreIncome } = useData();
   const { prefs } = useUserPrefs();
   const { user } = useAuth();
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -349,7 +356,11 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   const [payAmount, setPayAmount] = useState('');
   const [payDate, setPayDate] = useState(localToday());
   const [payMethod, setPayMethod] = useState<Income['paymentMethod']>('direct_deposit');
-  const [removingPay, setRemovingPay] = useState<string | null>(null);
+  const [payRain, setPayRain] = useState(false);
+  // Payments taken off while this shift is open, ready to put back. Shown in
+  // the panel: a toast's Undo cannot be tapped behind an open shift.
+  const [removedPays, setRemovedPays] = useState<Income[]>([]);
+
   const [parsingStub, setParsingStub] = useState(false);
   const [viewingStub, setViewingStub] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -558,6 +569,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
       enteredByHand: kind ? undefined : true,
     });
     toast.success(`💰 $${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} recorded for ${target.name}`);
+    setPayRain(true);
+    setTimeout(() => setPayRain(false), 2100);
     closePay();
   };
 
@@ -896,10 +909,11 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           {isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
         </span>
 
+        <MoneyRain active={payRain} />
         {/* Pay, first thing: what has come in for this project, and the one
             way to add more — typed, or read off a stub or a check. */}
         <input ref={stubInputRef} id={`stub-input-${job.id}`} type="file" accept="image/*,.pdf" className="hidden" onChange={handleStubUpload} disabled={parsingStub} />
-        {(job.date <= localToday() || projectPayments.length > 0) && (
+        {(job.date <= localToday() || projectPayments.length > 0 || removedPays.length > 0) && (
           <div className="pixel-panel p-3 space-y-2">
             {projectPayments.length > 0 && (
               <div className="space-y-1">
@@ -912,18 +926,27 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                       <span className="font-bold text-mono text-dot-paid">${i.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                       <span className="text-muted-foreground text-mono">{format(new Date(i.date + 'T12:00:00'), 'MMM d')}</span>
                       <span className="flex-1" />
-                      {removingPay === i.id ? (
-                        <button type="button" onClick={() => { setRemovingPay(null); void deleteIncome(i.id); toast.success('Payment removed'); }}
-                          className="text-[10px] text-mono font-bold text-destructive border border-destructive/40 px-1.5 py-0.5">remove</button>
-                      ) : (
-                        <button type="button" onClick={() => setRemovingPay(i.id)} aria-label="Remove this payment"
-                          className="p-0.5 text-muted-foreground hover:text-destructive"><X size={12} /></button>
-                      )}
+                      {/* Undoable rather than confirmed: the exact payment
+                          comes back, so a slip never means re-entering a check. */}
+                      <button type="button" aria-label="Remove this payment" className="p-0.5 text-muted-foreground hover:text-destructive"
+                        onClick={() => { void deleteIncome(i.id); setRemovedPays(prev => [i, ...prev]); }}>
+                        <X size={12} />
+                      </button>
                     </div>
                   );
                 })}
               </div>
             )}
+
+            {removedPays.map(i => (
+              <div key={'removed-' + i.id} className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="flex-1">Removed ${i.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} · {format(new Date(i.date + 'T12:00:00'), 'MMM d')}</span>
+                <button type="button" className="pixel-button pick-off px-2 py-0.5 text-[11px] font-bold"
+                  onClick={() => { void restoreIncome(i); setRemovedPays(prev => prev.filter(r => r.id !== i.id)); }}>
+                  Undo
+                </button>
+              </div>
+            ))}
 
             {!showPay ? (
               job.date <= localToday() && (
@@ -1895,7 +1918,8 @@ function EventForm({ initial, onSave, onCancel }: {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function CalendarPage() {
-  const { data, authReady, updateJob, deleteJob, addEvent, updateEvent, deleteEvent } = useData();
+  const { data, authReady, updateJob, deleteJob, addEvent, updateEvent, deleteEvent, addJob, addIncome, updateIncome, deleteIncome } = useData();
+  const { prefs } = useUserPrefs();
   const [currentDate, setCurrentDate] = useState(new Date());
   // Shifts whose date has passed with no hours on them. This used to be the
   // Dashboard's hero card; it is about shifts, so it belongs here.
@@ -1964,6 +1988,123 @@ export default function CalendarPage() {
     }
     return set;
   }, [data.income]);
+
+  // ── Pay, by project ───────────────────────────────────────────────────────
+  // The calendar is where jobs and their pay live together now: each project
+  // of the month says what it has been paid or that it is still waiting, the
+  // longest wait is called out at the top, and payments that came in with no
+  // shift are here to be linked.
+  const incomeByProject = useMemo(() => {
+    const projectOfJob = new Map(data.jobs.map(j => [j.id, projectGroupKey(j)]));
+    const map = new Map<string, Income[]>();
+    for (const i of data.income) {
+      const k = i.jobId ? projectOfJob.get(i.jobId) : undefined;
+      if (!k) continue;
+      map.set(k, [...(map.get(k) ?? []), i]);
+    }
+    return map;
+  }, [data.jobs, data.income]);
+
+  const waitingOnPay = useMemo(() => {
+    const todayKey = localToday();
+    const groups = new Map<string, Job[]>();
+    for (const j of data.jobs) {
+      if (j.status === 'cancelled' || j.date > todayKey || effectiveHoursWorked(j) <= 0) continue;
+      const k = projectGroupKey(j);
+      groups.set(k, [...(groups.get(k) ?? []), j]);
+    }
+    const waiting: { key: string; jobs: Job[]; lastDay: string; expected: number }[] = [];
+    for (const [key, jobs] of groups) {
+      if ((incomeByProject.get(key) ?? []).some(i => i.status === 'paid')) continue;
+      const sorted = [...jobs].sort(compareCalls);
+      waiting.push({
+        key,
+        jobs: sorted,
+        lastDay: sorted[sorted.length - 1].date,
+        expected: sorted.reduce((sum, j) => sum + jobPayBreakdown(j, data.jobs, data.employers, prefs.payer).net, 0),
+      });
+    }
+    return waiting.sort((a, b) => a.lastDay.localeCompare(b.lastDay));
+  }, [data.jobs, data.employers, incomeByProject, prefs.payer]);
+  const oldestWaiting = waitingOnPay[0];
+  const daysWaitingOnPay = oldestWaiting ? differenceInCalendarDays(new Date(), parseISO(oldestWaiting.lastDay)) : 0;
+  const payTier: PayTimingTier = oldestWaiting ? getPayTimingTier(daysWaitingOnPay) : 'none';
+  const totalWaiting = waitingOnPay.reduce((sum, w) => sum + w.expected, 0);
+
+  const [rainActive, setRainActive] = useState(false);
+  const rain = () => { setRainActive(true); setTimeout(() => setRainActive(false), 2100); };
+
+  const undoToast = (message: string, undo: () => void) =>
+    toast.success(message, { duration: 8000, action: { label: 'Undo', onClick: undo } });
+
+  /**
+   * The 💰 on a project. If it was paid once and then unmarked, that payment —
+   * the real check, the real amount — is still here, set aside; it comes back
+   * rather than a new guess being recorded over it. Only a project never paid
+   * gets a new payment, at what its unpaid days were expected to pay.
+   */
+  const markProjectPaid = async (lead: Job) => {
+    const setAside = (incomeByProject.get(projectGroupKey(lead)) ?? []).filter(i => i.status === 'pending');
+    if (setAside.length > 0) {
+      for (const i of setAside) await updateIncome(i.id, { status: 'paid' });
+      rain();
+      const back = setAside.reduce((sum, i) => sum + i.amount, 0);
+      undoToast(`💰 Paid again — your $${back.toLocaleString(undefined, { minimumFractionDigits: 2 })} is back`, () => {
+        for (const i of setAside) void updateIncome(i.id, { status: 'pending' });
+      });
+      return;
+    }
+    const worked = projectOf(lead, data.jobs).filter(j => effectiveHoursWorked(j) > 0 && j.date <= localToday());
+    const amount = Math.round(worked.reduce((sum, j) => sum + jobPayBreakdown(j, data.jobs, data.employers, prefs.payer).net, 0) * 100) / 100;
+    if (worked.length === 0 || amount <= 0) {
+      // Nothing to estimate from: the shift itself has Add pay.
+      setSelectedDate(lead.date);
+      setSelectedJobId(lead.id);
+      return;
+    }
+    const created = await addIncome({
+      jobId: worked[0].id, client: worked[0].client, description: 'Marked paid', amount,
+      date: localToday(), status: 'paid', enteredByHand: true,
+    });
+    rain();
+    undoToast(`💰 Marked paid — $${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, () => void deleteIncome(created.id));
+  };
+
+  // Payments that came in with no shift to their name, each with the project
+  // it most likely paid.
+  const unlinkedPayments = useMemo(() => {
+    const ids = new Set(data.jobs.map(j => j.id));
+    return data.income
+      .filter(i => i.status === 'paid' && (!i.jobId || !ids.has(i.jobId)))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [data.jobs, data.income]);
+  const linkSuggestions = useMemo(() => {
+    const ctx = { allJobs: data.jobs, employers: data.employers, payer: prefs.payer, paidJobIds };
+    return new Map(unlinkedPayments.map(i => [i.id, bestProjectFor({ amount: i.amount, date: i.date, payer: i.client }, ctx)]));
+  }, [unlinkedPayments, data.jobs, data.employers, prefs.payer, paidJobIds]);
+
+  const linkPayment = async (payment: Income, job: Job) => {
+    await updateIncome(payment.id, { jobId: job.id });
+    undoToast(`Linked to ${job.name}`, () => void updateIncome(payment.id, { jobId: undefined }));
+  };
+  const makeShiftFromPayment = async (payment: Income) => {
+    const job = await addJob({
+      name: payment.description || 'Shift from a payment',
+      client: payment.client,
+      venue: '',
+      date: payment.date,
+      // Not completed: with no hours yet, that would hide it from Log hours.
+      status: 'upcoming',
+      notes: 'Made from a $' + payment.amount.toLocaleString() + ' payment dated ' + payment.date
+        + ' — move it to the day you worked, then add the hours and rate.',
+      needsReview: true,
+      has6th7thDayRule: false,
+    } as never);
+    if (!job) return;
+    await updateIncome(payment.id, { jobId: job.id });
+    setSelectedDate(job.date);
+    setSelectedJobId(job.id);
+  };
 
   // Per-job expected pay — the single source of truth behind the calendar's
   // day/week/month totals below AND the "Awaiting payment" list, so they can
@@ -2179,6 +2320,31 @@ export default function CalendarPage() {
             </p>
             <p className="text-xs font-body mt-0.5 text-muted-foreground truncate">
               {flaggedJobs[0].name} · {format(new Date(flaggedJobs[0].date + 'T12:00:00'), 'MMM d')} — {reviewReason(flaggedJobs[0]).text}
+            </p>
+          </div>
+        </button>
+      )}
+
+      <MoneyRain active={rainActive} />
+      {payTier !== 'none' && oldestWaiting && (
+        <button
+          onClick={() => { setSelectedDate(oldestWaiting.jobs[0].date); setSelectedJobId(oldestWaiting.jobs[0].id); }}
+          className={cn(
+            'pixel-button w-full mb-3 flex items-center gap-3 px-3 py-2.5 text-left',
+            payTier === 'watching' ? 'border-primary/60 bg-primary/10'
+              : payTier === 'warm' ? 'border-warning/60 bg-warning/10'
+              : 'border-destructive/60 bg-destructive/10',
+          )}
+        >
+          {payTier === 'watching' && <Eye size={18} className="text-primary shrink-0" />}
+          {payTier === 'warm' && <Flame size={18} className="flame-flicker text-warning shrink-0" />}
+          {payTier === 'blazing' && <span className="flame-flicker text-xl shrink-0">🔥</span>}
+          <div className="min-w-0">
+            <p className={cn('text-sm font-semibold', payTier === 'watching' ? 'text-primary' : payTier === 'warm' ? 'text-warning' : 'text-destructive')}>
+              {PAY_TIMING_LABELS[payTier]} — waiting on pay{waitingOnPay.length > 1 ? ` · ${waitingOnPay.length} projects` : ''}
+            </p>
+            <p className="text-xs font-body mt-0.5 text-muted-foreground truncate">
+              ${Math.round(totalWaiting).toLocaleString()} out · {daysWaitingOnPay}d since {oldestWaiting.jobs[0].name}
             </p>
           </div>
         </button>
@@ -2613,11 +2779,11 @@ export default function CalendarPage() {
         const monthPrefix = format(currentDate, 'yyyy-MM');
         // Newest day first, but a day's own calls morning first.
         const monthJobs = data.jobs.filter(job => job.date.startsWith(monthPrefix))
-          .sort((a, b) => a.date === b.date ? compareCalls(a, b) : b.date.localeCompare(a.date)).slice(0, 10);
+          .sort((a, b) => a.date === b.date ? compareCalls(a, b) : b.date.localeCompare(a.date));
         if (monthJobs.length === 0) return null;
         const loggedGroups: Record<string, Job[]> = {};
         for (const job of monthJobs) {
-          const key = job.jobNumber?.trim() || `${job.name}__${job.client}`;
+          const key = projectGroupKey(job);
           if (!loggedGroups[key]) loggedGroups[key] = [];
           loggedGroups[key].push(job);
         }
@@ -2688,6 +2854,32 @@ export default function CalendarPage() {
                             : <ChevronRight size={14} className="text-muted-foreground shrink-0" />
                         )}
                       </div>
+                      {(() => {
+                        const payments = (incomeByProject.get(key) ?? []).filter(i => i.status === 'paid');
+                        if (payments.length > 0) {
+                          const total = payments.reduce((sum, i) => sum + i.amount, 0);
+                          const last = payments.map(i => i.date).sort().pop()!;
+                          return (
+                            <p className="mt-2 text-[11px] text-mono text-dot-paid">
+                              💰 Paid ${total.toLocaleString(undefined, { minimumFractionDigits: 2 })} · {format(new Date(last + 'T12:00:00'), 'MMM d')}
+                              {' '}{payments.map(i => paymentIcon(i).icon).join('')}
+                            </p>
+                          );
+                        }
+                        if (!jobs.some(j => j.date <= localToday() && effectiveHoursWorked(j) > 0)) return null;
+                        return (
+                          <div className="mt-2 flex items-center justify-between gap-2">
+                            <p className="text-[11px] text-mono text-dot-pending">Waiting on pay</p>
+                            <button
+                              type="button"
+                              onClick={e => { e.stopPropagation(); void markProjectPaid(first); }}
+                              className="pixel-button pick-off px-2 py-1 text-[11px] font-bold"
+                            >
+                              💰 Mark paid
+                            </button>
+                          </div>
+                        );
+                      })()}
                     </div>
                     {isGroup && expanded && (
                       <div className="border-t border-primary/20 divide-y divide-primary/10">
@@ -2716,6 +2908,49 @@ export default function CalendarPage() {
           </div>
         );
       })()}
+
+      {unlinkedPayments.length > 0 && (
+        <div className="pixel-panel mt-4 p-3 space-y-2">
+          <p className="text-[10px] text-mono uppercase tracking-widest text-warning">Payments with no shift · {unlinkedPayments.length}</p>
+          <p className="text-[11px] text-muted-foreground">Money that came in but isn't tied to a shift yet. Link it to the project it paid, or make a shift from it.</p>
+          {unlinkedPayments.map(i => {
+            const guess = linkSuggestions.get(i.id);
+            return (
+              <div key={i.id} className="border-t border-border pt-2 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span aria-hidden>{paymentIcon(i).icon}</span>
+                  <p className="min-w-0 flex-1 truncate text-xs font-medium">{i.client || i.description}</p>
+                  <span className="shrink-0 text-xs text-mono font-bold text-dot-paid">${i.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  <span className="shrink-0 text-[10px] text-mono text-muted-foreground">{format(new Date(i.date + 'T12:00:00'), 'MMM d')}</span>
+                </div>
+                {guess && (
+                  <div className="text-[11px]">
+                    <p>
+                      Looks like <span className="font-semibold">{guess.project[0].name}</span> · {format(new Date(guess.project[0].date + 'T12:00:00'), 'MMM d')}{' '}
+                      <span className={cn('text-mono font-bold uppercase text-[10px]', guess.match.level === 'high' ? 'text-dot-paid' : 'text-dot-overdue')}>
+                        {guess.match.level} · {guess.match.percent}%
+                      </span>
+                    </p>
+                    <ul className="text-[10px] text-muted-foreground">
+                      {guess.match.reasons.filter(r => r.good).slice(0, 3).map(r => <li key={r.text}>✓ {r.text}</li>)}
+                    </ul>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  {guess && (
+                    <Button size="sm" className="h-7 text-[11px]" onClick={() => void linkPayment(i, guess.project[0])}>
+                      Link to {guess.project[0].name}
+                    </Button>
+                  )}
+                  <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => void makeShiftFromPayment(i)}>
+                    Make a shift
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </SpacePageWrapper>
   );
 }

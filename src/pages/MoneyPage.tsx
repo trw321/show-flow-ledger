@@ -1,25 +1,19 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { learnFromStubs, dismissSuggestion, consumeSkip, type Suggestion } from '@/lib/stubLearning';
-import { createPortal } from 'react-dom';
-import { HoursMeter, PaySummaryTable, ExportButton, type PeriodStat } from '@/components/MoneyWidgets';
+import { PaySummaryTable, ExportButton, type PeriodStat } from '@/components/MoneyWidgets';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
-import { getPayTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
-import { jobGross, jobPayBreakdown } from '@/lib/payCalc';
-import { Eye, Flame, Plus } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { jobPayBreakdown } from '@/lib/payCalc';
+import { Plus } from 'lucide-react';
 import { useData } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
-import PageHeader from '@/components/PageHeader';
-import EmptyState from '@/components/EmptyState';
 import IncomeStatementUpload from '@/components/IncomeStatementUpload';
 import BankStatementImport, { type ReconciliationRowInfo } from '@/components/BankStatementImport';
 import EmployerCombobox from '@/components/EmployerCombobox';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { DollarSign, Mic, MicOff, Trash2, Pencil, Clock, Scale, ChevronDown, ChevronUp, Upload, Check, X } from 'lucide-react';
-import { format, differenceInDays, addDays, endOfMonth, parseISO, startOfWeek, isWithinInterval, endOfWeek, startOfMonth, differenceInCalendarDays } from 'date-fns';
+import { DollarSign, Mic, MicOff, Trash2, Pencil, Clock, Upload } from 'lucide-react';
+import { format, differenceInDays, addDays, endOfMonth, parseISO, startOfWeek, isWithinInterval, endOfWeek, startOfMonth } from 'date-fns';
 import { calculateExpectedPay, effectiveHoursWorked, netHoursWorked } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
@@ -42,67 +36,6 @@ const payMethodConfig: Record<string, { label: string; cls: string; note?: strin
   other:          { label: 'other', cls: 'bg-secondary text-muted-foreground border-border' },
 };
 
-// ── Money rain ───────────────────────────────────────────────────────────────
-
-interface MoneyDrop {
-  id: number;
-  emoji: string;
-  left: number;
-  delay: number;
-  duration: number;
-  size: number;
-}
-
-function MoneyRain({ active }: { active: boolean }) {
-  const [drops, setDrops] = useState<MoneyDrop[]>([]);
-  const counterRef = useRef(0);
-
-  useEffect(() => {
-    if (!active) return;
-    const emojis = ['💰', '💵', '💴'];
-    const newDrops: MoneyDrop[] = Array.from({ length: 18 }, (_, i) => ({
-      id: counterRef.current++,
-      emoji: emojis[i % emojis.length],
-      left: Math.random() * 100,
-      delay: Math.random() * 0.6,
-      duration: 0.8 + Math.random() * 0.6,
-      size: 16 + Math.random() * 14,
-    }));
-    setDrops(newDrops);
-    const t = setTimeout(() => setDrops([]), 2000);
-    return () => clearTimeout(t);
-  }, [active]);
-
-  if (drops.length === 0) return null;
-
-  // Rendered into the body rather than the page: the money falls over the
-  // whole screen, and a wrapper with overflow hidden cannot cut it off.
-  return createPortal(
-    <div className="fixed inset-0 pointer-events-none z-[100] overflow-hidden">
-      {drops.map(d => (
-        <span
-          key={d.id}
-          style={{
-            position: 'absolute',
-            left: `${d.left}%`,
-            top: '-40px',
-            fontSize: `${d.size}px`,
-            animation: `moneyFall ${d.duration}s ease-in ${d.delay}s forwards`,
-          }}
-        >
-          {d.emoji}
-        </span>
-      ))}
-      <style>{`
-        @keyframes moneyFall {
-          0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
-          100% { transform: translateY(110vh) rotate(${Math.random() > 0.5 ? '' : '-'}${Math.floor(Math.random() * 360)}deg); opacity: 0.3; }
-        }
-      `}</style>
-    </div>,
-    document.body,
-  );
-}
 
 // ── Reconciliation helpers (ported from the retired Pay page) ──────────────
 
@@ -152,15 +85,6 @@ function projectLabel(row: { jobName: string; jobs: Job[] }): string {
   if (names.length === 0) return row.jobName;
   const number = names.length === 1 ? row.jobs.find(j => j.jobNumber?.trim())?.jobNumber?.trim() : undefined;
   return names.join(' · ') + (number ? ` #${number}` : '');
-}
-
-/** "Oct 13" or "Oct 13 – Oct 15": when the row's work was. */
-function workSpan(row: { jobs: Job[]; periodEnd: string }): string {
-  const dates = row.jobs.map(j => j.date).sort();
-  if (dates.length === 0) return format(parseISO(row.periodEnd), 'MMM d');
-  const first = format(parseISO(dates[0]), 'MMM d');
-  const last = format(parseISO(dates[dates.length - 1]), 'MMM d');
-  return first === last ? first : `${first} – ${last}`;
 }
 
 interface RowCandidate {
@@ -237,13 +161,6 @@ interface ReconciliationRow {
     lagDays: number;
     lagStatus: LagStatus;
   }[];
-}
-
-interface EditState {
-  client: string;
-  payrollCompany: string;
-  hourlyRate: string;
-  paySchedule: string;
 }
 
 // ── Edit form (used in dialog for existing income records) ─────────────────
@@ -432,288 +349,10 @@ function IncomeMadlib({ jobs, onAdd }: {
   );
 }
 
-// ── Reconciliation row card (one job/period) ────────────────────────────────
-// Extracted so it can render both as a standalone card and nested inside a
-// collapsed employer/week group without duplicating this JSX.
-
-function ReconciliationRowCard({
-  row, isExpanded, isEditing, isToggling, editState, setEditState, paidJobIds, navigate,
-  onToggleExpand, onStartEdit, onCancelEdit, onSaveEdit, onPaidToggle, onShowImport, onDeleteIncome,
-}: {
-  row: ReconciliationRow;
-  isExpanded: boolean;
-  isEditing: boolean;
-  isToggling: boolean;
-  editState: EditState;
-  setEditState: React.Dispatch<React.SetStateAction<EditState>>;
-  paidJobIds: Set<string>;
-  navigate: (path: string) => void;
-  onToggleExpand: () => void;
-  onStartEdit: () => void;
-  onCancelEdit: () => void;
-  onSaveEdit: () => void;
-  onPaidToggle: () => void;
-  onShowImport: () => void;
-  onDeleteIncome: (id: string) => void;
-}) {
-  // A payment line takes two taps to remove: one to ask, one to confirm.
-  const [removing, setRemoving] = useState<string | null>(null);
-  const isMatch = Math.abs(row.difference) < 0.01;
-  const isOver = row.difference > 0;
-  // A multi-shift "project" row only needs SOME linked income to flip
-  // row.isPaid true — that made a payment covering just one odd day out of
-  // a whole project read as the whole thing being paid. This distinguishes
-  // "some money in, but short of the period's expected total" from a
-  // genuine full match.
-  // "Partial" used to mean the money that arrived was less than expected.
-  // expectedPay is an ESTIMATE — calculateDayPay has already taken its guess
-  // at dues and tax out of it — so it lands near a real cheque but almost
-  // never on it, and any difference at all made a correctly paid shift read
-  // as part paid forever. A period is paid or it is not; how close the amount
-  // came is what the figures beside it are for. Part paid belongs to the
-  // group above, where a project spanning pay periods has had some land and
-  // not others.
-  const payStatus: 'unpaid' | 'full' = row.actualPaid > 0 ? 'full' : 'unpaid';
-
-  return (
-    <div className="rounded-2xl border border-border bg-card p-3.5 hover:border-primary/20 transition-colors">
-      <div className="flex items-start gap-3">
-        {/* Main info — tap to expand */}
-        <div className="flex-1 min-w-0 cursor-pointer" onClick={onToggleExpand}>
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-semibold text-sm">{row.client}</p>
-            <span className={cn(
-              "text-[9px] font-bold text-mono uppercase rounded-full px-2 py-0.5 border",
-              payStatus === 'full' ? "bg-success/15 text-success border-success/30"
-                : "bg-secondary text-muted-foreground border-border"
-            )}>
-              {payStatus === 'full' ? 'paid' : 'unpaid'}
-            </span>
-            {/* Money bag paid toggle — greyscale until any income exists, full color once some (or all) has come in */}
-            <button
-              onClick={(e) => { e.stopPropagation(); onPaidToggle(); }}
-              disabled={isToggling}
-              className={cn(
-                "w-9 h-9 rounded-full flex items-center justify-center text-lg transition-all shrink-0",
-                payStatus === 'full' ? "grayscale-0 opacity-100" : "grayscale opacity-55 hover:grayscale-0 hover:opacity-100",
-                isToggling && "opacity-40"
-              )}
-              aria-label={payStatus === 'full' ? 'Mark unpaid' : 'Mark paid'}
-              title={payStatus === 'full' ? 'Mark unpaid' : 'Mark paid'}
-            >
-              💰
-            </button>
-          </div>
-          {/* The project, so two jobs for the same employer — and the
-              cheques for each — read apart. */}
-          <p className="text-xs text-foreground/85 mt-0.5 truncate">{projectLabel(row)}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {row.periodLabel === 'Full project' ? workSpan(row) : row.periodLabel}
-            {row.payrollCompany ? ` · via ${row.payrollCompany}` : ''}
-          </p>
-          <p className="text-[10px] text-mono text-muted-foreground mt-1">
-            {row.totalHours.toFixed(1)}h worked
-            {row.isPaid && row.actualPaid > 0 && ` · $${row.actualPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })} received`}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-1.5 shrink-0">
-          <div className="text-right">
-            <p className="text-sm font-bold text-mono">${row.expectedPay.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-            <p className={`text-[10px] text-mono font-bold ${isMatch ? 'text-success' : isOver ? 'text-primary' : 'text-destructive'}`}>
-              {isMatch ? '✓ match' : `${row.difference >= 0 ? '+' : ''}$${row.difference.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
-            </p>
-          </div>
-          <button
-            onClick={() => isEditing ? onCancelEdit() : onStartEdit()}
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-            title="Edit"
-          >
-            <Pencil size={13} />
-          </button>
-          <button
-            onClick={onToggleExpand}
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-            title={isExpanded ? 'Collapse' : 'Expand'}
-          >
-            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </button>
-        </div>
-      </div>
-
-      {/* Inline edit form */}
-      {isEditing && (
-        <div className="-mx-3.5 mt-3 border-t border-border bg-muted/30 px-4 py-4">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-[10px] text-mono uppercase text-muted-foreground font-semibold tracking-wider">Edit details</h4>
-            <div className="flex gap-2">
-              <button onClick={onCancelEdit} className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1">
-                <X size={11} /> Cancel
-              </button>
-              <button onClick={onSaveEdit} className="text-[11px] text-success hover:text-success/80 flex items-center gap-1 font-medium">
-                <Check size={11} /> Save
-              </button>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] text-mono uppercase text-muted-foreground">Employer</label>
-              <Input value={editState.client} onChange={e => setEditState(p => ({ ...p, client: e.target.value }))} className="h-8 text-xs font-mono" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] text-mono uppercase text-muted-foreground">Payroll co.</label>
-              <Input value={editState.payrollCompany} onChange={e => setEditState(p => ({ ...p, payrollCompany: e.target.value }))} className="h-8 text-xs font-mono" placeholder="optional" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] text-mono uppercase text-muted-foreground">Rate ($/hr)</label>
-              <Input type="number" step="0.01" value={editState.hourlyRate} onChange={e => setEditState(p => ({ ...p, hourlyRate: e.target.value }))} className="h-8 text-xs font-mono" placeholder="0.00" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] text-mono uppercase text-muted-foreground">Pay schedule</label>
-              <Select value={editState.paySchedule} onValueChange={v => setEditState(p => ({ ...p, paySchedule: v }))}>
-                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="weekly">Weekly</SelectItem>
-                  <SelectItem value="bi-weekly">Bi-weekly</SelectItem>
-                  <SelectItem value="semi-monthly">Semi-monthly</SelectItem>
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                  <SelectItem value="per-project">Per project</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Expanded detail */}
-      {isExpanded && (
-        <div className="-mx-3.5 mt-3 border-t border-border bg-muted/20 px-4 py-4">
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <h4 className="text-[10px] text-mono uppercase text-muted-foreground mb-2 font-semibold tracking-wider">Jobs in this period</h4>
-              {row.timeEntryDetails.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No hours logged</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {row.timeEntryDetails.map((t, j) => {
-                    const jobForDate = row.jobs.find(job => job.date === t.date);
-                    const mixed = new Set(row.jobs.map(job => job.name)).size > 1;
-                    const paid = jobForDate ? paidJobIds.has(jobForDate.id) : false;
-                    return (
-                      <button
-                        key={j}
-                        type="button"
-                        disabled={!jobForDate}
-                        onClick={(e) => { e.stopPropagation(); if (jobForDate) navigate(`/calendar?job=${jobForDate.id}`); }}
-                        title={jobForDate ? 'Open this shift to edit, delete, or mark paid' : undefined}
-                        className={cn(
-                          'w-full text-left rounded-lg border px-3 py-1.5 text-xs transition-colors',
-                          jobForDate && 'hover:border-primary/40 cursor-pointer',
-                          paid ? 'border-success/40 bg-success/10' : 'border-border bg-background text-muted-foreground'
-                        )}
-                      >
-                        <div className="flex justify-between items-center">
-                          <span className={paid ? 'text-foreground' : undefined}>
-                            {format(parseISO(t.date), 'MMM d')} — {t.hours}h
-                            {mixed && jobForDate && <span className="text-muted-foreground"> · {jobForDate.name}</span>}
-                          </span>
-                          <span className={cn('text-mono font-medium', paid ? 'text-success' : 'text-foreground')}>${t.pay.toFixed(2)}</span>
-                        </div>
-                        {t.breakdown.length > 0 && (
-                          <div className="mt-1 space-y-0.5 pl-2 border-l border-border/60">
-                            {t.breakdown.map((line, k) => <p key={k}>{line}</p>)}
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-            <div>
-              <h4 className="text-[10px] text-mono uppercase text-muted-foreground mb-2 font-semibold tracking-wider">Payments received</h4>
-              {row.incomeDetails.length === 0 ? (
-                <div className="space-y-1.5">
-                  <p className="text-xs text-muted-foreground">No payments recorded</p>
-                  <button onClick={onShowImport} className="text-xs text-primary hover:underline">
-                    + Import bank statement / pay stub
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  {row.incomeDetails.map((inc, j) => {
-                    const lagLabel = inc.lagStatus === 'early' ? 'early'
-                      : inc.lagStatus === 'on-time' ? `${inc.lagDays}d after period`
-                      : inc.lagStatus === 'late' ? `${inc.lagDays}d — late`
-                      : `${inc.lagDays}d — unusual`;
-                    const lagColor = inc.lagStatus === 'on-time' || inc.lagStatus === 'early'
-                      ? 'text-success' : inc.lagStatus === 'late' ? 'text-accent' : 'text-destructive';
-                    const payorDiffers = !namesMatch(inc.payorName, row.client);
-                    const isLateCheck = inc.paymentMethod === 'check' && (inc.lagStatus === 'late' || inc.lagStatus === 'unusual');
-                    return (
-                      <div key={j} className={`rounded px-3 py-1.5 text-xs space-y-0.5 ${isLateCheck ? 'bg-warning/5 border border-warning/20' : 'bg-background'}`}>
-                        <div className="flex justify-between items-center gap-2">
-                          <div className="min-w-0 truncate">
-                            <span>{format(parseISO(inc.date), 'MMM d')}</span>
-                            {inc.description && <span className="text-muted-foreground"> — {inc.description}</span>}
-                          </div>
-                          <span className="flex items-center gap-1.5 shrink-0">
-                            <span className="text-mono font-medium text-success">+${inc.amount.toFixed(2)}</span>
-                            {removing === inc.id ? (
-                              <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); setRemoving(null); onDeleteIncome(inc.id); }}
-                                className="text-[10px] text-mono font-bold text-destructive border border-destructive/40 px-1.5 py-0.5"
-                              >
-                                remove
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); setRemoving(inc.id); }}
-                                aria-label="Remove this payment"
-                                title="Remove this payment — for one counted twice"
-                                className="p-0.5 text-muted-foreground hover:text-destructive"
-                              >
-                                <X size={12} />
-                              </button>
-                            )}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {inc.paymentMethod && (
-                            <span className={`text-[10px] text-mono px-1.5 py-0.5 rounded border ${
-                              inc.paymentMethod === 'direct_deposit' ? 'bg-info/10 text-info border-info/20'
-                              : inc.paymentMethod === 'check' ? 'bg-warning/10 text-warning border-warning/20'
-                              : inc.paymentMethod === 'cash' ? 'bg-success/10 text-success border-success/20'
-                              : 'bg-secondary text-muted-foreground border-border'
-                            }`}>
-                              {inc.paymentMethod === 'direct_deposit' ? 'direct deposit' : inc.paymentMethod === 'check' ? '📮 check' : inc.paymentMethod}
-                            </span>
-                          )}
-                          {payorDiffers && (
-                            <span className="text-[10px] text-mono text-accent bg-accent/10 px-1.5 py-0.5 rounded">paid by {inc.payorName}</span>
-                          )}
-                          <span className={`text-[10px] text-mono ${lagColor}`}>{lagLabel}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function MoneyPage() {
-  const { data, addIncome, updateIncome, deleteIncome, updateJob, updateEmployer, addJob } = useData();
-  const navigate = useNavigate();
+  const { data, addIncome, updateIncome, deleteIncome, restoreIncome, updateEmployer } = useData();
   const { prefs } = useUserPrefs();
   const [editId, setEditId] = useState<string | null>(null);
 
@@ -736,46 +375,14 @@ export default function MoneyPage() {
     return { year, w2, selfEmployed, estimate: estimateYearFromEarnings(w2, selfEmployed, prefs.payer.tax ?? {}) };
   }, [data.jobs, data.employers, prefs.payer]);
 
-  // Reconciliation state (ported from the retired Pay page)
-  const [filterJobClient, setFilterJobClient] = useState<string>('all');
   const [addOpen, setAddOpen] = useState(false);
-  const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
-  const [togglingKey, setTogglingKey] = useState<string | null>(null);
-  const [rainActive, setRainActive] = useState(false);
-  const [editingKey, setEditingKey] = useState<string | null>(null);
-  const [editState, setEditState] = useState<EditState>({ client: '', payrollCompany: '', hourlyRate: '', paySchedule: '' });
-  // An employer with lots of one-off gigs (e.g. many single-day Panitechnics
-  // shifts) got a separate top-level card per shift, which crowded the page
-  // fast. Rows for the same client landing in the same calendar week
-  // collapse into one group, expandable to reveal the individual cards —
-  // a client/week with just one row skips the group wrapper entirely.
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const editingInc = editId ? data.income.find(i => i.id === editId) : undefined;
   const jobs = data.jobs.map(j => ({ id: j.id, name: j.name }));
   const total = data.income.reduce((s, i) => s + i.amount, 0);
-  // Job-linked income already shows inside its Reconciliation row's
-  // "Payments received" detail — listing it again here duplicated the exact
-  // same dollar amount in two places. This list is only for income that
-  // isn't tied to a shift at all (manual entries, unmatched imports).
-  const sorted = [...data.income].filter(i => !i.jobId).sort((a, b) => b.date.localeCompare(a.date));
-
-  const uniqueClients = useMemo(() => {
-    const clients = new Set(data.jobs.map(j => j.client).filter(Boolean));
-    return Array.from(clients).sort();
-  }, [data.jobs]);
-
-  // A job counts as paid once a linked income record is marked paid — the
-  // per-job boxes below use this, distinct from row.isPaid which just means
-  // "some income exists for this pay period" as a whole.
-  const paidJobIds = useMemo(() => {
-    const set = new Set<string>();
-    for (const income of data.income) {
-      if (income.status === 'paid' && income.jobId) set.add(income.jobId);
-    }
-    return set;
-  }, [data.income]);
+  // Every payment, newest first.
+  const sorted = [...data.income].sort((a, b) => b.date.localeCompare(a.date));
 
   // Every shift grouped into the rows below, and which row each payment
   // belongs to. Worked out across all employers at once — the filter only
@@ -895,14 +502,10 @@ export default function MoneyPage() {
     return { rows, owner };
   }, [data]);
 
-  const reconciliation = useMemo(
-    () => filterJobClient === 'all' ? ledgerRows.rows : ledgerRows.rows.filter(r => r.client === filterJobClient),
-    [ledgerRows, filterJobClient],
-  );
+  const reconciliation = ledgerRows.rows;
 
   const totalExpected = reconciliation.reduce((s, r) => s + r.expectedPay, 0);
   const totalActual = reconciliation.reduce((s, r) => s + r.actualPaid, 0);
-  const totalDiff = totalActual - totalExpected;
   // Named rather than signed: "owed $420" reads without working out which way
   // a minus points.
   const owed = Math.max(0, totalExpected - totalActual);
@@ -920,45 +523,6 @@ export default function MoneyPage() {
   const daysPaid = datesIn(reconciliation.filter(isSettled));
   const paidFraction = totalExpected > 0 ? Math.min(1, totalActual / totalExpected) : 0;
   const round1 = (n: number) => Math.round(n * 10) / 10;
-  // Payments no shift claimed — no job linked, and no shift for that employer
-  // in a window it could belong to. They counted toward what was logged and
-  // nothing else, with nowhere on the page to find them.
-  const unmatchedIncome = useMemo(
-    () => data.income.filter(i => i.status === 'paid' && !ledgerRows.owner.has(i.id)),
-    [data.income, ledgerRows],
-  );
-
-  /**
-   * Turn a payment with no shift behind it into one. The payment is the
-   * evidence the work happened; the shift is what the rest of the app
-   * reasons about, so without it the money cannot be reconciled against
-   * anything. The new shift is marked for review, because everything but the
-   * date and employer is a guess.
-   */
-  const makeShiftFrom = async (incomeId: string) => {
-    const payment = data.income.find(i => i.id === incomeId);
-    if (!payment) return;
-    const job = await addJob({
-      name: payment.description || 'Shift from a payment',
-      client: payment.client,
-      venue: '',
-      date: payment.date,
-      // Not 'completed': with no hours yet, that would hide it from the
-      // Log hours reminder, and nothing else would ever ask for them.
-      status: 'upcoming',
-      // The payment's date is when the money landed, not when the work was.
-      notes: 'Made from a $' + payment.amount.toLocaleString() + ' payment dated ' + payment.date
-        + ' — move it to the day you worked, then add the hours and rate.',
-      needsReview: true,
-      has6th7thDayRule: false,
-    } as never);
-    if (!job) return;
-    await updateIncome(incomeId, { jobId: job.id });
-    toast.success('Shift made — add the hours to it', {
-      action: { label: 'Open', onClick: () => navigate(`/?job=${job.id}`) },
-    });
-  };
-
   const totalLogged = '$' + total.toLocaleString(undefined, { maximumFractionDigits: 0 }) + ' logged';
 
   // Rates the stubs disagree with the saved profile about, across every
@@ -986,17 +550,8 @@ export default function MoneyPage() {
     await updateEmployer(s.employerId, { dismissedSuggestions: dismissSuggestion(employer, s.field) });
   };
 
-  // ── Carried over from the Dashboard ──────────────────────────────────────
-  // How long the oldest unpaid shift has been waiting. This was the one thing
-  // the Dashboard said that nothing else did, so it leads the page.
-  const awaitingPayment = useMemo(() => data.jobs
-    .map(job => ({ job, pay: jobGross(job, data.jobs, data.employers) }))
-    .filter(({ job, pay }) => pay > 0 && !paidJobIds.has(job.id))
-    .sort((a, b) => a.job.date.localeCompare(b.job.date)), [data.jobs, data.employers, paidJobIds]);
-  const oldestUnpaid = awaitingPayment[0];
-  const daysWaiting = oldestUnpaid ? differenceInCalendarDays(new Date(), parseISO(oldestUnpaid.job.date)) : 0;
-  const payTier: PayTimingTier = oldestUnpaid ? getPayTimingTier(daysWaiting) : 'none';
-  const totalUnpaidDue = awaitingPayment.reduce((sum, { pay }) => sum + pay, 0);
+
+
 
   const paySummaryRows = useMemo(() => {
     const now = new Date();
@@ -1017,29 +572,6 @@ export default function MoneyPage() {
       return { label, gross, net, hours, shifts };
     });
   }, [data.jobs, data.employers]);
-
-  const reconciliationGroups = useMemo(() => {
-    const groups: Record<string, { client: string; weekStart: string; rows: ReconciliationRow[] }> = {};
-    const order: string[] = [];
-    for (const row of reconciliation) {
-      const weekStart = format(startOfWeek(parseISO(row.periodEnd), { weekStartsOn: 0 }), 'yyyy-MM-dd');
-      const key = `${row.client}__${weekStart}`;
-      if (!groups[key]) { groups[key] = { client: row.client, weekStart, rows: [] }; order.push(key); }
-      groups[key].rows.push(row);
-    }
-    return order.map(key => {
-      const g = groups[key];
-      const rows = [...g.rows].sort((a, b) => a.periodEnd.localeCompare(b.periodEnd));
-      return {
-        key,
-        client: g.client,
-        weekStart: g.weekStart,
-        rows,
-        totalExpected: rows.reduce((s, r) => s + r.expectedPay, 0),
-        totalActual: rows.reduce((s, r) => s + r.actualPaid, 0),
-      };
-    });
-  }, [reconciliation]);
 
   const importRows: ReconciliationRowInfo[] = useMemo(() =>
     reconciliation.map(r => ({
@@ -1063,62 +595,6 @@ export default function MoneyPage() {
     addIncome(income);
   };
 
-  const handlePaidToggle = async (row: ReconciliationRow) => {
-    const key = `${row.client}-${row.periodLabel}-${row.jobId}`;
-    setTogglingKey(key);
-    try {
-      // Fully paid already — the tap means undo.
-      // Anything in means the tap is an undo. Topping up the difference was
-      // wrong: expectedPay is an estimate, so the gap between it and a real
-      // payment is estimating error, not money still owed — recording it as
-      // income invented a payment that never arrived.
-      if (row.actualPaid > 0 && row.relatedIncomeIds.length > 0) {
-        for (const id of row.relatedIncomeIds) {
-          await updateIncome(id, { status: 'pending' });
-        }
-      } else {
-        const shortfall = row.expectedPay;
-        if (shortfall <= 0.01) { setTogglingKey(null); return; }
-        await addIncome({
-          jobId: row.jobId,
-          client: row.client,
-          description: `Payment — ${row.periodLabel}`,
-          // Tapping the money bag is somebody saying so; no stub, no cheque,
-          // nothing checked. Worth marking as that rather than as evidence.
-          enteredByHand: true,
-          amount: shortfall,
-          date: format(new Date(), 'yyyy-MM-dd'),
-          status: 'paid' as const,
-        });
-        setRainActive(true);
-        setTimeout(() => setRainActive(false), 2100);
-      }
-    } finally {
-      setTogglingKey(null);
-    }
-  };
-
-  const startEdit = (row: ReconciliationRow, key: string) => {
-    setEditingKey(key);
-    setEditState({
-      client: row.client,
-      payrollCompany: row.payrollCompany ?? '',
-      hourlyRate: row.hourlyRate?.toString() ?? '',
-      paySchedule: row.paySchedule,
-    });
-    setExpandedRow(key);
-  };
-
-  const saveEdit = async (row: ReconciliationRow) => {
-    await updateJob(row.jobId, {
-      client: editState.client.trim() || row.client,
-      payrollCompany: editState.payrollCompany.trim() || undefined,
-      hourlyRate: editState.hourlyRate ? parseFloat(editState.hourlyRate) : undefined,
-      paySchedule: editState.paySchedule as Job['paySchedule'],
-    });
-    setEditingKey(null);
-  };
-
   return (
     <SpacePageWrapper
       title={
@@ -1136,35 +612,7 @@ export default function MoneyPage() {
       }
       description={totalLogged}
     >
-      <MoneyRain active={rainActive} />
       <div className="max-w-lg mx-auto">
-      {/* How long the oldest unpaid shift has waited. The Dashboard's one
-          genuinely unique panel, and the reason to open this page at all. */}
-      {payTier !== 'none' && oldestUnpaid && (
-        <button
-          onClick={() => navigate(`/?job=${oldestUnpaid.job.id}`)}
-          className={cn(
-            'pixel-button w-full mb-4 flex items-center gap-3 px-4 py-3 text-left',
-            payTier === 'watching' ? 'border-primary/60 bg-primary/10'
-              : payTier === 'warm' ? 'border-warning/60 bg-warning/10'
-              : 'border-destructive/60 bg-destructive/10',
-          )}
-        >
-          {payTier === 'watching' && <Eye size={18} className="text-primary shrink-0" />}
-          {payTier === 'warm' && <Flame size={18} className="flame-flicker text-warning shrink-0" />}
-          {payTier === 'blazing' && <span className="flame-flicker text-xl shrink-0">🔥</span>}
-          <div className="min-w-0">
-            <p className={cn('text-sm font-semibold',
-              payTier === 'watching' ? 'text-primary' : payTier === 'warm' ? 'text-warning' : 'text-destructive')}>
-              {PAY_TIMING_LABELS[payTier]} — check for pay
-            </p>
-            <p className="text-xs font-body mt-0.5 text-muted-foreground">
-              ${totalUnpaidDue.toLocaleString(undefined, { maximumFractionDigits: 0 })} out · {daysWaiting}d since {oldestUnpaid.job.name}
-            </p>
-          </div>
-        </button>
-      )}
-
       {/* The three figures the page exists to answer, before any of the tools
           for changing them. Still owed is the one you came for, so it is the
           one that is big. */}
@@ -1301,22 +749,6 @@ export default function MoneyPage() {
         );
       })()}
 
-      {/* ── Reconciliation (ported from the retired Pay page) ──────────────── */}
-      <div className="mt-8 mb-3 flex items-center justify-between gap-2">
-        <p className="text-[10px] font-body uppercase tracking-widest text-muted-foreground/60">
-          Every shift · tap 💰 when one gets paid
-        </p>
-        {uniqueClients.length > 1 && (
-          <Select value={filterJobClient} onValueChange={setFilterJobClient}>
-            <SelectTrigger className="h-7 w-36 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All employers</SelectItem>
-              {uniqueClients.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        )}
-      </div>
-
       {/* Import dialog */}
       <Dialog open={showImport} onOpenChange={setShowImport}>
         <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
@@ -1336,119 +768,10 @@ export default function MoneyPage() {
 
       <ExportButton onClick={() => exportWeeklyToExcel(data.jobs, data.expenses, data.income, data.employers)} />
 
-      {unmatchedIncome.length > 0 && (
-        <div className="pixel-panel mb-6 p-3 space-y-2">
-          <p className="text-[10px] text-mono uppercase tracking-widest text-warning">
-            Payments with no shift · {unmatchedIncome.length}
-          </p>
-          <p className="text-[11px] text-muted-foreground">
-            Money that arrived but isn't tied to any shift, so it can't be checked against what you worked.
-          </p>
-          {unmatchedIncome.map(i => (
-            <div key={i.id} className="flex items-center gap-2 border-t border-border pt-2">
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium truncate">{i.client || i.description}</p>
-                <p className="text-[10px] text-mono text-muted-foreground">{i.date} · ${i.amount.toLocaleString()}</p>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-[11px] shrink-0"
-                onClick={() => makeShiftFrom(i.id)}
-              >
-                Make a shift
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {reconciliation.length === 0 ? (
-        <EmptyState icon={Scale} title="No data to reconcile" description="Add jobs with hours worked to see pay tracking." />
-      ) : (
-        <div className="flex flex-col gap-3 mb-8">
-          {reconciliationGroups.map(group => {
-            const rowProps = (row: ReconciliationRow) => {
-              // jobId too: every one-off project for an employer is "Full
-              // project", so client and period alone made two projects one row
-              // — opening, editing or paying one did it to both.
-              const key = `${row.client}-${row.periodLabel}-${row.jobId}`;
-              return {
-                key,
-                row,
-                isExpanded: expandedRow === key,
-                isEditing: editingKey === key,
-                isToggling: togglingKey === key,
-                editState,
-                setEditState,
-                paidJobIds,
-                navigate,
-                onToggleExpand: () => setExpandedRow(expandedRow === key ? null : key),
-                onStartEdit: () => startEdit(row, key),
-                onCancelEdit: () => setEditingKey(null),
-                onSaveEdit: () => saveEdit(row),
-                onPaidToggle: () => handlePaidToggle(row),
-                onShowImport: () => setShowImport(true),
-                onDeleteIncome: (id: string) => { deleteIncome(id); toast.success('Payment removed'); },
-              };
-            };
-
-            if (group.rows.length === 1) {
-              return <ReconciliationRowCard {...rowProps(group.rows[0])} />;
-            }
-
-            const groupExpanded = expandedGroups.has(group.key);
-            const groupDiff = group.totalActual - group.totalExpected;
-            const groupMatch = Math.abs(groupDiff) < 0.01;
-            const groupPaidCount = group.rows.filter(r => r.actualPaid > 0).length;
-
-            return (
-              <div key={group.key} className="rounded-2xl border border-border/60 bg-secondary/10 overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setExpandedGroups(prev => {
-                    const next = new Set(prev);
-                    if (next.has(group.key)) next.delete(group.key);
-                    else next.add(group.key);
-                    return next;
-                  })}
-                  className="w-full flex items-center gap-3 p-3.5 text-left hover:bg-secondary/20 transition-colors"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-sm">{group.client}</p>
-                      <span className="text-[9px] font-bold text-mono uppercase rounded-full px-2 py-0.5 border bg-secondary text-muted-foreground border-border">
-                        {group.rows.length} shifts
-                      </span>
-                      {groupPaidCount > 0 && groupPaidCount < group.rows.length && (
-                        <span className="text-[9px] font-bold text-mono uppercase rounded-full px-2 py-0.5 border bg-warning/15 text-warning border-warning/30">
-                          {groupPaidCount}/{group.rows.length} paid
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">week of {format(parseISO(group.weekStart), 'MMM d')}</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-sm font-bold text-mono">${group.totalExpected.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                    <p className={`text-[10px] text-mono font-bold ${groupMatch ? 'text-success' : groupDiff > 0 ? 'text-primary' : 'text-destructive'}`}>
-                      {groupMatch ? '✓ match' : `${groupDiff >= 0 ? '+' : ''}$${groupDiff.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
-                    </p>
-                  </div>
-                  {groupExpanded ? <ChevronUp size={16} className="text-muted-foreground shrink-0" /> : <ChevronDown size={16} className="text-muted-foreground shrink-0" />}
-                </button>
-                {groupExpanded && (
-                  <div className="flex flex-col gap-2 px-3 pb-3">
-                    {group.rows.map(row => <ReconciliationRowCard {...rowProps(row)} />)}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ── All income records ──────────────────────────────────────────────── */}
-      <p className="mb-3 text-[10px] font-body uppercase tracking-widest text-muted-foreground/60">All Income</p>
+      {/* ── Every payment ──────────────────────────────────────────────────────
+          Per project, pay is on the Calendar now. This is the plain record of
+          every payment, linked or not, for looking back over the year. */}
+      <p className="mt-6 mb-3 text-[10px] font-body uppercase tracking-widest text-muted-foreground/60">Every payment</p>
       {sorted.length === 0 ? (
         <div className="rounded-2xl border border-border/40 bg-secondary/10 p-8 text-center">
           <DollarSign size={28} className="text-muted-foreground/30 mx-auto mb-3" />
@@ -1506,7 +829,7 @@ export default function MoneyPage() {
                 <button onClick={() => setEditId(inc.id)} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
                   <Pencil size={13} />
                 </button>
-                <button onClick={() => deleteIncome(inc.id)} className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
+                <button onClick={() => { void deleteIncome(inc.id); toast.success('Payment removed', { duration: 8000, action: { label: 'Undo', onClick: () => void restoreIncome(inc) } }); }} aria-label="Remove this payment" className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
                   <Trash2 size={13} />
                 </button>
               </div>

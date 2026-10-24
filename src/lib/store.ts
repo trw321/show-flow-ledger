@@ -603,6 +603,7 @@ export function useAppData(key: string | null, onLocalChange?: (changes: LedgerC
   const addIncome = useCallback(async (income: Omit<Income, 'id' | 'createdAt'>) => {
     const newInc: Income = { ...income, id: uid(), createdAt: new Date().toISOString() };
     update(prev => ({ ...prev, income: [newInc, ...prev.income] }));
+    return newInc;
   }, [update]);
 
   const updateIncome = useCallback(async (id: string, updates: Partial<Income>) => {
@@ -611,6 +612,12 @@ export function useAppData(key: string | null, onLocalChange?: (changes: LedgerC
 
   const deleteIncome = useCallback(async (id: string) => {
     update(prev => ({ ...prev, income: prev.income.filter(i => i.id !== id) }));
+  }, [update]);
+
+  /** Puts a removed payment back exactly as it was — same record, same check —
+   *  so taking one off by mistake never means typing it in again. */
+  const restoreIncome = useCallback(async (income: Income) => {
+    update(prev => (prev.income.some(i => i.id === income.id) ? prev : { ...prev, income: [income, ...prev.income] }));
   }, [update]);
 
   // ── Equipment ─────────────────────────────────────────────────────────────
@@ -686,7 +693,7 @@ export function useAppData(key: string | null, onLocalChange?: (changes: LedgerC
     replaceAllData, applyRemote, readLedger,
     addJob, updateJob, deleteJob,
     addExpense, updateExpense, deleteExpense,
-    addIncome, updateIncome, deleteIncome,
+    addIncome, updateIncome, deleteIncome, restoreIncome,
     addEquipment, updateEquipment, deleteEquipment,
     addEmployer, updateEmployer, deleteEmployer,
     addEvent, updateEvent, deleteEvent,
@@ -695,7 +702,7 @@ export function useAppData(key: string | null, onLocalChange?: (changes: LedgerC
     data, replaceAllData, applyRemote, readLedger,
     addJob, updateJob, deleteJob,
     addExpense, updateExpense, deleteExpense,
-    addIncome, updateIncome, deleteIncome,
+    addIncome, updateIncome, deleteIncome, restoreIncome,
     addEquipment, updateEquipment, deleteEquipment,
     addEmployer, updateEmployer, deleteEmployer,
     addEvent, updateEvent, deleteEvent,
