@@ -16,7 +16,7 @@ import {
   AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
 import { parseDayTimeline, withGapOnClock, type DayTimeline } from '@/lib/dayTimeline';
-import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle, Flame } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle, Flame, PenLine, Banknote, Wallet, Flag, Undo2 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO, differenceInCalendarDays } from 'date-fns';
 import type { Job, CalendarEvent, Income } from '@/lib/store';
 import { matchPaymentToProject, betterProject, bestProjectFor, projectOf, type FoundPayment } from '@/lib/paymentMatch';
@@ -243,32 +243,48 @@ function projectGroupKey(j: Job): string {
 }
 
 /** How a payment came in, as the money icon it is shown with. */
-function paymentIcon(i: Income): { icon: string; label: string } {
-  if (i.enteredByHand) return { icon: '✏️', label: 'Added by hand' };
-  if (i.paymentMethod === 'check' || /\b(check|cheque)\b/i.test(i.description ?? '')) return { icon: '💵', label: 'Check' };
-  if (/stub/i.test(i.description ?? '')) return { icon: '🧾', label: 'Pay stub' };
-  return { icon: '💰', label: 'Payment' };
+function paymentIcon(i: Income): { Icon: typeof Wallet; label: string } {
+  if (i.enteredByHand) return { Icon: PenLine, label: 'Added by hand' };
+  if (i.paymentMethod === 'check' || /\b(check|cheque)\b/i.test(i.description ?? '')) return { Icon: Banknote, label: 'Check' };
+  if (/stub/i.test(i.description ?? '')) return { Icon: Receipt, label: 'Pay stub' };
+  return { Icon: Wallet, label: 'Payment' };
+}
+
+/**
+ * Payments that are the same one recorded more than once: the same amount, on
+ * the same day, the same way. Each group keeps its first; the rest are repeats.
+ */
+function samePaymentGroups(payments: Income[]): { first: Income; repeats: Income[] }[] {
+  const groups = new Map<string, { first: Income; repeats: Income[] }>();
+  for (const i of payments) {
+    const key = [i.amount.toFixed(2), i.date, i.description ?? '', i.enteredByHand ? 'hand' : '', i.paymentMethod ?? ''].join('|');
+    const g = groups.get(key);
+    if (g) g.repeats.push(i);
+    else groups.set(key, { first: i, repeats: [] });
+  }
+  return [...groups.values()];
+}
+
+/** A payment's icon, drawn the same way everywhere it appears. */
+function PayIcon({ income, className }: { income: Income; className?: string }) {
+  const { Icon, label } = paymentIcon(income);
+  return <Icon size={12} aria-label={label} className={cn('shrink-0', className)} />;
 }
 
 function StubMark({ job, paidByHand }: { job: Job; paidByHand?: boolean }) {
   const mark = job.payStub
     ? job.payStubKind === 'check'
-      ? { icon: '💵', label: 'Cheque photographed' }
-      : { icon: '🧾', label: 'Pay stub photographed' }
+      ? { Icon: Banknote, label: 'Cheque photographed' }
+      : { Icon: Receipt, label: 'Pay stub photographed' }
     : paidByHand
-      ? { icon: '✏️', label: 'Marked paid by hand — nothing checked against a document' }
+      ? { Icon: PenLine, label: 'Marked paid by hand — nothing checked against a document' }
       : null;
 
   // Nothing logged gets no mark at all. A greyed-out stub was the same picture
   // as a real stub, which made "nothing here" and "a stub is here" look alike
   // at six pixels — the one thing the mark exists to tell apart.
   if (!mark) return null;
-  return (
-    <span role="img" aria-label={mark.label} title={mark.label}
-      className="text-[11px] leading-none select-none">
-      {mark.icon}
-    </span>
-  );
+  return <mark.Icon size={12} aria-label={mark.label} className="shrink-0 text-muted-foreground" />;
 }
 
 function calcHours(start: string, end: string): number {
@@ -359,7 +375,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   const [payRain, setPayRain] = useState(false);
   // Payments taken off while this shift is open, ready to put back. Shown in
   // the panel: a toast's Undo cannot be tapped behind an open shift.
-  const [removedPays, setRemovedPays] = useState<Income[]>([]);
+  const [removedPays, setRemovedPays] = useState<Income[][]>([]);
 
   const [parsingStub, setParsingStub] = useState(false);
   const [viewingStub, setViewingStub] = useState<string | null>(null);
@@ -568,7 +584,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
       paymentMethod: kind === 'check' ? 'check' : kind ? undefined : payMethod,
       enteredByHand: kind ? undefined : true,
     });
-    toast.success(`💰 $${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} recorded for ${target.name}`);
+    toast.success(`$${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} recorded for ${target.name}`);
     setPayRain(true);
     setTimeout(() => setPayRain(false), 2100);
     closePay();
@@ -867,10 +883,13 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           <button onClick={onBack} aria-label="Back" className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-2 rounded-lg hover:bg-secondary">
             <ArrowLeft size={18} />
           </button>
+          {/* Delete in the middle, well away from close: side by side they
+              were one slip apart. */}
           <span className="flex-1" />
           <button onClick={handleDelete} aria-label="Delete shift" className="shrink-0 text-muted-foreground hover:text-destructive transition-colors p-2 rounded-lg hover:bg-destructive/10">
             <Trash2 size={18} />
           </button>
+          <span className="flex-1" />
           <DialogClose asChild>
             <button aria-label="Close" className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-2 rounded-lg hover:bg-secondary">
               <X size={18} />
@@ -918,18 +937,27 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             {projectPayments.length > 0 && (
               <div className="space-y-1">
                 <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground">Paid{project.length > 1 ? ' · this project' : ''}</p>
-                {projectPayments.map(i => {
-                  const how = paymentIcon(i);
+                {/* The same payment recorded more than once — the same amount, day
+                    and way in — is shown once, with how many times, and the extras
+                    can go in a tap. Old money-bag taps left runs of these behind. */}
+                {samePaymentGroups(projectPayments).map(({ first: i, repeats }) => {
                   return (
                     <div key={i.id} className="flex items-center gap-2 text-xs">
-                      <span role="img" aria-label={how.label} title={how.label}>{how.icon}</span>
+                      <PayIcon income={i} className="text-muted-foreground" />
                       <span className="font-bold text-mono text-dot-paid">${i.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                       <span className="text-muted-foreground text-mono">{format(new Date(i.date + 'T12:00:00'), 'MMM d')}</span>
+                      {repeats.length > 0 && (
+                        <button type="button" className="pixel-button pick-off px-1.5 py-0.5 text-[10px] font-bold text-warning"
+                          title="The same payment recorded more than once"
+                          onClick={() => { for (const r of repeats) void deleteIncome(r.id); setRemovedPays(prev => [repeats, ...prev]); }}>
+                          ×{repeats.length + 1} · keep one
+                        </button>
+                      )}
                       <span className="flex-1" />
                       {/* Undoable rather than confirmed: the exact payment
                           comes back, so a slip never means re-entering a check. */}
                       <button type="button" aria-label="Remove this payment" className="p-0.5 text-muted-foreground hover:text-destructive"
-                        onClick={() => { void deleteIncome(i.id); setRemovedPays(prev => [i, ...prev]); }}>
+                        onClick={() => { void deleteIncome(i.id); setRemovedPays(prev => [[i], ...prev]); }}>
                         <X size={12} />
                       </button>
                     </div>
@@ -938,11 +966,13 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
               </div>
             )}
 
-            {removedPays.map(i => (
-              <div key={'removed-' + i.id} className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="flex-1">Removed ${i.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} · {format(new Date(i.date + 'T12:00:00'), 'MMM d')}</span>
+            {removedPays.map(batch => (
+              <div key={'removed-' + batch[0].id} className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="flex-1">
+                  {batch.length > 1 ? `Removed ${batch.length} repeats of ` : 'Removed '}${batch[0].amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} · {format(new Date(batch[0].date + 'T12:00:00'), 'MMM d')}
+                </span>
                 <button type="button" className="pixel-button pick-off px-2 py-0.5 text-[11px] font-bold"
-                  onClick={() => { void restoreIncome(i); setRemovedPays(prev => prev.filter(r => r.id !== i.id)); }}>
+                  onClick={() => { for (const i of batch) void restoreIncome(i); setRemovedPays(prev => prev.filter(b => b !== batch)); }}>
                   Undo
                 </button>
               </div>
@@ -951,7 +981,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             {!showPay ? (
               job.date <= localToday() && (
                 <button type="button" onClick={() => setPayOpen(true)} className="pixel-button pick-on w-full py-2 text-sm font-bold">
-                  💰 Add pay
+                  <span className="inline-flex items-center justify-center gap-1.5"><Plus size={15} /> Add pay</span>
                 </button>
               )
             ) : (
@@ -964,12 +994,12 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                 {!payMode && !payFound && !editingStub && !parsingStub && (
                   <div className="grid grid-cols-3 gap-2">
                     {([
-                      { id: 'manual', icon: '✏️', label: 'Manual', go: startManualPay },
-                      { id: 'stub', icon: '🧾', label: 'Pay stub', go: () => startPayPhoto('stub') },
-                      { id: 'check', icon: '💵', label: 'Check', go: () => startPayPhoto('check') },
+                      { id: 'manual', Icon: PenLine, label: 'Manual', go: startManualPay },
+                      { id: 'stub', Icon: Receipt, label: 'Pay stub', go: () => startPayPhoto('stub') },
+                      { id: 'check', Icon: Banknote, label: 'Check', go: () => startPayPhoto('check') },
                     ] as const).map(o => (
                       <button key={o.id} type="button" onClick={o.go} className="pixel-button pick-off flex flex-col items-center gap-1 py-2.5 text-[11px] font-bold">
-                        <span className="text-lg leading-none" aria-hidden>{o.icon}</span>{o.label}
+                        <o.Icon size={18} aria-hidden />{o.label}
                       </button>
                     ))}
                   </div>
@@ -2049,7 +2079,7 @@ export default function CalendarPage() {
       for (const i of setAside) await updateIncome(i.id, { status: 'paid' });
       rain();
       const back = setAside.reduce((sum, i) => sum + i.amount, 0);
-      undoToast(`💰 Paid again — your $${back.toLocaleString(undefined, { minimumFractionDigits: 2 })} is back`, () => {
+      undoToast(`Paid again — your $${back.toLocaleString(undefined, { minimumFractionDigits: 2 })} is back`, () => {
         for (const i of setAside) void updateIncome(i.id, { status: 'pending' });
       });
       return;
@@ -2067,7 +2097,18 @@ export default function CalendarPage() {
       date: localToday(), status: 'paid', enteredByHand: true,
     });
     rain();
-    undoToast(`💰 Marked paid — $${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, () => void deleteIncome(created.id));
+    undoToast(`Marked paid — $${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, () => void deleteIncome(created.id));
+  };
+
+  /**
+   * The card's Undo for "paid". The project's payments are set aside, not
+   * deleted — so Mark paid, or Undo on the toast, brings back the very same
+   * ones, and a check never has to be entered twice.
+   */
+  const unmarkProjectPaid = async (lead: Job) => {
+    const paid = (incomeByProject.get(projectGroupKey(lead)) ?? []).filter(i => i.status === 'paid');
+    for (const i of paid) await updateIncome(i.id, { status: 'pending' });
+    undoToast('Set back to waiting on pay', () => { for (const i of paid) void updateIncome(i.id, { status: 'paid' }); });
   };
 
   // Payments that came in with no shift to their name, each with the project
@@ -2313,7 +2354,7 @@ export default function CalendarPage() {
           onClick={() => { setSelectedDate(flaggedJobs[0].date); setSelectedJobId(flaggedJobs[0].id); }}
           className="pixel-button w-full mb-3 flex items-center gap-3 border-warning/60 bg-warning/10 px-3 py-2.5 text-left"
         >
-          <span className="text-lg leading-none text-warning shrink-0" aria-hidden>⚑</span>
+          <Flag size={18} className="text-warning shrink-0" aria-hidden />
           <div className="min-w-0">
             <p className="text-sm font-semibold text-warning">
               Check later{flaggedJobs.length > 1 ? ` — ${flaggedJobs.length} shifts` : ''}
@@ -2430,7 +2471,7 @@ export default function CalendarPage() {
                         {dayJobs.slice(0, 3).map((job, j) => <span key={j} className={cn("w-1.5 h-1.5 rounded-full", jobDotClass(job, paidJobIds))} />)}
                         {dayJobs.length > 3 && <span className="text-[7px] text-muted-foreground text-mono">+{dayJobs.length - 3}</span>}
                       </div>
-                      {hasPay && <span className={cn("text-[8px] text-mono font-semibold leading-none mt-0.5", moneyTone(dayJobs, paidJobIds))}>{dayJobs.some(j => paidJobIds.has(j.id)) && <span role="img" aria-label="Paid">💰</span>}${payByDate[dateKey] >= 1000 ? `${(payByDate[dateKey] / 1000).toFixed(1)}k` : payByDate[dateKey].toFixed(0)}</span>}
+                      {hasPay && <span className={cn("text-[8px] text-mono font-semibold leading-none mt-0.5", moneyTone(dayJobs, paidJobIds))}>${payByDate[dateKey] >= 1000 ? `${(payByDate[dateKey] / 1000).toFixed(1)}k` : payByDate[dateKey].toFixed(0)}</span>}
                       {/* Plans underline the cell instead of taking a dot in the
                           job row — a recurring one then reads as a stripe down
                           the month, which a dot never did. */}
@@ -2620,8 +2661,8 @@ export default function CalendarPage() {
                   return (
                     <div key={job.id} onClick={() => setSelectedJobId(job.id)} className={cn("rounded-md border p-3 space-y-1 cursor-pointer hover:opacity-90 transition-opacity", paid ? "bg-success/20 text-success border-success/30" : overdue ? "bg-warning/20 text-warning border-warning/30" : statusColors[job.status])}>
                       <div className="flex items-start justify-between">
-                        <div><p className="font-medium text-sm flex items-center gap-1.5"><CallbackMark job={job} />{job.needsReview && <span className="text-warning" title="Flagged to check later">⚑</span>}{job.name}{job.role && <span className="opacity-70 font-normal">· {job.role}</span>}{job.pto && <span className="text-[10px] text-mono font-bold border border-current px-1">PTO</span>}<SplitMark job={job} allJobs={data.jobs} /></p><p className="text-xs opacity-70">{job.client}</p></div>
-                        <span className="text-[10px] text-mono uppercase font-medium opacity-70">{paid ? '💰 Paid' : overdue ? 'Needs Hours' : job.status}</span>
+                        <div><p className="font-medium text-sm flex items-center gap-1.5"><CallbackMark job={job} />{job.needsReview && <Flag size={12} className="text-warning shrink-0" aria-label="Flagged to check later" />}{job.name}{job.role && <span className="opacity-70 font-normal">· {job.role}</span>}{job.pto && <span className="text-[10px] text-mono font-bold border border-current px-1">PTO</span>}<SplitMark job={job} allJobs={data.jobs} /></p><p className="text-xs opacity-70">{job.client}</p></div>
+                        <span className="text-[10px] text-mono uppercase font-medium opacity-70">{paid ? 'Paid' : overdue ? 'Needs Hours' : job.status}</span>
                       </div>
                       {job.venue && <p className="text-xs opacity-60">{job.venue}</p>}
                       <div className="flex items-center gap-3 text-xs text-mono">
@@ -2822,7 +2863,7 @@ export default function CalendarPage() {
                               and it keeps the card reading like a card. */}
                           <p className="text-[17px] font-bold text-mono tracking-tight leading-none text-white">{dateRange}</p>
                           <p className="text-[13px] text-foreground/75 leading-snug truncate mt-1">
-                            {jobs.some(j => j.needsReview) && <span className="text-warning mr-1" title="Flagged to check later">⚑</span>}
+                            {jobs.some(j => j.needsReview) && <Flag size={11} className="inline mr-1 -mt-0.5 text-warning" aria-label="Flagged to check later" />}
                             {first.name}
                             {first.role && <span className="text-muted-foreground"> · {first.role}</span>}
                             {jobs.some(j => j.pto) && <span className="ml-1.5 text-[10px] text-mono font-bold border border-foreground/50 px-1">PTO</span>}
@@ -2833,7 +2874,7 @@ export default function CalendarPage() {
                             one thing sized to be read without stopping. */}
                         <div className="shrink-0 text-right">
                           {totalEarned > 0 ? (
-                            <p className={cn("text-lg font-bold text-mono leading-none", moneyTone(jobs, paidJobIds))}>{jobs.some(j => paidJobIds.has(j.id)) && <span role="img" aria-label="Paid" className="mr-1 text-base">💰</span>}${Math.round(totalEarned).toLocaleString()}</p>
+                            <p className={cn("text-lg font-bold text-mono leading-none", moneyTone(jobs, paidJobIds))}>${Math.round(totalEarned).toLocaleString()}</p>
                           ) : (
                             <p className="text-[11px] text-mono text-muted-foreground leading-none">{statusLabel[first.status]}</p>
                           )}
@@ -2857,13 +2898,34 @@ export default function CalendarPage() {
                       {(() => {
                         const payments = (incomeByProject.get(key) ?? []).filter(i => i.status === 'paid');
                         if (payments.length > 0) {
-                          const total = payments.reduce((sum, i) => sum + i.amount, 0);
+                          // Repeats of one payment are counted once here and flagged:
+                          // the same $296 saved fifteen times is one $296.
+                          const groups = samePaymentGroups(payments);
+                          const repeated = groups.reduce((n, g) => n + g.repeats.length, 0);
+                          const total = groups.reduce((sum, g) => sum + g.first.amount, 0);
                           const last = payments.map(i => i.date).sort().pop()!;
+                          const kinds = [...new Map(groups.map(g => [paymentIcon(g.first).label, g.first])).values()];
                           return (
-                            <p className="mt-2 text-[11px] text-mono text-dot-paid">
-                              💰 Paid ${total.toLocaleString(undefined, { minimumFractionDigits: 2 })} · {format(new Date(last + 'T12:00:00'), 'MMM d')}
-                              {' '}{payments.map(i => paymentIcon(i).icon).join('')}
-                            </p>
+                            <div className="mt-2 flex items-center justify-between gap-2">
+                              {/* Into the project, where its payments are listed and can be changed. */}
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); openJob(first); }}
+                                className="flex min-w-0 items-center gap-1.5 text-[11px] text-mono text-dot-paid hover:underline"
+                              >
+                                <Check size={12} className="shrink-0" />
+                                <span className="truncate">Paid ${total.toLocaleString(undefined, { minimumFractionDigits: 2 })} · {format(new Date(last + 'T12:00:00'), 'MMM d')}</span>
+                                {kinds.map(i => <PayIcon key={i.id} income={i} />)}
+                                {repeated > 0 && <span className="shrink-0 text-warning">· {repeated} repeated</span>}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); void unmarkProjectPaid(first); }}
+                                className="pixel-button pick-off flex shrink-0 items-center gap-1 px-2 py-1 text-[11px] font-bold"
+                              >
+                                <Undo2 size={12} /> Undo
+                              </button>
+                            </div>
                           );
                         }
                         if (!jobs.some(j => j.date <= localToday() && effectiveHoursWorked(j) > 0)) return null;
@@ -2875,7 +2937,7 @@ export default function CalendarPage() {
                               onClick={e => { e.stopPropagation(); void markProjectPaid(first); }}
                               className="pixel-button pick-off px-2 py-1 text-[11px] font-bold"
                             >
-                              💰 Mark paid
+                              <span className="inline-flex items-center gap-1"><Wallet size={12} /> Mark paid</span>
                             </button>
                           </div>
                         );
@@ -2918,7 +2980,7 @@ export default function CalendarPage() {
             return (
               <div key={i.id} className="border-t border-border pt-2 space-y-1.5">
                 <div className="flex items-center gap-2">
-                  <span aria-hidden>{paymentIcon(i).icon}</span>
+                  <PayIcon income={i} className="text-muted-foreground" />
                   <p className="min-w-0 flex-1 truncate text-xs font-medium">{i.client || i.description}</p>
                   <span className="shrink-0 text-xs text-mono font-bold text-dot-paid">${i.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   <span className="shrink-0 text-[10px] text-mono text-muted-foreground">{format(new Date(i.date + 'T12:00:00'), 'MMM d')}</span>
