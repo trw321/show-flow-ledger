@@ -30,6 +30,26 @@ export const MEDICARE_RATE = 0.0145;
 /** Medicare takes another 0.9% above this, and no employer matches it. */
 export const ADDITIONAL_MEDICARE_RATE = 0.009;
 
+/**
+ * The Social Security wage base: Social Security is only taken from this much
+ * of a year's wages, then stops until January. Medicare has no such cap. The
+ * SSA sets it each October for the year after — these are its published
+ * figures (ssa.gov/cola). A year not listed is not guessed at.
+ */
+export const SOCIAL_SECURITY_WAGE_BASE: Readonly<Record<number, number>> = {
+  2024: 168_600,
+  2025: 176_100,
+  2026: 184_500,
+  2027: 192_300,
+};
+
+/** The cap in force: the figure typed in, else the SSA's for the year, else none. */
+export function wageBaseFor(profile: TaxProfile, year?: number): number {
+  const typed = profile.socialSecurityWageBase;
+  if (typed && typed > 0) return typed;
+  return year !== undefined ? SOCIAL_SECURITY_WAGE_BASE[year] ?? 0 : 0;
+}
+
 export interface TaxProfile {
   filingStatus?: FilingStatus;
   /** Children claimed under 17 — each one is worth a credit against the bill. */
@@ -50,7 +70,7 @@ export interface TaxProfile {
   federalEffectivePercent?: number;
   /** W-4 filed exempt: no federal income tax withheld. FICA still is. */
   federalExempt?: boolean;
-  /** Social Security stops at this much wage. A yearly figure — keep it current. */
+  /** Social Security stops at this much wage. Blank uses the SSA's figure for the year. */
   socialSecurityWageBase?: number;
   /** Credit per child under 17, and per other dependent. Yearly figures. */
   creditPerChild?: number;
@@ -99,6 +119,8 @@ export function estimateTaxForYear(
   profile: TaxProfile,
   /** 1099 earnings, kept apart because nothing was withheld from them. */
   selfEmployedYearToDate = 0,
+  /** The tax year — picks the wage base when none is typed in. */
+  year?: number,
 ): TaxEstimate {
   const notes: string[] = [];
   const gross = Math.max(0, grossYearToDate);
@@ -106,13 +128,15 @@ export function estimateTaxForYear(
   // Income tax is on everything earned, W2 and 1099 alike.
   const taxable = gross + selfEmployed;
 
-  const wageBase = profile.socialSecurityWageBase ?? 0;
+  const wageBase = wageBaseFor(profile, year);
   const ssWages = wageBase > 0 ? Math.min(gross, wageBase) : gross;
   if (wageBase > 0 && gross > wageBase) {
     notes.push('Past the Social Security wage base — nothing more is taken for it this year.');
   }
   if (wageBase <= 0) {
-    notes.push('No Social Security wage base set, so it is being charged on everything.');
+    notes.push(year !== undefined
+      ? `No Social Security wage base known for ${year}, so it is being charged on everything — type the year's figure in Settings.`
+      : 'No Social Security wage base set, so it is being charged on everything.');
   }
   const socialSecurity = ssWages * SOCIAL_SECURITY_RATE;
 
@@ -182,10 +206,10 @@ export function estimateTaxForYear(
  * so what is still owed at the end of the year is the tax on 1099 work, plus
  * federal on W2 wages filed exempt.
  */
-export function estimateYearFromEarnings(w2Gross: number, selfEmployedGross: number, profile: TaxProfile): TaxEstimate {
-  const onWagesAlone = estimateTaxForYear(w2Gross, 0, profile);
+export function estimateYearFromEarnings(w2Gross: number, selfEmployedGross: number, profile: TaxProfile, year?: number): TaxEstimate {
+  const onWagesAlone = estimateTaxForYear(w2Gross, 0, profile, 0, year);
   const withheldOnWages = onWagesAlone.socialSecurity + onWagesAlone.medicare
     + onWagesAlone.state + onWagesAlone.stateDisability
     + (profile.federalExempt ? 0 : onWagesAlone.federal);
-  return estimateTaxForYear(w2Gross, withheldOnWages, profile, selfEmployedGross);
+  return estimateTaxForYear(w2Gross, withheldOnWages, profile, selfEmployedGross, year);
 }

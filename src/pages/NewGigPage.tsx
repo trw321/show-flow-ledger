@@ -232,7 +232,6 @@ export default function NewGigPage({ onComplete, startAs }: {
   const [manualOpen, setManualOpen] = useState(false);
   const [manual, setManual] = useState<ManualEntry>(EMPTY_MANUAL);
   const [extraDates, setExtraDates] = useState<string[]>([]);
-  const [pickingDays, setPickingDays] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
   const [hoursResults, setHoursResults] = useState<HoursMatchResult[]>([]);
   const [hoursAccepted, setHoursAccepted] = useState<Set<number>>(new Set());
@@ -260,6 +259,15 @@ export default function NewGigPage({ onComplete, startAs }: {
 
   const handleManualChange = (field: keyof ManualEntry, value: string) =>
     setManual(prev => ({ ...prev, [field]: value }));
+
+  // Every day tapped on the one calendar, in order. The first is the shift's
+  // date; the rest are copies of it, one per day.
+  const pickedDays = [manual.date, ...extraDates].filter(Boolean);
+  const pickDays = (days: Date[] | undefined) => {
+    const list = [...new Set((days ?? []).map(d => format(d, 'yyyy-MM-dd')))].sort();
+    handleManualChange('date', list[0] ?? '');
+    setExtraDates(list.slice(1));
+  };
 
   const handleManualSubmit = () => {
     const dates = [manual.date, ...extraDates].filter(Boolean);
@@ -857,24 +865,29 @@ export default function NewGigPage({ onComplete, startAs }: {
                 {/* Left — calendar */}
                 <div className="flex flex-col gap-1 flex-shrink-0">
                   <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">
-                    Date <span className="text-lime-400">*</span>
+                    Days <span className="text-lime-400">*</span> <span className="normal-case tracking-normal">— tap one or more</span>
                   </label>
                   <div
                     className="rounded-md overflow-hidden border border-border bg-background/40"
                     {...swipe}
                   >
                     <Calendar
-                      mode="single"
+                      mode="multiple"
                       month={calendarMonth}
                       onMonthChange={setCalendarMonth}
-                      selected={manual.date ? new Date(manual.date + 'T12:00:00') : undefined}
-                      onSelect={d => handleManualChange('date', d ? format(d, 'yyyy-MM-dd') : '')}
+                      selected={pickedDays.map(d => new Date(d + 'T12:00:00'))}
+                      onSelect={pickDays}
                       classNames={{
                         cell: "h-9 w-9 text-center text-sm p-0 relative focus-within:relative focus-within:z-20",
                       }}
                       className="text-foreground/80 [&_button]:text-foreground/70 [&_button:hover]:bg-foreground/10 [&_button[aria-selected]]:!bg-transparent [&_button[aria-selected]]:text-white [&_button[aria-selected]]:outline [&_button[aria-selected]]:outline-[3px] [&_button[aria-selected]]:outline-yellow-300 [&_button[aria-selected]]:-outline-offset-2 [&_button[aria-selected]]:!rounded-full [&_button[aria-selected]:hover]:!bg-transparent [&_button[data-today]]:!bg-blue-500 [&_button[data-today]]:!text-white [&_button[data-today][aria-selected]]:!bg-transparent [&_button[data-today][aria-selected]]:outline-yellow-300"
                     />
                   </div>
+                  {pickedDays.length > 1 && (
+                    <p className="max-w-[17rem] text-[10px] text-muted-foreground">
+                      {pickedDays.length} days, same details on each: {pickedDays.map(d => format(new Date(d + 'T12:00:00'), 'MMM d')).join(', ')}
+                    </p>
+                  )}
                 </div>
 
                 {/* Right — fields stacked */}
@@ -938,65 +951,13 @@ export default function NewGigPage({ onComplete, startAs }: {
                 </div>
               </div>
 
-              {/* More days for the same shift — tapped out on a calendar, as
-                  many as needed, rather than one date box at a time. */}
-              <div className="flex flex-col gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setPickingDays(p => !p)}
-                  className={cn(
-                    'flex items-center justify-between rounded-md border px-3 py-2 text-left text-xs transition-colors',
-                    pickingDays ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border bg-background/40 text-foreground/80 hover:border-primary/40',
-                  )}
-                >
-                  <span>
-                    {extraDates.length > 0
-                      ? `+ ${extraDates.length} more day${extraDates.length === 1 ? '' : 's'}`
-                      : '+ More days — tap them on a calendar'}
-                  </span>
-                  <ChevronDown size={14} className={cn('transition-transform', pickingDays && 'rotate-180')} />
-                </button>
-                {pickingDays && (
-                  <Calendar
-                    mode="multiple"
-                    selected={extraDates.map(d => new Date(d + 'T12:00:00'))}
-                    onSelect={(days) => setExtraDates(
-                      [...new Set((days ?? []).map(d => format(d, 'yyyy-MM-dd')))]
-                        .filter(d => d !== manual.date)
-                        .sort(),
-                    )}
-                    className="self-center rounded-md border border-border"
-                  />
-                )}
-                {extraDates.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {extraDates.map(d => (
-                      <span key={d} className="inline-flex items-center gap-1 border border-border bg-background/40 px-2 py-1 text-[11px] text-mono">
-                        {format(new Date(d + 'T12:00:00'), 'EEE MMM d')}
-                        <button
-                          type="button"
-                          onClick={() => setExtraDates(prev => prev.filter(v => v !== d))}
-                          className="text-muted-foreground hover:text-destructive"
-                          aria-label={`Remove ${d}`}
-                        >
-                          <X size={11} />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {extraDates.length > 0 && (
-                  <p className="text-[10px] text-muted-foreground/60">Same employer, time, rate & details on each day — you can change any of them before saving.</p>
-                )}
-              </div>
-
               <Button
                 onClick={handleManualSubmit}
-                disabled={!manual.date && extraDates.every(d => !d)}
+                disabled={pickedDays.length === 0}
                 size="sm"
                 className="w-full gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground border-0 font-medium mt-1"
               >
-                <Check size={13} /> Add shift{[manual.date, ...extraDates].filter(Boolean).length > 1 ? 's' : ''}
+                <Check size={13} /> Add shift{pickedDays.length > 1 ? 's' : ''}
               </Button>
             </div>
           )}

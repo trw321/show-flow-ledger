@@ -33,11 +33,6 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { label: 'Settings', to: '/settings', icon: <Settings size={18} /> },
 ];
 
-const ALL_TAB_ITEMS: NavItem[] = [
-  { label: 'Calendar', to: '/', icon: <CalendarDays size={20} /> },
-  { label: 'Money', to: '/money', icon: <TrendingUp size={20} /> },
-];
-
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const { prefs } = useUserPrefs();
@@ -71,12 +66,16 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
+// Every page the mode in Settings turns on, so none of them is only reachable
+// from the menu.
 function BottomTabBar() {
   const location = useLocation();
+  const { prefs } = useUserPrefs();
+  const items = ALL_NAV_ITEMS.filter(item => !item.tab || prefs.tabs[item.tab]);
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 flex pb-[env(safe-area-inset-bottom)] border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
-      {ALL_TAB_ITEMS.map(item => {
+      {items.map(item => {
         const active =
           item.to === '/'
             ? location.pathname === '/'
@@ -86,12 +85,13 @@ function BottomTabBar() {
             key={item.to}
             to={item.to}
             className={cn(
-              'flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-body transition-colors',
+              'flex min-w-0 flex-1 flex-col items-center gap-1 py-2.5 font-body transition-colors',
+              items.length > 5 ? 'text-[9px]' : 'text-[10px]',
               active ? 'text-primary' : 'text-muted-foreground',
             )}
           >
             {item.icon}
-            {item.label}
+            <span className="max-w-full truncate">{item.label}</span>
           </NavLink>
         );
       })}

@@ -3,6 +3,7 @@ import {
   estimateTaxForYear,
   SOCIAL_SECURITY_RATE,
   MEDICARE_RATE,
+  SOCIAL_SECURITY_WAGE_BASE,
   type TaxProfile,
 } from './taxEstimate';
 
@@ -75,6 +76,24 @@ describe('Social Security stops at the wage base', () => {
     const e = estimateTaxForYear(200_000, 0, { ...base, socialSecurityWageBase: undefined });
     expect(e.socialSecurity).toBeCloseTo(200_000 * SOCIAL_SECURITY_RATE, 2);
     expect(e.notes.join(' ')).toMatch(/wage base/i);
+  });
+
+  it('uses the SSA figure for the year when none is typed', () => {
+    const e = estimateTaxForYear(200_000, 0, { ...base, socialSecurityWageBase: undefined }, 0, 2026);
+    expect(SOCIAL_SECURITY_WAGE_BASE[2026]).toBe(184_500);
+    expect(e.socialSecurity).toBeCloseTo(184_500 * SOCIAL_SECURITY_RATE, 2);
+    expect(e.notes.join(' ')).not.toMatch(/charged on everything/i);
+  });
+
+  it('lets a typed figure win over the table', () => {
+    const e = estimateTaxForYear(200_000, 0, { ...base, socialSecurityWageBase: 150_000 }, 0, 2026);
+    expect(e.socialSecurity).toBeCloseTo(150_000 * SOCIAL_SECURITY_RATE, 2);
+  });
+
+  it('does not guess a year it has no figure for', () => {
+    const e = estimateTaxForYear(200_000, 0, { ...base, socialSecurityWageBase: undefined }, 0, 2031);
+    expect(e.socialSecurity).toBeCloseTo(200_000 * SOCIAL_SECURITY_RATE, 2);
+    expect(e.notes.join(' ')).toMatch(/2031/);
   });
 });
 

@@ -372,7 +372,7 @@ export default function MoneyPage() {
       if (resolveEmployer(job.client, data.employers)?.workerStatus === '1099') selfEmployed += earned;
       else w2 += earned;
     }
-    return { year, w2, selfEmployed, estimate: estimateYearFromEarnings(w2, selfEmployed, prefs.payer.tax ?? {}) };
+    return { year, w2, selfEmployed, estimate: estimateYearFromEarnings(w2, selfEmployed, prefs.payer.tax ?? {}, Number(year)) };
   }, [data.jobs, data.employers, prefs.payer]);
 
   const [addOpen, setAddOpen] = useState(false);

@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Trash2, AlertTriangle } from 'lucide-react';
-import { FILING_STATUS_LABELS, type FilingStatus } from '@/lib/taxEstimate';
+import { FILING_STATUS_LABELS, SOCIAL_SECURITY_WAGE_BASE, type FilingStatus } from '@/lib/taxEstimate';
 import type { LocalRates } from '@/lib/payerProfile';
 import { cn } from '@/lib/utils';
 
@@ -11,10 +11,10 @@ import { cn } from '@/lib/utils';
  * The numbers that are yours rather than any employer's, and the ones that
  * belong to your local.
  *
- * Nothing here is guessed on your behalf. Rates that change every year — the
- * Social Security wage base, the dependent credits — are fields with the
- * figure visible, because a value baked into the app would go stale in
- * January and quietly keep being used.
+ * Nothing here is guessed on your behalf. The dependent credits change every
+ * year, so they are fields with the figure visible. The Social Security wage
+ * base is published by the SSA for each year, so a blank field uses that
+ * year's figure — and says which — rather than charging on everything.
  */
 
 const FIELD = 'h-9 text-sm text-mono';
@@ -32,6 +32,9 @@ export default function TaxAndLocalsSettings() {
     const n = parseFloat(v);
     return Number.isFinite(n) ? n : undefined;
   };
+
+  const thisYear = new Date().getFullYear();
+  const ssaBase = SOCIAL_SECURITY_WAGE_BASE[thisYear];
 
   const setLocal = (index: number, patch: Partial<LocalRates>) =>
     setPayer({ ...payer, locals: payer.locals.map((l, i) => (i === index ? { ...l, ...patch } : l)) });
@@ -113,11 +116,17 @@ export default function TaxAndLocalsSettings() {
             </label>
             <label className="flex flex-col gap-1">
               <span className={LABEL}>Soc. Sec. wage base</span>
-              <Input type="number" className={FIELD} placeholder="176100"
+              <Input type="number" className={FIELD} placeholder={ssaBase ? String(ssaBase) : ''}
                 value={tax.socialSecurityWageBase ?? ''}
                 onChange={e => setTax({ socialSecurityWageBase: num(e.target.value) })} />
             </label>
           </div>
+
+          <p className="text-[10px] text-muted-foreground">
+            Social Security only comes out of the first {ssaBase ? <>${ssaBase.toLocaleString()}</> : 'part'} you earn in {thisYear} —
+            past that it stops until January. Medicare never stops. Leave it blank to use the
+            SSA's figure for each year.
+          </p>
 
           <div className="grid grid-cols-2 gap-2">
             <label className="flex flex-col gap-1">
@@ -134,8 +143,8 @@ export default function TaxAndLocalsSettings() {
             </label>
           </div>
           <p className="text-[10px] text-muted-foreground">
-            The wage base and the credits change every year — they are fields rather than
-            built in, so they can be kept right.
+            The credits change every year — they are fields rather than built in, so they
+            can be kept right.
           </p>
 
           {/* Exempt, and what it does not cover. */}
