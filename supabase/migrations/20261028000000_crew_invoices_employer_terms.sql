@@ -27,10 +27,10 @@ create table if not exists public.crew (
   deleted_at  timestamptz
 );
 
--- A crew member's scheduled shift, and the hours they actually worked. The
--- crew and project references are not foreign keys: a device can delete a
--- member or a shift before the other side has synced, and a hard reference
--- would refuse the whole batch over it.
+-- A crew member's scheduled shift, the hours they actually worked, and the
+-- payment that settled it, once paid. The crew, project and payment
+-- references are not foreign keys: a device can delete one before the other
+-- side has synced, and a hard reference would refuse the whole batch over it.
 create table if not exists public.crew_shifts (
   id           uuid primary key,
   user_id      uuid not null references auth.users(id) on delete cascade,
@@ -43,13 +43,15 @@ create table if not exists public.crew_shifts (
   notes        text,
   hours_worked numeric,
   rate         numeric,
+  payout_id    uuid,
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
   modified_at  timestamptz,
   deleted_at   timestamptz
 );
 
--- Invoices, for 1099 work and for billing as a boss.
+-- Invoices, for 1099 work and for billing as a boss. Marking one paid records
+-- a payment for each project it billed; their ids are kept to undo it.
 create table if not exists public.invoices (
   id             uuid primary key,
   user_id        uuid not null references auth.users(id) on delete cascade,
@@ -62,7 +64,7 @@ create table if not exists public.invoices (
   lines          jsonb not null default '[]'::jsonb,
   notes          text,
   status         text not null default 'draft' check (status in ('draft', 'sent', 'paid')),
-  paid_income_id uuid,
+  paid_income_ids jsonb not null default '[]'::jsonb,
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now(),
   modified_at    timestamptz,

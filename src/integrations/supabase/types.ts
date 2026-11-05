@@ -206,6 +206,111 @@ export type Database = {
         }
         Relationships: []
       }
+      crew: {
+        Row: {
+          bill_rate: number | null
+          created_at: string
+          deleted_at: string | null
+          email: string | null
+          id: string
+          modified_at: string | null
+          name: string
+          notes: string | null
+          pay_rate: number | null
+          phone: string | null
+          role: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          bill_rate?: number | null
+          created_at?: string
+          deleted_at?: string | null
+          email?: string | null
+          id: string
+          modified_at?: string | null
+          name: string
+          notes?: string | null
+          pay_rate?: number | null
+          phone?: string | null
+          role?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          bill_rate?: number | null
+          created_at?: string
+          deleted_at?: string | null
+          email?: string | null
+          id?: string
+          modified_at?: string | null
+          name?: string
+          notes?: string | null
+          pay_rate?: number | null
+          phone?: string | null
+          role?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      crew_shifts: {
+        Row: {
+          created_at: string
+          crew_id: string
+          date: string
+          deleted_at: string | null
+          end_time: string | null
+          hours_worked: number | null
+          id: string
+          job_id: string | null
+          modified_at: string | null
+          notes: string | null
+          payout_id: string | null
+          place: string | null
+          rate: number | null
+          start_time: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          crew_id: string
+          date: string
+          deleted_at?: string | null
+          end_time?: string | null
+          hours_worked?: number | null
+          id: string
+          job_id?: string | null
+          modified_at?: string | null
+          notes?: string | null
+          payout_id?: string | null
+          place?: string | null
+          rate?: number | null
+          start_time?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          crew_id?: string
+          date?: string
+          deleted_at?: string | null
+          end_time?: string | null
+          hours_worked?: number | null
+          id?: string
+          job_id?: string | null
+          modified_at?: string | null
+          notes?: string | null
+          payout_id?: string | null
+          place?: string | null
+          rate?: number | null
+          start_time?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       employers: {
         Row: {
           created_at: string
@@ -218,6 +323,7 @@ export type Database = {
           dismissed_suggestions: Json | null
           doubletime_multiplier: number | null
           estimated_tax_percent: number | null
+          first_check_weeks: number | null
           id: string
           meal_penalty_after_hours: number | null
           modified_at: string | null
@@ -229,6 +335,7 @@ export type Database = {
           notes: string | null
           overtime_multiplier: number | null
           overtime_rule: string
+          pay_lag_days: number | null
           pay_schedule: string | null
           payroll_company: string | null
           post_meal_minimum_hours: number | null
@@ -244,6 +351,7 @@ export type Database = {
           updated_at: string
           user_id: string
           vacation_percent: number | null
+          w4_exempt: boolean | null
           weekly_overtime_threshold_hours: number | null
           worker_status: string | null
         }
@@ -258,6 +366,7 @@ export type Database = {
           dismissed_suggestions?: Json | null
           doubletime_multiplier?: number | null
           estimated_tax_percent?: number | null
+          first_check_weeks?: number | null
           id?: string
           meal_penalty_after_hours?: number | null
           modified_at?: string | null
@@ -269,6 +378,7 @@ export type Database = {
           notes?: string | null
           overtime_multiplier?: number | null
           overtime_rule?: string
+          pay_lag_days?: number | null
           pay_schedule?: string | null
           payroll_company?: string | null
           post_meal_minimum_hours?: number | null
@@ -284,6 +394,7 @@ export type Database = {
           updated_at?: string
           user_id: string
           vacation_percent?: number | null
+          w4_exempt?: boolean | null
           weekly_overtime_threshold_hours?: number | null
           worker_status?: string | null
         }
@@ -298,6 +409,7 @@ export type Database = {
           dismissed_suggestions?: Json | null
           doubletime_multiplier?: number | null
           estimated_tax_percent?: number | null
+          first_check_weeks?: number | null
           id?: string
           meal_penalty_after_hours?: number | null
           modified_at?: string | null
@@ -309,6 +421,7 @@ export type Database = {
           notes?: string | null
           overtime_multiplier?: number | null
           overtime_rule?: string
+          pay_lag_days?: number | null
           pay_schedule?: string | null
           payroll_company?: string | null
           post_meal_minimum_hours?: number | null
@@ -324,6 +437,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
           vacation_percent?: number | null
+          w4_exempt?: boolean | null
           weekly_overtime_threshold_hours?: number | null
           worker_status?: string | null
         }
@@ -709,6 +823,63 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      invoices: {
+        Row: {
+          client: string
+          client_address: string | null
+          client_email: string | null
+          created_at: string
+          deleted_at: string | null
+          due_date: string | null
+          id: string
+          issue_date: string
+          lines: Json
+          modified_at: string | null
+          notes: string | null
+          number: string
+          paid_income_ids: Json
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          client: string
+          client_address?: string | null
+          client_email?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          due_date?: string | null
+          id: string
+          issue_date: string
+          lines?: Json
+          modified_at?: string | null
+          notes?: string | null
+          number: string
+          paid_income_ids?: Json
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          client?: string
+          client_address?: string | null
+          client_email?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          due_date?: string | null
+          id?: string
+          issue_date?: string
+          lines?: Json
+          modified_at?: string | null
+          notes?: string | null
+          number?: string
+          paid_income_ids?: Json
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       jobs: {
         Row: {
