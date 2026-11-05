@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { sameProject, projectSiblingsToRelabel } from './projectGrouping';
-import type { Job } from './store';
+import { sameProject, projectSiblingsToRelabel, projectKeys, projectOf } from './projectGrouping';
+import type { Employer, Job } from './store';
 
 const job = (extra: Partial<Job>): Job => ({
   id: 'x', name: 'Portola Fest', client: 'Blackpoint', venue: 'Pier 80',
@@ -70,5 +70,58 @@ describe('projectSiblingsToRelabel', () => {
 
   it('offers nothing when there was no employer to change from', () => {
     expect(projectSiblingsToRelabel(run[0], '', run)).toEqual([]);
+  });
+});
+
+describe('projectKeys: one answer for every screen', () => {
+  const key = (jobs: Job[], employers: Employer[] = []) => {
+    const keys = projectKeys(jobs, employers);
+    return (id: string) => keys.get(id);
+  };
+
+  it('joins a day typed in by hand to the dispatched run it belongs to', () => {
+    const of = key([
+      job({ id: 'a', name: 'Palace Hotel', jobNumber: '2026-3943', date: '2026-10-24' }),
+      job({ id: 'b', name: 'palace hotel ', date: '2026-10-25' }),
+    ]);
+    expect(of('b')).toBe(of('a'));
+  });
+
+  it('keeps two different dispatch numbers apart', () => {
+    const of = key([
+      job({ id: 'a', jobNumber: '2026-2956' }),
+      job({ id: 'b', jobNumber: '2026-3011', date: '2026-09-22' }),
+    ]);
+    expect(of('a')).not.toBe(of('b'));
+  });
+
+  it('does not reach a run weeks away', () => {
+    const of = key([
+      job({ id: 'a', jobNumber: '2026-2956', date: '2026-09-01' }),
+      job({ id: 'b', date: '2026-10-20' }),
+    ]);
+    expect(of('b')).not.toBe(of('a'));
+  });
+
+  it('reads the employer the way pay does, so its spellings agree', () => {
+    const blackpoint = { id: 'e1', name: 'Blackpoint', overtimeRule: 'daily', createdAt: 'x' } as Employer;
+    const of = key([
+      job({ id: 'a', client: 'Blackpoint' }),
+      job({ id: 'b', client: 'BLACKPOINT PRODUCTION INC.', date: '2026-09-22' }),
+    ], [blackpoint]);
+    expect(of('a')).toBe(of('b'));
+  });
+
+  it('leaves a shift with no name and no number on its own', () => {
+    const of = key([job({ id: 'a', name: '' }), job({ id: 'b', name: '' })]);
+    expect(of('a')).not.toBe(of('b'));
+  });
+
+  it('gives the pay matcher the same project', () => {
+    const jobs = [
+      job({ id: 'a', name: 'Palace Hotel', jobNumber: '2026-3943', date: '2026-10-24' }),
+      job({ id: 'b', name: 'Palace Hotel', date: '2026-10-25' }),
+    ];
+    expect(projectOf(jobs[1], jobs).map(j => j.id).sort()).toEqual(['a', 'b']);
   });
 });

@@ -30,6 +30,13 @@ export interface ParsedIncome {
 }
 
 /** The shift a payment was matched to, and every reason it was picked. */
+/** A pay stub read on its own — no check, no deposit in the picture. */
+export function looksLikeStubOnly(txn: ParsedIncome): boolean {
+  const what = (txn.description ?? '').toLowerCase();
+  return /\b(stub|earnings statement|payroll advice|pay statement)\b/.test(what)
+    && !/\b(check|cheque|deposit|deposited|direct deposit|ach|transfer)\b/.test(what);
+}
+
 export interface PaymentLink {
   job: Job | null;
   reasons: string[];
@@ -113,6 +120,8 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
   const [links, setLinks] = useState<PaymentLink[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [leftOut, setLeftOut] = useState<LeftOut[]>([]);
+  // Rows that are a pay stub and nothing more: what is coming, not money in.
+  const [stubOnly, setStubOnly] = useState<Set<number>>(new Set());
   // The photo as it was sent — after any black bars — so what is on screen is
   // exactly what the reader saw.
   const [preview, setPreview] = useState<string | null>(null);
@@ -123,7 +132,7 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
   const dragCounter = useRef(0);
 
   const reset = () => {
-    setTransactions([]); setLinks([]); setSelected(new Set()); setLeftOut([]);
+    setTransactions([]); setLinks([]); setSelected(new Set()); setLeftOut([]); setStubOnly(new Set());
     setPreview(null); setEditing(null); setPhotoBig(false);
   };
 
@@ -171,6 +180,10 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
         recorded: repeats[i] === undefined ? alreadyRecorded(t, data.income) : undefined,
       }));
       setTransactions(txns);
+      // A stub on its own says the money is coming; with its check or a
+      // deposit, the money is in. Only a guess to start from — each row can
+      // be switched.
+      setStubOnly(new Set(txns.map((t, i) => (looksLikeStubOnly(t) ? i : -1)).filter(i => i >= 0)));
       setLeftOut(flags);
       setLinks(txns.map(t => findLinkedJob(t, data.jobs)));
       setSelected(new Set(txns.map((_, i) => i).filter(i => flags[i].repeatOf === undefined && !flags[i].recorded)));
@@ -212,7 +225,7 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
           description: txn.description,
           amount: Math.abs(txn.amount),
           date: txn.date,
-          status: 'paid',
+          status: stubOnly.has(i) ? 'pending' : 'paid',
           invoiceNumber: txn.invoiceNumber || undefined,
           jobId: links[i]?.job?.id || undefined,
         });
@@ -330,6 +343,29 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
                         <span className="font-bold text-mono text-success text-sm">+${Math.abs(txn.amount).toLocaleString()}</span>
                         <span className="ml-auto text-[10px] text-mono text-muted-foreground">{on ? 'will be added' : 'left out'}</span>
                       </button>
+
+                      {on && (
+                        <div className="mt-2 grid grid-cols-2 gap-1.5">
+                          {([
+                            { stub: false, label: 'Money in' },
+                            { stub: true, label: 'Stub only — not in yet' },
+                          ]).map(({ stub, label }) => (
+                            <button
+                              key={label}
+                              type="button"
+                              aria-pressed={stubOnly.has(i) === stub}
+                              onClick={() => setStubOnly(prev => {
+                                const next = new Set(prev);
+                                if (stub) next.add(i); else next.delete(i);
+                                return next;
+                              })}
+                              className={cn('pixel-button px-1 py-1 text-[10px] font-bold', stubOnly.has(i) === stub ? 'pick-on' : 'pick-off')}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
 
                       <div className="mt-2 grid gap-x-3 gap-y-2 sm:grid-cols-2">
                         <div className="min-w-0">

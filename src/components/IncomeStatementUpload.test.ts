@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findLinkedJob, type ParsedIncome } from './IncomeStatementUpload';
+import { findLinkedJob, looksLikeStubOnly, type ParsedIncome } from './IncomeStatementUpload';
 import type { Job } from '@/lib/store';
 
 const shift = (id: string, date: string, extra: Partial<Job> = {}): Job => ({
@@ -40,5 +40,17 @@ describe('which shift a payment paid, and why', () => {
     // own payment — and would have said so.
     const link = findLinkedJob(paid({ client: '', description: '' }), jobs);
     expect(link.reasons.join(' ')).not.toMatch(/Paid by|Names/);
+  });
+});
+
+describe('a stub is not the money', () => {
+  it('reads a stub on its own as coming, not in', () => {
+    expect(looksLikeStubOnly({ client: 'EP', description: 'Pay stub — Odeum', amount: 812, date: '2026-10-30' })).toBe(true);
+    expect(looksLikeStubOnly({ client: 'EP', description: 'Earnings statement', amount: 812, date: '2026-10-30' })).toBe(true);
+  });
+
+  it('reads a stub with its check, or a deposit, as money in', () => {
+    expect(looksLikeStubOnly({ client: 'EP', description: 'Pay stub and check', amount: 812, date: '2026-10-30' })).toBe(false);
+    expect(looksLikeStubOnly({ client: 'EP', description: 'Direct deposit', amount: 812, date: '2026-10-30' })).toBe(false);
   });
 });

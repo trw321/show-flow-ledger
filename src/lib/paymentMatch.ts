@@ -2,6 +2,7 @@ import { differenceInCalendarDays, format, parseISO } from 'date-fns';
 import type { Employer, Job } from './store';
 import { effectiveHoursWorked, jobPayBreakdown } from './payCalc';
 import { EMPTY_PROFILE, type PayerProfile } from './payerProfile';
+import { projectKeysFor, projectOf as projectOfShift } from './projectGrouping';
 
 /** A payment as read off a stub or a check, or typed in. */
 export interface FoundPayment {
@@ -49,14 +50,9 @@ function sameName(a?: string, b?: string): boolean {
   return x.split(' ').some(w => w.length > 3 && words.has(w));
 }
 
-/** Every shift in the same project as this one: the same job number, or the same name and employer. */
-export function projectOf(job: Job, allJobs: Job[]): Job[] {
-  const key = projectKey(job);
-  return allJobs.filter(j => projectKey(j) === key);
-}
-
-function projectKey(j: Job): string {
-  return j.jobNumber?.trim() || `${(j.name ?? '').trim().toLowerCase()}|${j.client ?? ''}`;
+/** Every shift in the same project as this one — see projectGrouping. */
+export function projectOf(job: Job, allJobs: Job[], employers: Employer[] = []): Job[] {
+  return projectOfShift(job, allJobs, employers);
 }
 
 /**
@@ -166,8 +162,8 @@ export function matchPaymentToProject(payment: FoundPayment, project: Job[], ctx
  * stub for last week's job, opened on this week's shift, says so.
  */
 export function betterProject(payment: FoundPayment, current: Job, ctx: MatchContext): { project: Job[]; match: ProjectMatch } | null {
-  const here = matchPaymentToProject(payment, projectOf(current, ctx.allJobs), ctx);
-  const best = bestOf(payment, ctx, projectKey(current));
+  const here = matchPaymentToProject(payment, projectOf(current, ctx.allJobs, ctx.employers), ctx);
+  const best = bestOf(payment, ctx, projectKeysFor(ctx.allJobs, ctx.employers).get(current.id));
   return best && best.match.percent >= here.percent + 20 && best.match.level !== 'low' ? best : null;
 }
 
@@ -182,15 +178,16 @@ export function bestProjectFor(payment: FoundPayment, ctx: MatchContext): { proj
 
 function bestOf(payment: FoundPayment, ctx: MatchContext, skipKey?: string): { project: Job[]; match: ProjectMatch } | null {
   const seen = new Set<string>(skipKey ? [skipKey] : []);
+  const keys = projectKeysFor(ctx.allJobs, ctx.employers);
   let best: { project: Job[]; match: ProjectMatch } | null = null;
   for (const job of ctx.allJobs) {
-    const key = projectKey(job);
+    const key = keys.get(job.id) ?? job.id;
     if (seen.has(key)) continue;
     seen.add(key);
     if (effectiveHoursWorked(job) <= 0) continue;
     const gap = differenceInCalendarDays(parseISO(payment.date), parseISO(job.date));
     if (Number.isNaN(gap) || gap < -7 || gap > 45) continue;
-    const project = projectOf(job, ctx.allJobs);
+    const project = projectOf(job, ctx.allJobs, ctx.employers);
     const match = matchPaymentToProject(payment, project, ctx);
     if (!best || match.percent > best.match.percent) best = { project, match };
   }

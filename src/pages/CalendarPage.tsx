@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react';
-import { sameProject } from '@/lib/projectGrouping';
+import { sameProject, projectKeysFor } from '@/lib/projectGrouping';
 import { isCallbackShift } from '@/lib/hoursMatching';
 import { projectSiblingsToRelabel } from '@/lib/projectGrouping';
 import StubEditor from '@/components/StubEditor';
@@ -238,11 +238,6 @@ function SplitMark({ job, allJobs }: { job: Job; allJobs: Job[] }) {
  * a cheque only shows what arrived, and a figure typed in by hand has had
  * nothing checked against a document at all — so they cannot be the same mark.
  */
-/** One project: the same job number, or the same name and employer. */
-function projectGroupKey(j: Job): string {
-  return j.jobNumber?.trim() || `${j.name}__${j.client}`;
-}
-
 /** How a payment came in, as the money icon it is shown with. */
 function paymentIcon(i: Income): { Icon: typeof Wallet; label: string } {
   if (i.enteredByHand) return { Icon: PenLine, label: 'Added by hand' };
@@ -537,10 +532,13 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   // A payment usually covers the whole project, and may have been recorded
   // against any of its days, so the project is what pay is matched against
   // and what its payments are listed for.
-  const project = useMemo(() => projectOf(job, data.jobs), [job, data.jobs]);
+  const project = useMemo(() => projectOf(job, data.jobs, data.employers), [job, data.jobs, data.employers]);
+  // Money in, and money on its way: a pay stub says what is coming, it is
+  // not the money — so it waits here, marked as such, until the money lands.
   const projectPayments = useMemo(() => {
     const ids = new Set(project.map(j => j.id));
-    return data.income.filter(i => i.jobId && ids.has(i.jobId) && i.status === 'paid').sort((a, b) => a.date.localeCompare(b.date));
+    return data.income.filter(i => i.jobId && ids.has(i.jobId) && (i.status === 'paid' || i.status === 'pending'))
+      .sort((a, b) => a.date.localeCompare(b.date));
   }, [project, data.income]);
   const matchCtx = useMemo(() => ({
     allJobs: data.jobs,
@@ -581,13 +579,17 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
       description: kind === 'stub' ? 'Pay stub' : kind === 'check' ? 'Check' : 'Added by hand',
       amount,
       date: payDate,
-      status: 'paid',
+      status: kind === 'stub' ? 'pending' : 'paid',
       paymentMethod: kind === 'check' ? 'check' : kind ? undefined : payMethod,
       enteredByHand: kind ? undefined : true,
     });
-    toast.success(`$${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} recorded for ${target.name}`);
-    setPayRain(true);
-    setTimeout(() => setPayRain(false), 2100);
+    if (kind === 'stub') {
+      toast.success(`Stub in — $${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} on its way for ${target.name}. Tap Money in when it lands.`);
+    } else {
+      toast.success(`$${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} recorded for ${target.name}`);
+      setPayRain(true);
+      setTimeout(() => setPayRain(false), 2100);
+    }
     closePay();
   };
 
@@ -940,7 +942,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           <div className="pixel-panel p-3 space-y-2">
             {projectPayments.length > 0 && (
               <div className="space-y-1">
-                <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground">Paid{project.length > 1 ? ' · this project' : ''}</p>
+                <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground">Pay{project.length > 1 ? ' · this project' : ''}</p>
                 {/* The same payment recorded more than once — the same amount, day
                     and way in — is shown once, with how many times, and the extras
                     can go in a tap. Old money-bag taps left runs of these behind. */}
@@ -948,8 +950,17 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                   return (
                     <div key={i.id} className="flex items-center gap-2 text-xs">
                       <PayIcon income={i} className="text-muted-foreground" />
-                      <span className="font-bold text-mono text-dot-paid">${i.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      <span className={cn('font-bold text-mono', i.status === 'paid' ? 'text-dot-paid' : 'text-dot-pending')}>${i.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                       <span className="text-muted-foreground text-mono">{format(new Date(i.date + 'T12:00:00'), 'MMM d')}</span>
+                      {i.status === 'pending' && (
+                        <>
+                          <span className="text-[10px] text-mono text-dot-pending">{/stub/i.test(i.description) ? 'stub · not in yet' : 'not in yet'}</span>
+                          <button type="button" className="pixel-button pick-off px-1.5 py-0.5 text-[10px] font-bold"
+                            onClick={() => { void updateIncome(i.id, { status: 'paid' }); for (const r of repeats) void updateIncome(r.id, { status: 'paid' }); }}>
+                            Money in
+                          </button>
+                        </>
+                      )}
                       {repeats.length > 0 && (
                         <button type="button" className="pixel-button pick-off px-1.5 py-0.5 text-[10px] font-bold text-warning"
                           title="The same payment recorded more than once"
@@ -2015,13 +2026,33 @@ export default function CalendarPage() {
     return map;
   }, [data.events]);
 
+  // Which project each shift is on — one answer, shared with the pay matcher.
+  const projectKeyOf = useMemo(() => projectKeysFor(data.jobs, data.employers), [data.jobs, data.employers]);
+  const projectGroupKey = (j: Job) => projectKeyOf.get(j.id) ?? j.id;
+
+  // Paid shifts. A payment pays its project, not only the day it was put
+  // against: one check for a two-day gig turns both days green. It covers
+  // the days worked up to the day it came — a run paid weekly keeps its
+  // later days waiting until their own pay is in.
   const paidJobIds = useMemo(() => {
     const set = new Set<string>();
+    const jobById = new Map(data.jobs.map(j => [j.id, j]));
+    const paidThrough = new Map<string, string>();
     for (const income of data.income) {
-      if (income.status === 'paid' && income.jobId) set.add(income.jobId);
+      if (income.status !== 'paid' || !income.jobId) continue;
+      set.add(income.jobId);
+      const job = jobById.get(income.jobId);
+      if (!job) continue;
+      const key = projectKeyOf.get(job.id) ?? job.id;
+      const through = paidThrough.get(key);
+      if (!through || income.date > through) paidThrough.set(key, income.date);
+    }
+    for (const j of data.jobs) {
+      const through = paidThrough.get(projectKeyOf.get(j.id) ?? j.id);
+      if (through && j.date <= through && effectiveHoursWorked(j) > 0) set.add(j.id);
     }
     return set;
-  }, [data.income]);
+  }, [data.jobs, data.income, projectKeyOf]);
 
   // ── Pay, by project ───────────────────────────────────────────────────────
   // The calendar is where jobs and their pay live together now: each project
@@ -2029,15 +2060,14 @@ export default function CalendarPage() {
   // longest wait is called out at the top, and payments that came in with no
   // shift are here to be linked.
   const incomeByProject = useMemo(() => {
-    const projectOfJob = new Map(data.jobs.map(j => [j.id, projectGroupKey(j)]));
     const map = new Map<string, Income[]>();
     for (const i of data.income) {
-      const k = i.jobId ? projectOfJob.get(i.jobId) : undefined;
+      const k = i.jobId ? projectKeyOf.get(i.jobId) : undefined;
       if (!k) continue;
       map.set(k, [...(map.get(k) ?? []), i]);
     }
     return map;
-  }, [data.jobs, data.income]);
+  }, [projectKeyOf, data.income]);
 
   // The first day worked for each employer: where a slow first check's wait
   // starts from.
@@ -2082,7 +2112,7 @@ export default function CalendarPage() {
     return waiting.sort((a, b) => a.due.localeCompare(b.due));
     // payDueFor reads firstDayAt, listed here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.jobs, data.employers, incomeByProject, prefs.payer, firstDayAt]);
+  }, [data.jobs, data.employers, incomeByProject, prefs.payer, firstDayAt, projectKeyOf]);
   const oldestWaiting = waitingOnPay[0];
   const daysPastDue = oldestWaiting ? differenceInCalendarDays(new Date(), parseISO(oldestWaiting.due)) : 0;
   const payTier: PayTimingTier = oldestWaiting ? payTimingTier(daysPastDue) : 'none';
@@ -2107,12 +2137,12 @@ export default function CalendarPage() {
       for (const i of setAside) await updateIncome(i.id, { status: 'paid' });
       rain();
       const back = setAside.reduce((sum, i) => sum + i.amount, 0);
-      undoToast(`Paid again — your $${back.toLocaleString(undefined, { minimumFractionDigits: 2 })} is back`, () => {
+      undoToast(`Money in — $${back.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, () => {
         for (const i of setAside) void updateIncome(i.id, { status: 'pending' });
       });
       return;
     }
-    const worked = projectOf(lead, data.jobs).filter(j => effectiveHoursWorked(j) > 0 && j.date <= localToday());
+    const worked = projectOf(lead, data.jobs, data.employers).filter(j => effectiveHoursWorked(j) > 0 && j.date <= localToday());
     const amount = Math.round(worked.reduce((sum, j) => sum + jobPayBreakdown(j, data.jobs, data.employers, prefs.payer).net, 0) * 100) / 100;
     if (worked.length === 0 || amount <= 0) {
       // Nothing to estimate from: the shift itself has Add pay.
@@ -2711,7 +2741,28 @@ export default function CalendarPage() {
                       {job.startTime && !job.endTime && (
                         <p className="text-[10px] text-warning font-medium">⚠ No end time set — tap to add it</p>
                       )}
-                      <p className="text-[10px] opacity-40 text-mono">Tap for details →</p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[10px] opacity-40 text-mono">Tap for details →</p>
+                        {/* Pay for the day's project, without opening it. */}
+                        {job.date <= localToday() && effectiveHoursWorked(job) > 0 && (() => {
+                          const recorded = incomeByProject.get(projectGroupKey(job)) ?? [];
+                          if (paid) {
+                            return (
+                              <button type="button" onClick={e => { e.stopPropagation(); void unmarkProjectPaid(job); }}
+                                className="pixel-button pick-off flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-foreground">
+                                <Undo2 size={12} /> Undo paid
+                              </button>
+                            );
+                          }
+                          const coming = recorded.some(i => i.status === 'pending');
+                          return (
+                            <button type="button" onClick={e => { e.stopPropagation(); void markProjectPaid(job); }}
+                              className="pixel-button pick-off flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-foreground">
+                              {coming ? <><Banknote size={12} /> Money in</> : <><Wallet size={12} /> Mark paid</>}
+                            </button>
+                          );
+                        })()}
+                      </div>
                     </div>
                   );
                 })}
@@ -2925,6 +2976,10 @@ export default function CalendarPage() {
                       </div>
                       {(() => {
                         const payments = (incomeByProject.get(key) ?? []).filter(i => i.status === 'paid');
+                        // Recorded but not in yet: a pay stub, or a payment set back.
+                        const coming = (incomeByProject.get(key) ?? []).filter(i => i.status === 'pending');
+                        const comingTotal = samePaymentGroups(coming).reduce((sum, g) => sum + g.first.amount, 0);
+                        const comingLabel = coming.some(i => /stub/i.test(i.description)) ? 'Stub in' : 'Recorded';
                         if (payments.length > 0) {
                           // Repeats of one payment are counted once here and flagged:
                           // the same $296 saved fifteen times is one $296.
@@ -2945,6 +3000,7 @@ export default function CalendarPage() {
                                 <span className="truncate">Paid ${total.toLocaleString(undefined, { minimumFractionDigits: 2 })} · {format(new Date(last + 'T12:00:00'), 'MMM d')}</span>
                                 {kinds.map(i => <PayIcon key={i.id} income={i} />)}
                                 {repeated > 0 && <span className="shrink-0 text-warning">· {repeated} repeated</span>}
+                                {comingTotal > 0 && <span className="shrink-0 text-dot-pending">· ${Math.round(comingTotal).toLocaleString()} coming</span>}
                               </button>
                               <button
                                 type="button"
@@ -2952,6 +3008,29 @@ export default function CalendarPage() {
                                 className="pixel-button pick-off flex shrink-0 items-center gap-1 px-2 py-1 text-[11px] font-bold"
                               >
                                 <Undo2 size={12} /> Undo
+                              </button>
+                            </div>
+                          );
+                        }
+                        if (coming.length > 0) {
+                          // A stub says the money is coming. It is not the money:
+                          // the project stays waiting until it lands.
+                          return (
+                            <div className="mt-2 flex items-center justify-between gap-2">
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); openJob(first); }}
+                                className="flex min-w-0 items-center gap-1.5 text-[11px] text-mono text-dot-pending hover:underline"
+                              >
+                                <Receipt size={12} className="shrink-0" />
+                                <span className="truncate">{comingLabel} · ${comingTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })} coming</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); void markProjectPaid(first); }}
+                                className="pixel-button pick-off px-2 py-1 text-[11px] font-bold"
+                              >
+                                <span className="inline-flex items-center gap-1"><Banknote size={12} /> Money in</span>
                               </button>
                             </div>
                           );
