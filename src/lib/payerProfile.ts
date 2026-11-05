@@ -12,7 +12,10 @@ import type { TaxProfile } from '@/lib/taxEstimate';
  *    shift. Already do.
  *  - UNION DUES and VACATION are the LOCAL's. IA16 takes 3.5%, IA8 nearer 4%,
  *    whoever you happen to be working for that week.
- *  - TAX is YOURS. It follows your bracket and your state, not any employer.
+ *  - WITHHOLDING is the EMPLOYER's: each withholds by the W-4 you filed with
+ *    it — exempt with one, a set percentage with another. Your own federal
+ *    rate is what an employer without one of its own is assumed to take, and
+ *    what the year-end estimate charges.
  *  - The 401k match, the night premium and the overtime rule are the
  *    employer's, and stay there.
  */
@@ -48,6 +51,16 @@ export function findLocalRates(profile: PayerProfile, localName?: string): Local
 }
 
 /**
+ * No federal income tax comes out of this employer's checks: 1099 work, or a
+ * W-4 filed exempt with it. Exempt used to be one switch for every employer,
+ * and an employer with no answer of its own still follows that switch.
+ */
+export function withholdsNothing(employer: Employer | undefined, profile?: PayerProfile): boolean {
+  if (employer?.workerStatus === '1099') return true;
+  return employer?.w4Exempt ?? profile?.tax?.federalExempt ?? false;
+}
+
+/**
  * The percentages to apply to one shift, from whichever source owns each.
  *
  * The employer is still consulted last for dues and vacation so that ledgers
@@ -63,13 +76,12 @@ export function ratesForShift(
   return {
     unionDuesPercent: fromLocal?.unionDuesPercent ?? employer?.unionDuesPercent,
     vacationPercent: fromLocal?.vacationPercent ?? employer?.vacationPercent,
-    // Exempt stops federal income tax withholding. It does not stop Social
-    // Security or Medicare — those are not modelled per shift, they are in
-    // the year-end estimate, which says so plainly.
-    // A 1099 employer withholds nothing; what is owed on it shows in the
-    // year-end estimate instead. Exempt stops federal withholding too.
-    estimatedTaxPercent: employer?.workerStatus === '1099' || profile.tax?.federalExempt
+    // Each employer withholds by its own W-4. Exempt stops federal income tax
+    // withholding, not Social Security or Medicare — those are in the
+    // year-end estimate, which says so plainly. A 1099 employer withholds
+    // nothing; what is owed on it shows in the year-end estimate instead.
+    estimatedTaxPercent: withholdsNothing(employer, profile)
       ? 0
-      : profile.tax?.federalEffectivePercent ?? employer?.estimatedTaxPercent,
+      : employer?.estimatedTaxPercent ?? profile.tax?.federalEffectivePercent,
   };
 }

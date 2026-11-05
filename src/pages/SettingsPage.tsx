@@ -17,6 +17,7 @@ import { Briefcase, FileText, Crown, SlidersHorizontal, Trash2, Plus, Pencil, X,
 import { formatDistanceToNow } from 'date-fns';
 import type { Employer } from '@/lib/store';
 import { ptoBalance } from '@/lib/pto';
+import { payScheduleLabel } from '@/lib/payTiming';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -73,14 +74,24 @@ interface EmployerFormState {
   ptoEarnHours: string;
   ptoPerHoursWorked: string;
   ptoStartingHours: string;
+  /** The W-4 filed with this employer says exempt. */
+  w4Exempt: boolean;
+  /** When they pay, as picked: weekly, bi-weekly, a slow first check, or anything else. */
+  schedule: 'weekly' | 'bi-weekly' | 'first-check' | 'other';
+  /** After a slow first check, the regular schedule. */
+  afterFirst: 'weekly' | 'bi-weekly';
+  firstCheckWeeks: string;
+  payLagDays: string;
 }
 
 const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '', nightPremiumEnabled: true, unionDuesPercent: '', unionLocal: '', estimatedTaxPercent: '', vacationPercent: '', retirementMatchPercent: '', payBy: 'hour', defaultDayRate: '', dayRateHours: '',
   // Breaking the hour is a union contract term. Some employers pay it and
   // some (Odeum) do not, so a new employer starts without it.
-  workerStatus: 'w2', breakTheHour: false, roles: [], ptoEarnHours: '', ptoPerHoursWorked: '', ptoStartingHours: '' };
+  workerStatus: 'w2', breakTheHour: false, roles: [], ptoEarnHours: '', ptoPerHoursWorked: '', ptoStartingHours: '',
+  w4Exempt: false, schedule: 'other', afterFirst: 'weekly', firstCheckWeeks: '3', payLagDays: '' };
 
-function employerToForm(e: Employer): EmployerFormState {
+/** `legacyExempt`: the old account-wide W-4 exempt switch, which an employer with no answer of its own still follows. */
+function employerToForm(e: Employer, legacyExempt = false): EmployerFormState {
   return {
     name: e.name,
     defaultHourlyRate: e.defaultHourlyRate?.toString() ?? '',
@@ -102,6 +113,13 @@ function employerToForm(e: Employer): EmployerFormState {
     ptoEarnHours: e.ptoEarnHours?.toString() ?? '',
     ptoPerHoursWorked: e.ptoPerHoursWorked?.toString() ?? '',
     ptoStartingHours: e.ptoStartingHours?.toString() ?? '',
+    w4Exempt: e.w4Exempt ?? legacyExempt,
+    schedule: e.firstCheckWeeks ? 'first-check'
+      : e.paySchedule === 'weekly' || e.paySchedule === 'bi-weekly' ? e.paySchedule
+      : 'other',
+    afterFirst: e.paySchedule === 'bi-weekly' ? 'bi-weekly' : 'weekly',
+    firstCheckWeeks: e.firstCheckWeeks?.toString() ?? '3',
+    payLagDays: e.payLagDays?.toString() ?? '',
   };
 }
 
@@ -119,6 +137,15 @@ function formTerms(form: EmployerFormState): Partial<Employer> {
     ptoEarnHours: num(form.ptoEarnHours),
     ptoPerHoursWorked: num(form.ptoPerHoursWorked),
     ptoStartingHours: num(form.ptoStartingHours),
+    // A W-4 is a W2 thing; 1099 withholds nothing either way.
+    w4Exempt: form.workerStatus === 'w2' ? form.w4Exempt : undefined,
+    // When they pay. Only the picked shape's numbers are kept, so a stale
+    // first-check delay cannot sit behind a plain weekly schedule.
+    paySchedule: form.schedule === 'first-check' ? form.afterFirst
+      : form.schedule === 'other' ? undefined
+      : form.schedule,
+    firstCheckWeeks: form.schedule === 'first-check' ? num(form.firstCheckWeeks) ?? 3 : undefined,
+    payLagDays: form.schedule === 'other' ? num(form.payLagDays) : undefined,
   };
 }
 
@@ -128,6 +155,8 @@ function EmployerForm({ initial, onSave, onCancel }: {
   onCancel: () => void;
 }) {
   const [form, setForm] = useState(initial);
+  const { prefs } = useUserPrefs();
+  const yourRate = prefs.payer.tax?.federalEffectivePercent;
   return (
     <div className="flex flex-col gap-2 p-3 rounded-xl border border-primary/30 bg-primary/5">
       <Input
@@ -151,6 +180,96 @@ function EmployerForm({ initial, onSave, onCancel }: {
             {status === 'w2' ? 'W2 — tax withheld' : '1099 — nothing withheld'}
           </button>
         ))}
+      </div>
+      {/* Tax is this employer's: the W-4 you filed with it says exempt or
+          not, and how much comes out. */}
+      {form.workerStatus === 'w2' ? (
+        <div className="space-y-1.5 pt-1">
+          <p className="text-xs">Federal tax this employer takes out</p>
+          <div className="grid grid-cols-2 gap-1.5">
+            {([
+              { exempt: false, label: 'Withheld' },
+              { exempt: true, label: 'W-4 exempt' },
+            ]).map(({ exempt, label }) => (
+              <button
+                key={label}
+                type="button"
+                aria-pressed={form.w4Exempt === exempt}
+                onClick={() => setForm(f => ({ ...f, w4Exempt: exempt }))}
+                className={cn('pixel-button py-1.5 text-[11px] font-bold', form.w4Exempt === exempt ? 'pick-on' : 'pick-off')}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {form.w4Exempt ? (
+            <p className="text-[10px] text-muted-foreground">
+              No federal income tax comes out. Social Security and Medicare still do, and the federal
+              tax is still owed when you file — Money counts it.
+            </p>
+          ) : (
+            <Input
+              type="number"
+              step="0.1"
+              min="0"
+              placeholder={yourRate ? `Withheld % — blank uses your ${yourRate}%` : 'Withheld % (e.g. 12)'}
+              value={form.estimatedTaxPercent}
+              onChange={e => setForm(f => ({ ...f, estimatedTaxPercent: e.target.value }))}
+              className="h-8 text-xs"
+            />
+          )}
+        </div>
+      ) : (
+        <p className="text-[10px] text-muted-foreground">Nothing is withheld. The tax on it shows on Money as still to pay.</p>
+      )}
+      {/* When they pay — so "waiting on pay" only sounds once it is late. */}
+      <div className="space-y-1.5 pt-1">
+        <p className="text-xs">When they pay</p>
+        <div className="grid grid-cols-4 gap-1.5">
+          {([
+            { id: 'weekly' as const, label: 'Weekly' },
+            { id: 'bi-weekly' as const, label: 'Bi-weekly' },
+            { id: 'first-check' as const, label: '3-wk start' },
+            { id: 'other' as const, label: 'Other' },
+          ]).map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={form.schedule === id}
+              onClick={() => setForm(f => ({ ...f, schedule: id }))}
+              className={cn('pixel-button px-1 py-1.5 text-[11px] font-bold', form.schedule === id ? 'pick-on' : 'pick-off')}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {form.schedule === 'first-check' && (
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span>First check</span>
+            <Input type="number" step="1" min="1" value={form.firstCheckWeeks}
+              onChange={e => setForm(f => ({ ...f, firstCheckWeeks: e.target.value }))} className="h-8 w-14 text-xs" />
+            <span>weeks after your first day, then</span>
+            {(['weekly', 'bi-weekly'] as const).map(after => (
+              <button
+                key={after}
+                type="button"
+                aria-pressed={form.afterFirst === after}
+                onClick={() => setForm(f => ({ ...f, afterFirst: after }))}
+                className={cn('pixel-button px-2 py-1 text-[11px] font-bold', form.afterFirst === after ? 'pick-on' : 'pick-off')}
+              >
+                {after}
+              </button>
+            ))}
+          </div>
+        )}
+        {form.schedule === 'other' && (
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span>Paid about</span>
+            <Input type="number" step="1" min="1" placeholder="21" value={form.payLagDays}
+              onChange={e => setForm(f => ({ ...f, payLagDays: e.target.value }))} className="h-8 w-14 text-xs" />
+            <span>days after the work — blank if you don't know</span>
+          </div>
+        )}
       </div>
       {/* How this employer pays. A day rate is a flat amount for the day,
           paid in full however short it was, with overtime past the hours it
@@ -267,16 +386,6 @@ function EmployerForm({ initial, onSave, onCancel }: {
           value={form.unionLocal}
           onChange={e => setForm(f => ({ ...f, unionLocal: e.target.value }))}
           className="h-8 text-xs"
-        />
-        <Input
-          type="number"
-          step="0.1"
-          min="0"
-          placeholder="Est. tax % (e.g. 20)"
-          value={form.estimatedTaxPercent}
-          onChange={e => setForm(f => ({ ...f, estimatedTaxPercent: e.target.value }))}
-          className="h-8 text-xs"
-          title="Rough estimate only — leave blank for 1099/self-employed work with no withholding"
         />
         <Input
           type="number"
@@ -534,7 +643,7 @@ export default function SettingsPage() {
       nightPremiumMultiplier: 2.0,
       unionDuesPercent: form.unionDuesPercent ? parseFloat(form.unionDuesPercent) : undefined,
       unionLocal: form.unionLocal.trim() || undefined,
-      estimatedTaxPercent: form.estimatedTaxPercent ? parseFloat(form.estimatedTaxPercent) : undefined,
+      estimatedTaxPercent: form.workerStatus === 'w2' && form.estimatedTaxPercent ? parseFloat(form.estimatedTaxPercent) : undefined,
       vacationPercent: form.vacationPercent ? parseFloat(form.vacationPercent) : undefined,
       retirementMatchPercent: form.retirementMatchPercent ? parseFloat(form.retirementMatchPercent) : undefined,
       // Only one of the two is the employer's way of paying; the other is
@@ -558,7 +667,7 @@ export default function SettingsPage() {
       nightPremiumMultiplier: 2.0,
       unionDuesPercent: form.unionDuesPercent ? parseFloat(form.unionDuesPercent) : undefined,
       unionLocal: form.unionLocal.trim() || undefined,
-      estimatedTaxPercent: form.estimatedTaxPercent ? parseFloat(form.estimatedTaxPercent) : undefined,
+      estimatedTaxPercent: form.workerStatus === 'w2' && form.estimatedTaxPercent ? parseFloat(form.estimatedTaxPercent) : undefined,
       vacationPercent: form.vacationPercent ? parseFloat(form.vacationPercent) : undefined,
       retirementMatchPercent: form.retirementMatchPercent ? parseFloat(form.retirementMatchPercent) : undefined,
       // Only one of the two is the employer's way of paying; the other is
@@ -714,7 +823,7 @@ export default function SettingsPage() {
             editingEmployerId === emp.id ? (
               <EmployerForm
                 key={emp.id}
-                initial={employerToForm(emp)}
+                initial={employerToForm(emp, !!prefs.payer.tax?.federalExempt)}
                 onSave={form => saveEditedEmployer(emp.id, form)}
                 onCancel={() => setEditingEmployerId(null)}
               />
@@ -732,6 +841,8 @@ export default function SettingsPage() {
                   </p>
                   <p className="text-[10px] text-mono text-foreground/75 mt-0.5">
                     {emp.workerStatus === '1099' ? '1099' : 'W2'}
+                    {emp.workerStatus !== '1099' && (emp.w4Exempt ? ' · W-4 exempt' : emp.estimatedTaxPercent ? ` · withholds ${emp.estimatedTaxPercent}%` : '')}
+                    {payScheduleLabel(emp) && ` · ${payScheduleLabel(emp)}`}
                     {emp.roundUpToWholeHours && ' · breaks the hour'}
                     {(emp.roles?.length ?? 0) > 0 && ` · ${emp.roles!.map(r => r.name).join(', ')}`}
                     {(() => {

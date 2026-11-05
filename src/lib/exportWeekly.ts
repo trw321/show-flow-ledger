@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import type { Job, Expense, Income, Employer } from './store';
 import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming } from './payCalc';
 import { resolveEmployer } from './employerMatch';
+import { withholdsNothing } from './payerProfile';
 
 interface JobPayDetails {
   grossPay: number;
@@ -30,7 +31,7 @@ function jobPayDetails(job: Job, allJobs: Job[], employers: Employer[]): JobPayD
     nightHours,
     nightMultiplier: employer?.nightPremiumMultiplier,
     unionDuesPercent: employer?.unionDuesPercent,
-    estimatedTaxPercent: employer?.estimatedTaxPercent,
+    estimatedTaxPercent: withholdsNothing(employer) ? 0 : employer?.estimatedTaxPercent,
   });
   const weeklyBonus = employer ? calculateWeeklyOvertimeBonus(job, allJobs, employer) : 0;
   const gross = totalPay + weeklyBonus;

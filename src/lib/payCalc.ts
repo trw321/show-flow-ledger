@@ -1,5 +1,5 @@
 import type { Job, Employer } from './store';
-import { ratesForShift, EMPTY_PROFILE, type PayerProfile } from './payerProfile';
+import { ratesForShift, withholdsNothing, EMPTY_PROFILE, type PayerProfile } from './payerProfile';
 import { parseDayTimeline, POST_MEAL_MINIMUM_HOURS } from './dayTimeline';
 import { parseISO, differenceInCalendarDays, startOfDay, startOfWeek, endOfWeek } from 'date-fns';
 import { resolveEmployer } from './employerMatch';
@@ -726,8 +726,9 @@ export function calculateExpectedPay(
     nightMultiplier: employer?.nightPremiumMultiplier ?? 2.0,
     roundUpToWholeHours: employer?.roundUpToWholeHours,
     unionDuesPercent: employer?.unionDuesPercent,
-    // A 1099 employer withholds nothing, so nothing comes off what it sends.
-    estimatedTaxPercent: employer?.workerStatus === '1099' ? 0 : employer?.estimatedTaxPercent,
+    // A 1099 employer withholds nothing, so nothing comes off what it sends;
+    // neither does one whose W-4 says exempt.
+    estimatedTaxPercent: withholdsNothing(employer) ? 0 : employer?.estimatedTaxPercent,
   };
 
   // Group by date

@@ -49,10 +49,18 @@ describe('which source owns which number', () => {
     expect(ratesForShift(job({ local: 'ia8' }), employer(), profile).unionDuesPercent).toBe(4);
   });
 
-  it('takes tax from you, not from the employer', () => {
-    // An employer holding a stale 35% does not override your own estimate.
-    const r = ratesForShift(job({ local: 'ia16' }), employer({ estimatedTaxPercent: 35 }), profile);
-    expect(r.estimatedTaxPercent).toBe(22);
+  it("withholds what the employer's W-4 says, per employer", () => {
+    const r = ratesForShift(job({ local: 'ia16' }), employer({ estimatedTaxPercent: 10 }), profile);
+    expect(r.estimatedTaxPercent).toBe(10);
+  });
+
+  it('uses your federal rate for an employer with none of its own', () => {
+    expect(ratesForShift(job({ local: 'ia16' }), employer(), profile).estimatedTaxPercent).toBe(22);
+  });
+
+  it('can be exempt with one employer and withheld at another', () => {
+    expect(ratesForShift(job(), employer({ w4Exempt: true, estimatedTaxPercent: 10 }), profile).estimatedTaxPercent).toBe(0);
+    expect(ratesForShift(job(), employer({ w4Exempt: false }), { ...profile, tax: { ...profile.tax, federalExempt: true } }).estimatedTaxPercent).toBe(22);
   });
 
   it('withholds nothing when the W2 was filed exempt', () => {

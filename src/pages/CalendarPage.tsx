@@ -20,7 +20,8 @@ import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Recei
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO, differenceInCalendarDays } from 'date-fns';
 import type { Job, CalendarEvent, Income } from '@/lib/store';
 import { matchPaymentToProject, betterProject, bestProjectFor, projectOf, type FoundPayment } from '@/lib/paymentMatch';
-import { getPayTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
+import { payDueDate, payTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
+import { ratesForShift } from '@/lib/payerProfile';
 import { alreadyRecorded } from '@/lib/paymentRepeats';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross, jobPayBreakdown, compareCalls } from '@/lib/payCalc';
@@ -713,14 +714,17 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   const minimumApplied = minHours > 0 && paidHours < minHours && paidHours > 0;
   const rate = parseFloat(hourlyRate) || 0;
   const mealPenaltyUnits = parseFloat(mealPenalties) || 0;
+  // Dues, vacation and withholding from whoever owns each — the local, the
+  // employer's W-4 — exactly as every other pay figure takes them.
+  const previewRates = ratesForShift(job, employer, prefs.payer);
   const payPreview = rate > 0 && billableHours > 0
-    ? calculateDayPay(actualHours, rate, minHours, mealPenaltyUnits, 1, { duration: mealDuration, onClock: mealOnClock, offClockMinutesTotal: offClockMealMins }, { nightHours, nightMultiplier: employer?.nightPremiumMultiplier, unionDuesPercent: employer?.unionDuesPercent, estimatedTaxPercent: employer?.estimatedTaxPercent })
+    ? calculateDayPay(actualHours, rate, minHours, mealPenaltyUnits, 1, { duration: mealDuration, onClock: mealOnClock, offClockMinutesTotal: offClockMealMins }, { nightHours, nightMultiplier: employer?.nightPremiumMultiplier, unionDuesPercent: previewRates.unionDuesPercent, estimatedTaxPercent: previewRates.estimatedTaxPercent })
     : null;
   // calculateDayPay's own breakdown stops at dues/tax — vacation is applied
   // on top of that (same as jobGross/jobPayBreakdown), so it needs its own
   // line here or this "paperwork" total silently disagrees with the net
   // figure shown everywhere else in the app.
-  const vacationPercent = employer?.vacationPercent ?? 0;
+  const vacationPercent = previewRates.vacationPercent ?? 0;
   const vacationAmount = payPreview && vacationPercent > 0 ? payPreview.totalPay * (vacationPercent / 100) : 0;
   const payPreviewTotal = (payPreview?.totalPay ?? 0) + vacationAmount;
 
@@ -2035,6 +2039,25 @@ export default function CalendarPage() {
     return map;
   }, [data.jobs, data.income]);
 
+  // The first day worked for each employer: where a slow first check's wait
+  // starts from.
+  const firstDayAt = useMemo(() => {
+    const first = new Map<string, string>();
+    for (const j of data.jobs) {
+      if (j.status === 'cancelled' || effectiveHoursWorked(j) <= 0) continue;
+      const e = resolveEmployer(j.client, data.employers);
+      if (e && (!first.has(e.id) || j.date < first.get(e.id)!)) first.set(e.id, j.date);
+    }
+    return first;
+  }, [data.jobs, data.employers]);
+
+  /** When a project's pay should be in, by its employer's schedule. */
+  const payDueFor = (jobs: Job[]) => {
+    const lastDay = jobs.reduce((last, j) => (j.date > last ? j.date : last), jobs[0].date);
+    const employer = resolveEmployer(jobs[0].client, data.employers);
+    return payDueDate(lastDay, employer, employer ? firstDayAt.get(employer.id) : undefined);
+  };
+
   const waitingOnPay = useMemo(() => {
     const todayKey = localToday();
     const groups = new Map<string, Job[]>();
@@ -2043,7 +2066,7 @@ export default function CalendarPage() {
       const k = projectGroupKey(j);
       groups.set(k, [...(groups.get(k) ?? []), j]);
     }
-    const waiting: { key: string; jobs: Job[]; lastDay: string; expected: number }[] = [];
+    const waiting: { key: string; jobs: Job[]; lastDay: string; due: string; expected: number }[] = [];
     for (const [key, jobs] of groups) {
       if ((incomeByProject.get(key) ?? []).some(i => i.status === 'paid')) continue;
       const sorted = [...jobs].sort(compareCalls);
@@ -2051,14 +2074,19 @@ export default function CalendarPage() {
         key,
         jobs: sorted,
         lastDay: sorted[sorted.length - 1].date,
+        due: payDueFor(sorted),
         expected: sorted.reduce((sum, j) => sum + jobPayBreakdown(j, data.jobs, data.employers, prefs.payer).net, 0),
       });
     }
-    return waiting.sort((a, b) => a.lastDay.localeCompare(b.lastDay));
-  }, [data.jobs, data.employers, incomeByProject, prefs.payer]);
+    // Most overdue first: the one the alert is about.
+    return waiting.sort((a, b) => a.due.localeCompare(b.due));
+    // payDueFor reads firstDayAt, listed here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.jobs, data.employers, incomeByProject, prefs.payer, firstDayAt]);
   const oldestWaiting = waitingOnPay[0];
-  const daysWaitingOnPay = oldestWaiting ? differenceInCalendarDays(new Date(), parseISO(oldestWaiting.lastDay)) : 0;
-  const payTier: PayTimingTier = oldestWaiting ? getPayTimingTier(daysWaitingOnPay) : 'none';
+  const daysPastDue = oldestWaiting ? differenceInCalendarDays(new Date(), parseISO(oldestWaiting.due)) : 0;
+  const payTier: PayTimingTier = oldestWaiting ? payTimingTier(daysPastDue) : 'none';
+  const overdueCount = waitingOnPay.filter(w => w.due <= localToday()).length;
   const totalWaiting = waitingOnPay.reduce((sum, w) => sum + w.expected, 0);
 
   const [rainActive, setRainActive] = useState(false);
@@ -2382,10 +2410,10 @@ export default function CalendarPage() {
           {payTier === 'blazing' && <span className="flame-flicker text-xl shrink-0">🔥</span>}
           <div className="min-w-0">
             <p className={cn('text-sm font-semibold', payTier === 'watching' ? 'text-primary' : payTier === 'warm' ? 'text-warning' : 'text-destructive')}>
-              {PAY_TIMING_LABELS[payTier]} — waiting on pay{waitingOnPay.length > 1 ? ` · ${waitingOnPay.length} projects` : ''}
+              {PAY_TIMING_LABELS[payTier]} — pay is late{overdueCount > 1 ? ` · ${overdueCount} projects` : ''}
             </p>
             <p className="text-xs font-body mt-0.5 text-muted-foreground truncate">
-              ${Math.round(totalWaiting).toLocaleString()} out · {daysWaitingOnPay}d since {oldestWaiting.jobs[0].name}
+              ${Math.round(totalWaiting).toLocaleString()} out · {oldestWaiting.jobs[0].name} was due {format(parseISO(oldestWaiting.due), 'MMM d')}{daysPastDue > 0 ? ` · ${daysPastDue}d late` : ''}
             </p>
           </div>
         </button>
@@ -2928,10 +2956,15 @@ export default function CalendarPage() {
                             </div>
                           );
                         }
-                        if (!jobs.some(j => j.date <= localToday() && effectiveHoursWorked(j) > 0)) return null;
+                        const worked = jobs.filter(j => j.date <= localToday() && effectiveHoursWorked(j) > 0);
+                        if (worked.length === 0) return null;
+                        const due = payDueFor(worked);
+                        const late = differenceInCalendarDays(new Date(), parseISO(due));
                         return (
                           <div className="mt-2 flex items-center justify-between gap-2">
-                            <p className="text-[11px] text-mono text-dot-pending">Waiting on pay</p>
+                            <p className={cn('text-[11px] text-mono', late > 0 ? 'text-warning' : 'text-dot-pending')}>
+                              Waiting on pay · {late > 0 ? `${late}d late` : `due ${format(parseISO(due), 'MMM d')}`}
+                            </p>
                             <button
                               type="button"
                               onClick={e => { e.stopPropagation(); void markProjectPaid(first); }}

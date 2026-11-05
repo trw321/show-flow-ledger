@@ -1,11 +1,11 @@
 import { useUserPrefs } from '@/lib/UserPrefsContext';
+import { useData } from '@/lib/DataContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { FILING_STATUS_LABELS, SOCIAL_SECURITY_WAGE_BASE, type FilingStatus } from '@/lib/taxEstimate';
 import type { LocalRates } from '@/lib/payerProfile';
-import { cn } from '@/lib/utils';
 
 /**
  * The numbers that are yours rather than any employer's, and the ones that
@@ -22,11 +22,21 @@ const LABEL = 'text-[10px] text-mono uppercase tracking-wider text-muted-foregro
 
 export default function TaxAndLocalsSettings() {
   const { prefs, setPayer } = useUserPrefs();
+  const { data, updateEmployer } = useData();
   const payer = prefs.payer;
   const tax = payer.tax ?? {};
 
   const setTax = (patch: Record<string, unknown>) =>
     setPayer({ ...payer, tax: { ...tax, ...patch } });
+
+  // Exempt was one switch for every employer. It is each employer's now —
+  // the W-4 is filed with each — so the old switch is handed to every W2
+  // employer that has not said otherwise, and then cleared.
+  const w2Employers = data.employers.filter(e => e.workerStatus !== '1099');
+  const moveExemptToEmployers = () => {
+    for (const e of w2Employers) if (e.w4Exempt === undefined) void updateEmployer(e.id, { w4Exempt: true });
+    setTax({ federalExempt: undefined });
+  };
 
   const num = (v: string): number | undefined => {
     const n = parseFloat(v);
@@ -103,8 +113,8 @@ export default function TaxAndLocalsSettings() {
             </label>
           </div>
           <p className="text-[10px] text-muted-foreground">
-            Your <em>effective</em> rate across the year, not your top bracket. Upload a stub and
-            it can be worked out for you.
+            Your <em>effective</em> rate across the year, not your top bracket — what the tax
+            estimate uses. What each employer withholds, or W-4 exempt, is set on the employer.
           </p>
 
           <div className="grid grid-cols-2 gap-2">
@@ -147,33 +157,22 @@ export default function TaxAndLocalsSettings() {
             can be kept right.
           </p>
 
-          {/* Exempt, and what it does not cover. */}
-          <label className={cn(
-            'flex items-start gap-2.5 cursor-pointer select-none p-2.5 border',
-            tax.federalExempt ? 'border-warning/50 bg-warning/5' : 'border-border bg-card',
-          )}>
-            <input
-              type="checkbox"
-              checked={!!tax.federalExempt}
-              onChange={e => setTax({ federalExempt: e.target.checked })}
-              className="mt-0.5 rounded border-border shrink-0"
-            />
-            <span className="text-[11px] leading-tight">
-              <span className="font-semibold">W-4 filed EXEMPT</span>
-              <span className="block text-[10px] text-muted-foreground mt-0.5">
-                No federal income tax withheld.
-              </span>
-            </span>
-          </label>
+          {/* Exempt used to live here, for every employer at once. */}
           {tax.federalExempt && (
-            <p className="text-[10px] text-warning flex items-start gap-1.5">
-              <AlertTriangle size={11} className="shrink-0 mt-0.5" />
-              <span>
-                Exempt stops federal income tax and nothing else. Social Security, Medicare and
-                state disability still come out of every cheque, and whatever federal tax you
-                actually owe is still owed at the end of the year.
-              </span>
-            </p>
+            <div className="flex items-start gap-2 border border-warning/50 bg-warning/5 p-2.5 text-[11px]">
+              <AlertTriangle size={12} className="shrink-0 mt-0.5 text-warning" />
+              <div className="space-y-1.5">
+                <p>
+                  W-4 exempt is switched on here, for every employer at once. It's set on each
+                  employer now{w2Employers.length ? '' : ' — add your employers below first'}.
+                </p>
+                {w2Employers.length > 0 && (
+                  <button type="button" onClick={moveExemptToEmployers} className="pixel-button pick-off px-2 py-1 text-[11px] font-bold">
+                    Move it to {w2Employers.length === 1 ? w2Employers[0].name : `all ${w2Employers.length} W2 employers`}
+                  </button>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </section>

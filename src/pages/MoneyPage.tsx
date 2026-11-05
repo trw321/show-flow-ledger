@@ -18,6 +18,7 @@ import { calculateExpectedPay, effectiveHoursWorked, netHoursWorked } from '@/li
 import { resolveEmployer } from '@/lib/employerMatch';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { estimateYearFromEarnings } from '@/lib/taxEstimate';
+import { withholdsNothing } from '@/lib/payerProfile';
 import type { Income, Job } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -358,21 +359,33 @@ export default function MoneyPage() {
 
   // The year's tax so far: what W2 checks withhold as they go, and what is
   // left for tax time — all of the tax on 1099 work, self-employment tax
-  // included, and federal on W2 wages if the W-4 was filed exempt.
+  // included, and whatever federal a W2 employer did not take. Each employer
+  // withholds by its own W-4, so that is added up shift by shift.
   const taxYear = useMemo(() => {
     const year = String(new Date().getFullYear());
     let w2 = 0;
     let selfEmployed = 0;
+    let federalWithheld = 0;
+    const exemptAt = new Set<string>();
     for (const job of data.jobs) {
       if (!job.date.startsWith(year)) continue;
       const b = jobPayBreakdown(job, data.jobs, data.employers, prefs.payer);
       if (b.gross <= 0) continue;
       // Vacation is wages too.
       const earned = b.gross + b.vacation;
-      if (resolveEmployer(job.client, data.employers)?.workerStatus === '1099') selfEmployed += earned;
-      else w2 += earned;
+      const employer = resolveEmployer(job.client, data.employers);
+      if (employer?.workerStatus === '1099') {
+        selfEmployed += earned;
+      } else {
+        w2 += earned;
+        federalWithheld += b.tax;
+        if (withholdsNothing(employer, prefs.payer)) exemptAt.add(employer?.name ?? job.client);
+      }
     }
-    return { year, w2, selfEmployed, estimate: estimateYearFromEarnings(w2, selfEmployed, prefs.payer.tax ?? {}, Number(year)) };
+    return {
+      year, w2, selfEmployed, exemptAt: [...exemptAt],
+      estimate: estimateYearFromEarnings(w2, selfEmployed, prefs.payer.tax ?? {}, Number(year), federalWithheld),
+    };
   }, [data.jobs, data.employers, prefs.payer]);
 
   const [addOpen, setAddOpen] = useState(false);
@@ -739,8 +752,8 @@ export default function MoneyPage() {
             <p className="text-[11px] text-muted-foreground">
               W2 {dollars(taxYear.w2)}{taxYear.selfEmployed > 0 && <> · 1099 {dollars(taxYear.selfEmployed)} · self-employment tax {dollars(taxYear.estimate.selfEmployment)}</>}
             </p>
-            {prefs.payer.tax?.federalExempt && (
-              <p className="text-[11px] text-warning">W-4 exempt: no federal tax is withheld from your checks — it's counted above.</p>
+            {taxYear.exemptAt.length > 0 && (
+              <p className="text-[11px] text-warning">W-4 exempt at {taxYear.exemptAt.join(', ')}: no federal tax is withheld there — it's counted above.</p>
             )}
             {!prefs.payer.tax?.federalEffectivePercent && (
               <p className="text-[11px] text-muted-foreground">Set your tax rate in Settings for a real figure.</p>

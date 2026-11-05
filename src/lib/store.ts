@@ -163,6 +163,10 @@ export interface Employer {
   payrollCompany?: string;
   timekeepingApp?: string;
   paySchedule?: Job['paySchedule'];
+  /** The first check takes longer while you are set up in payroll: this many weeks from your first day here. After it, paySchedule. Three is common. */
+  firstCheckWeeks?: number;
+  /** For a schedule that is neither weekly nor bi-weekly: about how many days after the work the pay arrives. */
+  payLagDays?: number;
   overtimeRule: 'daily' | 'weekly' | 'none';
   dailyOvertimeThresholdHours?: number;
   dailyDoubletimeThresholdHours?: number;
@@ -190,8 +194,10 @@ export interface Employer {
   unionDuesPercent?: number;
   /** IATSE local number this employer's work falls under (e.g. "16", "8"). Free text — purely informational, shown in exports. */
   unionLocal?: string;
-  /** Estimated tax withholding as a percent of gross pay, auto-deducted like union dues. A rough estimate, not real withholding math — leave unset for 1099/self-employed work with no withholding. */
+  /** What this employer withholds for federal income tax, as a percent of gross — set by the W-4 you filed with it. Unset uses your own federal rate. Ignored for 1099 work and an exempt W-4, which withhold nothing. */
   estimatedTaxPercent?: number;
+  /** The W-4 filed with this employer says exempt: no federal income tax comes out. Social Security and Medicare still do. Unset follows the old account-wide switch. */
+  w4Exempt?: boolean;
   /** Vacation/fringe pay as a percent of gross earnings, added on top (e.g. 6 = 6%) — common IATSE benefit. Undefined/0 = not paid. */
   vacationPercent?: number;
   /** Settings suggestions the user turned down. A dismissal skips the next

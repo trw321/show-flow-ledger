@@ -204,12 +204,23 @@ export function estimateTaxForYear(
  * stub. A W2 employer withholds what is due on W2 wages as it goes — Social
  * Security, Medicare and state, and federal too unless the W-4 says exempt —
  * so what is still owed at the end of the year is the tax on 1099 work, plus
- * federal on W2 wages filed exempt.
+ * whatever federal the W2 employers did not take.
+ *
+ * `federalWithheld` is that federal, added up employer by employer — each
+ * withholds by its own W-4, exempt or a percentage. Without it, all W2 wages
+ * are taken to have had federal withheld at your rate, unless exempt.
  */
-export function estimateYearFromEarnings(w2Gross: number, selfEmployedGross: number, profile: TaxProfile, year?: number): TaxEstimate {
+export function estimateYearFromEarnings(
+  w2Gross: number,
+  selfEmployedGross: number,
+  profile: TaxProfile,
+  year?: number,
+  federalWithheld?: number,
+): TaxEstimate {
   const onWagesAlone = estimateTaxForYear(w2Gross, 0, profile, 0, year);
+  const federalOut = federalWithheld ?? (profile.federalExempt ? 0 : onWagesAlone.federal);
   const withheldOnWages = onWagesAlone.socialSecurity + onWagesAlone.medicare
     + onWagesAlone.state + onWagesAlone.stateDisability
-    + (profile.federalExempt ? 0 : onWagesAlone.federal);
+    + federalOut;
   return estimateTaxForYear(w2Gross, withheldOnWages, profile, selfEmployedGross, year);
 }

@@ -92,6 +92,13 @@ describe('the year from earnings alone', () => {
     expect(e.stillOwed).toBeCloseTo(10_000 * 0.12 + 10_000 * 0.04 + 10_000 * 0.9235 * 0.153, 2);
   });
 
+  it('owes the federal an employer did not withhold, employer by employer', async () => {
+    const { estimateYearFromEarnings } = await import('./taxEstimate');
+    // $60k of W2: $40k where 12% came out, $20k where the W-4 said exempt.
+    const e = estimateYearFromEarnings(60_000, 0, { federalEffectivePercent: 12 }, undefined, 40_000 * 0.12);
+    expect(e.stillOwed).toBeCloseTo(20_000 * 0.12, 2);
+  });
+
   it('owes federal on W2 wages when the W-4 was filed exempt', async () => {
     const { estimateYearFromEarnings } = await import('./taxEstimate');
     // Nothing was withheld for it, so all of it is still to pay.
