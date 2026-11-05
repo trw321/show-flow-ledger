@@ -16,6 +16,9 @@ export function describeLedger(data: AppData): string {
     data.payouts?.length && plural(data.payouts.length, 'crew payment'),
     data.events?.length && plural(data.events.length, 'plan'),
     data.equipment.length && plural(data.equipment.length, 'piece of gear', 'pieces of gear'),
+    data.crew?.length && plural(data.crew.length, 'crew member'),
+    data.crewShifts?.length && plural(data.crewShifts.length, 'crew shift'),
+    data.invoices?.length && plural(data.invoices.length, 'invoice'),
   ].filter(Boolean) as string[];
   if (parts.length <= 1) return parts[0] ?? 'nothing';
   return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
