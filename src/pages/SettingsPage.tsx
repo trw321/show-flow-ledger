@@ -51,7 +51,7 @@ const WORKER_OPTIONS: { type: 'w2' | '1099' | 'boss'; label: string; subtitle: s
   },
 ];
 
-const TAB_ORDER: TabKey[] = ['expenses', 'income', 'payouts'];
+const TAB_ORDER: TabKey[] = ['income', 'expenses', 'invoices', 'crew', 'payouts'];
 
 interface EmployerFormState {
   name: string;
@@ -777,13 +777,13 @@ export default function SettingsPage() {
           </div>
           <div>
             <p className="font-semibold text-foreground mb-1">1099 Contractor</p>
-            <p className="text-success">Expenses, income</p>
+            <p className="text-success">Expenses, income, invoices</p>
             <p className="text-muted-foreground/50 mt-1">Full financials — deductions and invoicing.</p>
           </div>
           <div>
             <p className="font-semibold text-foreground mb-1">Boss</p>
-            <p className="text-success">+ Pay Outs</p>
-            <p className="text-muted-foreground/50 mt-1">Owner/operator — also tracks payments made to crew.</p>
+            <p className="text-success">+ Crew, Pay Outs</p>
+            <p className="text-muted-foreground/50 mt-1">Owner/operator — your crew's schedules, and what you pay them.</p>
           </div>
         </div>
       </section>

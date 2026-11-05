@@ -1,4 +1,4 @@
-import type { AppData, Job, Expense, Income, Equipment, Employer, CalendarEvent, PayOut } from './store';
+import type { AppData, Job, Expense, Income, Equipment, Employer, CalendarEvent, PayOut, CrewMember, CrewShift, Invoice } from './store';
 import type { LedgerTable } from './ledgerDiff';
 
 // The mapping between the ledger and the database, in both directions. Kept
@@ -152,6 +152,30 @@ const payoutRow = (o: PayOut, userId: string) => ({
   ...syncColumns(o),
 });
 
+const crewRow = (c: CrewMember, userId: string) => ({
+  id: c.id, user_id: userId, name: c.name, role: orNull(c.role),
+  pay_rate: orNull(c.payRate), bill_rate: orNull(c.billRate),
+  phone: orNull(c.phone), email: orNull(c.email), notes: orNull(c.notes), created_at: c.createdAt,
+  ...syncColumns(c),
+});
+
+const crewShiftRow = (s: CrewShift, userId: string) => ({
+  id: s.id, user_id: userId, crew_id: s.crewId, date: s.date,
+  start_time: orNull(s.startTime), end_time: orNull(s.endTime), job_id: orNull(s.jobId),
+  place: orNull(s.place), notes: orNull(s.notes), hours_worked: orNull(s.hoursWorked),
+  rate: orNull(s.rate), payout_id: orNull(s.payoutId), created_at: s.createdAt,
+  ...syncColumns(s),
+});
+
+const invoiceRow = (v: Invoice, userId: string) => ({
+  id: v.id, user_id: userId, number: v.number, client: v.client,
+  client_email: orNull(v.clientEmail), client_address: orNull(v.clientAddress),
+  issue_date: v.issueDate, due_date: orNull(v.dueDate), lines: v.lines ?? [],
+  notes: orNull(v.notes), status: v.status, paid_income_ids: v.paidIncomeIds ?? [],
+  created_at: v.createdAt,
+  ...syncColumns(v),
+});
+
 /** The whole local ledger as database rows, in insert order. */
 export function buildRows(data: AppData, userId: string): [LedgerTable, Record<string, unknown>[]][] {
   return [
@@ -165,6 +189,9 @@ export function buildRows(data: AppData, userId: string): [LedgerTable, Record<s
     // Crew payments ride along with everything else now, rather than sitting
     // in their own storage the backup never looked at.
     ['payouts', (data.payouts ?? []).map(o => payoutRow(o, userId))],
+    ['crew', (data.crew ?? []).map(c => crewRow(c, userId))],
+    ['crewShifts', (data.crewShifts ?? []).map(s => crewShiftRow(s, userId))],
+    ['invoices', (data.invoices ?? []).map(v => invoiceRow(v, userId))],
   ];
 }
 
@@ -316,6 +343,37 @@ const toPayout = (r: Row): PayOut => ({
   modifiedAt: editedAt(r),
 });
 
+const toCrew = (r: Row): CrewMember => ({
+  id: r.id as string, name: r.name as string, role: und(r.role as string),
+  payRate: und(r.pay_rate as number), billRate: und(r.bill_rate as number),
+  phone: und(r.phone as string), email: und(r.email as string), notes: und(r.notes as string),
+  createdAt: r.created_at as string,
+  modifiedAt: editedAt(r),
+});
+
+const toCrewShift = (r: Row): CrewShift => ({
+  id: r.id as string, crewId: r.crew_id as string, date: r.date as string,
+  startTime: und(r.start_time as string), endTime: und(r.end_time as string), jobId: und(r.job_id as string),
+  place: und(r.place as string), notes: und(r.notes as string), hoursWorked: und(r.hours_worked as number),
+  rate: und(r.rate as number), payoutId: und(r.payout_id as string),
+  createdAt: r.created_at as string,
+  modifiedAt: editedAt(r),
+});
+
+const toInvoice = (r: Row): Invoice => {
+  const paid = (r.paid_income_ids as string[] | null) ?? [];
+  return {
+    id: r.id as string, number: r.number as string, client: r.client as string,
+    clientEmail: und(r.client_email as string), clientAddress: und(r.client_address as string),
+    issueDate: r.issue_date as string, dueDate: und(r.due_date as string),
+    lines: ((r.lines as Invoice['lines'] | null) ?? []).map(l => ({ ...l, amount: Number(l.amount) })),
+    notes: und(r.notes as string), status: r.status as Invoice['status'],
+    paidIncomeIds: paid.length ? paid : undefined,
+    createdAt: r.created_at as string,
+    modifiedAt: editedAt(r),
+  };
+};
+
 /** Database rows back into app data. */
 export function fromRows(raw: Record<string, Row[]>): AppData {
   return {
@@ -326,17 +384,22 @@ export function fromRows(raw: Record<string, Row[]>): AppData {
     equipment: (raw.equipment ?? []).map(toEquipment),
     employers: (raw.employers ?? []).map(toEmployer),
     events: (raw.events ?? []).map(toEvent),
+    crew: (raw.crew ?? []).map(toCrew),
+    crewShifts: (raw.crewShifts ?? []).map(toCrewShift),
+    invoices: (raw.invoices ?? []).map(toInvoice),
   };
 }
 
 const BUILDERS: { [T in LedgerTable]: (record: never, userId: string) => Record<string, unknown> } = {
   jobs: jobRow, expenses: expenseRow, income: incomeRow, equipment: equipmentRow,
   employers: employerRow, events: eventRow, payouts: payoutRow,
+  crew: crewRow, crewShifts: crewShiftRow, invoices: invoiceRow,
 };
 
 const READERS: { [T in LedgerTable]: (row: Row) => unknown } = {
   jobs: toJob, expenses: toExpense, income: toIncome, equipment: toEquipment,
   employers: toEmployer, events: toEvent, payouts: toPayout,
+  crew: toCrew, crewShifts: toCrewShift, invoices: toInvoice,
 };
 
 /** One ledger record as the row that stores it. */

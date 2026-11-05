@@ -168,7 +168,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [userId]);
 
   const deleteEverything = useCallback(async () => {
-    await replaceAllData({ jobs: [], expenses: [], income: [], equipment: [], employers: [], events: [], payouts: [] });
+    await replaceAllData({ ...EMPTY_LEDGER });
   }, [replaceAllData]);
 
   const value = useMemo<DataContextValue>(() => ({

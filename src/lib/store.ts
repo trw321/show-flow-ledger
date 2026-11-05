@@ -245,6 +245,76 @@ export interface PayOut {
   modifiedAt?: string;
 }
 
+/** Someone who works for you. */
+export interface CrewMember {
+  id: string;
+  name: string;
+  role?: string;
+  /** What you pay them, an hour. */
+  payRate?: number;
+  /** What you bill a client for them, an hour. Unset bills at their pay rate. */
+  billRate?: number;
+  phone?: string;
+  email?: string;
+  notes?: string;
+  createdAt: string;
+  /** Last edited — see Job.modifiedAt. */
+  modifiedAt?: string;
+}
+
+/** One of your crew, booked for a day. */
+export interface CrewShift {
+  id: string;
+  crewId: string;
+  date: string;
+  startTime?: string;
+  endTime?: string;
+  /** The shift of yours this crews, when it is one — the project it bills to. */
+  jobId?: string;
+  /** Where, when it is not one of your shifts. */
+  place?: string;
+  notes?: string;
+  /** Hours they actually worked, once in. Until then the call times stand in. */
+  hoursWorked?: number;
+  /** Their rate for this shift, when it is not their usual. */
+  rate?: number;
+  /** The payment on Pay Outs that settled it. */
+  payoutId?: string;
+  createdAt: string;
+  /** Last edited — see Job.modifiedAt. */
+  modifiedAt?: string;
+}
+
+/** One line of an invoice. The amount is what is billed; hours and rate are shown with it. */
+export interface InvoiceLine {
+  description: string;
+  quantity?: number;
+  rate?: number;
+  amount: number;
+  /** The shift of yours it bills. */
+  jobId?: string;
+  /** The crew shift it bills. */
+  crewShiftId?: string;
+}
+
+export interface Invoice {
+  id: string;
+  number: string;
+  client: string;
+  clientEmail?: string;
+  clientAddress?: string;
+  issueDate: string;
+  dueDate?: string;
+  lines: InvoiceLine[];
+  notes?: string;
+  status: 'draft' | 'sent' | 'paid';
+  /** The payments Mark paid recorded — one per project it billed — so Undo can take them off again. */
+  paidIncomeIds?: string[];
+  createdAt: string;
+  /** Last edited — see Job.modifiedAt. */
+  modifiedAt?: string;
+}
+
 export interface AppData {
   jobs: Job[];
   expenses: Expense[];
@@ -258,6 +328,10 @@ export interface AppData {
    * device — and signed out they were never saved at all.
    */
   payouts: PayOut[];
+  /** Boss mode: the people who work for you, and when. */
+  crew: CrewMember[];
+  crewShifts: CrewShift[];
+  invoices: Invoice[];
 }
 
 // ── localStorage persistence ────────────────────────────────────────────────
@@ -308,7 +382,7 @@ export function syncMetaKeyFor(userId: string): string {
   return `showflow-sync:${userId}`;
 }
 
-export const EMPTY_LEDGER: AppData = { jobs: [], expenses: [], income: [], equipment: [], employers: [], events: [], payouts: [] };
+export const EMPTY_LEDGER: AppData = { jobs: [], expenses: [], income: [], equipment: [], employers: [], events: [], payouts: [], crew: [], crewShifts: [], invoices: [] };
 
 /** Old crew payments already folded into the ledger once. */
 const ADOPTED_PAYOUTS_KEY = 'showflow-payouts-adopted';
@@ -685,6 +759,63 @@ export function useAppData(key: string | null, onLocalChange?: (changes: LedgerC
     update(prev => ({ ...prev, payouts: (prev.payouts ?? []).filter(p => p.id !== id) }));
   }, [update]);
 
+  const updatePayout = useCallback(async (id: string, updates: Partial<PayOut>) => {
+    update(prev => ({ ...prev, payouts: (prev.payouts ?? []).map(p => p.id === id ? { ...p, ...updates } : p) }));
+  }, [update]);
+
+  // ── Crew and their shifts ─────────────────────────────────────────────────
+
+  const addCrewMember = useCallback(async (member: Omit<CrewMember, 'id' | 'createdAt'>) => {
+    const created: CrewMember = { ...member, id: uid(), createdAt: new Date().toISOString() };
+    update(prev => ({ ...prev, crew: [created, ...(prev.crew ?? [])] }));
+    return created;
+  }, [update]);
+
+  const updateCrewMember = useCallback(async (id: string, updates: Partial<CrewMember>) => {
+    update(prev => ({ ...prev, crew: (prev.crew ?? []).map(c => c.id === id ? { ...c, ...updates } : c) }));
+  }, [update]);
+
+  /** Someone leaves the crew, and their bookings with them. */
+  const deleteCrewMember = useCallback(async (id: string) => {
+    update(prev => ({
+      ...prev,
+      crew: (prev.crew ?? []).filter(c => c.id !== id),
+      crewShifts: (prev.crewShifts ?? []).filter(s => s.crewId !== id),
+    }));
+  }, [update]);
+
+  /** Books shifts — one per day when several days are picked at once. */
+  const addCrewShifts = useCallback(async (shifts: Omit<CrewShift, 'id' | 'createdAt'>[]) => {
+    const now = new Date().toISOString();
+    const created: CrewShift[] = shifts.map(s => ({ ...s, id: uid(), createdAt: now }));
+    update(prev => ({ ...prev, crewShifts: [...created, ...(prev.crewShifts ?? [])] }));
+    return created;
+  }, [update]);
+
+  const updateCrewShift = useCallback(async (id: string, updates: Partial<CrewShift>) => {
+    update(prev => ({ ...prev, crewShifts: (prev.crewShifts ?? []).map(s => s.id === id ? { ...s, ...updates } : s) }));
+  }, [update]);
+
+  const deleteCrewShift = useCallback(async (id: string) => {
+    update(prev => ({ ...prev, crewShifts: (prev.crewShifts ?? []).filter(s => s.id !== id) }));
+  }, [update]);
+
+  // ── Invoices ──────────────────────────────────────────────────────────────
+
+  const addInvoice = useCallback(async (invoice: Omit<Invoice, 'id' | 'createdAt'>) => {
+    const created: Invoice = { ...invoice, id: uid(), createdAt: new Date().toISOString() };
+    update(prev => ({ ...prev, invoices: [created, ...(prev.invoices ?? [])] }));
+    return created;
+  }, [update]);
+
+  const updateInvoice = useCallback(async (id: string, updates: Partial<Invoice>) => {
+    update(prev => ({ ...prev, invoices: (prev.invoices ?? []).map(v => v.id === id ? { ...v, ...updates } : v) }));
+  }, [update]);
+
+  const deleteInvoice = useCallback(async (id: string) => {
+    update(prev => ({ ...prev, invoices: (prev.invoices ?? []).filter(v => v.id !== id) }));
+  }, [update]);
+
   // Replaces everything, through update() like any edit — so a replacement
   // that can't fit in storage fails the same visible way a save does, and
   // every record it drops reaches the sync as a deletion.
@@ -703,7 +834,10 @@ export function useAppData(key: string | null, onLocalChange?: (changes: LedgerC
     addEquipment, updateEquipment, deleteEquipment,
     addEmployer, updateEmployer, deleteEmployer,
     addEvent, updateEvent, deleteEvent,
-    addPayout, deletePayout,
+    addPayout, updatePayout, deletePayout,
+    addCrewMember, updateCrewMember, deleteCrewMember,
+    addCrewShifts, updateCrewShift, deleteCrewShift,
+    addInvoice, updateInvoice, deleteInvoice,
   }), [
     data, replaceAllData, applyRemote, readLedger,
     addJob, updateJob, deleteJob,
@@ -712,7 +846,10 @@ export function useAppData(key: string | null, onLocalChange?: (changes: LedgerC
     addEquipment, updateEquipment, deleteEquipment,
     addEmployer, updateEmployer, deleteEmployer,
     addEvent, updateEvent, deleteEvent,
-    addPayout, deletePayout,
+    addPayout, updatePayout, deletePayout,
+    addCrewMember, updateCrewMember, deleteCrewMember,
+    addCrewShifts, updateCrewShift, deleteCrewShift,
+    addInvoice, updateInvoice, deleteInvoice,
   ]);
 }
 

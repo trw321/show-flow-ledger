@@ -18,7 +18,7 @@ import {
 import { parseDayTimeline, withGapOnClock, type DayTimeline } from '@/lib/dayTimeline';
 import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle, Flame, PenLine, Banknote, Wallet, Flag, Undo2 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO, differenceInCalendarDays } from 'date-fns';
-import type { Job, CalendarEvent, Income } from '@/lib/store';
+import type { Job, CalendarEvent, Income, Invoice } from '@/lib/store';
 import { matchPaymentToProject, betterProject, bestProjectFor, projectOf, type FoundPayment } from '@/lib/paymentMatch';
 import { payDueDate, payTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
 import { ratesForShift } from '@/lib/payerProfile';
@@ -2081,8 +2081,20 @@ export default function CalendarPage() {
     return first;
   }, [data.jobs, data.employers]);
 
-  /** When a project's pay should be in, by its employer's schedule. */
+  // Which unpaid invoice each shift is on, if any.
+  const openInvoiceOf = useMemo(() => {
+    const map = new Map<string, Invoice>();
+    for (const v of data.invoices ?? []) {
+      if (v.status === 'paid') continue;
+      for (const l of v.lines) if (l.jobId) map.set(l.jobId, v);
+    }
+    return map;
+  }, [data.invoices]);
+
+  /** When a project's pay should be in: when its invoice is due, or by its employer's schedule. */
   const payDueFor = (jobs: Job[]) => {
+    const invoiced = jobs.map(j => openInvoiceOf.get(j.id)).find(v => v?.dueDate);
+    if (invoiced?.dueDate) return invoiced.dueDate;
     const lastDay = jobs.reduce((last, j) => (j.date > last ? j.date : last), jobs[0].date);
     const employer = resolveEmployer(jobs[0].client, data.employers);
     return payDueDate(lastDay, employer, employer ? firstDayAt.get(employer.id) : undefined);
@@ -2112,7 +2124,7 @@ export default function CalendarPage() {
     return waiting.sort((a, b) => a.due.localeCompare(b.due));
     // payDueFor reads firstDayAt, listed here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.jobs, data.employers, incomeByProject, prefs.payer, firstDayAt, projectKeyOf]);
+  }, [data.jobs, data.employers, incomeByProject, prefs.payer, firstDayAt, projectKeyOf, openInvoiceOf]);
   const oldestWaiting = waitingOnPay[0];
   const daysPastDue = oldestWaiting ? differenceInCalendarDays(new Date(), parseISO(oldestWaiting.due)) : 0;
   const payTier: PayTimingTier = oldestWaiting ? payTimingTier(daysPastDue) : 'none';
@@ -2173,10 +2185,12 @@ export default function CalendarPage() {
   // it most likely paid.
   const unlinkedPayments = useMemo(() => {
     const ids = new Set(data.jobs.map(j => j.id));
+    // An invoice's payment for something that was not a shift is meant to have none.
+    const fromInvoices = new Set((data.invoices ?? []).flatMap(v => v.paidIncomeIds ?? []));
     return data.income
-      .filter(i => i.status === 'paid' && (!i.jobId || !ids.has(i.jobId)))
+      .filter(i => i.status === 'paid' && (!i.jobId || !ids.has(i.jobId)) && !fromInvoices.has(i.id))
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [data.jobs, data.income]);
+  }, [data.jobs, data.income, data.invoices]);
   const linkSuggestions = useMemo(() => {
     const ctx = { allJobs: data.jobs, employers: data.employers, payer: prefs.payer, paidJobIds };
     return new Map(unlinkedPayments.map(i => [i.id, bestProjectFor({ amount: i.amount, date: i.date, payer: i.client }, ctx)]));
@@ -3039,10 +3053,11 @@ export default function CalendarPage() {
                         if (worked.length === 0) return null;
                         const due = payDueFor(worked);
                         const late = differenceInCalendarDays(new Date(), parseISO(due));
+                        const invoice = jobs.map(j => openInvoiceOf.get(j.id)).find(Boolean);
                         return (
                           <div className="mt-2 flex items-center justify-between gap-2">
                             <p className={cn('text-[11px] text-mono', late > 0 ? 'text-warning' : 'text-dot-pending')}>
-                              Waiting on pay · {late > 0 ? `${late}d late` : `due ${format(parseISO(due), 'MMM d')}`}
+                              {invoice ? `${invoice.status === 'draft' ? 'Draft' : 'Invoiced'} ${invoice.number}` : 'Waiting on pay'} · {late > 0 ? `${late}d late` : `due ${format(parseISO(due), 'MMM d')}`}
                             </p>
                             <button
                               type="button"

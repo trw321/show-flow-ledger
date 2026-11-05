@@ -4,7 +4,7 @@ import type { AppData } from './store';
  * The ledger's record lists, in the order a sync writes them: employers and
  * jobs before the expenses, income and equipment that point at jobs.
  */
-export const LEDGER_TABLES = ['employers', 'jobs', 'expenses', 'income', 'equipment', 'events', 'payouts'] as const;
+export const LEDGER_TABLES = ['employers', 'jobs', 'expenses', 'income', 'equipment', 'events', 'payouts', 'crew', 'crewShifts', 'invoices'] as const;
 export type LedgerTable = typeof LEDGER_TABLES[number];
 
 /** One record that changed on this device and has not reached the account yet. */

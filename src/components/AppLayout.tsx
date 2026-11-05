@@ -8,6 +8,8 @@ import {
   X,
   TrendingUp,
   Wallet,
+  Users,
+  FileText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -22,13 +24,16 @@ interface NavItem {
 }
 
 // The Calendar is the core loop and Settings is always reachable; Money,
-// Expenses and Pay Outs are what Settings' "Visible Sections" panel controls.
+// Expenses, Invoices, Crew and Pay Outs are what Settings' "Visible
+// Sections" panel controls.
 // The Dashboard is gone — it showed the same month totals as Money with one
 // extra chart, and the chart moved there with it.
 const ALL_NAV_ITEMS: NavItem[] = [
   { label: 'Calendar', to: '/', icon: <CalendarDays size={18} /> },
   { label: 'Money', to: '/money', icon: <TrendingUp size={18} />, tab: 'income' },
   { label: 'Expenses', to: '/expenses', icon: <Receipt size={18} />, tab: 'expenses' },
+  { label: 'Invoices', to: '/invoices', icon: <FileText size={18} />, tab: 'invoices' },
+  { label: 'Crew', to: '/crew', icon: <Users size={18} />, tab: 'crew' },
   { label: 'Pay Outs', to: '/payouts', icon: <Wallet size={18} />, tab: 'payouts' },
   { label: 'Settings', to: '/settings', icon: <Settings size={18} /> },
 ];

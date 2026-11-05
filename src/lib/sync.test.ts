@@ -31,7 +31,7 @@ const { stampChanges, recordCount } = await import('./ledgerDiff');
 const { mergeRemote, unionLedgers, pushChanges, decidePrefs, mergeUnstampedPrefs, entryKey } = await import('./sync');
 const { buildRows, fromRows } = await import('./cloudSync');
 
-const empty = (): AppData => ({ jobs: [], expenses: [], income: [], equipment: [], employers: [], events: [], payouts: [] });
+const empty = (): AppData => ({ jobs: [], expenses: [], income: [], equipment: [], employers: [], events: [], payouts: [], crew: [], crewShifts: [], invoices: [] });
 
 const job = (id: string, extra: Partial<Job> = {}): Job => ({
   id, name: 'Show', client: 'Odeum', venue: 'Hall', date: '2026-10-01', status: 'completed',

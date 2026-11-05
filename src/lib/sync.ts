@@ -228,8 +228,10 @@ const MAX_BATCH_ROWS = 200;
 const MAX_IDS_PER_DELETE = 100;
 
 // The generated types describe each table separately; the sync treats them
-// all alike, and they all have the columns it touches.
-const from = (table: LedgerTable) => supabase.from(table as 'jobs');
+// all alike, and they all have the columns it touches. Each list is stored
+// under its own name, but for crew shifts, whose table is crew_shifts.
+const DB_TABLE: Partial<Record<LedgerTable, string>> = { crewShifts: 'crew_shifts' };
+const from = (table: LedgerTable) => supabase.from((DB_TABLE[table] ?? table) as 'jobs');
 
 async function pullTable(table: LedgerTable, userId: string, since?: string): Promise<Row[]> {
   const got: Row[] = [];

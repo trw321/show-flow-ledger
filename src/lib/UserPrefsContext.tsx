@@ -10,27 +10,40 @@ import { stampNow } from '@/lib/ledgerDiff';
 // expenses/income are checked anywhere) and their pages are gone — Log &
 // Calendar and Pay are core to the app now, not something to hide. Down to
 // just the genuinely optional secondary features.
-export type TabKey = 'expenses' | 'income' | 'payouts';
+export type TabKey = 'expenses' | 'income' | 'payouts' | 'crew' | 'invoices';
 
 export type WorkerType = 'w2' | '1099' | 'boss' | 'custom';
+
+/** Who an invoice is from: you, or your business. */
+export interface InvoiceFrom {
+  name?: string;
+  business?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+}
 
 export interface UserPrefs {
   workerType: WorkerType;
   tabs: Record<TabKey, boolean>;
   /** Tax, exempt status and what each local charges — see payerProfile. */
   payer: PayerProfile;
+  /** Your details at the top of every invoice. */
+  invoiceFrom?: InvoiceFrom;
 }
 
 export const TAB_LABELS: Record<TabKey, { label: string; description: string }> = {
   expenses: { label: 'Expenses', description: 'Track deductible business expenses (1099)' },
   income:   { label: 'Income',   description: 'Invoice tracking and payment records' },
   payouts:  { label: 'Pay Outs', description: 'Record and track payments made to crew' },
+  crew:     { label: 'Crew',     description: 'Your people and their schedules (boss)' },
+  invoices: { label: 'Invoices', description: 'Bill clients for your shifts and your crew (1099, boss)' },
 };
 
 export const WORKER_PRESETS: Record<'w2' | '1099' | 'boss', Record<TabKey, boolean>> = {
-  w2:     { expenses: false, income: true, payouts: false },
-  '1099': { expenses: true,  income: true, payouts: false },
-  boss:   { expenses: true,  income: true, payouts: true },
+  w2:     { expenses: false, income: true, payouts: false, crew: false, invoices: false },
+  '1099': { expenses: true,  income: true, payouts: false, crew: false, invoices: true },
+  boss:   { expenses: true,  income: true, payouts: true,  crew: true,  invoices: true },
 };
 
 const DEFAULT_PREFS: UserPrefs = { workerType: '1099', tabs: WORKER_PRESETS['1099'], payer: EMPTY_PROFILE };
@@ -40,12 +53,16 @@ function loadPrefs(uid?: string | null): UserPrefs {
     const raw = localStorage.getItem(prefsKeyFor(uid));
     if (!raw) return DEFAULT_PREFS;
     const parsed = JSON.parse(raw);
+    const workerType: WorkerType = parsed.workerType ?? DEFAULT_PREFS.workerType;
     return {
-      workerType: parsed.workerType ?? DEFAULT_PREFS.workerType,
-      tabs: { ...DEFAULT_PREFS.tabs, ...parsed.tabs },
+      workerType,
+      // A section added since these were saved takes what the mode would
+      // give it — boss mode gets Crew without anyone having to find it.
+      tabs: { ...(workerType === 'custom' ? DEFAULT_PREFS.tabs : WORKER_PRESETS[workerType]), ...parsed.tabs },
       // Saved before the payer profile existed: start empty rather than
       // undefined, so every reader can assume the shape is there.
       payer: { ...EMPTY_PROFILE, ...(parsed.payer ?? {}) },
+      invoiceFrom: parsed.invoiceFrom,
     };
   } catch {
     return DEFAULT_PREFS;
@@ -68,6 +85,7 @@ interface UserPrefsContextValue {
   setWorkerType: (type: WorkerType) => void;
   setTabEnabled: (tab: TabKey, enabled: boolean) => void;
   setPayer: (payer: PayerProfile) => void;
+  setInvoiceFrom: (from: InvoiceFrom) => void;
 }
 
 const UserPrefsContext = createContext<UserPrefsContextValue | null>(null);
@@ -110,6 +128,7 @@ export function UserPrefsProvider({ children }: { children: React.ReactNode }) {
   // Your tax rate, whether the W2 was filed exempt, and what each local
   // charges — see payerProfile for why these are not the employer's.
   const setPayer = (payer: PayerProfile) => update({ ...prefs, payer });
+  const setInvoiceFrom = (invoiceFrom: InvoiceFrom) => update({ ...prefs, invoiceFrom });
 
   const setTabEnabled = (tab: TabKey, enabled: boolean) => {
     const next = { ...prefs.tabs, [tab]: enabled };
@@ -119,7 +138,7 @@ export function UserPrefsProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <UserPrefsContext.Provider value={{ prefs, setWorkerType, setTabEnabled, setPayer }}>
+    <UserPrefsContext.Provider value={{ prefs, setWorkerType, setTabEnabled, setPayer, setInvoiceFrom }}>
       {children}
     </UserPrefsContext.Provider>
   );

@@ -4,7 +4,7 @@ import type { AppData } from './store';
 
 const USER = 'user-1';
 
-const empty: AppData = { jobs: [], expenses: [], income: [], equipment: [], employers: [], events: [], payouts: [] };
+const empty: AppData = { jobs: [], expenses: [], income: [], equipment: [], employers: [], events: [], payouts: [], crew: [], crewShifts: [], invoices: [] };
 
 const rowsFor = (data: Partial<AppData>, table: string) => {
   const all = buildRows({ ...empty, ...data }, USER);
@@ -147,6 +147,7 @@ describe('backup → restore round trip', () => {
                   dismissedSuggestions: [{ field: 'estimatedTaxPercent', skipsRemaining: 1, dismissedAt: '2026-09-16' }] }],
     events: [{ id: 'v1', title: 'Dentist', date: '2026-09-15', createdAt: '2026-01-01' }],
     payouts: [{ id: 'o1', workerName: 'Sam', amount: 450, date: '2026-09-12', jobRef: '2026-2956', method: 'venmo', notes: 'load out', createdAt: '2026-01-01' }],
+    crew: [], crewShifts: [], invoices: [],
   };
 
   const roundTrip = (data: AppData): AppData =>
@@ -320,9 +321,27 @@ describe('every field survives the trip to the database and back', () => {
     id: 'i1', jobId: 'j1', client: 'Odeum', description: 'Check', amount: 400, date: '2026-10-12', status: 'paid',
     paymentMethod: 'check', enteredByHand: true, invoiceNumber: '77', createdAt: '2026-10-01T00:00:00.000Z', modifiedAt: '2026-10-02T00:00:00.000Z',
   };
-  const back = fromRows(Object.fromEntries(buildRows({ ...empty, jobs: [job], employers: [employer], income: [income] }, USER)));
+  const member: AppData['crew'][number] = {
+    id: 'c1', name: 'Jamie Torres', role: 'A2', payRate: 40, billRate: 55, phone: '555', email: 'j@x', notes: 'n',
+    createdAt: '2026-10-01T00:00:00.000Z', modifiedAt: '2026-10-02T00:00:00.000Z',
+  };
+  const booking: AppData['crewShifts'][number] = {
+    id: 's1', crewId: 'c1', date: '2026-10-10', startTime: '08:00 AM', endTime: '06:00 PM', jobId: 'j1',
+    place: 'Hall', notes: 'n', hoursWorked: 10, rate: 45, payoutId: 'p1',
+    createdAt: '2026-10-01T00:00:00.000Z', modifiedAt: '2026-10-02T00:00:00.000Z',
+  };
+  const invoice: AppData['invoices'][number] = {
+    id: 'v1', number: 'INV-0001', client: 'Odeum', clientEmail: 'ap@odeum', clientAddress: '1 Main',
+    issueDate: '2026-10-12', dueDate: '2026-11-11', notes: 'Zelle',
+    lines: [{ description: 'Oct 10 · Gala', quantity: 9, rate: 52, amount: 494, jobId: 'j1' }, { description: 'Jamie', quantity: 10, rate: 55, amount: 550, crewShiftId: 's1' }],
+    status: 'paid', paidIncomeIds: ['i1'], createdAt: '2026-10-01T00:00:00.000Z', modifiedAt: '2026-10-02T00:00:00.000Z',
+  };
+  const back = fromRows(Object.fromEntries(buildRows({ ...empty, jobs: [job], employers: [employer], income: [income], crew: [member], crewShifts: [booking], invoices: [invoice] }, USER)));
 
   it('keeps every field of a shift', () => expect(back.jobs[0]).toEqual(job));
   it('keeps every field of an employer', () => expect(back.employers[0]).toEqual(employer));
   it('keeps every field of a payment', () => expect(back.income[0]).toEqual(income));
+  it('keeps every field of a crew member', () => expect(back.crew[0]).toEqual(member));
+  it('keeps every field of a crew shift', () => expect(back.crewShifts[0]).toEqual(booking));
+  it('keeps every field of an invoice', () => expect(back.invoices[0]).toEqual(invoice));
 });
