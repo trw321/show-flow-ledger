@@ -301,7 +301,7 @@ describe('every field survives the trip to the database and back', () => {
     payrollCompany: 'EP', hourlyRate: 52, minimumHours: 5, has6th7thDayRule: true, steward: 'Sam', parkingCost: 20,
     hoursWorked: 9, mealDuration: 60, mealOnClock: false, dayRate: 400, dayRateHours: 10, payStubKind: 'check',
     hoursPlanned: true, local: 'ia16', needsReview: true, callTimeline: '8-12, 1-5', callGapsOnClock: [false],
-    meal2Duration: 30, meal2OnClock: true, mealPenalties: 1, nightPremiumConfirmed: false, nightPremiumActualHours: 1.5,
+    meal2Duration: 30, meal2OnClock: true, extraMeals: [{ duration: 30, onClock: false }], mealPenalties: 1, nightPremiumConfirmed: false, nightPremiumActualHours: 1.5,
     attachments: ['a'], payStub: 'storage:x', stubParsed: { netPay: 400 }, stubCorrections: [{ field: 'net', was: 1, now: 2, at: 'x' }],
     contract: '2023-2028 BASIC ENTERTAINMENT', role: 'A1', pto: true, notes: 'n', createdAt: '2026-10-01T00:00:00.000Z', modifiedAt: '2026-10-02T00:00:00.000Z',
   };
@@ -313,7 +313,7 @@ describe('every field survives the trip to the database and back', () => {
     nightPremiumStartHour: 0, nightPremiumEndHour: 6, nightPremiumMultiplier: 2, defaultDayRate: 400, dayRateHours: 10,
     retirementMatchPercent: 6, roundUpToWholeHours: true, postMealMinimumHours: 2, mealPenaltyAfterHours: 5,
     unionDuesPercent: 3.5, unionLocal: '16', estimatedTaxPercent: 20, w4Exempt: true, vacationPercent: 8,
-    firstCheckWeeks: 3, payLagDays: 30, contract: 'ia16-basic', minimumCallHours: 5, sixthSeventhDayRule: true,
+    firstCheckWeeks: 3, payLagDays: 30, payPeriodStart: '2026-11-01', contract: 'ia16-basic', minimumCallHours: 5, sixthSeventhDayRule: true,
     dismissedSuggestions: [{ field: 'x', skipsRemaining: 1, dismissedAt: 'x' }], notes: 'n',
     createdAt: '2026-10-01T00:00:00.000Z', modifiedAt: '2026-10-02T00:00:00.000Z',
   };

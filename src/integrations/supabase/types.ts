@@ -338,6 +338,7 @@ export type Database = {
           overtime_multiplier: number | null
           overtime_rule: string
           pay_lag_days: number | null
+          pay_period_start: string | null
           pay_schedule: string | null
           payroll_company: string | null
           post_meal_minimum_hours: number | null
@@ -384,6 +385,7 @@ export type Database = {
           overtime_multiplier?: number | null
           overtime_rule?: string
           pay_lag_days?: number | null
+          pay_period_start?: string | null
           pay_schedule?: string | null
           payroll_company?: string | null
           post_meal_minimum_hours?: number | null
@@ -430,6 +432,7 @@ export type Database = {
           overtime_multiplier?: number | null
           overtime_rule?: string
           pay_lag_days?: number | null
+          pay_period_start?: string | null
           pay_schedule?: string | null
           payroll_company?: string | null
           post_meal_minimum_hours?: number | null
@@ -903,6 +906,7 @@ export type Database = {
           day_rate_hours: number | null
           deleted_at: string | null
           end_time: string | null
+          extra_meals: Json | null
           has_6th_7th_day_rule: boolean
           has_vacation_pay: boolean
           hourly_rate: number | null
@@ -953,6 +957,7 @@ export type Database = {
           day_rate_hours?: number | null
           deleted_at?: string | null
           end_time?: string | null
+          extra_meals?: Json | null
           has_6th_7th_day_rule?: boolean
           has_vacation_pay?: boolean
           hourly_rate?: number | null
@@ -1003,6 +1008,7 @@ export type Database = {
           day_rate_hours?: number | null
           deleted_at?: string | null
           end_time?: string | null
+          extra_meals?: Json | null
           has_6th_7th_day_rule?: boolean
           has_vacation_pay?: boolean
           hourly_rate?: number | null

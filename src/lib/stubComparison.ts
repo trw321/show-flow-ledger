@@ -1,5 +1,6 @@
 import type { Job, Employer } from './store';
 import { jobPayBreakdown, netHoursWorked } from './payCalc';
+import { EMPTY_PROFILE, type PayerProfile } from './payerProfile';
 import type { StubParsed } from './stubMatching';
 
 export type RowStatus = 'match' | 'close' | 'off' | 'missing';
@@ -49,10 +50,11 @@ export function compareStubToShifts(
   jobs: Job[],
   allJobs: Job[],
   employers: Employer[],
+  payer: PayerProfile = EMPTY_PROFILE,
 ): ComparisonRow[] {
   const totals = jobs.reduce(
     (acc, job) => {
-      const { gross, net, dues, tax, vacation } = jobPayBreakdown(job, allJobs, employers);
+      const { gross, net, dues, tax, vacation } = jobPayBreakdown(job, allJobs, employers, payer);
       acc.gross += gross;
       acc.net += net;
       acc.dues += dues;

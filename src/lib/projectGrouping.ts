@@ -42,6 +42,8 @@ const norm = (s?: string) => (s ?? '').trim().toLowerCase();
 
 /** A shift logged without its job number joins a numbered run of the same show this close to it. */
 const NEAR_RUN_DAYS = 14;
+/** With no job number to say otherwise, the same show this long after the last day is a new project. */
+const NEW_RUN_GAP_DAYS = 7;
 
 /**
  * Every shift's project, worked out once over the whole ledger, so the
@@ -55,7 +57,9 @@ const NEAR_RUN_DAYS = 14;
  *  - A shift without one joins the nearest numbered run of the same show for
  *    the same employer, within two weeks.
  *  - Otherwise the show name and the employer, ignoring case, and the
- *    employer's spelling ("BLACKPOINT PRODUCTION INC." is Blackpoint).
+ *    employer's spelling ("BLACKPOINT PRODUCTION INC." is Blackpoint), for as
+ *    long as the days keep coming. A week's gap starts a new project: the same
+ *    show in March and in November is two jobs, paid twice.
  *  - A shift with no name and no number is a project of its own.
  */
 export function projectKeys(jobs: Job[], employers: Employer[] = []): Map<string, string> {
@@ -74,6 +78,7 @@ export function projectKeys(jobs: Job[], employers: Employer[] = []): Map<string
     }
   }
 
+  const loose = new Map<string, Job[]>();
   for (const j of jobs) {
     if (keys.has(j.id)) continue;
     if (!norm(j.name)) { keys.set(j.id, 'shift:' + j.id); continue; }
@@ -83,7 +88,17 @@ export function projectKeys(jobs: Job[], employers: Employer[] = []): Map<string
       const gap = Math.abs(differenceInCalendarDays(parseISO(n.date), parseISO(j.date)));
       if (gap <= NEAR_RUN_DAYS && (!nearest || gap < nearest.gap)) nearest = { job: n, gap };
     }
-    keys.set(j.id, nearest ? keys.get(nearest.job.id)! : 'show:' + k);
+    if (nearest) keys.set(j.id, keys.get(nearest.job.id)!);
+    else loose.set(k, [...(loose.get(k) ?? []), j]);
+  }
+
+  for (const [k, shifts] of loose) {
+    const byDate = [...shifts].sort((a, b) => a.date.localeCompare(b.date));
+    let runStart = byDate[0].date;
+    byDate.forEach((j, i) => {
+      if (i > 0 && differenceInCalendarDays(parseISO(j.date), parseISO(byDate[i - 1].date)) > NEW_RUN_GAP_DAYS) runStart = j.date;
+      keys.set(j.id, `show:${k}:${runStart}`);
+    });
   }
   return keys;
 }

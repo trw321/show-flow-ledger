@@ -117,6 +117,21 @@ describe('projectKeys: one answer for every screen', () => {
     expect(of('a')).not.toBe(of('b'));
   });
 
+  it('keeps the same show months apart as two projects', () => {
+    const of = key([
+      job({ id: 'a', date: '2026-03-02' }),
+      job({ id: 'b', date: '2026-03-03' }),
+      job({ id: 'c', date: '2026-11-02' }),
+    ]);
+    expect(of('a')).toBe(of('b'));
+    expect(of('c')).not.toBe(of('a'));
+  });
+
+  it('keeps a run together across a weekend off', () => {
+    const of = key([job({ id: 'a', date: '2026-03-06' }), job({ id: 'b', date: '2026-03-09' })]);
+    expect(of('a')).toBe(of('b'));
+  });
+
   it('gives the pay matcher the same project', () => {
     const jobs = [
       job({ id: 'a', name: 'Palace Hotel', jobNumber: '2026-3943', date: '2026-10-24' }),

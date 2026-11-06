@@ -49,6 +49,8 @@ export interface Job {
   meal2Duration?: 0 | 30 | 45 | 60;
   /** Whether the SECOND meal was paid. Same meaning as mealOnClock, for meal2Duration. */
   meal2OnClock?: boolean;
+  /** Meals past the second, on a long day. */
+  extraMeals?: { duration: 0 | 30 | 45 | 60; onClock: boolean }[];
   /** Units of meal-penalty pay owed (each = 1hr at straight rate) — only meaningful when mealDuration is 0. */
   mealPenalties?: number;
   /** For employers with nightPremiumEnabled: were the hours past midnight actually worked (true, gets the premium) vs. just minimum-call padding that was never really worked (false, straight time)? Undefined = not asked yet / not applicable. Superseded by nightPremiumActualHours when that's set — this stays around for the simple all-or-nothing case and old saved jobs. */
@@ -169,6 +171,8 @@ export interface Employer {
   firstCheckWeeks?: number;
   /** About how many days after the work the pay arrives, when the schedule alone does not say. */
   payLagDays?: number;
+  /** Any day a pay period started on. With paySchedule it says where every period falls. */
+  payPeriodStart?: string;
   /** The contract these terms came from — see contracts.ts. */
   contract?: string;
   /** The minimum call a new shift for this employer starts with. The shift can say otherwise. */

@@ -330,7 +330,8 @@ export function offClockMealMinutes(job: Job): number {
   }
   const first = job.mealDuration && !job.mealOnClock ? job.mealDuration : 0;
   const second = job.meal2Duration && !job.meal2OnClock ? job.meal2Duration : 0;
-  return first + second;
+  const more = (job.extraMeals ?? []).reduce((sum, m) => sum + (m.onClock ? 0 : m.duration), 0);
+  return first + second + more;
 }
 
 /**

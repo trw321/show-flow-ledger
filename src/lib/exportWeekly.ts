@@ -1,7 +1,7 @@
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import type { Job, Expense, Income, Employer } from './store';
-import { calculateDayPay, dayMultiplierFor, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming } from './payCalc';
+import { calculateDayPay, dayMultiplierFor, offClockMealMinutes, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming } from './payCalc';
 import { resolveEmployer } from './employerMatch';
 import { withholdsNothing } from './payerProfile';
 
@@ -22,7 +22,7 @@ function jobPayDetails(job: Job, allJobs: Job[], employers: Employer[]): JobPayD
     ? calculateNightHours(job.startTime, job.endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour)
     : 0;
   const nightHours = resolveConfirmedNightHours(rawNightHours, job.nightPremiumConfirmed, job.nightPremiumActualHours);
-  const { totalPay, duesAmount, taxAmount, nightHours: premiumHours } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock }, {
+  const { totalPay, duesAmount, taxAmount, nightHours: premiumHours } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock, offClockMinutesTotal: offClockMealMinutes(job) }, {
     rule: employer?.overtimeRule ?? 'daily',
     otThresholdHours: employer?.dailyOvertimeThresholdHours,
     dtThresholdHours: employer?.dailyDoubletimeThresholdHours,
