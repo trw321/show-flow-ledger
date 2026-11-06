@@ -221,6 +221,12 @@ export default function AuthPage() {
             </>
           )}
         </div>
+        {/* An account only adds sync and backup. Nothing needs one. */}
+        {!resetting && (
+          <button type="button" onClick={() => navigate('/')} className="mt-4 w-full text-center text-xs text-muted-foreground underline hover:text-foreground">
+            Use it without an account
+          </button>
+        )}
       </motion.div>
     </div>
   );
