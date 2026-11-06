@@ -10,6 +10,10 @@ interface AuthContextValue {
   loading: boolean;
   /** `signedIn` is false when the project wants the email confirmed first. */
   signUp: (email: string, password: string) => Promise<{ error: string | null; signedIn: boolean }>;
+  /** Emails a link that opens the choose-a-new-password screen. */
+  sendPasswordReset: (email: string) => Promise<{ error: string | null }>;
+  /** Sets a new password for whoever is signed in — which a reset link makes you. */
+  setNewPassword: (password: string) => Promise<{ error: string | null }>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
@@ -60,6 +64,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: error?.message ?? null };
   };
 
+  const sendPasswordReset = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/auth?reset=1` });
+    return { error: error?.message ?? null };
+  };
+
+  const setNewPassword = async (password: string) => {
+    const { error } = await supabase.auth.updateUser({ password });
+    return { error: error?.message ?? null };
+  };
+
   const signOut = async () => {
     // Signing out on purpose is the one thing that stops this device showing
     // the account's ledger; a session that merely lapses does not.
@@ -70,7 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, signUp, signIn, signOut, sendPasswordReset, setNewPassword }}>
       {children}
     </AuthContext.Provider>
   );
