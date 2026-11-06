@@ -125,3 +125,16 @@ export function projectOf(job: Job, allJobs: Job[], employers: Employer[] = NO_E
   const key = keys.get(job.id);
   return key ? allJobs.filter(j => keys.get(j.id) === key) : [job];
 }
+
+/**
+ * A callback is any day of a job after its first. The start date is the call,
+ * and every later date is a call back. A second call on the same day is a
+ * split, not a callback, whatever the offer's notes say: "CB SAME DAY" is a
+ * split. It's worked out from the dates because the notes can't be trusted
+ * either way: the days expanded from "CB 11/9" don't say CB on them at all.
+ */
+export function isCallback(job: Job, allJobs: Job[], employers: Employer[] = NO_EMPLOYERS): boolean {
+  if (job.status === 'cancelled') return false;
+  const start = projectOf(job, allJobs, employers).filter(j => j.status !== 'cancelled').map(j => j.date).sort()[0];
+  return !!start && job.date > start;
+}

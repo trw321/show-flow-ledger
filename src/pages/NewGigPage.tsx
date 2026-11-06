@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { isDuplicateJob, findLikelyDuplicate } from '@/lib/jobDedup';
 import { findOfferMatch, mergeOffer, type OfferMerge } from '@/lib/offerMerge';
+import { isCallback } from '@/lib/projectGrouping';
 import { PARSER_MODELS, REASONING_EFFORTS, supportsReasoning, loadParserChoice, saveParserChoice, nextLevel, type ReasoningEffort } from '@/lib/parserModels';
 import type { Job, CalendarEvent, EmployerRole } from '@/lib/store';
 import { contractsWorked } from '@/lib/contracts';
@@ -56,7 +57,7 @@ async function callAPI(url: string, key: string, body: object): Promise<Response
 }
 
 function ShiftCard({
-  job, index, selected, conflict, existingMatch, merge, onToggle, onChange,
+  job, index, selected, conflict, existingMatch, merge, callback, onToggle, onChange,
 }: {
   job: ParsedJob;
   index: number;
@@ -65,11 +66,12 @@ function ShiftCard({
   existingMatch?: Job;
   /** This offer is a shift already logged, and what it adds to it. */
   merge?: OfferMerge;
+  /** A later day of the job than its first. */
+  callback: boolean;
   onToggle: () => void;
   onChange: (field: keyof ParsedJob, value: string | number | undefined) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const isCallback = !!job.notes?.match(/\bC\/?B\b/i) && !job.notes?.match(/\bNO[\s/-]*C\/?B\b/i);
 
   return (
     <div className={cn(
@@ -94,7 +96,7 @@ function ShiftCard({
           <div className="min-w-0">
             <p className="text-sm font-medium flex items-center gap-1.5">
               <span className="truncate">{job.date ? format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d') : '—'}</span>
-              {isCallback && <Phone size={12} className="text-destructive shrink-0" aria-label="Callback" />}
+              {callback && <Phone size={12} className="text-destructive shrink-0" aria-label="Callback" />}
               {conflict && (
                 <span className="text-[10px] text-warning font-normal shrink-0">
                   <AlertTriangle size={10} className="inline mr-0.5" />same date
@@ -103,7 +105,7 @@ function ShiftCard({
             </p>
             <p className="text-xs text-muted-foreground truncate">
               {[
-                isCallback ? 'Callback' : null,
+                callback ? 'Callback' : null,
                 job.name,
                 job.client,
                 job.venue,
@@ -655,6 +657,14 @@ export default function NewGigPage({ onComplete, startAs }: {
     return map;
   }, [jobs, data.jobs, text]);
 
+  // Which of these are callbacks, against the rest of this paste and whatever
+  // is already logged for the job: a later date on a job that started earlier.
+  const callbacks = useMemo(() => {
+    const offers = jobs.map((j, i) => ({ ...j, id: `offer-${i}` }) as unknown as Job);
+    const everything = [...data.jobs, ...offers];
+    return offers.map(o => isCallback(o, everything, data.employers));
+  }, [jobs, data.jobs, data.employers]);
+
   const handleImport = async () => {
     if (selected.size === 0) { toast.error('Select at least one shift'); return; }
     setIsImporting(true);
@@ -1192,6 +1202,7 @@ export default function NewGigPage({ onComplete, startAs }: {
                 conflict={conflictDates.has(job.date)}
                 existingMatch={existingMatches.get(i)}
                 merge={offerMerges.get(i)}
+                callback={callbacks[i]}
                 onToggle={() => setSelected(prev => { const next = new Set(prev); next.has(i) ? next.delete(i) : next.add(i); return next; })}
                 onChange={(field, value) => updateParsedJob(i, field, value)}
               />

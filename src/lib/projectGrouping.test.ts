@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sameProject, projectSiblingsToRelabel, projectKeys, projectOf } from './projectGrouping';
+import { isCallback, sameProject, projectSiblingsToRelabel, projectKeys, projectOf } from './projectGrouping';
 import type { Employer, Job } from './store';
 
 const job = (extra: Partial<Job>): Job => ({
@@ -7,6 +7,54 @@ const job = (extra: Partial<Job>): Job => ({
   date: '2026-09-21', status: 'upcoming', notes: '',
   has6th7thDayRule: false, ...extra,
 } as Job);
+
+describe('what a callback is', () => {
+  const run = [
+    job({ id: 'first', date: '2026-11-08', jobNumber: '2026-3926' }),
+    job({ id: 'next', date: '2026-11-09', jobNumber: '2026-3926' }),
+    job({ id: 'out', date: '2026-11-21', jobNumber: '2026-3926' }),
+  ];
+  const of = (id: string, jobs = run) => isCallback(jobs.find(j => j.id === id)!, jobs);
+
+  it('is any day after the start date', () => {
+    expect(of('first')).toBe(false);
+    expect(of('next')).toBe(true);
+    expect(of('out')).toBe(true);
+  });
+
+  it('does not need the notes to say so', () => {
+    expect(run.every(j => !/cb/i.test(j.notes ?? ''))).toBe(true);
+    expect(of('next')).toBe(true);
+  });
+
+  it('is never a one-day job, whatever its notes say', () => {
+    const parade = [job({ id: 'p', date: '2026-11-04', jobNumber: '2026-3943', notes: 'CB SAME DAY FOR LOAD OUT' })];
+    expect(of('p', parade)).toBe(false);
+  });
+
+  it('is not a second call on the same day, which is a split', () => {
+    const split = [job({ id: 'am', date: '2026-09-19', startTime: '9:00 AM' }), job({ id: 'pm', date: '2026-09-19', startTime: '6:30 PM' })];
+    expect(of('am', split)).toBe(false);
+    expect(of('pm', split)).toBe(false);
+  });
+
+  it('counts both calls of a split on a later day', () => {
+    const later = [...run, job({ id: 'late', date: '2026-11-21', jobNumber: '2026-3926', startTime: '6:00 PM' })];
+    expect(of('late', later)).toBe(true);
+  });
+
+  it('starts from the first day that actually happened', () => {
+    const cut = [job({ id: 'gone', date: '2026-11-08', jobNumber: 'X', status: 'cancelled' }), job({ id: 'a', date: '2026-11-09', jobNumber: 'X' }), job({ id: 'b', date: '2026-11-10', jobNumber: 'X' })];
+    expect(of('a', cut)).toBe(false);
+    expect(of('b', cut)).toBe(true);
+    expect(of('gone', cut)).toBe(false);
+  });
+
+  it('follows a job however its number is written', () => {
+    const mixed = [job({ id: 'a', date: '2026-08-22', jobNumber: '2705' }), job({ id: 'b', date: '2026-08-25', jobNumber: '2026-2705' })];
+    expect(of('b', mixed)).toBe(true);
+  });
+});
 
 describe('sameProject', () => {
   it('matches on the job number when both carry one', () => {

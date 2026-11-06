@@ -1,6 +1,6 @@
 import { localToday } from './today';
 import { describe, it, expect } from 'vitest';
-import { hourUpdateToEntry, matchEntries, isCallbackShift, type SmartImportHourUpdate, type HoursEntry } from './hoursMatching';
+import { hourUpdateToEntry, matchEntries, notedAsCallback, type SmartImportHourUpdate, type HoursEntry } from './hoursMatching';
 import { calculateDayPay, offClockMealMinutes, netHoursWorked, jobPayBreakdown, effectiveHoursWorked } from './payCalc';
 import type { Employer, Job } from './store';
 import { EMPTY_PROFILE } from './payerProfile';
@@ -403,14 +403,14 @@ describe('matching an hours note to a shift', () => {
   });
 
   it('recognises the callback wording as well as the code', () => {
-    expect(isCallbackShift(job({ notes: 'cb for load out' }))).toBe(true);
-    expect(isCallbackShift(job({ notes: 'Callback 10p' }))).toBe(true);
-    expect(isCallbackShift(job({ name: 'Call Back' }))).toBe(true);
-    expect(isCallbackShift(job({ notes: 'dock B, bring blacks' }))).toBe(false);
+    expect(notedAsCallback(job({ notes: 'cb for load out' }))).toBe(true);
+    expect(notedAsCallback(job({ notes: 'Callback 10p' }))).toBe(true);
+    expect(notedAsCallback(job({ name: 'Call Back' }))).toBe(true);
+    expect(notedAsCallback(job({ notes: 'dock B, bring blacks' }))).toBe(false);
   });
 
   it('does not mistake an ordinary word containing cb for a callback', () => {
-    expect(isCallbackShift(job({ notes: 'cbs television city' }))).toBe(false);
+    expect(notedAsCallback(job({ notes: 'cbs television city' }))).toBe(false);
   });
 });
 

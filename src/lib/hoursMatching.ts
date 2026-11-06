@@ -125,12 +125,13 @@ export interface MatchResult {
 }
 
 /**
- * A callback is a second call on a day you have already worked, and it starts
- * when the show needs you rather than when the first call did. A start time
- * that disagrees with the parent shift is therefore the normal case, not
- * evidence against the match — so it is not compared at all for one.
+ * A shift whose notes call it a callback, in any form, "CB SAME DAY" included.
+ * It starts when the show needs you rather than when the first call did, so a
+ * start time that disagrees is the normal case, not evidence against the match,
+ * and it is not compared at all. This is only for that: what is really a
+ * callback comes from the dates, see isCallback.
  */
-export function isCallbackShift(job: Job): boolean {
+export function notedAsCallback(job: Job): boolean {
   // Word-bounded, so "CBS Television City" stays a venue, not a callback.
   return /\bcb\b|\bcall[\s-]?backs?\b/i.test(`${job.notes ?? ''} ${job.name ?? ''}`);
 }
@@ -166,7 +167,7 @@ export function scoreMatch(entry: HoursEntry, job: Job): { score: number; possib
 
   // Start time match — skipped entirely for a callback, which is expected to
   // start at its own time.
-  if (entry.startTime && job.startTime && !isCallbackShift(job)) {
+  if (entry.startTime && job.startTime && !notedAsCallback(job)) {
     const em = parseTimeToMins(entry.startTime);
     const jm = parseTimeToMins(job.startTime);
     if (!isNaN(em) && !isNaN(jm)) {

@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react';
-import { sameProject, projectKeysFor } from '@/lib/projectGrouping';
-import { isCallbackShift } from '@/lib/hoursMatching';
+import { isCallback, sameProject, projectKeysFor } from '@/lib/projectGrouping';
 import { projectSiblingsToRelabel } from '@/lib/projectGrouping';
 import StubEditor from '@/components/StubEditor';
 import MoneyRain from '@/components/MoneyRain';
@@ -18,7 +17,7 @@ import {
 import { parseDayTimeline, withGapOnClock, type DayTimeline } from '@/lib/dayTimeline';
 import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle, Flame, PenLine, Banknote, Wallet, Flag, Undo2 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO, differenceInCalendarDays } from 'date-fns';
-import type { Job, CalendarEvent, Income, Invoice } from '@/lib/store';
+import type { Employer, Job, CalendarEvent, Income, Invoice } from '@/lib/store';
 import { matchPaymentToProject, betterProject, bestProjectFor, projectOf, type FoundPayment } from '@/lib/paymentMatch';
 import { payDueDate, payTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
 import { paidShiftIds, periodNet, periodPayments, projectPeriods, type PayPeriod, type ProjectPeriod } from '@/lib/payPeriods';
@@ -204,12 +203,12 @@ function planColor(title: string): string {
 }
 
 /**
- * A callback — a second call on a day already worked, or a later day of a run.
- * Worth seeing at a glance: it starts at its own time and it is the one the
- * hours note is most likely to disagree with.
+ * A callback: any day of a job after its first. Worth seeing at a glance: it
+ * starts at its own time and it is the one the hours note is most likely to
+ * disagree with.
  */
-function CallbackMark({ job }: { job: Job }) {
-  if (!isCallbackShift(job)) return null;
+function CallbackMark({ job, allJobs, employers }: { job: Job; allJobs: Job[]; employers: Employer[] }) {
+  if (!isCallback(job, allJobs, employers)) return null;
   return (
     <span role="img" aria-label="Callback" title="Callback" className="text-[11px] leading-none select-none">
       📞
@@ -414,7 +413,6 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   const { user } = useAuth();
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-  const isCallback = !!job.notes?.match(/\bC\/?B\b/i) && !job.notes?.match(/\bNO[\s/-]*C\/?B\b/i);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [client, setClient] = useState(job.client ?? '');
   const [startTime, setStartTime] = useState(job.startTime ?? '');
@@ -1080,7 +1078,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
         <div className="min-w-0">
           <p className="text-[10px] font-body uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
             <span>{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d, yyyy')}</span>
-            {isCallback && <Phone size={11} className="text-destructive shrink-0" aria-label="Callback" />}
+            {isCallback(job, data.jobs, data.employers) && <Phone size={11} className="text-destructive shrink-0" aria-label="Callback" />}
           </p>
           <DialogTitle className="text-mono text-sm truncate">{job.name}</DialogTitle>
         </div>
@@ -1571,7 +1569,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <CallbackMark job={job} />Clocked hours<SplitMark job={job} allJobs={data.jobs} />
+                <CallbackMark job={job} allJobs={data.jobs} employers={data.employers} />Clocked hours<SplitMark job={job} allJobs={data.jobs} />
               </label>
               <Input type="number" min="0" step="0.5" value={hoursWorked} onChange={e => handleHoursWorkedChange(e.target.value)} placeholder="e.g. 8" className="h-9 text-sm text-mono" />
               {/* The box holds the clocked span, because that is what gets saved and
@@ -2966,7 +2964,7 @@ export default function CalendarPage() {
                   return (
                     <div key={job.id} onClick={() => setSelectedJobId(job.id)} className={cn("rounded-md border p-3 space-y-1 cursor-pointer hover:opacity-90 transition-opacity", paid ? "bg-success/20 text-success border-success/30" : overdue ? "bg-warning/20 text-warning border-warning/30" : statusColors[job.status])}>
                       <div className="flex items-start justify-between">
-                        <div><p className="font-medium text-sm flex items-center gap-1.5"><CallbackMark job={job} />{job.needsReview && <Flag size={12} className="text-warning shrink-0" aria-label="Flagged to check later" />}{job.name}{job.role && <span className="opacity-70 font-normal">· {job.role}</span>}{job.pto && <span className="text-[10px] text-mono font-bold border border-current px-1">PTO</span>}<SplitMark job={job} allJobs={data.jobs} /></p><p className="text-xs opacity-70">{job.client}</p></div>
+                        <div><p className="font-medium text-sm flex items-center gap-1.5"><CallbackMark job={job} allJobs={data.jobs} employers={data.employers} />{job.needsReview && <Flag size={12} className="text-warning shrink-0" aria-label="Flagged to check later" />}{job.name}{job.role && <span className="opacity-70 font-normal">· {job.role}</span>}{job.pto && <span className="text-[10px] text-mono font-bold border border-current px-1">PTO</span>}<SplitMark job={job} allJobs={data.jobs} /></p><p className="text-xs opacity-70">{job.client}</p></div>
                         <span className="text-[10px] text-mono uppercase font-medium opacity-70">{paid ? 'Paid' : overdue ? 'Needs Hours' : job.status}</span>
                       </div>
                       {job.venue && <p className="text-xs opacity-60">{job.venue}</p>}
@@ -3423,7 +3421,7 @@ export default function CalendarPage() {
                             onClick={() => openJob(job)}
                             className="px-3 py-2 pl-6 flex items-center justify-between gap-2 cursor-pointer hover:bg-primary/10 active:bg-primary/15 transition-colors"
                           >
-                            <span className="text-xs text-mono flex items-center gap-1.5"><CallbackMark job={job} />{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}<SplitMark job={job} allJobs={data.jobs} />{sixthSeventhDayDates[job.date] && <PremiumTag day={sixthSeventhDayDates[job.date].day} pays={sixthSeventhDayDates[job.date].pays} />}</span>
+                            <span className="text-xs text-mono flex items-center gap-1.5"><CallbackMark job={job} allJobs={data.jobs} employers={data.employers} />{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}<SplitMark job={job} allJobs={data.jobs} />{sixthSeventhDayDates[job.date] && <PremiumTag day={sixthSeventhDayDates[job.date].day} pays={sixthSeventhDayDates[job.date].pays} />}</span>
                             <span className="flex items-center gap-1.5 text-[11px] text-mono text-muted-foreground">
                               {netHoursWorked(job) > 0 ? `${netHoursWorked(job)}h` : isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
                               {job.startTime && !job.endTime && <span className="text-warning"> · no end time</span>}
