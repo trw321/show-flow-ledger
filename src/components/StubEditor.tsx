@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { Crop, RectangleHorizontal, Undo2, Check, X, ZoomIn, ZoomOut, Move, Maximize } from 'lucide-react';
+import { Crop, Stamp, Undo2, Check, X, ZoomIn, ZoomOut, Move, Maximize } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /**
@@ -12,6 +12,10 @@ import { cn } from '@/lib/utils';
  * redacted areas are painted into the image itself, so what gets uploaded does
  * not contain them in the first place. This is not an overlay that could be
  * peeled off later.
+ *
+ * It goes on as a stamp, because blacking out your own pay stub might as well
+ * be fun. The stamp is only ever on top of the black, which covers first and
+ * completely.
  *
  * It takes the whole screen: inside the pop-up it opened from, a stub was too
  * small to put a bar on one line of it, and zoomed in it could not be moved up
@@ -49,6 +53,47 @@ function normalise(a: Point, b: Point): Rect {
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+
+const STAMP_RED = '#ff2a2a';
+/** A tap's stamp, as a share of what's on screen. */
+const STAMP_WIDTH = 0.34;
+const STAMP_SHAPE = 0.3;
+
+/**
+ * One stamp on the image. Solid black goes down first, edge to edge, so nothing
+ * under it can show. The red is drawn on the black and clipped to it, tilted a
+ * little like a hand did it, and turned sideways in a tall stamp.
+ */
+function paintStamp(ctx: CanvasRenderingContext2D, r: Rect) {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+
+  const tall = r.h > r.w * 1.5;
+  const long = tall ? r.h : r.w;
+  const short = tall ? r.w : r.h;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(r.x, r.y, r.w, r.h);
+  ctx.clip();
+  ctx.translate(r.x + r.w / 2, r.y + r.h / 2);
+  ctx.rotate((tall ? -Math.PI / 2 : 0) - Math.min(0.03, (short * 0.1) / long));
+  const line = Math.max(1, short * 0.07);
+  const inset = short * 0.12;
+  ctx.strokeStyle = STAMP_RED;
+  ctx.lineWidth = line;
+  ctx.strokeRect(-long / 2 + inset, -short / 2 + inset, long - inset * 2, short - inset * 2);
+  // Measured at one size and scaled, so it fits whatever font the phone has.
+  const font = (size: number) => `900 ${size}px "Arial Black", Impact, Helvetica, sans-serif`;
+  ctx.font = font(100);
+  const fits = (long - inset * 4) / ctx.measureText('REDACTED').width * 100;
+  const size = Math.min(fits, short * 0.62);
+  ctx.font = font(size);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = STAMP_RED;
+  ctx.fillText('REDACTED', 0, size * 0.04);
+  ctx.restore();
+}
 const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 const midpoint = (a: Point, b: Point): Point => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 const inside = (p: Point, r: Rect) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
@@ -61,6 +106,8 @@ export default function StubEditor({ source, onCancel, onDone }: Props) {
   const [redactions, setRedactions] = useState<Rect[]>([]);
   const [crop, setCrop] = useState<Rect | null>(null);
   const [history, setHistory] = useState<Snapshot[]>([]);
+  // The stamp coming down. The picture already has it; this is the thump.
+  const [landing, setLanding] = useState<{ id: number; at: Rect } | null>(null);
   const [drag, setDrag] = useState<{ from: Point; to: Point } | null>(null);
   const [ready, setReady] = useState(false);
   const [natural, setNatural] = useState({ w: 1, h: 1 });
@@ -165,8 +212,7 @@ export default function StubEditor({ source, onCancel, onDone }: Props) {
 
     ctx.drawImage(img, 0, 0);
 
-    ctx.fillStyle = '#000';
-    for (const r of redactions) ctx.fillRect(r.x, r.y, r.w, r.h);
+    for (const r of redactions) paintStamp(ctx, r);
 
     const scale = img.naturalWidth / 800;
     const line = Math.max(2, 2 * scale);
@@ -195,6 +241,13 @@ export default function StubEditor({ source, onCancel, onDone }: Props) {
 
   /** Remember how things are, so the next change can be undone. */
   const remember = () => setHistory(h => [...h, { redactions, crop }]);
+
+  const stamp = (r: Rect) => {
+    remember();
+    setRedactions(prev => [...prev, r]);
+    setLanding({ id: Date.now(), at: r });
+    navigator.vibrate?.(20);
+  };
 
   const undo = () => {
     const last = history[history.length - 1];
@@ -265,21 +318,28 @@ export default function StubEditor({ source, onCancel, onDone }: Props) {
     const r = normalise(drag.from, drag.to);
     setDrag(null);
     if (tapped) {
-      // A tap on a black bar takes it off again.
+      // A tap on a stamp takes it off again. Anywhere else on the stub, it stamps.
       if (tool === 'redact') {
         const p = toImageSpace(e.clientX, e.clientY);
         const hit = redactions.map((bar, i) => (inside(p, bar) ? i : -1)).filter(i => i >= 0).pop();
         if (hit !== undefined) {
           remember();
           setRedactions(prev => prev.filter((_, i) => i !== hit));
+        } else if (inside(p, { x: 0, y: 0, w: natural.w, h: natural.h })) {
+          // Sized to what's on screen, so zoomed in it fits one line of print.
+          const w = (natural.w * STAMP_WIDTH) / zoom;
+          const h = w * STAMP_SHAPE;
+          stamp({ x: clamp(p.x - w / 2, 0, natural.w - w), y: clamp(p.y - h / 2, 0, natural.h - h), w, h });
         }
       }
       return;
     }
     if (r.w < 4 || r.h < 4) return;
-    remember();
-    if (tool === 'redact') setRedactions(prev => [...prev, r]);
-    else setCrop(r);
+    if (tool === 'redact') stamp(r);
+    else {
+      remember();
+      setCrop(r);
+    }
   };
 
   const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -301,8 +361,7 @@ export default function StubEditor({ source, onCancel, onDone }: Props) {
     const ctx = out.getContext('2d');
     if (!ctx) return;
     ctx.drawImage(img, -area.x, -area.y);
-    ctx.fillStyle = '#000';
-    for (const r of redactions) ctx.fillRect(r.x - area.x, r.y - area.y, r.w, r.h);
+    for (const r of redactions) paintStamp(ctx, { ...r, x: r.x - area.x, y: r.y - area.y });
     onDone(out.toDataURL('image/jpeg', 0.85));
   };
 
@@ -323,7 +382,7 @@ export default function StubEditor({ source, onCancel, onDone }: Props) {
               <X size={13} /> Cancel
             </button>
             <DialogPrimitive.Title className="text-xs text-mono uppercase tracking-widest text-muted-foreground">
-              Black out &amp; crop
+              Redact &amp; crop
             </DialogPrimitive.Title>
             <button type="button" onClick={apply} disabled={!ready} className="pixel-button pick-on flex items-center gap-1 px-3 py-1.5 text-xs font-bold disabled:opacity-40">
               <Check size={13} /> {hasEdits ? 'Use edited' : 'Use as is'}
@@ -332,7 +391,7 @@ export default function StubEditor({ source, onCancel, onDone }: Props) {
 
           <div className="flex items-center gap-1.5 px-3 py-2">
             {([
-              { id: 'redact' as const, label: 'Black bar', icon: RectangleHorizontal },
+              { id: 'redact' as const, label: 'Stamp', icon: Stamp },
               { id: 'crop' as const, label: 'Crop', icon: Crop },
               { id: 'pan' as const, label: 'Move', icon: Move },
             ]).map(({ id, label, icon: Icon }) => (
@@ -376,6 +435,20 @@ export default function StubEditor({ source, onCancel, onDone }: Props) {
               style={{ width: baseW, height: baseH, transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: '0 0' }}
             >
               <canvas ref={canvasRef} className="block h-full w-full" />
+              {landing && (
+                <div
+                  key={landing.id}
+                  aria-hidden
+                  className="stamp-landing"
+                  onAnimationEnd={() => setLanding(null)}
+                  style={{
+                    left: `${(landing.at.x / natural.w) * 100}%`,
+                    top: `${(landing.at.y / natural.h) * 100}%`,
+                    width: `${(landing.at.w / natural.w) * 100}%`,
+                    height: `${(landing.at.h / natural.h) * 100}%`,
+                  }}
+                />
+              )}
             </div>
           </div>
 
@@ -405,7 +478,7 @@ export default function StubEditor({ source, onCancel, onDone }: Props) {
           </div>
           <p className="px-3 pb-2 pt-1.5 text-[11px] text-muted-foreground">
             {tool === 'redact'
-              ? `Drag over anything private. Tap a bar to take it off. Pinch or + to zoom, two fingers or Move to get around.${redactions.length ? ` · ${redactions.length} bar${redactions.length === 1 ? '' : 's'}` : ''}`
+              ? `Tap to stamp it, or drag over a long line. Tap a stamp to take it off. Pinch or + to zoom, two fingers or Move to get around.${redactions.length ? ` · ${redactions.length} stamp${redactions.length === 1 ? '' : 's'}` : ''}`
               : tool === 'crop'
                 ? 'Drag around the part worth keeping.'
                 : 'Drag to move around the stub. Pinch to zoom.'}
