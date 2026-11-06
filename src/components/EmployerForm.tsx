@@ -40,10 +40,10 @@ export interface EmployerFormState {
   ptoStartingHours: string;
   /** The W-4 filed with this employer says exempt. */
   w4Exempt: boolean;
-  /** When they pay, as picked: weekly, bi-weekly, a slow first check, or anything else. */
-  schedule: 'weekly' | 'bi-weekly' | 'first-check' | 'other';
-  /** After a slow first check, the regular schedule. */
-  afterFirst: 'weekly' | 'bi-weekly';
+  /** When they pay, as picked: weekly, bi-weekly, or anything else. */
+  schedule: 'weekly' | 'bi-weekly' | 'other';
+  /** The first check takes weeks to arrive, and then the schedule starts. */
+  slowFirstCheck: boolean;
   firstCheckWeeks: string;
   payLagDays: string;
   /** Which contract the terms came from, or empty. */
@@ -59,7 +59,7 @@ export const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyR
   // Breaking the hour is a union contract term. Some employers pay it and
   // some (Odeum) do not, so a new employer starts without it.
   workerStatus: 'w2', breakTheHour: false, roles: [], ptoEarnHours: '', ptoPerHoursWorked: '', ptoStartingHours: '',
-  w4Exempt: false, schedule: 'other', afterFirst: 'weekly', firstCheckWeeks: '3', payLagDays: '',
+  w4Exempt: false, schedule: 'other', slowFirstCheck: false, firstCheckWeeks: '3', payLagDays: '',
   contract: '', dtThreshold: '', minimumCall: '', mealPenaltyAfter: '', nightEndHour: '', sixthSeventh: false,
   payrollCompany: '', payPeriodStart: '' };
 
@@ -89,10 +89,8 @@ export function employerToForm(e: Employer, legacyExempt = false): EmployerFormS
     ptoPerHoursWorked: e.ptoPerHoursWorked?.toString() ?? '',
     ptoStartingHours: e.ptoStartingHours?.toString() ?? '',
     w4Exempt: e.w4Exempt ?? legacyExempt,
-    schedule: e.firstCheckWeeks ? 'first-check'
-      : e.paySchedule === 'weekly' || e.paySchedule === 'bi-weekly' ? e.paySchedule
-      : 'other',
-    afterFirst: e.paySchedule === 'bi-weekly' ? 'bi-weekly' : 'weekly',
+    schedule: e.paySchedule === 'weekly' || e.paySchedule === 'bi-weekly' ? e.paySchedule : 'other',
+    slowFirstCheck: !!e.firstCheckWeeks,
     firstCheckWeeks: e.firstCheckWeeks?.toString() ?? '3',
     payLagDays: e.payLagDays?.toString() ?? '',
     contract: e.contract ?? '',
@@ -150,13 +148,11 @@ function formTerms(form: EmployerFormState): Partial<Employer> {
     ptoStartingHours: num(form.ptoStartingHours),
     // A W-4 is a W2 thing; 1099 withholds nothing either way.
     w4Exempt: form.workerStatus === 'w2' ? form.w4Exempt : undefined,
-    // When they pay. Only the picked shape's numbers are kept, so a stale
-    // first-check delay cannot sit behind a plain weekly schedule.
-    paySchedule: form.schedule === 'first-check' ? form.afterFirst
-      : form.schedule === 'other' ? undefined
-      : form.schedule,
-    firstCheckWeeks: form.schedule === 'first-check' ? num(form.firstCheckWeeks) ?? 3 : undefined,
-    payLagDays: form.schedule === 'first-check' ? undefined : num(form.payLagDays),
+    // When they pay. A delay only counts while the switch is on, so a stale
+    // one cannot sit behind a plain weekly schedule.
+    paySchedule: form.schedule === 'other' ? undefined : form.schedule,
+    firstCheckWeeks: form.slowFirstCheck ? num(form.firstCheckWeeks) ?? 3 : undefined,
+    payLagDays: num(form.payLagDays),
     contract: form.contract || undefined,
     dailyDoubletimeThresholdHours: form.overtimeRule === 'daily' ? num(form.dtThreshold) : undefined,
     minimumCallHours: num(form.minimumCall),
@@ -262,11 +258,10 @@ export function EmployerForm({ initial, onSave, onCancel }: {
       {/* When they pay — so "waiting on pay" only sounds once it is late. */}
       <div className="space-y-1.5 pt-1">
         <p className="text-xs">When they pay</p>
-        <div className="grid grid-cols-4 gap-1.5">
+        <div className="grid grid-cols-3 gap-1.5">
           {([
             { id: 'weekly' as const, label: 'Weekly' },
             { id: 'bi-weekly' as const, label: 'Bi-weekly' },
-            { id: 'first-check' as const, label: '3-wk start' },
             { id: 'other' as const, label: 'Other' },
           ]).map(({ id, label }) => (
             <button
@@ -280,23 +275,21 @@ export function EmployerForm({ initial, onSave, onCancel }: {
             </button>
           ))}
         </div>
-        {form.schedule === 'first-check' && (
+        {/* Goes with a schedule, not instead of one: the first check is slow,
+            and then weekly or bi-weekly takes over. */}
+        <div className="flex items-center justify-between gap-2">
+          <span className="min-w-0">
+            <span className="block text-[11px]">Slow first check</span>
+            <span className="block text-[10px] text-muted-foreground">It takes weeks to arrive, then the schedule kicks in.</span>
+          </span>
+          <Switch aria-label="Slow first check" checked={form.slowFirstCheck} onCheckedChange={on => setForm(f => ({ ...f, slowFirstCheck: on }))} />
+        </div>
+        {form.slowFirstCheck && (
           <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
             <span>First check</span>
-            <Input type="number" step="1" min="1" value={form.firstCheckWeeks}
+            <Input type="number" step="1" min="1" aria-label="Weeks until the first check" value={form.firstCheckWeeks}
               onChange={e => setForm(f => ({ ...f, firstCheckWeeks: e.target.value }))} className="h-8 w-14 text-xs" />
-            <span>weeks after your first day, then</span>
-            {(['weekly', 'bi-weekly'] as const).map(after => (
-              <button
-                key={after}
-                type="button"
-                aria-pressed={form.afterFirst === after}
-                onClick={() => setForm(f => ({ ...f, afterFirst: after }))}
-                className={cn('pixel-button px-2 py-1 text-[11px] font-bold', form.afterFirst === after ? 'pick-on' : 'pick-off')}
-              >
-                {after}
-              </button>
-            ))}
+            <span>weeks after your first day{form.schedule === 'other' ? '' : `, then ${form.schedule}`}</span>
           </div>
         )}
         {form.schedule !== 'other' && (
@@ -307,16 +300,14 @@ export function EmployerForm({ initial, onSave, onCancel }: {
             <span className="basis-full text-[10px]">Any one will do. It's how the app spots a project crossing into the next pay period.</span>
           </div>
         )}
-        {form.schedule !== 'first-check' && (
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-            <span>Paid within</span>
-            <Input type="number" step="1" min="1" aria-label="Paid within this many days of the work"
-              placeholder={String(payLagDays({ paySchedule: form.schedule === 'other' ? undefined : form.schedule } as Employer))}
-              value={form.payLagDays}
-              onChange={e => setForm(f => ({ ...f, payLagDays: e.target.value }))} className="h-8 w-14 text-xs" />
-            <span>days of the work{form.schedule === 'other' ? " — blank if you don't know" : ''}</span>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span>Paid within</span>
+          <Input type="number" step="1" min="1" aria-label="Paid within this many days of the work"
+            placeholder={String(payLagDays({ paySchedule: form.schedule === 'other' ? undefined : form.schedule } as Employer))}
+            value={form.payLagDays}
+            onChange={e => setForm(f => ({ ...f, payLagDays: e.target.value }))} className="h-8 w-14 text-xs" />
+          <span>days of the work{form.schedule === 'other' ? " — blank if you don't know" : ''}</span>
+        </div>
       </div>
       {/* How this employer pays. A day rate is a flat amount for the day,
           paid in full however short it was, with overtime past the hours it

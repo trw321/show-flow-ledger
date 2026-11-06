@@ -3,6 +3,7 @@ import type { Employer, Income, Job } from './store';
 import { resolveEmployer } from './employerMatch';
 import { effectiveHoursWorked, jobPayBreakdown } from './payCalc';
 import { EMPTY_PROFILE, type PayerProfile } from './payerProfile';
+import { firstCheckDate, payDueDate, payLagDays } from './payTiming';
 import { projectKeysFor } from './projectGrouping';
 
 /**
@@ -75,6 +76,8 @@ export function payPeriodOf(date: string, rule: PeriodRule): PayPeriod {
 export interface ProjectPeriod extends PayPeriod {
   /** The project's shifts in this period, oldest first. */
   jobs: Job[];
+  /** These shifts wait for a slow first check, not a regular one. */
+  firstCheck?: boolean;
 }
 
 export interface ProjectPeriods {
@@ -84,14 +87,32 @@ export interface ProjectPeriods {
   assumed: boolean;
 }
 
-/** A project cut at the edges of its employer's pay periods, oldest first. */
+/** The first day worked for an employer: where a slow first check's wait starts. */
+function firstDayWorked(employer: Employer, allJobs: Job[]): string | undefined {
+  return allJobs
+    .filter(j => j.status !== 'cancelled' && isDay(j.date) && effectiveHoursWorked(j) > 0 && resolveEmployer(j.client, [employer]))
+    .map(j => j.date)
+    .sort()[0];
+}
+
+/**
+ * A project cut at the edges of its employer's pay periods, oldest first. What
+ * waits for a slow first check is one piece however many periods it runs over:
+ * it's one check. After that the regular schedule takes over.
+ */
 export function projectPeriods(jobs: Job[], employer: Employer | undefined, allJobs: Job[]): ProjectPeriods {
   const rule = periodRule(employer, allJobs);
   if (!rule) return { periods: [], known: false, assumed: false };
+  const firstDay = employer?.firstCheckWeeks ? firstDayWorked(employer, allJobs) : undefined;
+  const firstCheck = firstCheckDate(employer, firstDay);
+  const firstPiece = firstCheck && firstDay
+    ? { start: firstDay, end: ymd(addDays(parseISO(firstCheck), -payLagDays(employer))), firstCheck: true }
+    : undefined;
   const byStart = new Map<string, ProjectPeriod>();
   for (const job of jobs) {
     if (job.status === 'cancelled' || !isDay(job.date)) continue;
-    const period = payPeriodOf(job.date, rule);
+    const onFirstCheck = firstPiece && payDueDate(job.date, employer, firstDay) === firstCheck;
+    const period = onFirstCheck ? firstPiece : payPeriodOf(job.date, rule);
     const entry = byStart.get(period.start) ?? { ...period, jobs: [] };
     entry.jobs.push(job);
     byStart.set(period.start, entry);

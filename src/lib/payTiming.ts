@@ -26,18 +26,21 @@ export function payLagDays(employer: Employer | undefined): number {
   return (employer?.paySchedule && LAG_DAYS[employer.paySchedule]) || DEFAULT_LAG_DAYS;
 }
 
+/** The day a slow first check should land, for an employer that has one. */
+export function firstCheckDate(employer: Employer | undefined, firstDayHere?: string): string | undefined {
+  if (!employer?.firstCheckWeeks || employer.firstCheckWeeks <= 0 || !firstDayHere) return undefined;
+  return format(addDays(parseISO(firstDayHere), Math.round(employer.firstCheckWeeks * 7)), 'yyyy-MM-dd');
+}
+
 /**
  * The day pay for work ending on `lastDay` should have arrived by. A first
  * check that takes weeks to set up covers everything worked before it, so
  * nothing worked in those first weeks is due before it.
  */
 export function payDueDate(lastDay: string, employer: Employer | undefined, firstDayHere?: string): string {
-  let due = addDays(parseISO(lastDay), payLagDays(employer));
-  if (employer?.firstCheckWeeks && employer.firstCheckWeeks > 0 && firstDayHere) {
-    const firstCheck = addDays(parseISO(firstDayHere), Math.round(employer.firstCheckWeeks * 7));
-    if (lastDay < format(firstCheck, 'yyyy-MM-dd') && firstCheck > due) due = firstCheck;
-  }
-  return format(due, 'yyyy-MM-dd');
+  const due = format(addDays(parseISO(lastDay), payLagDays(employer)), 'yyyy-MM-dd');
+  const firstCheck = firstCheckDate(employer, firstDayHere);
+  return firstCheck && lastDay < firstCheck && firstCheck > due ? firstCheck : due;
 }
 
 /** How worried to be, by how many days past due the pay is. */

@@ -86,6 +86,40 @@ describe('a project across pay periods', () => {
   });
 });
 
+describe('a slow first check', () => {
+  // Weekly from Nov 1, first check 3 weeks after a first day of Nov 2: Nov 23.
+  const e = employer({ paySchedule: 'weekly', payPeriodStart: '2026-11-01', firstCheckWeeks: 3 });
+
+  it('is one piece, however many periods it runs over', () => {
+    const run = [shift('a', '2026-11-02'), shift('b', '2026-11-09')];
+    const { periods } = projectPeriods(run, e, run);
+    expect(periods).toHaveLength(1);
+    expect(periods[0]).toMatchObject({ firstCheck: true, start: '2026-11-02', end: '2026-11-11' });
+  });
+
+  it('hands over to the regular schedule after it', () => {
+    const run = [shift('a', '2026-11-02'), shift('b', '2026-11-16')];
+    const { periods } = projectPeriods(run, e, run);
+    expect(periods).toHaveLength(2);
+    expect(periods[0].firstCheck).toBe(true);
+    expect(periods[1]).toMatchObject({ start: '2026-11-15', end: '2026-11-21' });
+    expect(periods[1].firstCheck).toBeUndefined();
+  });
+
+  it('has nothing to do with work long after it', () => {
+    const first = shift('a', '2026-01-05', { jobNumber: 'OLD' });
+    const later = [shift('b', '2026-11-07'), shift('c', '2026-11-08')];
+    const { periods } = projectPeriods(later, e, [first, ...later]);
+    expect(periods).toHaveLength(2);
+    expect(periods.some(p => p.firstCheck)).toBe(false);
+  });
+
+  it('is paid by one check', () => {
+    const run = [shift('a', '2026-11-02'), shift('b', '2026-11-09')];
+    expect([...paidShiftIds(run, [paid('a', 300, '2026-11-23')], [e])].sort()).toEqual(['a', 'b']);
+  });
+});
+
 describe('what a payment pays', () => {
   const e = employer({ paySchedule: 'weekly', payPeriodStart: '2026-11-01' });
   const run = [shift('a', '2026-11-06'), shift('b', '2026-11-07'), shift('c', '2026-11-08'), shift('d', '2026-11-09')];
