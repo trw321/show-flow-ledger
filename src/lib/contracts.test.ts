@@ -16,7 +16,7 @@ const run = (n: number, extra: (i: number) => Partial<Job> = () => ({})) =>
 describe('Local 16', () => {
   const e = employer(local16.terms);
 
-  it('is found from the employer', () => expect(contractFor(e)?.short).toBe('Local 16'));
+  it('is found from the employer', () => expect(contractFor(e)?.short).toBe('Basic Ent.'));
 
   it('pays 1.5× after 8 hours and 2× after 12', () => {
     const day = shift('a', '2026-10-05', { hoursWorked: 13 });

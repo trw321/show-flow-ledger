@@ -225,6 +225,9 @@ function EmployerForm({ initial, onSave, onCancel }: {
             {CONTRACTS.map(c => <SelectItem key={c.key} value={c.key}>{c.name} · {c.version}</SelectItem>)}
           </SelectContent>
         </Select>
+        {CONTRACTS.find(c => c.key === form.contract)?.caution && (
+          <p className="text-[10px] text-warning">{CONTRACTS.find(c => c.key === form.contract)!.caution}</p>
+        )}
         {form.contract && (
           <p className="text-[10px] text-muted-foreground">
             Filled in below, and you can change any of it. Once saved, overtime, night and 6th/7th day pay count on
@@ -1025,6 +1028,7 @@ export default function SettingsPage() {
                 <summary className="cursor-pointer text-sm font-medium">
                   {c.name} <span className="text-[11px] font-normal text-muted-foreground">{c.version}</span>
                 </summary>
+                {c.caution && <p className="mt-2 text-[11px] text-warning">{c.caution}</p>}
                 <ul className="mt-2 space-y-0.5 text-[11px] text-muted-foreground">
                   {c.summary.map(line => <li key={line}>• {line}</li>)}
                 </ul>

@@ -10,6 +10,10 @@ import type { Employer } from './store';
  *
  * These are the terms as they were saved in May 2026. What is here is what
  * was saved, not a reading of the agreement itself.
+ *
+ * Local 16 has many contracts, and each dispatch names the one it is under.
+ * The Basic Entertainment entry is only one of them, and an employer can work
+ * under several, so picking it for an employer is an approximation.
  */
 
 export interface Contract {
@@ -24,6 +28,8 @@ export interface Contract {
   summary: string[];
   /** In the contract, but not worked out by the app. */
   notCalculated: string[];
+  /** Said wherever it can be picked, when what it covers needs care. */
+  caution?: string;
   /** The 6th and 7th days count across everyone paying through one payroll company, not one employer. */
   countDaysByPayrollCompany?: boolean;
 }
@@ -31,9 +37,10 @@ export interface Contract {
 export const CONTRACTS: Contract[] = [
   {
     key: 'ia16-basic',
-    name: 'IATSE Local 16 Basic Agreement',
-    short: 'Local 16',
-    version: '2023–2028',
+    name: 'Local 16 Basic Entertainment',
+    short: 'Basic Ent.',
+    version: '2023-2028',
+    caution: "Only one of Local 16's many contracts, with terms saved in May and not checked against the agreement. Picking it applies to all of this employer's shifts, whichever contract each was dispatched under.",
     terms: {
       contract: 'ia16-basic',
       unionLocal: '16',
