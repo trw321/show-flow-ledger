@@ -23,6 +23,7 @@ import type { Income, Job } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useVoiceInput, parseIncomeSpeech } from '@/lib/useVoiceInput';
+import { jobKey } from '@/lib/jobDedup';
 
 const statusColors: Record<Income['status'], string> = {
   paid:    'bg-success/15 text-success border-success/30',
@@ -417,7 +418,7 @@ export default function MoneyPage() {
       const isScheduled = job.paySchedule && job.paySchedule !== 'per-project';
       const key = isScheduled
         ? `${job.client}||${job.payrollCompany || ''}`
-        : `${job.client}||${job.payrollCompany || ''}||${job.jobNumber?.trim() || job.id}`;
+        : `${job.client}||${job.payrollCompany || ''}||${jobKey(job.jobNumber, job.date) || job.id}`;
       if (!productions[key]) productions[key] = [];
       productions[key].push(job);
     }

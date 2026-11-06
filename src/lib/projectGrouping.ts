@@ -1,6 +1,7 @@
 import { differenceInCalendarDays, parseISO } from 'date-fns';
 import type { Employer, Job } from '@/lib/store';
 import { resolveEmployer } from '@/lib/employerMatch';
+import { jobKey } from '@/lib/jobDedup';
 
 /**
  * Which shifts belong to the same piece of work.
@@ -12,8 +13,8 @@ import { resolveEmployer } from '@/lib/employerMatch';
  * for a different employer is not.
  */
 export function sameProject(a: Job, b: Job): boolean {
-  const aNum = a.jobNumber?.trim();
-  const bNum = b.jobNumber?.trim();
+  const aNum = jobKey(a.jobNumber, a.date);
+  const bNum = jobKey(b.jobNumber, b.date);
   if (aNum && bNum) return aNum === bNum;
   // A job number on one side and not the other means they were logged
   // differently; fall back to the name rather than calling them unrelated.
@@ -53,7 +54,8 @@ const NEW_RUN_GAP_DAYS = 7;
  * belonged to — so a payment could be on one project while its days were
  * counted on another, and a run showed up as two.
  *
- *  - A job number decides on its own: the same number is the same project.
+ *  - A job number decides on its own: the same number is the same project,
+ *    with or without its year in front ("2705" is "2026-2705").
  *  - A shift without one joins the nearest numbered run of the same show for
  *    the same employer, within two weeks.
  *  - Otherwise the show name and the employer, ignoring case, and the
@@ -69,9 +71,9 @@ export function projectKeys(jobs: Job[], employers: Employer[] = []): Map<string
 
   const numberedByName = new Map<string, Job[]>();
   for (const j of jobs) {
-    const num = j.jobNumber?.trim();
+    const num = jobKey(j.jobNumber, j.date);
     if (!num) continue;
-    keys.set(j.id, '#' + num.toLowerCase());
+    keys.set(j.id, '#' + num);
     if (norm(j.name)) {
       const k = nameKey(j);
       numberedByName.set(k, [...(numberedByName.get(k) ?? []), j]);

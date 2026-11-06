@@ -12,12 +12,22 @@ const normalizeTime = (value?: string) => {
   return `${m[1].padStart(2, '0')}:${m[2]} ${m[3].toLowerCase()}`;
 };
 
+/**
+ * A job number in one form. Dispatch writes the year first, "2026-2705", and a
+ * shift read off a photo or logged by hand may carry only the code, "2705".
+ * They are one job, so a bare code takes its year from the shift's own date.
+ */
+export function jobKey(jobNumber?: string | null, date?: string): string {
+  const number = normalize(jobNumber ?? undefined);
+  return /^\d{1,6}$/.test(number) && date ? `${date.slice(0, 4)}-${number.padStart(4, '0')}` : number;
+}
+
 export function getJobDedupKey(job: Partial<JobIdentity>) {
   const date = normalize(job.date);
   // Include startTime so same-day callbacks (same job#, same date, different time) are distinct
   if (job.jobNumber?.trim()) {
     const time = normalizeTime(job.startTime);
-    return `dispatch|${normalize(job.jobNumber)}|${date}${time ? `|${time}` : ''}`;
+    return `dispatch|${jobKey(job.jobNumber, job.date)}|${date}${time ? `|${time}` : ''}`;
   }
   // With startTime: date + normalized time
   if (job.startTime?.trim()) {
@@ -33,7 +43,7 @@ export function getJobDedupKey(job: Partial<JobIdentity>) {
  * same day, at their own pay. It takes a role on both to say so, so a dispatch
  * brought in again still matches the shift it made, whatever was picked since.
  */
-const differentRoles = (a: Partial<JobIdentity>, b: Partial<JobIdentity>) =>
+export const differentRoles = (a: Partial<JobIdentity>, b: Partial<JobIdentity>) =>
   !!normalize(a.role) && !!normalize(b.role) && normalize(a.role) !== normalize(b.role);
 
 export function isDuplicateJob(incoming: Partial<JobIdentity>, existing: Partial<JobIdentity>[]) {
@@ -56,9 +66,9 @@ export function findLikelyDuplicate<T extends Partial<JobIdentity>>(
   const date = normalize(incoming.date);
   if (!date) return undefined;
 
-  const jobNumber = normalize(incoming.jobNumber);
+  const jobNumber = jobKey(incoming.jobNumber, incoming.date);
   if (jobNumber) {
-    const match = existing.find(ex => normalize(ex.jobNumber) === jobNumber && normalize(ex.date) === date && !differentRoles(incoming, ex));
+    const match = existing.find(ex => jobKey(ex.jobNumber, ex.date) === jobNumber && normalize(ex.date) === date && !differentRoles(incoming, ex));
     if (match) return match;
   }
 

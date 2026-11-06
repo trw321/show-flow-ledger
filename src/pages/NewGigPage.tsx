@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { isDuplicateJob, findLikelyDuplicate } from '@/lib/jobDedup';
+import { findOfferMatch, mergeOffer, type OfferMerge } from '@/lib/offerMerge';
 import { PARSER_MODELS, REASONING_EFFORTS, supportsReasoning, loadParserChoice, saveParserChoice, nextLevel, type ReasoningEffort } from '@/lib/parserModels';
 import type { Job, CalendarEvent, EmployerRole } from '@/lib/store';
 import { contractsWorked } from '@/lib/contracts';
@@ -55,13 +56,15 @@ async function callAPI(url: string, key: string, body: object): Promise<Response
 }
 
 function ShiftCard({
-  job, index, selected, conflict, existingMatch, onToggle, onChange,
+  job, index, selected, conflict, existingMatch, merge, onToggle, onChange,
 }: {
   job: ParsedJob;
   index: number;
   selected: boolean;
   conflict: boolean;
   existingMatch?: Job;
+  /** This offer is a shift already logged, and what it adds to it. */
+  merge?: OfferMerge;
   onToggle: () => void;
   onChange: (field: keyof ParsedJob, value: string | number | undefined) => void;
 }) {
@@ -117,6 +120,17 @@ function ShiftCard({
           </div>
         </button>
       </div>
+
+      {merge && (
+        <div className="mx-3 mb-3 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-2 text-[11px] text-foreground flex items-start gap-1.5" data-testid="offer-merge">
+          <Check size={12} className="shrink-0 mt-0.5" />
+          <span>
+            {merge.changes.length > 0
+              ? <>Already on your calendar. This fills in: <span className="font-medium">{merge.changes.join(', ')}</span>.</>
+              : 'Already on your calendar, with nothing new to add.'}
+          </span>
+        </div>
+      )}
 
       {existingMatch && (
         <div className="mx-3 mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-2.5 py-2 text-[11px] text-destructive flex items-start gap-1.5">
@@ -625,14 +639,37 @@ export default function NewGigPage({ onComplete, startAs }: {
     handleParse({ model: upLevel.model, effort: upLevel.effort });
   };
 
+  // Offers that are shifts already logged: the photo first, the whole offer
+  // later. Saving fills those in rather than skipping them or doubling the day.
+  // Only text can correct anything: it is the dispatch's own word.
+  const offerMerges = useMemo(() => {
+    const map = new Map<number, OfferMerge>();
+    const taken = new Set<string>();
+    const fullText = isDispatchText(text);
+    jobs.forEach((job, i) => {
+      const target = findOfferMatch(job, data.jobs, taken);
+      if (!target) return;
+      taken.add(target.id);
+      map.set(i, mergeOffer(target, job, fullText));
+    });
+    return map;
+  }, [jobs, data.jobs, text]);
+
   const handleImport = async () => {
-    const toImport = jobs.filter((_, i) => selected.has(i));
-    if (toImport.length === 0) { toast.error('Select at least one shift'); return; }
+    if (selected.size === 0) { toast.error('Select at least one shift'); return; }
     setIsImporting(true);
     const onFile: Parameters<typeof isDuplicateJob>[1] = [...data.jobs];
-    let imported = 0, skipped = 0, failed = 0;
+    let imported = 0, merged = 0, skipped = 0, failed = 0;
 
-    for (const j of toImport) {
+    for (const [i, j] of jobs.entries()) {
+      if (!selected.has(i)) continue;
+      const merge = offerMerges.get(i);
+      if (merge) {
+        if (Object.keys(merge.updates).length === 0) { skipped++; continue; }
+        try { await updateExistingJob(merge.target.id, merge.updates); merged++; }
+        catch { failed++; }
+        continue;
+      }
       // An offer usually names an employer and no separate payroll company,
       // and in that case the employer is who pays you. Assuming it beats
       // leaving it blank, but it IS an assumption, so the shift gets flagged
@@ -670,16 +707,16 @@ export default function NewGigPage({ onComplete, startAs }: {
     }
 
     setIsImporting(false);
-    if (imported === 0 && failed > 0) { toast.error('Save failed — check your connection'); return; }
-    if (imported > 0) fireCelebration();
+    if (imported + merged === 0 && failed > 0) { toast.error('Save failed — check your connection'); return; }
+    if (imported + merged > 0) fireCelebration();
     toast.success(
-      `Saved ${imported} shift${imported !== 1 ? 's' : ''}` +
+      [imported || !merged ? `Saved ${imported} shift${imported !== 1 ? 's' : ''}` : '', merged ? `filled in ${merged}` : ''].filter(Boolean).join(' · ') +
       (skipped ? ` · skipped ${skipped} duplicate${skipped !== 1 ? 's' : ''}` : '') +
       (failed ? ` · ${failed} failed` : '')
     );
     setText(''); setJobs([]); setSelected(new Set()); setStep('input'); setVortexPhase('idle');
     setManual(EMPTY_MANUAL); setManualOpen(false);
-    if (imported > 0) onComplete?.();
+    if (imported + merged > 0) onComplete?.();
   };
 
   const handleClear = () => {
@@ -831,11 +868,12 @@ export default function NewGigPage({ onComplete, startAs }: {
   const existingMatches = useMemo(() => {
     const map = new Map<number, Job>();
     jobs.forEach((job, i) => {
+      if (offerMerges.has(i)) return;
       const match = findLikelyDuplicate(job, data.jobs);
       if (match) map.set(i, match);
     });
     return map;
-  }, [jobs, data.jobs]);
+  }, [jobs, data.jobs, offerMerges]);
 
   const hasContent = text.trim().length > 0 || step === 'review-jobs' || step === 'review-hours' || step === 'review-events';
   const manualHasContent = Object.values(manual).some(v => v.trim() !== '');
@@ -1153,6 +1191,7 @@ export default function NewGigPage({ onComplete, startAs }: {
                 selected={selected.has(i)}
                 conflict={conflictDates.has(job.date)}
                 existingMatch={existingMatches.get(i)}
+                merge={offerMerges.get(i)}
                 onToggle={() => setSelected(prev => { const next = new Set(prev); next.has(i) ? next.delete(i) : next.add(i); return next; })}
                 onChange={(field, value) => updateParsedJob(i, field, value)}
               />

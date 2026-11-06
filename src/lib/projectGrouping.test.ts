@@ -117,6 +117,16 @@ describe('projectKeys: one answer for every screen', () => {
     expect(of('a')).not.toBe(of('b'));
   });
 
+  it('treats a job number with and without its year as one project', () => {
+    const of = key([
+      job({ id: 'a', date: '2026-08-22', jobNumber: '2705' }),
+      job({ id: 'b', date: '2026-08-25', jobNumber: '2026-2705' }),
+      job({ id: 'c', date: '2025-08-22', jobNumber: '2705' }),
+    ]);
+    expect(of('a')).toBe(of('b'));
+    expect(of('c')).not.toBe(of('a'));
+  });
+
   it('keeps the same show months apart as two projects', () => {
     const of = key([
       job({ id: 'a', date: '2026-03-02' }),
