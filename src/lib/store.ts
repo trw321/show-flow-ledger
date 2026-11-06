@@ -82,6 +82,8 @@ export interface Job {
     now: number;
     at: string;
   }[];
+  /** The contract this call is under, as the dispatch names it — "2023-2028 BASIC ENTERTAINMENT". It belongs to the shift alone: the same employer at the same venue can work under a different contract from one call to the next. */
+  contract?: string;
   /** The role worked on this shift — "A1", "Stagehand" — when the employer pays roles differently. Picking one sets the shift's rate from it. */
   role?: string;
   /** Paid time off: the hours are paid at straight time but were not worked, so they earn nothing a worked day does — no overtime, night premium, meal penalty or minimum — and they come out of the PTO banked with this employer. */

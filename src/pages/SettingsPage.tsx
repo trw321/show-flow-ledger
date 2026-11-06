@@ -18,7 +18,7 @@ import { formatDistanceToNow } from 'date-fns';
 import type { Employer } from '@/lib/store';
 import { ptoBalance } from '@/lib/pto';
 import { payLagDays, payScheduleLabel } from '@/lib/payTiming';
-import { CONTRACTS, contractFor } from '@/lib/contracts';
+import { CONTRACTS, contractFor, contractsWorked } from '@/lib/contracts';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -215,14 +215,14 @@ function EmployerForm({ initial, onSave, onCancel }: {
         className="h-8 text-sm"
         autoFocus
       />
-      {/* A contract fills in everything below at once; any of it can still be changed. */}
+      {/* A company's own terms fill in everything below at once. Union contracts go by the shift, so they are not here. */}
       <div className="space-y-1">
-        <p className="text-xs">Contract</p>
+        <p className="text-xs">Company terms</p>
         <Select value={form.contract || 'none'} onValueChange={v => setForm(f => withContract(f, v))}>
-          <SelectTrigger className="h-8 text-xs" aria-label="Contract"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-8 text-xs" aria-label="Company terms"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="none">None</SelectItem>
-            {CONTRACTS.map(c => <SelectItem key={c.key} value={c.key}>{c.name} · {c.version}</SelectItem>)}
+            {CONTRACTS.filter(c => c.perEmployer || c.key === form.contract).map(c => <SelectItem key={c.key} value={c.key}>{c.name} · {c.version}</SelectItem>)}
           </SelectContent>
         </Select>
         {CONTRACTS.find(c => c.key === form.contract)?.caution && (
@@ -1020,6 +1020,26 @@ export default function SettingsPage() {
         <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/60 uppercase mb-3">
           Contracts
         </p>
+        {/* Built from the dispatches themselves: each shift keeps the one it was called under. */}
+        <div className="mb-3 rounded-xl border border-border bg-card px-3 py-2.5">
+          <p className="text-sm font-medium">On your shifts</p>
+          {contractsWorked(data.jobs).length === 0 ? (
+            <p className="mt-1 text-[11px] text-muted-foreground">None yet. Each dispatch names its contract, and they collect here.</p>
+          ) : (
+            <ul className="mt-1.5 space-y-1">
+              {contractsWorked(data.jobs).map(c => (
+                <li key={c.name} className="flex items-baseline justify-between gap-2 text-[11px]">
+                  <span className="min-w-0 break-words text-foreground/85">{c.name}</span>
+                  <span className="shrink-0 text-mono text-muted-foreground">
+                    {c.shifts} shift{c.shifts === 1 ? '' : 's'}
+                    {c.lowestRate !== undefined && ` · $${c.lowestRate}${c.highestRate !== c.lowestRate ? `–${c.highestRate}` : ''}`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-1.5 text-[10px] text-muted-foreground">Names only so far. No terms are applied from them yet.</p>
+        </div>
         <div className="flex flex-col gap-2">
           {CONTRACTS.map(c => {
             const on = data.employers.filter(e => e.contract === c.key);
@@ -1040,9 +1060,11 @@ export default function SettingsPage() {
                     </ul>
                   </>
                 )}
-                <p className="mt-2 text-[11px] text-foreground/75">
-                  {on.length > 0 ? `On: ${on.map(e => e.name).join(', ')}` : 'Not on an employer yet. Edit an employer above and pick it.'}
-                </p>
+                {(c.perEmployer || on.length > 0) && (
+                  <p className="mt-2 text-[11px] text-foreground/75">
+                    {on.length > 0 ? `On: ${on.map(e => e.name).join(', ')}` : 'Not on an employer yet. Edit an employer above and pick it.'}
+                  </p>
+                )}
               </details>
             );
           })}

@@ -144,6 +144,7 @@ function ShiftCard({
               { label: 'End time', field: 'endTime' as const, value: job.endTime ?? '', type: 'text', placeholder: '05:00 PM' },
               { label: 'Event', field: 'name' as const, value: job.name, type: 'text' },
               { label: 'Venue', field: 'venue' as const, value: job.venue, type: 'text' },
+              { label: 'Contract', field: 'contract' as const, value: job.contract ?? '', type: 'text' },
               { label: 'Payroll co.', field: 'payrollCompany' as const, value: job.payrollCompany ?? '', type: 'text' },
               { label: 'Rate ($/hr)', field: 'hourlyRate' as const, value: job.hourlyRate?.toString() ?? '', type: 'number' },
               { label: 'Steward', field: 'steward' as const, value: job.steward ?? '', type: 'text' },
@@ -413,7 +414,7 @@ export default function NewGigPage({ onComplete, startAs }: {
         jobNumber: src.jobNumber, name: src.name, client: src.client, venue: src.venue, date,
         startTime: src.startTime, endTime: src.endTime, status: 'upcoming' as const,
         payrollCompany: src.payrollCompany, local: src.local, hourlyRate: src.hourlyRate,
-        steward: src.steward, parkingCost: src.parkingCost, notes: src.notes,
+        steward: src.steward, parkingCost: src.parkingCost, notes: src.notes, contract: src.contract,
         mealDuration: src.mealDuration, mealOnClock: src.mealOnClock, minimumHours: src.minimumHours,
         // Hours logged on the copied shift are that day's work; they carry to
         // days that have happened, never to ones that have not.
@@ -623,7 +624,7 @@ export default function NewGigPage({ onComplete, startAs }: {
         dayRate: startsOnDayRate ? employerRecord?.defaultDayRate : undefined,
         dayRateHours: startsOnDayRate ? employerRecord?.dayRateHours : undefined,
         local: j.local, needsReview: payrollAssumed || undefined,
-        hourlyRate: j.hourlyRate, steward: j.steward,
+        hourlyRate: j.hourlyRate, steward: j.steward, contract: j.contract?.trim() || undefined,
         parkingCost: j.parkingCost, notes: j.notes || '',
         mealDuration: j.mealDuration, mealOnClock: j.mealOnClock,
         minimumHours: j.minimumHours ?? employerRecord?.minimumCallHours, hoursWorked: j.hoursWorked,

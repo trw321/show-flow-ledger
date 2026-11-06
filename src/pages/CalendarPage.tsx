@@ -22,7 +22,7 @@ import type { Job, CalendarEvent, Income, Invoice } from '@/lib/store';
 import { matchPaymentToProject, betterProject, bestProjectFor, projectOf, type FoundPayment } from '@/lib/paymentMatch';
 import { payDueDate, payTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
 import { ratesForShift } from '@/lib/payerProfile';
-import { contractFor } from '@/lib/contracts';
+import { contractFor, contractsWorked, shiftContract } from '@/lib/contracts';
 import { alreadyRecorded } from '@/lib/paymentRepeats';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { calculateDayPay, dayInARow, dayMultiplierFor, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross, jobPayBreakdown, compareCalls } from '@/lib/payCalc';
@@ -370,6 +370,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   const [hourlyRate, setHourlyRate] = useState(job.hourlyRate?.toString() ?? '');
   const [minimumHours, setMinimumHours] = useState(job.minimumHours?.toString() ?? '');
   const [payrollCompany, setPayrollCompany] = useState(job.payrollCompany ?? '');
+  const [contractName, setContractName] = useState(shiftContract(job) ?? '');
   const [mealDuration, setMealDuration] = useState<Job['mealDuration']>(job.mealDuration ?? undefined);
   const [mealOnClock, setMealOnClock] = useState(job.mealOnClock ?? false);
   const [meal2Duration, setMeal2Duration] = useState<Job['meal2Duration']>(job.meal2Duration ?? undefined);
@@ -437,6 +438,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     setHourlyRate(job.hourlyRate?.toString() ?? '');
     setMinimumHours(job.minimumHours?.toString() ?? '');
     setPayrollCompany(job.payrollCompany ?? '');
+    setContractName(shiftContract(job) ?? '');
     setMealDuration(job.mealDuration ?? undefined);
     setMeal2Duration(job.meal2Duration ?? undefined);
     setMeal2OnClock(job.meal2OnClock ?? false);
@@ -678,6 +680,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
         dayRateHours: job.dayRateHours,
         paySchedule: job.paySchedule,
         payrollCompany: job.payrollCompany,
+        contract: job.contract,
         hourlyRate: job.hourlyRate,
         minimumHours: job.minimumHours,
         has6th7thDayRule: job.has6th7thDayRule,
@@ -841,6 +844,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
       updates.minimumHours = parsedMin > 0 ? parsedMin : undefined;
     }
     if (payrollCompany !== (job.payrollCompany ?? '')) updates.payrollCompany = payrollCompany.trim() || undefined;
+    if (contractName !== (shiftContract(job) ?? '')) updates.contract = contractName.trim() || undefined;
     if (mealDuration !== (job.mealDuration ?? undefined)) updates.mealDuration = mealDuration;
     if (mealDuration && mealOnClock !== (job.mealOnClock ?? false)) updates.mealOnClock = mealOnClock;
     const timelineToSave = callsOpen && callTimeline.trim() ? callTimeline.trim() : undefined;
@@ -901,6 +905,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     hourlyRate !== (job.hourlyRate?.toString() ?? '') ||
     minimumHours !== (job.minimumHours?.toString() ?? '') ||
     payrollCompany !== (job.payrollCompany ?? '') ||
+    contractName !== (shiftContract(job) ?? '') ||
     mealDuration !== (job.mealDuration ?? undefined) ||
     (!!mealDuration && mealOnClock !== (job.mealOnClock ?? false)) ||
     (callsOpen && callTimeline.trim() ? callTimeline.trim() : undefined) !== (job.callTimeline ?? undefined) ||
@@ -1558,7 +1563,17 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           {(client || job.client) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Employer</span><span className="font-medium text-xs">{client || job.client}</span></div>}
           {job.local && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Client</span><span className="font-medium text-xs">{job.local}</span></div>}
           {(job.payrollCompany || payrollCompany) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Payroll company</span><span className="font-medium text-xs">{payrollCompany || job.payrollCompany}</span></div>}
-          {contractFor(employer) && <div className="flex justify-between gap-3"><span className="text-muted-foreground text-xs shrink-0">Contract</span><span className="font-medium text-xs text-right">{contractFor(employer)!.name} {contractFor(employer)!.version}</span></div>}
+          {shiftContract(job) ? (
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground text-xs shrink-0">Contract</span>
+              <span className="text-right">
+                <span className="block font-medium text-xs">{shiftContract(job)}</span>
+                <span className="block text-[10px] text-muted-foreground">No terms saved for it yet. Pay uses {job.client}'s settings.</span>
+              </span>
+            </div>
+          ) : contractFor(employer)?.perEmployer ? (
+            <div className="flex justify-between gap-3"><span className="text-muted-foreground text-xs shrink-0">Terms</span><span className="font-medium text-xs text-right">{contractFor(employer)!.name} {contractFor(employer)!.version}</span></div>
+          ) : null}
           {job.venue && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Venue</span><span className="font-medium text-xs">{job.venue}</span></div>}
           {job.jobNumber && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Job #</span><span className="font-medium text-xs text-mono">{job.jobNumber}</span></div>}
           {(startTime || job.startTime) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Start</span><span className="font-medium text-xs text-mono">{startTime || job.startTime}{endTime ? ` – ${endTime}` : ''}</span></div>}
@@ -1880,6 +1895,12 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Payroll company</label>
             <Input value={payrollCompany} onChange={e => setPayrollCompany(e.target.value)} placeholder="e.g. Nolan AV, Live Nation" className="h-9 text-sm" />
+          </div>
+          {/* This call's contract, as the dispatch names it. Never the employer's or the venue's. */}
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Contract</label>
+            <Input list="shift-contracts" value={contractName} onChange={e => setContractName(e.target.value)} placeholder="As the dispatch names it" className="h-9 text-sm" />
+            <datalist id="shift-contracts">{contractsWorked(data.jobs).map(c => <option key={c.name} value={c.name} />)}</datalist>
           </div>
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground">Min. Call</label>

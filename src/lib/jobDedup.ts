@@ -1,6 +1,6 @@
 import type { Job } from './store';
 
-type JobIdentity = Pick<Job, 'jobNumber' | 'name' | 'client' | 'date' | 'startTime'>;
+type JobIdentity = Pick<Job, 'jobNumber' | 'name' | 'client' | 'date' | 'startTime' | 'contract'>;
 
 const normalize = (value?: string) => value?.trim().toLowerCase().replace(/\s+/g, ' ') ?? '';
 
@@ -23,7 +23,9 @@ export function getJobDedupKey(job: Partial<JobIdentity>) {
   if (job.startTime?.trim()) {
     return `time|${date}|${normalizeTime(job.startTime)}`;
   }
-  return `fallback|${date}|${normalize(job.client)}|${normalize(job.name)}`;
+  // The same employer and show under another contract is another call.
+  const contract = normalize(job.contract);
+  return `fallback|${date}|${normalize(job.client)}|${normalize(job.name)}${contract ? `|${contract}` : ''}`;
 }
 
 export function isDuplicateJob(incoming: Partial<JobIdentity>, existing: Partial<JobIdentity>[]) {
@@ -58,7 +60,10 @@ export function findLikelyDuplicate<T extends Partial<JobIdentity>>(
   // shift, even if start-time formatting drifted between extractions.
   const client = normalize(incoming.client);
   if (client) {
-    return existing.find(ex => normalize(ex.date) === date && normalize(ex.client) === client);
+    const contract = normalize(incoming.contract);
+    return existing.find(ex => normalize(ex.date) === date && normalize(ex.client) === client
+      // Two named contracts that differ are two calls, not one parsed twice.
+      && !(contract && ex.contract && normalize(ex.contract) !== contract));
   }
   return undefined;
 }

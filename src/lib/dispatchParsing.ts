@@ -23,6 +23,8 @@ export interface ParsedJob {
   payrollCompany?: string;
   /** The dispatching local, e.g. "ia8" — never the employer. */
   local?: string;
+  /** The contract this call is under, as the dispatch names it. */
+  contract?: string | null;
   hourlyRate?: number;
   steward?: string;
   parkingCost?: number;

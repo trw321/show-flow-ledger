@@ -1,19 +1,21 @@
-import type { Employer } from './store';
+import type { Employer, Job } from './store';
 
 /**
  * The contracts you work under, as terms an employer can take on.
  *
- * Built in rather than stored on an account: a contract is the same on every
- * device and for anyone under it, and picking one has to work before anyone
- * has signed in. Picking one copies its terms onto the employer, where every
- * pay figure already reads them — and where any of them can still be changed.
+ * Two different things live here, and they must not be confused.
  *
- * These are the terms as they were saved in May 2026. What is here is what
- * was saved, not a reading of the agreement itself.
+ * A union contract belongs to the SHIFT. Local 16 has many, each dispatch names
+ * the one it is under, and the same employer at the same venue can be under a
+ * different one from one call to the next. So a contract is never tied to an
+ * employer or a venue: the shift keeps the name (see shiftContract), and no
+ * terms are applied from it yet, because none have been confirmed.
  *
- * Local 16 has many contracts, and each dispatch names the one it is under.
- * The Basic Entertainment entry is only one of them, and an employer can work
- * under several, so picking it for an employer is an approximation.
+ * A company's own terms, like Reliant AV's guidelines, do cover everything for
+ * that one company, so those can be picked on the employer (perEmployer).
+ *
+ * The terms here are as they were saved in May 2026: what was saved, not a
+ * reading of any agreement.
  */
 
 export interface Contract {
@@ -28,8 +30,10 @@ export interface Contract {
   summary: string[];
   /** In the contract, but not worked out by the app. */
   notCalculated: string[];
-  /** Said wherever it can be picked, when what it covers needs care. */
+  /** Said wherever it is shown, when what it covers needs care. */
   caution?: string;
+  /** A company's own terms, which can be picked on that employer. A union contract never is. */
+  perEmployer?: boolean;
   /** The 6th and 7th days count across everyone paying through one payroll company, not one employer. */
   countDaysByPayrollCompany?: boolean;
 }
@@ -40,7 +44,7 @@ export const CONTRACTS: Contract[] = [
     name: 'Local 16 Basic Entertainment',
     short: 'Basic Ent.',
     version: '2023-2028',
-    caution: "Only one of Local 16's many contracts, with terms saved in May and not checked against the agreement. Picking it applies to all of this employer's shifts, whichever contract each was dispatched under.",
+    caution: "One of Local 16's many contracts, with terms saved in May and not checked against the agreement. Kept here to read. The app doesn't apply it: contracts go by the shift, not the employer.",
     terms: {
       contract: 'ia16-basic',
       unionLocal: '16',
@@ -81,6 +85,7 @@ export const CONTRACTS: Contract[] = [
     name: 'Reliant AV Guidelines',
     short: 'Reliant AV',
     version: '2026',
+    perEmployer: true,
     terms: {
       contract: 'reliant-2026',
       defaultHourlyRate: 35,
@@ -113,6 +118,53 @@ export const CONTRACTS: Contract[] = [
     ],
   },
 ];
+
+/** Dress codes the parser can leave on the end of a line of notes. */
+const DRESS_CODE_AT_END = /\s+(NWB|YWA|NWA|WC|BOB|ALL BLACK)$/;
+
+/**
+ * A contract name inside a shift's notes, which is where the parser put it
+ * before shifts had a place of their own for it. Only finds names that lead
+ * with their years, which is how the ones seen so far are written.
+ */
+export function contractInNotes(notes?: string): string | undefined {
+  const found = notes?.match(/\b(20\d{2})\s*-\s*(20\d{2})\s+[A-Z][A-Z0-9 &'/.-]*[A-Z0-9]/);
+  if (!found) return undefined;
+  // A job number can look like this; a contract's years run forwards and close together.
+  const span = Number(found[2]) - Number(found[1]);
+  if (span < 0 || span > 10) return undefined;
+  return found[0].replace(DRESS_CODE_AT_END, '').replace(/\s+/g, ' ').trim();
+}
+
+/** The contract a shift is under, as its dispatch named it. */
+export function shiftContract(job: Pick<Job, 'contract' | 'notes'>): string | undefined {
+  return job.contract?.trim() || contractInNotes(job.notes);
+}
+
+export interface WorkedContract {
+  name: string;
+  shifts: number;
+  lowestRate?: number;
+  highestRate?: number;
+}
+
+/** Every contract your shifts name, most worked first: the real list, built from your own dispatches. */
+export function contractsWorked(jobs: Job[]): WorkedContract[] {
+  const seen = new Map<string, WorkedContract>();
+  for (const job of jobs) {
+    const name = job.status === 'cancelled' ? undefined : shiftContract(job);
+    if (!name) continue;
+    const key = name.toUpperCase().replace(/\s+/g, ' ');
+    const entry = seen.get(key) ?? { name, shifts: 0 };
+    entry.shifts += 1;
+    if (job.hourlyRate) {
+      entry.lowestRate = Math.min(entry.lowestRate ?? job.hourlyRate, job.hourlyRate);
+      entry.highestRate = Math.max(entry.highestRate ?? job.hourlyRate, job.hourlyRate);
+    }
+    seen.set(key, entry);
+  }
+  return [...seen.values()].sort((a, b) => b.shifts - a.shifts || a.name.localeCompare(b.name));
+}
 
 /** The contract an employer is on, if any. */
 export function contractFor(employer: Pick<Employer, 'contract'> | undefined): Contract | undefined {

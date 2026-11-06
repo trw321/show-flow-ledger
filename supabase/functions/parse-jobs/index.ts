@@ -83,7 +83,8 @@ FIELD MAPPINGS:
 - Show → name
 - Rate → hourlyRate (strip $, e.g. $55.72 → 55.72)
 - Steward → steward
-- Skill + Job Notes + Contract + Dress Code + any Line Notes text → combine into notes
+- Contract → contract, copied exactly as written (e.g. 2025-2027 BASIC LTE ENTRTNMENT). It names the agreement this one call is under. Null if the text does not name one: never work it out from the employer or the venue.
+- Skill + Job Notes + Dress Code + any Line Notes text → combine into notes
 
 payrollCompany is a company name (contains words like PAYROLL, AGENCY, STAFFING, INC, LLC) —
 it is NEVER a short dress-code abbreviation. The Dress Code field near the end (after Rate,
@@ -124,8 +125,9 @@ Status: "upcoming" for future dates, "completed" for past dates.`;
                 parkingCost: { type: ["number", "null"], description: "Parking cost if mentioned" },
                 status: { type: "string", enum: ["upcoming", "in-progress", "completed", "cancelled"] },
                 notes: { type: ["string", "null"], description: "Additional notes" },
+                contract: { type: ["string", "null"], description: "The contract this call is under, exactly as the dispatch writes it" },
               },
-              required: ["jobNumber", "date", "startTime", "endTime", "name", "client", "payrollCompany", "local", "venue", "hourlyRate", "steward", "parkingCost", "status", "notes"],
+              required: ["contract", "jobNumber", "date", "startTime", "endTime", "name", "client", "payrollCompany", "local", "venue", "hourlyRate", "steward", "parkingCost", "status", "notes"],
               additionalProperties: false,
             },
           },

@@ -303,7 +303,7 @@ describe('every field survives the trip to the database and back', () => {
     hoursPlanned: true, local: 'ia16', needsReview: true, callTimeline: '8-12, 1-5', callGapsOnClock: [false],
     meal2Duration: 30, meal2OnClock: true, mealPenalties: 1, nightPremiumConfirmed: false, nightPremiumActualHours: 1.5,
     attachments: ['a'], payStub: 'storage:x', stubParsed: { netPay: 400 }, stubCorrections: [{ field: 'net', was: 1, now: 2, at: 'x' }],
-    role: 'A1', pto: true, notes: 'n', createdAt: '2026-10-01T00:00:00.000Z', modifiedAt: '2026-10-02T00:00:00.000Z',
+    contract: '2023-2028 BASIC ENTERTAINMENT', role: 'A1', pto: true, notes: 'n', createdAt: '2026-10-01T00:00:00.000Z', modifiedAt: '2026-10-02T00:00:00.000Z',
   };
   const employer: AppData['employers'][number] = {
     id: 'e1', name: 'Odeum', workerStatus: '1099', roles: [{ name: 'A1', hourlyRate: 62 }], ptoEarnHours: 1,

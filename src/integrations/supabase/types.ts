@@ -896,6 +896,7 @@ export type Database = {
           call_gaps_on_clock: Json | null
           call_timeline: string | null
           client: string
+          contract: string | null
           created_at: string
           date: string
           day_rate: number | null
@@ -945,6 +946,7 @@ export type Database = {
           call_gaps_on_clock?: Json | null
           call_timeline?: string | null
           client?: string
+          contract?: string | null
           created_at?: string
           date: string
           day_rate?: number | null
@@ -994,6 +996,7 @@ export type Database = {
           call_gaps_on_clock?: Json | null
           call_timeline?: string | null
           client?: string
+          contract?: string | null
           created_at?: string
           date?: string
           day_rate?: number | null
