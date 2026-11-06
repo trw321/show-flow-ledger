@@ -313,7 +313,7 @@ describe('every field survives the trip to the database and back', () => {
     nightPremiumStartHour: 0, nightPremiumEndHour: 6, nightPremiumMultiplier: 2, defaultDayRate: 400, dayRateHours: 10,
     retirementMatchPercent: 6, roundUpToWholeHours: true, postMealMinimumHours: 2, mealPenaltyAfterHours: 5,
     unionDuesPercent: 3.5, unionLocal: '16', estimatedTaxPercent: 20, w4Exempt: true, vacationPercent: 8,
-    firstCheckWeeks: 3, payLagDays: 30,
+    firstCheckWeeks: 3, payLagDays: 30, contract: 'ia16-basic', minimumCallHours: 5, sixthSeventhDayRule: true,
     dismissedSuggestions: [{ field: 'x', skipsRemaining: 1, dismissedAt: 'x' }], notes: 'n',
     createdAt: '2026-10-01T00:00:00.000Z', modifiedAt: '2026-10-02T00:00:00.000Z',
   };

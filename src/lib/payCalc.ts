@@ -3,6 +3,7 @@ import { ratesForShift, withholdsNothing, EMPTY_PROFILE, type PayerProfile } fro
 import { parseDayTimeline, POST_MEAL_MINIMUM_HOURS } from './dayTimeline';
 import { parseISO, differenceInCalendarDays, startOfDay, startOfWeek, endOfWeek } from 'date-fns';
 import { resolveEmployer } from './employerMatch';
+import { contractFor } from './contracts';
 import { localToday } from './today';
 
 export interface OvertimeOptions {
@@ -433,7 +434,7 @@ export function jobPayBreakdown(
   // Dues follow the local, tax follows you, and only what is left is the
   // employer's to say. See payerProfile for why.
   const rates = ratesForShift(job, employer, payer);
-  const dayMult = getDayMultiplier(job.date, job.client, allJobs, job.has6th7thDayRule ?? false);
+  const dayMult = dayMultiplierFor(job, employer, allJobs);
   const dayMealMinutes = isSplitDay
     ? dayShifts.reduce((sum, j) => sum + offClockMealMinutes(j), 0)
     : offClockMealMinutes(job);
@@ -609,19 +610,22 @@ export function resolveConfirmedNightHours(
  * How many consecutive calendar days (including entryDate) have been worked
  * in a row for the given client, counting backward from entryDate. Returns 0
  * if entryDate itself has no worked hours logged for that client. Used both
- * for the 6th/7th day pay multiplier (when has6th7thDayRule is set) and for
- * flagging the pattern to the user even when it isn't.
+ * for the 6th/7th day pay multiplier and for flagging the pattern to the user
+ * even when it does not pay. Given a payroll company, days count across every
+ * employer paid through it, which is how some contracts count them.
  */
 export function getConsecutiveDayStreak(
   entryDate: string,
   client: string,
-  allJobs: Job[]
+  allJobs: Job[],
+  payrollCompany?: string,
 ): number {
   const targetDate = startOfDay(parseISO(entryDate));
+  const sameRun = (j: Job) => (payrollCompany ? (j.payrollCompany ?? j.client) === payrollCompany : j.client === client);
 
   // A day off, paid or not, breaks a run of days worked.
   const relevantJobs = allJobs.filter(
-    j => j.client === client && !j.pto && effectiveHoursWorked(j) > 0
+    j => sameRun(j) && !j.pto && effectiveHoursWorked(j) > 0
   );
 
   const workDates = [...new Set(relevantJobs.map(j => j.date))]
@@ -644,20 +648,23 @@ export function getConsecutiveDayStreak(
   return consecutiveDays;
 }
 
+/** Which day in a row this shift is, counted the way its employer's contract counts them. */
+export function dayInARow(job: Job, employer: Employer | undefined, allJobs: Job[]): number {
+  return getConsecutiveDayStreak(
+    job.date, job.client, allJobs,
+    contractFor(employer)?.countDaysByPayrollCompany ? job.payrollCompany : undefined,
+  );
+}
+
 /**
- * Determine the day multiplier for 6th/7th consecutive day rules.
- * Looks at all jobs for the same client in the surrounding period.
+ * What the 6th and 7th days in a row pay: 1.5×, then 2×, for an employer whose
+ * terms say so. The shift can also carry the rule itself, as old ones may.
  */
-export function getDayMultiplier(
-  entryDate: string,
-  client: string,
-  allJobs: Job[],
-  has6th7thDayRule: boolean
-): number {
-  if (!has6th7thDayRule) return 1;
-  const consecutiveDays = getConsecutiveDayStreak(entryDate, client, allJobs);
-  if (consecutiveDays >= 7) return 2;
-  if (consecutiveDays >= 6) return 1.5;
+export function dayMultiplierFor(job: Job, employer: Employer | undefined, allJobs: Job[]): number {
+  if (!job.has6th7thDayRule && !employer?.sixthSeventhDayRule) return 1;
+  const days = dayInARow(job, employer, allJobs);
+  if (days >= 7) return 2;
+  if (days >= 6) return 1.5;
   return 1;
 }
 
@@ -765,7 +772,7 @@ export function calculateExpectedPay(
   }
 
   for (const [date, { hours, mealPenalties, rate, offClockMealMinutes, postMealPadding, mealDuration, mealOnClock, sides }] of byDate.entries()) {
-    const dayMultiplier = getDayMultiplier(date, referenceJob.client, allJobs, referenceJob.has6th7thDayRule || false);
+    const dayMultiplier = dayMultiplierFor({ ...referenceJob, date }, employer, allJobs);
     // Every call's night hours count. This used to keep only the last call
     // seen, so a split day's after-midnight time could lose its premium
     // entirely depending on which call happened to be listed last.

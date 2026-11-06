@@ -12,14 +12,14 @@ interface MoneyDrop {
   size: number;
 }
 
-export default function MoneyRain({ active }: { active: boolean }) {
+export default function MoneyRain({ active, party }: { active: boolean; /** The 6th and 7th days: more of it, and a party. */ party?: boolean }) {
   const [drops, setDrops] = useState<MoneyDrop[]>([]);
   const counterRef = useRef(0);
 
   useEffect(() => {
     if (!active) return;
-    const emojis = ['💰', '💵', '💴'];
-    const newDrops: MoneyDrop[] = Array.from({ length: 18 }, (_, i) => ({
+    const emojis = party ? ['💰', '💵', '🤑', '🎉', '💸', '🥳', '✨'] : ['💰', '💵', '💴'];
+    const newDrops: MoneyDrop[] = Array.from({ length: party ? 40 : 18 }, (_, i) => ({
       id: counterRef.current++,
       emoji: emojis[i % emojis.length],
       left: Math.random() * 100,
@@ -30,7 +30,7 @@ export default function MoneyRain({ active }: { active: boolean }) {
     setDrops(newDrops);
     const t = setTimeout(() => setDrops([]), 2000);
     return () => clearTimeout(t);
-  }, [active]);
+  }, [active, party]);
 
   if (drops.length === 0) return null;
 

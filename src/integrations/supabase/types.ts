@@ -313,6 +313,7 @@ export type Database = {
       }
       employers: {
         Row: {
+          contract: string | null
           created_at: string
           daily_doubletime_threshold_hours: number | null
           daily_overtime_threshold_hours: number | null
@@ -326,6 +327,7 @@ export type Database = {
           first_check_weeks: number | null
           id: string
           meal_penalty_after_hours: number | null
+          minimum_call_hours: number | null
           modified_at: string | null
           name: string
           night_premium_enabled: boolean | null
@@ -345,6 +347,7 @@ export type Database = {
           retirement_match_percent: number | null
           roles: Json | null
           round_up_to_whole_hours: boolean | null
+          sixth_seventh_day: boolean | null
           timekeeping_app: string | null
           union_dues_percent: number | null
           union_local: string | null
@@ -356,6 +359,7 @@ export type Database = {
           worker_status: string | null
         }
         Insert: {
+          contract?: string | null
           created_at?: string
           daily_doubletime_threshold_hours?: number | null
           daily_overtime_threshold_hours?: number | null
@@ -369,6 +373,7 @@ export type Database = {
           first_check_weeks?: number | null
           id?: string
           meal_penalty_after_hours?: number | null
+          minimum_call_hours?: number | null
           modified_at?: string | null
           name: string
           night_premium_enabled?: boolean | null
@@ -388,6 +393,7 @@ export type Database = {
           retirement_match_percent?: number | null
           roles?: Json | null
           round_up_to_whole_hours?: boolean | null
+          sixth_seventh_day?: boolean | null
           timekeeping_app?: string | null
           union_dues_percent?: number | null
           union_local?: string | null
@@ -399,6 +405,7 @@ export type Database = {
           worker_status?: string | null
         }
         Update: {
+          contract?: string | null
           created_at?: string
           daily_doubletime_threshold_hours?: number | null
           daily_overtime_threshold_hours?: number | null
@@ -412,6 +419,7 @@ export type Database = {
           first_check_weeks?: number | null
           id?: string
           meal_penalty_after_hours?: number | null
+          minimum_call_hours?: number | null
           modified_at?: string | null
           name?: string
           night_premium_enabled?: boolean | null
@@ -431,6 +439,7 @@ export type Database = {
           retirement_match_percent?: number | null
           roles?: Json | null
           round_up_to_whole_hours?: boolean | null
+          sixth_seventh_day?: boolean | null
           timekeeping_app?: string | null
           union_dues_percent?: number | null
           union_local?: string | null
@@ -1355,6 +1364,51 @@ export type Database = {
           updated_at?: string
           user_id?: string
           worker_name?: string
+        }
+        Relationships: []
+      }
+      problem_reports: {
+        Row: {
+          build: string | null
+          created_at: string
+          device: Json | null
+          id: string
+          kind: string
+          note: string | null
+          on_screen: string | null
+          page: string | null
+          replay_url: string | null
+          resolved: boolean
+          trail: Json
+          user_id: string
+        }
+        Insert: {
+          build?: string | null
+          created_at?: string
+          device?: Json | null
+          id?: string
+          kind?: string
+          note?: string | null
+          on_screen?: string | null
+          page?: string | null
+          replay_url?: string | null
+          resolved?: boolean
+          trail?: Json
+          user_id: string
+        }
+        Update: {
+          build?: string | null
+          created_at?: string
+          device?: Json | null
+          id?: string
+          kind?: string
+          note?: string | null
+          on_screen?: string | null
+          page?: string | null
+          replay_url?: string | null
+          resolved?: boolean
+          trail?: Json
+          user_id?: string
         }
         Relationships: []
       }

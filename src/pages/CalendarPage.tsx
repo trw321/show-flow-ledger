@@ -22,9 +22,10 @@ import type { Job, CalendarEvent, Income, Invoice } from '@/lib/store';
 import { matchPaymentToProject, betterProject, bestProjectFor, projectOf, type FoundPayment } from '@/lib/paymentMatch';
 import { payDueDate, payTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
 import { ratesForShift } from '@/lib/payerProfile';
+import { contractFor } from '@/lib/contracts';
 import { alreadyRecorded } from '@/lib/paymentRepeats';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
-import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, getConsecutiveDayStreak, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross, jobPayBreakdown, compareCalls } from '@/lib/payCalc';
+import { calculateDayPay, dayInARow, dayMultiplierFor, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross, jobPayBreakdown, compareCalls } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { useSwipe } from '@/lib/useSwipe';
 import { cn } from '@/lib/utils';
@@ -238,6 +239,40 @@ function SplitMark({ job, allJobs }: { job: Job; allJobs: Job[] }) {
  * a cheque only shows what arrived, and a figure typed in by hand has had
  * nothing checked against a document at all — so they cannot be the same mark.
  */
+const ordinal = (n: number) => {
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 13) return `${n}th`;
+  return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
+};
+
+/** A day that is the 6th or later in a row, and what it pays over a normal day. */
+interface PremiumDay { day: number; pays: number; who: string }
+const premiumClass = (p: { day: number }) => (p.day >= 7 ? 'premium-7' : 'premium-6');
+
+/** The big one: the top of a 6th or 7th day. Only money that is really owed gets the money. */
+function PremiumDayBanner({ day, pays, who }: PremiumDay) {
+  const face = pays >= 2 ? '🤑' : pays > 1 ? '💰' : '🔥';
+  return (
+    <div className={cn('rounded-lg px-3 py-2.5 text-center', premiumClass({ day }))}>
+      <p className="text-lg font-black leading-tight tracking-tight">{face} {ordinal(day).toUpperCase()} DAY IN A ROW {face}</p>
+      <p className="mt-0.5 text-sm font-bold leading-snug">
+        {pays >= 2 ? '🎉 DOUBLE TIME · 2× all day 💸'
+          : pays > 1 ? '🎉 TIME AND A HALF · 1.5× all day 💵'
+          : `${who} isn't set to pay extra. If it should, pick a contract in Settings 👀`}
+      </p>
+    </div>
+  );
+}
+
+/** The small one: on a card, or a day in a list. */
+function PremiumTag({ day, pays }: Pick<PremiumDay, 'day' | 'pays'>) {
+  return (
+    <span className={cn('shrink-0 rounded-full px-1.5 py-0.5 text-[10px] text-mono font-black', premiumClass({ day }))}>
+      {pays >= 2 ? '🤑' : pays > 1 ? '💰' : '🔥'} {ordinal(day)} day{pays > 1 ? ` · ${pays}×` : ''}
+    </span>
+  );
+}
+
 /** How a payment came in, as the money icon it is shown with. */
 function paymentIcon(i: Income): { Icon: typeof Wallet; label: string } {
   if (i.enteredByHand) return { Icon: PenLine, label: 'Added by hand' };
@@ -720,7 +755,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   // employer's W-4 — exactly as every other pay figure takes them.
   const previewRates = ratesForShift(job, employer, prefs.payer);
   const payPreview = rate > 0 && billableHours > 0
-    ? calculateDayPay(actualHours, rate, minHours, mealPenaltyUnits, 1, { duration: mealDuration, onClock: mealOnClock, offClockMinutesTotal: offClockMealMins }, { nightHours, nightMultiplier: employer?.nightPremiumMultiplier, unionDuesPercent: previewRates.unionDuesPercent, estimatedTaxPercent: previewRates.estimatedTaxPercent })
+    ? calculateDayPay(actualHours, rate, minHours, mealPenaltyUnits, dayMultiplierFor(job, employer, data.jobs), { duration: mealDuration, onClock: mealOnClock, offClockMinutesTotal: offClockMealMins }, { nightHours, nightMultiplier: employer?.nightPremiumMultiplier, unionDuesPercent: previewRates.unionDuesPercent, estimatedTaxPercent: previewRates.estimatedTaxPercent })
     : null;
   // calculateDayPay's own breakdown stops at dues/tax — vacation is applied
   // on top of that (same as jobGross/jobPayBreakdown), so it needs its own
@@ -933,6 +968,10 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
         <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold text-mono uppercase tracking-wider border", isOverdueUpcoming(job) ? "bg-warning/20 text-warning border-warning/30" : statusColors[job.status])}>
           {isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
         </span>
+
+        {dayInARow(job, employer, data.jobs) >= 6 && (
+          <PremiumDayBanner day={dayInARow(job, employer, data.jobs)} pays={dayMultiplierFor(job, employer, data.jobs)} who={job.client} />
+        )}
 
         <MoneyRain active={payRain} />
         {/* Pay, first thing: what has come in for this project, and the one
@@ -1519,6 +1558,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           {(client || job.client) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Employer</span><span className="font-medium text-xs">{client || job.client}</span></div>}
           {job.local && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Client</span><span className="font-medium text-xs">{job.local}</span></div>}
           {(job.payrollCompany || payrollCompany) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Payroll company</span><span className="font-medium text-xs">{payrollCompany || job.payrollCompany}</span></div>}
+          {contractFor(employer) && <div className="flex justify-between gap-3"><span className="text-muted-foreground text-xs shrink-0">Contract</span><span className="font-medium text-xs text-right">{contractFor(employer)!.name} {contractFor(employer)!.version}</span></div>}
           {job.venue && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Venue</span><span className="font-medium text-xs">{job.venue}</span></div>}
           {job.jobNumber && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Job #</span><span className="font-medium text-xs text-mono">{job.jobNumber}</span></div>}
           {(startTime || job.startTime) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Start</span><span className="font-medium text-xs text-mono">{startTime || job.startTime}{endTime ? ` – ${endTime}` : ''}</span></div>}
@@ -2287,22 +2327,31 @@ export default function CalendarPage() {
     };
   }, [data.jobs, data.income, data.employers, currentDate]);
 
-  // Dates that are the 6th+ consecutive day worked for the same employer —
-  // flagged regardless of whether "6th/7th day rule" is checked on the job,
-  // so it's a heads-up to go verify the contract, not just a confirmation.
+  // Dates that are the 6th+ day in a row — marked whether or not the employer
+  // pays extra for it, so one that should can be caught, with what it pays.
   const sixthSeventhDayDates = useMemo(() => {
-    const map: Record<string, number> = {};
+    const map: Record<string, PremiumDay> = {};
     for (const [date, jobs] of Object.entries(jobsByDate)) {
-      let maxStreak = 0;
       for (const job of jobs) {
         if (effectiveHoursWorked(job) <= 0) continue;
-        const streak = getConsecutiveDayStreak(date, job.client, data.jobs);
-        if (streak > maxStreak) maxStreak = streak;
+        const employer = resolveEmployer(job.client, data.employers);
+        const day = dayInARow(job, employer, data.jobs);
+        if (day >= 6 && day > (map[date]?.day ?? 0)) {
+          map[date] = { day, pays: dayMultiplierFor(job, employer, data.jobs), who: job.client };
+        }
       }
-      if (maxStreak >= 6) map[date] = maxStreak;
     }
     return map;
-  }, [jobsByDate, data.jobs]);
+  }, [jobsByDate, data.jobs, data.employers]);
+
+  // Opening a premium day is worth a party.
+  const [partyRain, setPartyRain] = useState(false);
+  useEffect(() => {
+    if (!selectedDate || !(sixthSeventhDayDates[selectedDate]?.pays > 1)) return;
+    setPartyRain(true);
+    const t = setTimeout(() => setPartyRain(false), 2100);
+    return () => clearTimeout(t);
+  }, [selectedDate, sixthSeventhDayDates]);
 
   const monthDays = useMemo(() => {
     const start = startOfWeek(startOfMonth(currentDate), { weekStartsOn: 0 });
@@ -2439,6 +2488,7 @@ export default function CalendarPage() {
       )}
 
       <MoneyRain active={rainActive} />
+      <MoneyRain active={partyRain} party />
       {payTier !== 'none' && oldestWaiting && (
         <button
           onClick={() => { setSelectedDate(oldestWaiting.jobs[0].date); setSelectedJobId(oldestWaiting.jobs[0].id); }}
@@ -2519,16 +2569,21 @@ export default function CalendarPage() {
                     <div
                       key={i}
                       onClick={() => setSelectedDate(dateKey)}
-                      title={sixthSeventhStreak ? `${sixthSeventhStreak}th consecutive day worked for this employer` : "Tap to add a plan or view this day"}
+                      title={sixthSeventhStreak ? `${ordinal(sixthSeventhStreak.day)} day in a row` : "Tap to add a plan or view this day"}
                       className={cn(
                         "relative flex flex-col items-center py-1.5 transition-colors rounded-lg mx-0.5 mb-0.5 cursor-pointer active:bg-secondary/60 hover:bg-secondary/30",
                         !isCurrentMonth && 'opacity-30',
                         todayFlag && 'bg-primary/10',
-                        sixthSeventhStreak && 'bg-warning/20 ring-1 ring-warning/60'
+                        sixthSeventhStreak && premiumClass(sixthSeventhStreak)
                       )}
                     >
-                      {sixthSeventhStreak > 0 && (
-                        <span className="absolute top-0 right-0.5 w-1.5 h-1.5 rounded-full bg-warning" />
+                      {sixthSeventhStreak && (
+                        <span className="absolute -right-0.5 -top-1.5 z-10 text-[13px] leading-none" aria-hidden="true">
+                          {sixthSeventhStreak.pays >= 2 ? '🤑' : sixthSeventhStreak.pays > 1 ? '💰' : '🔥'}
+                        </span>
+                      )}
+                      {sixthSeventhStreak && (
+                        <span className="absolute left-0.5 top-0 text-[8px] font-black text-mono leading-none">{ordinal(sixthSeventhStreak.day)}</span>
                       )}
                       {todayFlag ? (
                         <span className="relative w-6 h-6 flex items-center justify-center">
@@ -2620,7 +2675,7 @@ export default function CalendarPage() {
                         <div
                           key={ci}
                           onClick={(e) => { if (dayJobs.length > 0) { e.stopPropagation(); setSelectedDate(dateKey); } }}
-                          className={cn('h-3 flex items-center justify-center text-[6px] text-mono rounded-[2px] transition-colors select-none', dayJobs.length > 0 && 'cursor-pointer', hasPaid && 'bg-dot-paid/30 text-dot-paid font-semibold', !hasPaid && hasCompleted && 'bg-dot-pending/25 text-dot-pending', !hasPaid && !hasCompleted && hasUpcoming && 'bg-dot-upcoming/20 text-dot-upcoming', !dayJobs.length && 'text-muted-foreground/25', todayFlag && 'ring-1 ring-inset ring-primary/70')}
+                          className={cn('h-3 flex items-center justify-center text-[6px] text-mono rounded-[2px] transition-colors select-none', dayJobs.length > 0 && 'cursor-pointer', hasPaid && 'bg-dot-paid/30 text-dot-paid font-semibold', !hasPaid && hasCompleted && 'bg-dot-pending/25 text-dot-pending', !hasPaid && !hasCompleted && hasUpcoming && 'bg-dot-upcoming/20 text-dot-upcoming', !dayJobs.length && 'text-muted-foreground/25', todayFlag && 'ring-1 ring-inset ring-primary/70', sixthSeventhDayDates[dateKey] && cn(premiumClass(sixthSeventhDayDates[dateKey]), 'font-black'))}
                         >
                           {day}
                         </div>
@@ -2715,16 +2770,7 @@ export default function CalendarPage() {
                 </DialogTitle>
               </DialogHeader>
               <div className="space-y-2">
-                {selectedDate && sixthSeventhDayDates[selectedDate] > 0 && (
-                  <div className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
-                    ⚠ {sixthSeventhDayDates[selectedDate]}th consecutive day worked{' '}
-                    {selectedJobs
-                      .filter(job => getConsecutiveDayStreak(selectedDate, job.client, data.jobs) >= 6)
-                      .map(job => job.client)
-                      .filter((c, i, arr) => arr.indexOf(c) === i)
-                      .join(', ') || 'for this employer'} — check contract for premium pay.
-                  </div>
-                )}
+                {selectedDate && sixthSeventhDayDates[selectedDate] && <PremiumDayBanner {...sixthSeventhDayDates[selectedDate]} />}
                 {selectedJobs.map(job => {
                   const hours = netHoursWorked(job);
                   const earned = jobGross(job, data.jobs, data.employers);
@@ -2978,6 +3024,10 @@ export default function CalendarPage() {
                         <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", jobDotClass(first, paidJobIds))} />
                         {isGroup && <span className="text-[10px] text-mono bg-foreground/10 text-foreground/70 px-1.5 py-0.5 rounded-full">{dayCount > 1 ? `${dayCount} days` : `${jobs.length} calls`}</span>}
                         {first.jobNumber && <span className="text-[10px] text-mono text-muted-foreground/60">#{first.jobNumber}</span>}
+                        {(() => {
+                          const best = jobs.map(j => sixthSeventhDayDates[j.date]).filter(Boolean).sort((a, b) => b.day - a.day)[0];
+                          return best ? <PremiumTag day={best.day} pays={best.pays} /> : null;
+                        })()}
                         <span className="flex-1" />
                         {totalHours > 0 && (
                           <StubMark job={first} paidByHand={paidByHandJobIds.has(first.id)} />
@@ -3078,7 +3128,7 @@ export default function CalendarPage() {
                             onClick={() => openJob(job)}
                             className="px-3 py-2 pl-6 flex items-center justify-between gap-2 cursor-pointer hover:bg-primary/10 active:bg-primary/15 transition-colors"
                           >
-                            <span className="text-xs text-mono flex items-center gap-1.5"><CallbackMark job={job} />{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}<SplitMark job={job} allJobs={data.jobs} /></span>
+                            <span className="text-xs text-mono flex items-center gap-1.5"><CallbackMark job={job} />{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}<SplitMark job={job} allJobs={data.jobs} />{sixthSeventhDayDates[job.date] && <PremiumTag day={sixthSeventhDayDates[job.date].day} pays={sixthSeventhDayDates[job.date].pays} />}</span>
                             <span className="flex items-center gap-1.5 text-[11px] text-mono text-muted-foreground">
                               {netHoursWorked(job) > 0 ? `${netHoursWorked(job)}h` : isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
                               {job.startTime && !job.endTime && <span className="text-warning"> · no end time</span>}

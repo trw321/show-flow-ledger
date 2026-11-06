@@ -165,8 +165,14 @@ export interface Employer {
   paySchedule?: Job['paySchedule'];
   /** The first check takes longer while you are set up in payroll: this many weeks from your first day here. After it, paySchedule. Three is common. */
   firstCheckWeeks?: number;
-  /** For a schedule that is neither weekly nor bi-weekly: about how many days after the work the pay arrives. */
+  /** About how many days after the work the pay arrives, when the schedule alone does not say. */
   payLagDays?: number;
+  /** The contract these terms came from — see contracts.ts. */
+  contract?: string;
+  /** The minimum call a new shift for this employer starts with. The shift can say otherwise. */
+  minimumCallHours?: number;
+  /** The 6th and 7th days in a row pay premium: 1.5×, then 2×. */
+  sixthSeventhDayRule?: boolean;
   overtimeRule: 'daily' | 'weekly' | 'none';
   dailyOvertimeThresholdHours?: number;
   dailyDoubletimeThresholdHours?: number;

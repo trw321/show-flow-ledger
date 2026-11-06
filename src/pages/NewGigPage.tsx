@@ -545,7 +545,7 @@ export default function NewGigPage({ onComplete, startAs }: {
         mealDuration: entry.mealDuration,
         mealOnClock: entry.mealOnClock,
         mealPenalties: entry.mealPenalties,
-        minimumHours: entry.minimumHours,
+        minimumHours: entry.minimumHours ?? resolveEmployer(entry.client || entry.payrollCompany || '', data.employers)?.minimumCallHours,
         payrollCompany: entry.payrollCompany,
         notes: entry.notes || '',
         has6th7thDayRule: false,
@@ -626,7 +626,7 @@ export default function NewGigPage({ onComplete, startAs }: {
         hourlyRate: j.hourlyRate, steward: j.steward,
         parkingCost: j.parkingCost, notes: j.notes || '',
         mealDuration: j.mealDuration, mealOnClock: j.mealOnClock,
-        minimumHours: j.minimumHours, hoursWorked: j.hoursWorked,
+        minimumHours: j.minimumHours ?? employerRecord?.minimumCallHours, hoursWorked: j.hoursWorked,
         has6th7thDayRule: false,
       };
       const key = getJobDedupKey(draft);

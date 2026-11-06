@@ -212,6 +212,27 @@
     box-shadow: none;
   }
 
+  /* The 6th and 7th days in a row: the one place the app shouts. Highlighter
+     colours, the same on every gel, because this is money. Text on them is
+     dark, whatever it was, or it disappears into the yellow. */
+  .premium-6 { --hl-a: #fff01f; --hl-b: #39ff14; --hl-glow: rgb(255 240 31 / 0.7); }
+  .premium-7 { --hl-a: #ff2bd6; --hl-b: #ffe600; --hl-glow: rgb(255 43 214 / 0.8); }
+  .premium-6,
+  .premium-7 {
+    background-image: linear-gradient(110deg, var(--hl-a), var(--hl-b), var(--hl-a));
+    background-size: 220% 100%;
+    color: #14061f;
+    box-shadow: 0 0 0 1px var(--hl-a), 0 0 14px var(--hl-glow);
+    animation: premium-shine 3s linear infinite;
+  }
+  .premium-6 *,
+  .premium-7 * { color: #14061f !important; }
+  @keyframes premium-shine { to { background-position: -220% 0; } }
+  @media (prefers-reduced-motion: reduce) {
+    .premium-6,
+    .premium-7 { animation: none; }
+  }
+
   /* A chosen option. Not the gel's primary: surfaces are tinted with the
      gel's own hue, so a primary highlight on a primary-tinted card barely
      showed. The warm white of the text stands off every gel. */

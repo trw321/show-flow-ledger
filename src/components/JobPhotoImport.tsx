@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useData } from '@/lib/DataContext';
+import { resolveEmployer } from '@/lib/employerMatch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -169,6 +170,7 @@ export default function JobPhotoImport({
           steward: job.steward,
           parkingCost: job.parkingCost,
           notes: job.notes || '',
+          minimumHours: resolveEmployer(job.client, appData.employers)?.minimumCallHours,
           has6th7thDayRule: false,
         };
         const key = getJobDedupKey(draft);

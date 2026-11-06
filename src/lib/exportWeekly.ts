@@ -1,7 +1,7 @@
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import type { Job, Expense, Income, Employer } from './store';
-import { calculateDayPay, getDayMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming } from './payCalc';
+import { calculateDayPay, dayMultiplierFor, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming } from './payCalc';
 import { resolveEmployer } from './employerMatch';
 import { withholdsNothing } from './payerProfile';
 
@@ -17,7 +17,7 @@ function jobPayDetails(job: Job, allJobs: Job[], employers: Employer[]): JobPayD
   if (!hours) return { grossPay: 0, duesAmount: 0, taxAmount: 0, premiumHours: 0 };
   const rate = job.hourlyRate ?? 0;
   const employer = resolveEmployer(job.client, employers);
-  const dayMult = getDayMultiplier(job.date, job.client, allJobs, job.has6th7thDayRule ?? false);
+  const dayMult = dayMultiplierFor(job, employer, allJobs);
   const rawNightHours = ((employer?.nightPremiumEnabled ?? true) && job.startTime && job.endTime)
     ? calculateNightHours(job.startTime, job.endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour)
     : 0;

@@ -17,7 +17,8 @@ import { Briefcase, FileText, Crown, SlidersHorizontal, Trash2, Plus, Pencil, X,
 import { formatDistanceToNow } from 'date-fns';
 import type { Employer } from '@/lib/store';
 import { ptoBalance } from '@/lib/pto';
-import { payScheduleLabel } from '@/lib/payTiming';
+import { payLagDays, payScheduleLabel } from '@/lib/payTiming';
+import { CONTRACTS, contractFor } from '@/lib/contracts';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -82,13 +83,21 @@ interface EmployerFormState {
   afterFirst: 'weekly' | 'bi-weekly';
   firstCheckWeeks: string;
   payLagDays: string;
+  /** Which contract the terms came from, or empty. */
+  contract: string;
+  dtThreshold: string;
+  minimumCall: string;
+  mealPenaltyAfter: string;
+  nightEndHour: string;
+  sixthSeventh: boolean;
 }
 
 const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '', nightPremiumEnabled: true, unionDuesPercent: '', unionLocal: '', estimatedTaxPercent: '', vacationPercent: '', retirementMatchPercent: '', payBy: 'hour', defaultDayRate: '', dayRateHours: '',
   // Breaking the hour is a union contract term. Some employers pay it and
   // some (Odeum) do not, so a new employer starts without it.
   workerStatus: 'w2', breakTheHour: false, roles: [], ptoEarnHours: '', ptoPerHoursWorked: '', ptoStartingHours: '',
-  w4Exempt: false, schedule: 'other', afterFirst: 'weekly', firstCheckWeeks: '3', payLagDays: '' };
+  w4Exempt: false, schedule: 'other', afterFirst: 'weekly', firstCheckWeeks: '3', payLagDays: '',
+  contract: '', dtThreshold: '', minimumCall: '', mealPenaltyAfter: '', nightEndHour: '', sixthSeventh: false };
 
 /** `legacyExempt`: the old account-wide W-4 exempt switch, which an employer with no answer of its own still follows. */
 function employerToForm(e: Employer, legacyExempt = false): EmployerFormState {
@@ -120,6 +129,40 @@ function employerToForm(e: Employer, legacyExempt = false): EmployerFormState {
     afterFirst: e.paySchedule === 'bi-weekly' ? 'bi-weekly' : 'weekly',
     firstCheckWeeks: e.firstCheckWeeks?.toString() ?? '3',
     payLagDays: e.payLagDays?.toString() ?? '',
+    contract: e.contract ?? '',
+    dtThreshold: e.dailyDoubletimeThresholdHours?.toString() ?? '',
+    minimumCall: e.minimumCallHours?.toString() ?? '',
+    mealPenaltyAfter: e.mealPenaltyAfterHours?.toString() ?? '',
+    nightEndHour: e.nightPremiumEndHour?.toString() ?? '',
+    sixthSeventh: e.sixthSeventhDayRule ?? false,
+  };
+}
+
+/** A contract's terms, filled into the form. Whatever it says nothing about stays as it was. */
+function withContract(f: EmployerFormState, key: string): EmployerFormState {
+  const contract = CONTRACTS.find(c => c.key === key);
+  if (!contract) return { ...f, contract: '' };
+  const t = contract.terms;
+  const text = (n: number | undefined, was: string) => (n === undefined ? was : String(n));
+  const newRoles = (t.roles ?? []).filter(r => !f.roles.some(have => have.name === r.name));
+  return {
+    ...f,
+    contract: key,
+    overtimeRule: t.overtimeRule ?? f.overtimeRule,
+    threshold: text(t.dailyOvertimeThresholdHours, f.threshold),
+    dtThreshold: text(t.dailyDoubletimeThresholdHours, f.dtThreshold),
+    breakTheHour: t.roundUpToWholeHours ?? f.breakTheHour,
+    nightPremiumEnabled: t.nightPremiumEnabled ?? f.nightPremiumEnabled,
+    nightEndHour: text(t.nightPremiumEndHour, f.nightEndHour),
+    mealPenaltyAfter: text(t.mealPenaltyAfterHours, f.mealPenaltyAfter),
+    minimumCall: text(t.minimumCallHours, f.minimumCall),
+    sixthSeventh: t.sixthSeventhDayRule ?? f.sixthSeventh,
+    vacationPercent: text(t.vacationPercent, f.vacationPercent),
+    unionLocal: t.unionLocal ?? f.unionLocal,
+    defaultHourlyRate: text(t.defaultHourlyRate, f.defaultHourlyRate),
+    roles: [...f.roles, ...newRoles.map(r => ({ name: r.name, rate: (r.hourlyRate ?? r.dayRate)?.toString() ?? '' }))],
+    schedule: t.paySchedule === 'weekly' || t.paySchedule === 'bi-weekly' ? t.paySchedule : f.schedule,
+    payLagDays: t.payLagDays?.toString() ?? '',
   };
 }
 
@@ -145,7 +188,13 @@ function formTerms(form: EmployerFormState): Partial<Employer> {
       : form.schedule === 'other' ? undefined
       : form.schedule,
     firstCheckWeeks: form.schedule === 'first-check' ? num(form.firstCheckWeeks) ?? 3 : undefined,
-    payLagDays: form.schedule === 'other' ? num(form.payLagDays) : undefined,
+    payLagDays: form.schedule === 'first-check' ? undefined : num(form.payLagDays),
+    contract: form.contract || undefined,
+    dailyDoubletimeThresholdHours: form.overtimeRule === 'daily' ? num(form.dtThreshold) : undefined,
+    minimumCallHours: num(form.minimumCall),
+    mealPenaltyAfterHours: num(form.mealPenaltyAfter),
+    nightPremiumEndHour: form.nightPremiumEnabled ? num(form.nightEndHour) : undefined,
+    sixthSeventhDayRule: form.sixthSeventh,
   };
 }
 
@@ -166,6 +215,23 @@ function EmployerForm({ initial, onSave, onCancel }: {
         className="h-8 text-sm"
         autoFocus
       />
+      {/* A contract fills in everything below at once; any of it can still be changed. */}
+      <div className="space-y-1">
+        <p className="text-xs">Contract</p>
+        <Select value={form.contract || 'none'} onValueChange={v => setForm(f => withContract(f, v))}>
+          <SelectTrigger className="h-8 text-xs" aria-label="Contract"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">None</SelectItem>
+            {CONTRACTS.map(c => <SelectItem key={c.key} value={c.key}>{c.name} · {c.version}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {form.contract && (
+          <p className="text-[10px] text-muted-foreground">
+            Filled in below, and you can change any of it. Once saved, overtime, night and 6th/7th day pay count on
+            this employer's past shifts too. The minimum call is for new shifts.
+          </p>
+        )}
+      </div>
       {/* W2 takes tax out of each check; 1099 takes nothing, and it is all
           still owed at the year end, self-employment tax included. */}
       <div className="grid grid-cols-2 gap-1.5">
@@ -262,12 +328,14 @@ function EmployerForm({ initial, onSave, onCancel }: {
             ))}
           </div>
         )}
-        {form.schedule === 'other' && (
+        {form.schedule !== 'first-check' && (
           <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-            <span>Paid about</span>
-            <Input type="number" step="1" min="1" placeholder="21" value={form.payLagDays}
+            <span>Paid within</span>
+            <Input type="number" step="1" min="1" aria-label="Paid within this many days of the work"
+              placeholder={String(payLagDays({ paySchedule: form.schedule === 'other' ? undefined : form.schedule } as Employer))}
+              value={form.payLagDays}
               onChange={e => setForm(f => ({ ...f, payLagDays: e.target.value }))} className="h-8 w-14 text-xs" />
-            <span>days after the work — blank if you don't know</span>
+            <span>days of the work{form.schedule === 'other' ? " — blank if you don't know" : ''}</span>
           </div>
         )}
       </div>
@@ -340,14 +408,48 @@ function EmployerForm({ initial, onSave, onCancel }: {
         </Select>
       </div>
       {form.overtimeRule !== 'none' && (
+        <div className={cn('grid gap-2', form.overtimeRule === 'daily' && 'grid-cols-2')}>
+          <Input
+            type="number"
+            placeholder={form.overtimeRule === 'weekly' ? 'OT after N hrs/week (default 40)' : 'OT after hrs/day (8)'}
+            aria-label="Overtime after this many hours"
+            value={form.threshold}
+            onChange={e => setForm(f => ({ ...f, threshold: e.target.value }))}
+            className="h-8 text-xs"
+          />
+          {form.overtimeRule === 'daily' && (
+            <Input
+              type="number"
+              placeholder="2× after hrs/day (12)"
+              aria-label="Double time after this many hours"
+              value={form.dtThreshold}
+              onChange={e => setForm(f => ({ ...f, dtThreshold: e.target.value }))}
+              className="h-8 text-xs"
+            />
+          )}
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-2">
         <Input
           type="number"
-          placeholder={form.overtimeRule === 'weekly' ? 'OT after N hrs/week (default 40)' : 'OT after N hrs/day (default 8)'}
-          value={form.threshold}
-          onChange={e => setForm(f => ({ ...f, threshold: e.target.value }))}
+          step="0.5"
+          placeholder="Minimum call (hrs)"
+          aria-label="Minimum call in hours"
+          title="What a new shift for this employer starts with"
+          value={form.minimumCall}
+          onChange={e => setForm(f => ({ ...f, minimumCall: e.target.value }))}
           className="h-8 text-xs"
         />
-      )}
+        <Input
+          type="number"
+          step="0.5"
+          placeholder="Meal due after (5)"
+          aria-label="Meal due after this many hours"
+          value={form.mealPenaltyAfter}
+          onChange={e => setForm(f => ({ ...f, mealPenaltyAfter: e.target.value }))}
+          className="h-8 text-xs"
+        />
+      </div>
       <Input
         placeholder="Timekeeping app (if not payroll)"
         value={form.timekeepingApp}
@@ -369,6 +471,25 @@ function EmployerForm({ initial, onSave, onCancel }: {
         <Switch
           checked={form.nightPremiumEnabled}
           onCheckedChange={v => setForm(f => ({ ...f, nightPremiumEnabled: v }))}
+        />
+      </div>
+      {form.nightPremiumEnabled && (
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span>Ends at</span>
+          <Input type="number" min="0" max="23" aria-label="Night premium ends at this hour" value={form.nightEndHour}
+            onChange={e => setForm(f => ({ ...f, nightEndHour: e.target.value }))} className="h-8 w-14 text-xs" />
+          <span>:00 (8 is 8 AM) — blank runs to the end of the shift</span>
+        </div>
+      )}
+      <div className="flex items-center justify-between gap-2 pt-1">
+        <span className="text-xs">
+          6th and 7th day pay
+          <span className="block text-[10px] text-muted-foreground">The 6th day in a row pays 1.5×, the 7th 2×.</span>
+        </span>
+        <Switch
+          aria-label="6th and 7th day pay"
+          checked={form.sixthSeventh}
+          onCheckedChange={v => setForm(f => ({ ...f, sixthSeventh: v }))}
         />
       </div>
       <div className="grid grid-cols-2 gap-2">
@@ -841,6 +962,7 @@ export default function SettingsPage() {
                   </p>
                   <p className="text-[10px] text-mono text-foreground/75 mt-0.5">
                     {emp.workerStatus === '1099' ? '1099' : 'W2'}
+                    {contractFor(emp) && ` · ${contractFor(emp)!.short}`}
                     {emp.workerStatus !== '1099' && (emp.w4Exempt ? ' · W-4 exempt' : emp.estimatedTaxPercent ? ` · withholds ${emp.estimatedTaxPercent}%` : '')}
                     {payScheduleLabel(emp) && ` · ${payScheduleLabel(emp)}`}
                     {emp.roundUpToWholeHours && ' · breaks the hour'}
@@ -887,6 +1009,39 @@ export default function SettingsPage() {
               </div>
             )
           ))}
+        </div>
+      </section>
+
+      {/* The contracts, to read and to see who is on them. */}
+      <section>
+        <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/60 uppercase mb-3">
+          Contracts
+        </p>
+        <div className="flex flex-col gap-2">
+          {CONTRACTS.map(c => {
+            const on = data.employers.filter(e => e.contract === c.key);
+            return (
+              <details key={c.key} className="rounded-xl border border-border bg-card px-3 py-2.5">
+                <summary className="cursor-pointer text-sm font-medium">
+                  {c.name} <span className="text-[11px] font-normal text-muted-foreground">{c.version}</span>
+                </summary>
+                <ul className="mt-2 space-y-0.5 text-[11px] text-muted-foreground">
+                  {c.summary.map(line => <li key={line}>• {line}</li>)}
+                </ul>
+                {c.notCalculated.length > 0 && (
+                  <>
+                    <p className="mt-2 text-[10px] text-mono uppercase tracking-wider text-warning">Not worked out by the app</p>
+                    <ul className="space-y-0.5 text-[11px] text-muted-foreground">
+                      {c.notCalculated.map(line => <li key={line}>• {line}</li>)}
+                    </ul>
+                  </>
+                )}
+                <p className="mt-2 text-[11px] text-foreground/75">
+                  {on.length > 0 ? `On: ${on.map(e => e.name).join(', ')}` : 'Not on an employer yet. Edit an employer above and pick it.'}
+                </p>
+              </details>
+            );
+          })}
         </div>
       </section>
 
