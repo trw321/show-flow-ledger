@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { splitJobRecords, expandCBRecord } from './dispatchParsing';
+import { splitJobRecords, expandCBRecord, isDispatchText, missingOffers } from './dispatchParsing';
+import { IGNITE, TWO_OFFERS, VALKYRIES } from './dispatchParsing.fixtures';
 
 // Every case here is a real dispatch paste that broke expandCBRecord at some
 // point (verbatim, tabs and all) — the point of this file isn't "test the
@@ -12,7 +13,82 @@ function expandRaw(raw: string): string[] {
   return records.flatMap(expandCBRecord);
 }
 
+describe('where one offer ends and the next begins', () => {
+  const firstLine = (r: string) => r.split('\n')[0].trim();
+
+  it('splits two offers as they arrive', () => {
+    expect(splitJobRecords(TWO_OFFERS).map(firstLine)).toEqual(['2026-3926', '2026-3943']);
+  });
+
+  it('splits them when the line break after the steward is lost', () => {
+    const glued = ['2026-3926\t', '11/8/26 08:00 AM', '', `${IGNITE}\t2026-3943\t`, '11/4/26 07:00 AM', '', VALKYRIES].join('\n');
+    const records = splitJobRecords(glued);
+    expect(records.map(firstLine)).toEqual(['2026-3926', '2026-3943']);
+    expect(records[0]).toContain('DAVID CARMINITO');
+    expect(records[0]).not.toContain('VALKYRIES');
+  });
+
+  it('splits them when each offer is all on one line', () => {
+    const oneLine = `2026-3926\t11/8/26 08:00 AM\t${IGNITE}\n2026-3943\t11/4/26 07:00 AM\t${VALKYRIES}`;
+    const records = splitJobRecords(oneLine);
+    expect(records.map(firstLine)).toEqual(['2026-3926', '2026-3943']);
+    // And its callbacks still expand: 11/8, 11/9, 11/20, 11/21.
+    expect(expandCBRecord(records[0])).toHaveLength(4);
+  });
+
+  it('splits them when it all runs together with spaces', () => {
+    const flat = '2026-3926 11/8/26 08:00 AM MSFT IGNITE DAVID CARMINITO 2026-3943 11/4/26 07:00 AM VALKYRIES PARADE JOSHUA BOYNE';
+    expect(splitJobRecords(flat).map(firstLine)).toEqual(['2026-3926', '2026-3943']);
+  });
+
+  it('never takes a contract for a job number', () => {
+    expect(splitJobRecords(TWO_OFFERS)).toHaveLength(2);
+    expect(splitJobRecords(`2026-3926\t\n11/8/26 08:00 AM\n\nNOTE\tSKILL\t2023-2028 BASIC BREAKOUT\t2025-2027 BASIC LTE`)).toHaveLength(1);
+  });
+
+  it('knows dispatch text from a sentence', () => {
+    expect(isDispatchText(TWO_OFFERS)).toBe(true);
+    expect(isDispatchText('notes 2026-3926 11/8/26 08:00 AM')).toBe(true);
+    expect(isDispatchText('add to today the same odeum shift i logged on monday')).toBe(false);
+    expect(isDispatchText('10/24 8am-5pm Hall, $52/hr')).toBe(false);
+  });
+
+  it('finds an offer the parser skipped', () => {
+    const records = splitJobRecords(TWO_OFFERS);
+    expect(missingOffers(records, [{ jobNumber: '2026-3926' }, { jobNumber: '2026-3943' }])).toEqual([]);
+    expect(missingOffers(records, [{ jobNumber: '2026-3926' }]).map(firstLine)).toEqual(['2026-3943']);
+  });
+});
+
 describe('expandCBRecord — regression cases from real dispatch pastes', () => {
+  it('"CB 11/9, LOAD OUT 11/20 & 11/21" keeps the date behind the words', () => {
+    // Bug: a part had to start with its date, so "LOAD OUT 11/20" was read as
+    // a note and the 20th was lost. A two-day load out came through as one.
+    const records = splitJobRecords(TWO_OFFERS).flatMap(expandCBRecord);
+    const dates = records.map(r => r.match(/\d{1,2}\/\d{1,2}\/26/)![0]);
+    expect(dates).toEqual(['11/8/26', '11/9/26', '11/20/26', '11/21/26', '11/4/26']);
+    expect(records[1]).not.toContain('LOAD OUT');
+    expect(records[2]).toContain('LOAD OUT');
+    expect(records[3]).toContain('LOAD OUT');
+    expect(records[3]).not.toContain('11/20');
+  });
+
+  it('reads the date when the words come first ("CB LOAD OUT 11/20 & 11/21")', () => {
+    const raw = ['2026-0600\t', '11/8/26 08:00 AM', '', 'CB LOAD OUT 11/20 & 11/21\tT ELEC\tCLIENT\tCLIENT\tSite\tShow\tLoc\tNotes\tCONTRACT\t$50\tNWB\tSTEWARD'].join('\n');
+    const dates = expandRaw(raw).map(r => r.match(/\d{1,2}\/\d{1,2}\/26/)![0]);
+    expect(dates).toEqual(['11/8/26', '11/20/26', '11/21/26']);
+  });
+
+  it('"CB THRU 10/7 THEN LOAD OUT 10/17 & 10/18" reads those dates too', () => {
+    const raw = ['2026-0601\t', '10/5/26 08:00 AM', '', 'CB THRU 10/7 THEN LOAD OUT 10/17 & 10/18\tT ELEC\tCLIENT\tCLIENT\tSite\tShow\tLoc\tNotes\tCONTRACT\t$50\tNWB\tSTEWARD'].join('\n');
+    const dates = expandRaw(raw).map(r => r.match(/\d{1,2}\/\d{1,2}\/26/)![0]);
+    expect(dates).toEqual(['10/5/26', '10/6/26', '10/7/26', '10/17/26', '10/18/26']);
+  });
+
+  it('"CB SAME DAY FOR LOAD OUT" stays one shift', () => {
+    expect(expandCBRecord(splitJobRecords(TWO_OFFERS)[1])).toHaveLength(1);
+  });
+
   it('"CB THRU 10/7 THEN 10/17 & 10/18" expands the "&"-joined date too, not just the first one', () => {
     // Bug: "&" wasn't treated as a date separator (only "," was), so
     // "10/17 & 10/18 FOR LOAD OUT" parsed as one chunk — matched 10/17 and

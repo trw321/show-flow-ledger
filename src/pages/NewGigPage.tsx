@@ -25,7 +25,7 @@ import { useSwipe } from '@/lib/useSwipe';
 import { localToday } from '@/lib/today';
 import { parseCopyRequest } from '@/lib/copyRequest';
 import {
-  type ParsedJob, splitJobRecords, expandCBRecord, expandThruNotesForBatch,
+  type ParsedJob, splitJobRecords, expandCBRecord, expandThruNotesForBatch, isDispatchText, missingOffers,
 } from '@/lib/dispatchParsing';
 
 interface ManualEntry {
@@ -461,7 +461,7 @@ export default function NewGigPage({ onComplete, startAs }: {
     setParseProgress('');
 
     try {
-      if (/^\d{4}-\d{4}/m.test(text)) {
+      if (isDispatchText(text)) {
         const records = splitJobRecords(text);
         const expanded: string[] = [];
         for (const rec of records) expanded.push(...expandCBRecord(rec));
@@ -483,6 +483,18 @@ export default function NewGigPage({ onComplete, startAs }: {
           const d = await resp.json();
           allJobs.push(...(d.jobs || []));
         }
+        // A skipped offer throws nothing and looks like nothing, and a shift
+        // goes missing. Each one is looked for, and asked about on its own.
+        for (const rec of missingOffers(records, allJobs)) {
+          const resp = await callAPI(`${supabaseUrl}/functions/v1/parse-jobs`, supabaseKey, {
+            text: expandCBRecord(rec).join('\n\n'),
+            model: useModel,
+            reasoningEffort: useEffort,
+          });
+          if (resp.ok) allJobs.push(...((await resp.json()).jobs || []));
+        }
+        const lost = missingOffers(records, allJobs).map(r => r.split(/\s/)[0]);
+        if (lost.length > 0) toast.warning(`Couldn't read ${lost.join(', ')}. Paste it on its own to try again.`);
         finishJobsParse(allJobs);
         return;
       }

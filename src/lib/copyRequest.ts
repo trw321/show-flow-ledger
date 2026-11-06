@@ -1,3 +1,4 @@
+import { isDispatchText } from './dispatchParsing';
 import type { Job } from './store';
 import { localToday } from './today';
 
@@ -56,7 +57,13 @@ function dateMentions(text: string, now: Date): Mention[] {
  * not this kind of request, or names no shift that can be found.
  */
 export function parseCopyRequest(text: string, jobs: Job[], now = new Date()): { sources: Job[]; dates: string[] } | null {
-  const t = text.toLowerCase();
+  // An offer is never a request, however it reads. "CB SAME DAY" has both of
+  // the words looked for below, and this runs before the parser, so it took a
+  // shift already logged, copied it to every date in the paste, and the real
+  // offer never reached the parser at all.
+  if (isDispatchText(text)) return null;
+  // Same length, so positions in here still line up with the dates found.
+  const t = text.toLowerCase().replace(/\bsame[\s-]day\b/g, m => ' '.repeat(m.length));
   if (!/\b(same|copy|duplicate|repeat|again)\b/.test(t)) return null;
   if (!/\b(shift|shifts|call|calls|job|gig|day)\b/.test(t)) return null;
 

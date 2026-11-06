@@ -74,9 +74,48 @@ export function isTimeToken(tok: string): boolean {
   );
 }
 
+/**
+ * Text from a dispatch, which has rules of its own, rather than a sentence or a
+ * note. An offer opens with its job number and then its date. A contract looks
+ * like a job number too ("2023-2028 BASIC"), but no date ever follows one.
+ */
+export function isDispatchText(text: string): boolean {
+  return /^\d{4}-\d{4}/m.test(text) || /\b\d{4}-\d{4}\s+\d{1,2}\/\d{1,2}\/\d{2,4}/.test(text);
+}
+
+/**
+ * One offer each. The steward ends an offer and the job number and date start
+ * the next, wherever that lands: a copy can lose the line break between them,
+ * or put the whole offer on one line.
+ */
 export function splitJobRecords(raw: string): string[] {
-  const parts = raw.split(/(?=^\d{4}-\d{4}[\t ]*\r?$)/m);
-  return parts.map(p => p.trim()).filter(p => p.length > 0);
+  const parts = raw.split(/(?=^\d{4}-\d{4}[\t ]*\r?$|\b\d{4}-\d{4}\s+\d{1,2}\/\d{1,2}\/\d{2,4})/m);
+  return parts
+    .map(p => p.trim())
+    .filter(p => p.length > 0)
+    // What reads these expects the job number on a line of its own.
+    .map(p => p.replace(/^(\d{4}-\d{4})[\t ]+(?=\d{1,2}\/\d{1,2}\/\d{2,4})/, '$1\t\n'));
+}
+
+/**
+ * Job numbers in the offers with no shift back from the parser. A skipped offer
+ * throws no error and looks like nothing at all, so it has to be looked for.
+ */
+export function missingOffers(records: string[], jobs: Pick<ParsedJob, 'jobNumber'>[]): string[] {
+  const found = new Set(jobs.map(j => j.jobNumber?.trim()));
+  return records.filter(r => {
+    const number = r.match(/^\d{4}-\d{4}/)?.[0];
+    return !!number && !found.has(number);
+  });
+}
+
+/**
+ * One piece of a callback list: "11/20", "11/20 @6PM", or "LOAD OUT 11/20",
+ * where the words in front say what that date is for.
+ */
+function readDatePart(part: string): { lead: string; md: string; rest: string } | null {
+  const m = part.match(/^(.*?)\s*\b(\d{1,2}\/\d{1,2})\b(.*)$/);
+  return m ? { lead: m[1].trim(), md: m[2], rest: m[3].trim() } : null;
 }
 
 export function expandCBRecord(record: string): string[] {
@@ -164,7 +203,7 @@ export function expandCBRecord(record: string): string[] {
 
   type CBEntry = { date: Date; time?: string; note?: string };
   const cbEntries: CBEntry[] = [];
-  const hasLeadingDate = /^\d{1,2}\/\d{1,2}/.test(cbContent);
+  const hasDate = /\b\d{1,2}\/\d{1,2}\b/.test(cbContent);
   const hasThru = /^THRU\b/i.test(cbContent);
 
   if (hasThru) {
@@ -190,15 +229,17 @@ export function expandCBRecord(record: string): string[] {
       let trailingTime: string | undefined;
       let trailingNote: string | undefined;
       const thenEntries: CBEntry[] = [];
+      let carried = '';
       for (const part of parts) {
-        const dm = part.match(/^(\d{1,2}\/\d{1,2})(.*)/);
-        if (!dm) { if (part.trim()) trailingNote = part.trim(); continue; }
-        let rem2 = dm[2].trim();
+        const dp = readDatePart(part);
+        if (!dp) { if (part.trim()) trailingNote = part.trim(); continue; }
+        if (dp.lead) carried = dp.lead;
+        let rem2 = dp.rest;
         let timeOverride: string | undefined;
         const atM = rem2.match(/^(@\S+)\s*(.*)/);
         if (atM && isTimeToken(atM[1])) { timeOverride = normTime(atM[1]); trailingTime = timeOverride; rem2 = atM[2].trim(); }
         if (rem2) trailingNote = rem2;
-        thenEntries.push({ date: parseMD(dm[1]), time: timeOverride, note: rem2 || undefined });
+        thenEntries.push({ date: parseMD(dp.md), time: timeOverride, note: rem2 || carried || undefined });
       }
       for (const e of thenEntries) {
         if (!e.time && trailingTime) e.time = trailingTime;
@@ -209,37 +250,36 @@ export function expandCBRecord(record: string): string[] {
       const noteM = rem.match(/\b(FOR|WITH)\b\s*(.+)/i);
       if (noteM) for (const e of cbEntries) e.note = noteM[0].trim();
     }
-  } else if (hasLeadingDate) {
+  } else if (hasDate) {
+    // "11/9, LOAD OUT 11/20 & 11/21": words in front of a date go with it and
+    // the dates after it. The date used to be lost along with them.
     const parts = cbContent.split(/\s*(?:,|&)\s*/);
     let trailingNote = '';
+    let carried = '';
     for (const part of parts) {
-      const dm = part.match(/^(\d{1,2}\/\d{1,2})(.*)/);
-      if (!dm) { if (part.trim()) trailingNote = part.trim(); continue; }
-      let rem2 = dm[2].trim();
+      const dp = readDatePart(part);
+      if (!dp) { if (part.trim()) trailingNote = part.trim(); continue; }
+      if (dp.lead) carried = dp.lead;
+      let rem2 = dp.rest;
       let timeOverride: string | undefined;
       const atM = rem2.match(/^(@\S+)\s*(.*)/);
       if (atM && isTimeToken(atM[1])) { timeOverride = normTime(atM[1]); rem2 = atM[2].trim(); }
       if (rem2) trailingNote = rem2;
-      cbEntries.push({ date: parseMD(dm[1]), time: timeOverride, note: rem2 || undefined });
+      cbEntries.push({ date: parseMD(dp.md), time: timeOverride, note: rem2 || carried || undefined });
     }
     if (trailingNote) for (const e of cbEntries) if (!e.note) e.note = trailingNote;
   } else {
-    const trailingDateM = cbContent.match(/^(.+)\s+(\d{1,2}\/\d{1,2})\s*$/);
-    if (trailingDateM) {
-      cbEntries.push({ date: parseMD(trailingDateM[2]), time: '', note: trailingDateM[1].trim() || undefined });
-    } else {
-      const tokM = cbContent.match(/^(@?\S+)\s*(.*)/);
-      if (tokM && isTimeToken(tokM[1])) {
-        // "CB 6PM" — a real second call later the same day, distinguishable
-        // from plain descriptive text by actually starting with a time.
-        cbEntries.push({ date: new Date(parentDate), time: normTime(tokM[1]), note: tokM[2].trim() || undefined });
-      }
-      // Neither a trailing date nor a leading time — e.g. "CB FOR OUT" or
-      // "CB FOR LOAD OUT" is describing what this same shift covers, not
-      // naming a second dated/timed call. Nothing to expand; falls through
-      // to the cbEntries.length === 0 check below and returns the record
-      // unchanged instead of fabricating a same-day duplicate.
+    const tokM = cbContent.match(/^(@?\S+)\s*(.*)/);
+    if (tokM && isTimeToken(tokM[1])) {
+      // "CB 6PM" — a real second call later the same day, distinguishable
+      // from plain descriptive text by actually starting with a time.
+      cbEntries.push({ date: new Date(parentDate), time: normTime(tokM[1]), note: tokM[2].trim() || undefined });
     }
+    // Neither a date nor a leading time — e.g. "CB FOR OUT" or "CB FOR LOAD
+    // OUT" is describing what this same shift covers, not naming a second
+    // dated/timed call. Nothing to expand; falls through to the
+    // cbEntries.length === 0 check below and returns the record unchanged
+    // instead of fabricating a same-day duplicate.
   }
 
   if (cbEntries.length === 0) return [record];
@@ -303,13 +343,15 @@ export function expandThruNotes(job: ParsedJob): ParsedJob[] {
   if (thenMatch) {
     const thenPart = thenMatch[2].trim().replace(/^(?:AND|THEN)\s+/i, '');
     let trailingNote: string | undefined;
+    let carried = '';
     for (const part of thenPart.split(/\s*(?:,|&)\s*/)) {
-      const dm = part.match(/^(\d{1,2}\/\d{1,2})(.*)/);
-      if (!dm) { if (part.trim()) trailingNote = part.trim(); continue; }
-      const d = parseMD(dm[1]);
+      const dp = readDatePart(part);
+      if (!dp) { if (part.trim()) trailingNote = part.trim(); continue; }
+      const d = parseMD(dp.md);
       if (!d) continue;
-      const noteText = dm[2].trim() || undefined;
-      if (noteText) trailingNote = noteText;
+      if (dp.lead) carried = dp.lead;
+      const noteText = dp.rest || carried || undefined;
+      if (dp.rest) trailingNote = dp.rest;
       extraEntries.push({ date: d, note: noteText });
     }
     for (const e of extraEntries) if (!e.note && trailingNote) e.note = trailingNote;

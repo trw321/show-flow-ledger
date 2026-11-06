@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseCopyRequest } from './copyRequest';
+import { TWO_OFFERS } from './dispatchParsing.fixtures';
 import type { Job } from './store';
 
 // Thursday 22 October 2026, mid-afternoon.
@@ -40,6 +41,19 @@ describe('copying a shift that is already logged', () => {
 
   it('is not a dispatch offer', () => {
     expect(parseCopyRequest('Odeum 10/24 8am-5pm Hall, $52/hr', jobs, now)).toBeNull();
+  });
+
+  it('never takes a dispatch for a request, even with its shift already logged', () => {
+    // Real: "CB SAME DAY" read as "same" and "day". With the Ignite shifts on
+    // the calendar, this copied one of them to the 4th, 8th, 9th and 20th, and
+    // the Valkyries offer next to it never got parsed.
+    const logged = ['2026-11-08', '2026-11-09', '2026-11-20', '2026-11-21'].map((d, i) => shift('i' + i, d, 'FREEMAN AUDIO VISUAL SOLUTIONS INC'));
+    expect(parseCopyRequest(TWO_OFFERS, logged, new Date(2026, 10, 6, 12, 0))).toBeNull();
+  });
+
+  it('does not take "same day" for a request in any other text either', () => {
+    const logged = [shift('a', '2026-10-19')];
+    expect(parseCopyRequest('odeum 10/19 and 10/24, cb same day for load out', logged, now)).toBeNull();
   });
 
   it('gives up when no named day has that shift', () => {
