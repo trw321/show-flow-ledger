@@ -228,11 +228,8 @@ function SplitMark({ job, allJobs }: { job: Job; allJobs: Job[] }) {
   );
   if (!isSplit) return null;
   return (
-    <span
-      title="Split shift — another call the same day"
-      className="text-[9px] text-mono font-bold uppercase tracking-wider text-warning"
-    >
-      split
+    <span role="img" aria-label="Split shift" title="Split shift — another call the same day" className="text-[11px] leading-none select-none">
+      🤸
     </span>
   );
 }

@@ -53,6 +53,12 @@ export default function CalendarKey({ month, plans, states }: {
           ))}
         </ul>
 
+        <p className="font-8bit mt-3 text-[7px] uppercase text-white/60">Marks</p>
+        <ul className="mt-1.5 grid grid-cols-2 gap-x-2 text-[11px] text-mono text-white">
+          <li>📞 callback</li>
+          <li>🤸 split</li>
+        </ul>
+
         <p className="font-8bit mt-3 text-[7px] uppercase text-white/60">Days in a row</p>
         <ul className="mt-1.5 flex gap-2 text-[11px] text-mono">
           <li className="premium-6 px-1.5 font-bold">6th</li>
