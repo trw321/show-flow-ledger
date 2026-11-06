@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   CalendarDays,
@@ -15,6 +15,8 @@ import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { useUserPrefs, TabKey } from '@/lib/UserPrefsContext';
+import ReportProblem from '@/components/ReportProblem';
+import { logStep } from '@/lib/problemLog';
 
 interface NavItem {
   label: string;
@@ -106,6 +108,8 @@ function BottomTabBar() {
 
 export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { pathname } = useLocation();
+  useEffect(() => { logStep('page', pathname); }, [pathname]);
 
   return (
     <div className="min-h-screen flex overflow-x-hidden">
@@ -115,24 +119,28 @@ export default function AppLayout() {
           <span className="text-2xl font-display text-foreground">Show Flow</span>
         </div>
         <SidebarNav />
+        <div className="mt-auto p-3"><ReportProblem withLabel /></div>
       </aside>
 
       {/* Mobile header — pt- includes the safe-area inset so it clears the notch/status bar */}
       <div className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
         <span className="text-xl font-display">Show Flow</span>
-        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              {mobileOpen ? <X size={18} /> : <Menu size={18} />}
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-64 p-0">
-            <div className="px-4 py-5 border-b border-border">
-              <span className="text-2xl font-display">Show Flow</span>
-            </div>
-            <SidebarNav onNavigate={() => setMobileOpen(false)} />
-          </SheetContent>
-        </Sheet>
+        <div className="flex items-center gap-1">
+          <ReportProblem />
+          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                {mobileOpen ? <X size={18} /> : <Menu size={18} />}
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-64 p-0">
+              <div className="px-4 py-5 border-b border-border">
+                <span className="text-2xl font-display">Show Flow</span>
+              </div>
+              <SidebarNav onNavigate={() => setMobileOpen(false)} />
+            </SheetContent>
+          </Sheet>
+        </div>
       </div>
 
       {/* Main content — top/bottom margins on mobile mirror the fixed header/tab bar's actual height, safe-area inset included, so content never sits under either.

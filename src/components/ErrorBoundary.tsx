@@ -1,6 +1,7 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
 import posthog from 'posthog-js';
 import { clearAllData } from '@/lib/store';
+import { reportCrash } from '@/lib/problemLog';
 
 interface Props { children: ReactNode; }
 interface State { hasError: boolean; error: Error | null; }
@@ -14,6 +15,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     posthog.captureException(error, { extra: { componentStack: info.componentStack } });
+    reportCrash(`${error.message}${info.componentStack ?? ''}`);
   }
 
   render() {
