@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Creepster&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Creepster&family=Press+Start+2P&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -210,6 +210,82 @@
   .pixel-button:active {
     transform: translate(2px, 2px);
     box-shadow: none;
+  }
+
+  /* A project that lands on two checks. It has to be seen from across the
+     list, so it looks like what it is: a warning. */
+  .hazard-tape {
+    display: flex;
+    justify-content: center;
+    padding: 3px 0;
+    background: repeating-linear-gradient(-45deg, #ffe600 0 9px, #14061f 9px 18px);
+  }
+  .hazard-tape > span {
+    background: #ffe600;
+    color: #14061f;
+    padding: 1px 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  /* Where one pay period ends and the next begins. */
+  .period-cut {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #ffe600;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .period-cut::before,
+  .period-cut::after {
+    content: '';
+    flex: 1;
+    border-top: 2px dashed #ffe600;
+  }
+
+  /* The stamp coming down on a stub: big, then a thump. Steps, like the key. */
+  .stamp-landing {
+    position: absolute;
+    pointer-events: none;
+    border: 3px solid #ff2a2a;
+    background: rgb(255 42 42 / 0.25);
+    animation: stamp-landing 0.2s steps(4) both;
+  }
+  @keyframes stamp-landing {
+    from { opacity: 0; transform: scale(2.4) rotate(-9deg); }
+    70% { opacity: 1; transform: scale(0.94) rotate(-1.7deg); }
+    to { opacity: 0; transform: scale(1) rotate(-1.7deg); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .stamp-landing { display: none; }
+  }
+
+  /* The calendar key: a tiny game menu. Steps, not easing, so it pops like one. */
+  .font-8bit { font-family: 'Press Start 2P', var(--font-mono), monospace; }
+  .key-8bit {
+    /* The pop-up's own colours and shadow would win otherwise. */
+    background: #14061f !important;
+    box-shadow: 0 0 0 3px #fff, 0 0 0 6px #14061f, 9px 9px 0 3px rgb(0 0 0 / 0.55) !important;
+    animation: key-pop 0.16s steps(3) both !important;
+  }
+  .key-swatch {
+    width: 10px;
+    height: 10px;
+    flex: none;
+    box-shadow: 0 0 0 1px #fff;
+  }
+  @keyframes key-pop {
+    from { opacity: 0; transform: scale(0.5); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .key-8bit { animation: none !important; }
   }
 
   /* The 6th and 7th days in a row: the one place the app shouts. Highlighter

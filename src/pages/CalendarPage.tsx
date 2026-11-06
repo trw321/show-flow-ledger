@@ -21,6 +21,11 @@ import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addM
 import type { Job, CalendarEvent, Income, Invoice } from '@/lib/store';
 import { matchPaymentToProject, betterProject, bestProjectFor, projectOf, type FoundPayment } from '@/lib/paymentMatch';
 import { payDueDate, payTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
+import { paidShiftIds, periodNet, periodPayments, projectPeriods, type PayPeriod, type ProjectPeriod } from '@/lib/payPeriods';
+import { explainPay } from '@/lib/payExplain';
+import PayEstimateCard from '@/components/PayEstimateCard';
+import CalendarKey from '@/components/CalendarKey';
+import EmployerEditor from '@/components/EmployerEditor';
 import { ratesForShift } from '@/lib/payerProfile';
 import { contractFor, contractsWorked, shiftContract } from '@/lib/contracts';
 import { alreadyRecorded } from '@/lib/paymentRepeats';
@@ -344,6 +349,54 @@ function addHoursToTime(start: string, hours: number): string {
   return minutesToTimeStr(s + hours * 60);
 }
 
+/** A meal being filled in: how long it is isn't known until it's tapped. */
+type MealEntry = { duration?: Job['mealDuration']; onClock: boolean };
+
+const MEAL_LENGTHS = [{ value: 0, label: 'MP' }, { value: 30, label: '30m' }, { value: 45, label: '45m' }, { value: 60, label: '1hr' }] as const;
+
+/** One meal: how long, and whether it stayed on the clock. Tapping the length again clears it. */
+function MealChoice({ duration, onClock, onDuration, onOnClock }: {
+  duration: Job['mealDuration'];
+  onClock: boolean;
+  onDuration: (value: Job['mealDuration']) => void;
+  onOnClock: (value: boolean) => void;
+}) {
+  return (
+    <>
+      <div className="grid grid-cols-4 gap-1.5">
+        {MEAL_LENGTHS.map(({ value, label }) => {
+          const active = duration === value;
+          return (
+            <button key={label} type="button" onClick={() => onDuration(active ? undefined : value)} className={cn("rounded-md border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
+              <p className={cn("text-sm font-bold text-mono", active && "text-primary")}>{label}</p>
+            </button>
+          );
+        })}
+      </div>
+      {duration !== undefined && duration > 0 && (
+        <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+          {[{ value: true, label: 'On the clock', sub: 'paid, no deduction' }, { value: false, label: 'Off the clock', sub: `${duration}min deducted` }].map(({ value, label, sub }) => {
+            const active = onClock === value;
+            return (
+              <button key={label} type="button" onClick={() => onOnClock(value)} className={cn("rounded-md border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
+                <p className={cn("text-xs font-bold", active && "text-primary")}>{label}</p>
+                <p className="text-[9px] leading-tight mt-0.5 opacity-70">{sub}</p>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
+
+/** A pay period's dates, without saying the month twice. */
+function periodDates({ start, end }: PayPeriod): string {
+  const from = parseISO(start);
+  const to = parseISO(end);
+  return `${format(from, 'MMM d')} – ${format(to, from.getMonth() === to.getMonth() ? 'd' : 'MMM d')}`;
+}
+
 // ── Job detail view ───────────────────────────────────────────────────────────
 
 function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOnMount, onStubOpened }: {
@@ -377,7 +430,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   const [meal2OnClock, setMeal2OnClock] = useState(job.meal2OnClock ?? false);
   // A second meal is opt-in: most days have one. Shown when the saved shift
   // already has one, so an existing second meal is never hidden.
-  const [secondMealOpen, setSecondMealOpen] = useState(job.meal2Duration !== undefined);
+  const [secondMealOpen, setSecondMealOpen] = useState(job.meal2Duration !== undefined || !!job.extraMeals?.length);
+  // Past the second. A long day has them, so there's no limit to how many.
+  const [extraMeals, setExtraMeals] = useState<MealEntry[]>(job.extraMeals ?? []);
   // A day of several calls, typed as it arrives: "8-10, 11-3, 4-7". The gaps
   // between the calls are the meals, so nothing about them is entered twice.
   const [callTimeline, setCallTimeline] = useState(job.callTimeline ?? '');
@@ -409,6 +464,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   // the panel: a toast's Undo cannot be tapped behind an open shift.
   const [removedPays, setRemovedPays] = useState<Income[][]>([]);
 
+  const [editingEmployer, setEditingEmployer] = useState(false);
   const [parsingStub, setParsingStub] = useState(false);
   const [viewingStub, setViewingStub] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -442,7 +498,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     setMealDuration(job.mealDuration ?? undefined);
     setMeal2Duration(job.meal2Duration ?? undefined);
     setMeal2OnClock(job.meal2OnClock ?? false);
-    setSecondMealOpen(job.meal2Duration !== undefined);
+    setSecondMealOpen(job.meal2Duration !== undefined || !!job.extraMeals?.length);
+    setExtraMeals(job.extraMeals ?? []);
     setCallTimeline(job.callTimeline ?? '');
     setGapsOnClock(job.callGapsOnClock ?? []);
     setCallsOpen(!!job.callTimeline);
@@ -577,16 +634,26 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     return data.income.filter(i => i.jobId && ids.has(i.jobId) && (i.status === 'paid' || i.status === 'pending'))
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [project, data.income]);
+  const paidIds = useMemo(() => paidShiftIds(data.jobs, data.income, data.employers, prefs.payer), [data.jobs, data.income, data.employers, prefs.payer]);
   const matchCtx = useMemo(() => ({
     allJobs: data.jobs,
     employers: data.employers,
     payer: prefs.payer,
-    paidJobIds: new Set(data.income.filter(i => i.status === 'paid' && i.jobId).map(i => i.jobId!)),
-  }), [data.jobs, data.employers, data.income, prefs.payer]);
+    paidJobIds: paidIds,
+  }), [data.jobs, data.employers, prefs.payer, paidIds]);
+  // Pay lands a period at a time, so a project split across pay periods is
+  // matched a piece at a time: this shift's piece, or the next one unpaid.
+  const payPiece = useMemo(() => {
+    const { periods } = projectPeriods(project, resolveEmployer(job.client, data.employers), data.jobs);
+    if (periods.length < 2) return project;
+    const unpaid = (p: ProjectPeriod) => p.jobs.some(j => effectiveHoursWorked(j) > 0 && !paidIds.has(j.id));
+    const own = periods.find(p => p.jobs.some(j => j.id === job.id));
+    return ((own && unpaid(own) ? own : periods.find(unpaid) ?? own)?.jobs) ?? project;
+  }, [project, job.id, job.client, data.jobs, data.employers, paidIds]);
   const pendingPayment: FoundPayment | null = (payFound || payMode === 'manual') && parseFloat(payAmount) > 0
     ? { ...(payFound?.payment ?? {}), amount: parseFloat(payAmount), date: payDate }
     : null;
-  const payMatch = pendingPayment ? matchPaymentToProject(pendingPayment, project, matchCtx) : null;
+  const payMatch = pendingPayment ? matchPaymentToProject(pendingPayment, payPiece, matchCtx) : null;
   const payElsewhere = pendingPayment && payFound ? betterProject(pendingPayment, job, matchCtx) : null;
   const payDuplicate = pendingPayment ? alreadyRecorded({ ...pendingPayment, client: pendingPayment.payer }, data.income) : undefined;
   const showPay = payOpen || !!editingStub || parsingStub || !!payFound || payMode !== null;
@@ -603,7 +670,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     setPayMode('manual');
     setPayDate(localToday());
     // What the project's unpaid days were expected to pay, as a starting point.
-    const expected = matchPaymentToProject({ amount: 0, date: localToday() }, project, matchCtx).expected;
+    const expected = matchPaymentToProject({ amount: 0, date: localToday() }, payPiece, matchCtx).expected;
     setPayAmount(expected > 0 ? expected.toFixed(2) : '');
   };
   const savePayment = async (target: Job) => {
@@ -687,6 +754,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
         steward: job.steward,
         mealDuration: job.mealDuration,
         mealOnClock: job.mealOnClock,
+        meal2Duration: job.meal2Duration,
+        meal2OnClock: job.meal2OnClock,
+        extraMeals: job.extraMeals,
         nightPremiumConfirmed: job.nightPremiumConfirmed,
         notes: job.notes,
       });
@@ -747,7 +817,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   // changed the pay but every hours figure on screen stayed put.
   const offClockMealMins = timeline
     ? timeline.offClockMinutes
-    : ((mealDuration && !mealOnClock) ? mealDuration : 0) + ((meal2Duration && !meal2OnClock) ? meal2Duration : 0);
+    : ((mealDuration && !mealOnClock) ? mealDuration : 0) + ((meal2Duration && !meal2OnClock) ? meal2Duration : 0)
+      + extraMeals.reduce((sum, m) => sum + (m.duration && !m.onClock ? m.duration : 0), 0);
   const mealDeductionHours = offClockMealMins / 60;
   const paidHours = Math.max(0, actualHours - mealDeductionHours);
   const billableHours = Math.max(paidHours, minHours);
@@ -774,8 +845,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   );
 
   const stubComparison = useMemo(
-    () => (stubParsed && stubMatch ? compareStubToShifts(stubParsed, stubMatch.jobs, data.jobs, data.employers) : null),
-    [stubParsed, stubMatch, data.jobs, data.employers],
+    () => (stubParsed && stubMatch ? compareStubToShifts(stubParsed, stubMatch.jobs, data.jobs, data.employers, prefs.payer) : null),
+    [stubParsed, stubMatch, data.jobs, data.employers, prefs.payer],
   );
   const stubDisagreements = useMemo(() => (stubComparison ? disagreements(stubComparison) : []), [stubComparison]);
 
@@ -783,6 +854,25 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     () => (stubParsed ? learnFromStubs(data.jobs, data.employers) : []),
     [stubParsed, data.jobs, data.employers],
   );
+
+  // The estimate beside what came in, and why they differ: for the payment
+  // being added, for the stub on file, and for what the project has received.
+  const worth = { allJobs: data.jobs, employers: data.employers, payer: prefs.payer };
+  const payCovers = (() => {
+    const worked = payFound?.kind === 'stub' && stubMatch?.jobs.length
+      ? stubMatch.jobs
+      : payPiece.filter(j => j.date <= localToday() && effectiveHoursWorked(j) > 0);
+    const unpaid = worked.filter(j => !paidIds.has(j.id));
+    return unpaid.length > 0 ? unpaid : worked;
+  })();
+  const payExplanation = pendingPayment
+    ? explainPay({ ...worth, stub: payFound?.kind === 'stub' ? stubParsed : null, received: pendingPayment.amount, jobs: payCovers })
+    : null;
+  const stubExplanation = stubParsed && stubMatch ? explainPay({ ...worth, stub: stubParsed, jobs: stubMatch.jobs }) : null;
+  const moneyIn = samePaymentGroups(projectPayments.filter(i => i.status === 'paid'));
+  const receivedVsEstimate = moneyIn.length > 0
+    ? explainPay({ ...worth, received: moneyIn.reduce((sum, g) => sum + g.first.amount, 0), jobs: project.filter(j => paidIds.has(j.id)) })
+    : null;
 
   // A stub is evidence of what was actually paid, so accepting a line records
   // the real figure and keeps the old one alongside it.
@@ -815,6 +905,10 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     await updateEmployer(s.employerId, { dismissedSuggestions: dismissSuggestion(employerRecord, s.field) });
     toast('Skipped — I\'ll ask again after the next stub');
   };
+
+  // A meal added but never given a length isn't a meal yet.
+  const extraMealsToSave = extraMeals.filter((m): m is NonNullable<Job['extraMeals']>[number] => m.duration !== undefined);
+  const extraMealsChanged = JSON.stringify(extraMealsToSave) !== JSON.stringify(job.extraMeals ?? []);
 
   const employerChanged = client.trim() !== (job.client ?? '') && client.trim() !== '';
   const projectSiblings = employerChanged
@@ -875,6 +969,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     if (!isFuture && job.hoursPlanned && (actualHours > 0 || timeline)) updates.hoursPlanned = undefined;
     if (meal2Duration !== (job.meal2Duration ?? undefined)) updates.meal2Duration = meal2Duration;
     if (meal2Duration && meal2OnClock !== (job.meal2OnClock ?? false)) updates.meal2OnClock = meal2OnClock;
+    if (extraMealsChanged) updates.extraMeals = extraMealsToSave.length > 0 ? extraMealsToSave : undefined;
     if (mealPenalties !== (job.mealPenalties?.toString() ?? '')) {
       const parsedPenalties = parseFloat(mealPenalties);
       updates.mealPenalties = parsedPenalties > 0 ? parsedPenalties : undefined;
@@ -913,10 +1008,50 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     needsReview !== (job.needsReview ?? false) ||
     meal2Duration !== (job.meal2Duration ?? undefined) ||
     (!!meal2Duration && meal2OnClock !== (job.meal2OnClock ?? false)) ||
+    extraMealsChanged ||
     (mealPenalties !== (job.mealPenalties?.toString() ?? '')) ||
     (rawNightHours > 0 && nightPremiumConfirmed !== (job.nightPremiumConfirmed ?? true)) ||
     nightActualHoursChanged ||
     payStub !== (job.payStub ?? '');
+
+  // What the stubs imply this employer's rates really are.
+  const learnedFromStubs = stubSuggestions.length > 0 && (
+    <div className="rounded-md border border-accent/30 bg-accent/5 p-3 space-y-2">
+      <p className="text-[9px] text-mono font-bold tracking-widest uppercase text-accent/80">
+        Learned from your stubs
+      </p>
+      {stubSuggestions.map(s => (
+        <div key={s.field} className="space-y-1.5">
+          <p className="text-[11px]">
+            <span className="font-semibold">{s.label}</span> looks like{' '}
+            <span className="text-mono text-success font-bold">{s.suggested}%</span>
+            {s.current != null && <> , not <span className="text-mono line-through text-destructive">{s.current}%</span></>}
+          </p>
+          <p className="text-[10px] text-mono text-muted-foreground">
+            {s.sampleCount === 1
+              ? `From 1 stub (${s.evidence[0]}) — worth a look, not conclusive`
+              : `${s.sampleCount} stubs agree (${s.evidence.join(', ')}) — strong signal`}
+          </p>
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => applySuggestion(s)}
+              className="flex-1 rounded-md border border-success/40 bg-success/10 text-success px-2 py-1 text-[10px] font-medium hover:bg-success/20 transition-colors"
+            >
+              Update to {s.suggested}%
+            </button>
+            <button
+              type="button"
+              onClick={() => dismissSuggestionFor(s)}
+              className="rounded-md border border-border bg-secondary/20 text-muted-foreground px-2 py-1 text-[10px] hover:text-foreground transition-colors"
+            >
+              Not now
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <>
@@ -1022,6 +1157,11 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                     </div>
                   );
                 })}
+                {receivedVsEstimate && receivedVsEstimate.verdict !== 'none' && (
+                  <p className="text-[11px] text-mono text-muted-foreground" data-testid="received-vs-estimate">
+                    Estimated ${receivedVsEstimate.lines[1].estimated.toLocaleString(undefined, { minimumFractionDigits: 2 })} · {receivedVsEstimate.headline}
+                  </p>
+                )}
               </div>
             )}
 
@@ -1136,6 +1276,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                         )}
                       </div>
                     )}
+                    {payExplanation && <PayEstimateCard explanation={payExplanation} covers={payCovers} />}
+                    {payFound && learnedFromStubs}
                     {payDuplicate && (
                       <p className="text-[11px] text-warning">Already in your payments ({payDuplicate.date}) — adding it again counts it twice.</p>
                     )}
@@ -1324,30 +1466,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                 penalty is owed or not regardless, so that stays below. */}
             <div className={cn("space-y-1.5", mealsFromTimeline && "hidden")}>
             <label className="text-xs text-muted-foreground">{secondMealOpen ? 'First Meal' : 'Meal Break'}</label>
-            <div className="grid grid-cols-4 gap-1.5">
-              {([{ value: 0 as const, label: 'MP' }, { value: 30 as const, label: '30m' }, { value: 45 as const, label: '45m' }, { value: 60 as const, label: '1hr' }]).map(({ value, label }) => {
-                const active = mealDuration === value;
-                return (
-                  <button key={label} type="button" onClick={() => setMealDuration(active ? undefined : value)} className={cn("rounded-md border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
-                    <p className={cn("text-sm font-bold text-mono", active && "text-primary")}>{label}</p>
-                  </button>
-                );
-              })}
-            </div>
-            {mealDuration !== undefined && mealDuration > 0 && (
-              <div className="grid grid-cols-2 gap-1.5 pt-0.5">
-                {[{ value: true, label: 'On the clock', sub: 'paid, no deduction' }, { value: false, label: 'Off the clock', sub: `${mealDuration}min deducted` }].map(({ value, label, sub }) => {
-                  const active = mealOnClock === value;
-                  return (
-                    <button key={label} type="button" onClick={() => setMealOnClock(value)} className={cn("rounded-md border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
-                      <p className={cn("text-xs font-bold", active && "text-primary")}>{label}</p>
-                      <p className="text-[9px] leading-tight mt-0.5 opacity-70">{sub}</p>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            {/* A second meal gets its own boxes rather than sharing the first's:
+            <MealChoice duration={mealDuration} onClock={mealOnClock} onDuration={setMealDuration} onOnClock={setMealOnClock} />
+            {/* Each further meal gets its own boxes rather than sharing the first's:
                 an hour off at lunch and half an hour on later is a normal day,
                 and the two have nothing to do with each other. */}
             {!secondMealOpen ? (
@@ -1359,41 +1479,55 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                 <Plus size={11} /> Add a second meal
               </button>
             ) : (
-              <div className="space-y-1.5 pt-1 border-t border-border/60">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs text-muted-foreground">Second Meal</label>
-                  <button
-                    type="button"
-                    onClick={() => { setSecondMealOpen(false); setMeal2Duration(undefined); setMeal2OnClock(false); }}
-                    className="text-[11px] text-destructive hover:underline"
-                  >
-                    Remove
-                  </button>
-                </div>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {([{ value: 0 as const, label: 'MP' }, { value: 30 as const, label: '30m' }, { value: 45 as const, label: '45m' }, { value: 60 as const, label: '1hr' }]).map(({ value, label }) => {
-                    const active = meal2Duration === value;
-                    return (
-                      <button key={label} type="button" onClick={() => setMeal2Duration(active ? undefined : value)} className={cn("rounded-md border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
-                        <p className={cn("text-sm font-bold text-mono", active && "text-primary")}>{label}</p>
-                      </button>
-                    );
-                  })}
-                </div>
-                {meal2Duration !== undefined && meal2Duration > 0 && (
-                  <div className="grid grid-cols-2 gap-1.5 pt-0.5">
-                    {[{ value: true, label: 'On the clock', sub: 'paid, no deduction' }, { value: false, label: 'Off the clock', sub: `${meal2Duration}min deducted` }].map(({ value, label, sub }) => {
-                      const active = meal2OnClock === value;
-                      return (
-                        <button key={label} type="button" onClick={() => setMeal2OnClock(value)} className={cn("rounded-md border py-2 px-1 text-center transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
-                          <p className={cn("text-xs font-bold", active && "text-primary")}>{label}</p>
-                          <p className="text-[9px] leading-tight mt-0.5 opacity-70">{sub}</p>
-                        </button>
-                      );
-                    })}
+              <>
+                <div className="space-y-1.5 pt-1 border-t border-border/60">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-muted-foreground">Second Meal</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // The next one along moves up, so the numbers stay in a row.
+                        const [next, ...rest] = extraMeals;
+                        setSecondMealOpen(!!next);
+                        setMeal2Duration(next?.duration);
+                        setMeal2OnClock(next?.onClock ?? false);
+                        setExtraMeals(rest);
+                      }}
+                      className="text-[11px] text-destructive hover:underline"
+                    >
+                      Remove
+                    </button>
                   </div>
-                )}
-              </div>
+                  <MealChoice duration={meal2Duration} onClock={meal2OnClock} onDuration={setMeal2Duration} onOnClock={setMeal2OnClock} />
+                </div>
+                {extraMeals.map((meal, i) => (
+                  <div key={i} className="space-y-1.5 pt-1 border-t border-border/60">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-muted-foreground">Meal {i + 3}</label>
+                      <button
+                        type="button"
+                        onClick={() => setExtraMeals(prev => prev.filter((_, n) => n !== i))}
+                        className="text-[11px] text-destructive hover:underline"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <MealChoice
+                      duration={meal.duration}
+                      onClock={meal.onClock}
+                      onDuration={duration => setExtraMeals(prev => prev.map((m, n) => (n === i ? { ...m, duration } : m)))}
+                      onOnClock={on => setExtraMeals(prev => prev.map((m, n) => (n === i ? { ...m, onClock: on } : m)))}
+                    />
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setExtraMeals(prev => [...prev, { onClock: false }])}
+                  className="flex items-center gap-1 text-[11px] text-primary hover:underline pt-0.5"
+                >
+                  <Plus size={11} /> Add another meal
+                </button>
+              </>
             )}
             </div>
             <div className="pt-0.5">
@@ -1560,7 +1694,24 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
         )}
         <div className="rounded-md border border-border bg-secondary/10 p-3 space-y-2">
           {job.name && <div className="flex justify-between gap-3"><span className="text-muted-foreground text-xs shrink-0">Project</span><span className="font-medium text-xs text-right">{job.name}</span></div>}
-          {(client || job.client) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Employer</span><span className="font-medium text-xs">{client || job.client}</span></div>}
+          {(client || job.client) && (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-muted-foreground text-xs">Employer</span>
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="truncate font-medium text-xs">{client || job.client}</span>
+                <button type="button" onClick={() => setEditingEmployer(true)} className="pixel-button pick-off shrink-0 px-1.5 py-0.5 text-[10px] font-bold">
+                  {employer ? 'Edit employer' : 'Save as employer'}
+                </button>
+              </span>
+            </div>
+          )}
+          {editingEmployer && (
+            <EmployerEditor
+              employer={employer}
+              prefill={{ name: client || job.client, payrollCompany, defaultHourlyRate: hourlyRate }}
+              onClose={() => setEditingEmployer(false)}
+            />
+          )}
           {job.local && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Client</span><span className="font-medium text-xs">{job.local}</span></div>}
           {(job.payrollCompany || payrollCompany) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Payroll company</span><span className="font-medium text-xs">{payrollCompany || job.payrollCompany}</span></div>}
           {shiftContract(job) ? (
@@ -1725,6 +1876,13 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           </div>
         )}
 
+        {stubExplanation && (
+          <div className="space-y-1">
+            <p className="text-[9px] text-mono font-bold tracking-widest uppercase text-muted-foreground/70">Estimate vs stub</p>
+            <PayEstimateCard explanation={stubExplanation} covers={stubMatch?.jobs} />
+          </div>
+        )}
+
         {/* Side by side, because a total only tells you something is wrong —
             this shows which line it is. */}
         {stubComparison && (
@@ -1790,44 +1948,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           </div>
         )}
 
-        {/* Phase 5: what the stubs imply this employer's rates really are. */}
-        {stubSuggestions.length > 0 && (
-          <div className="rounded-md border border-accent/30 bg-accent/5 p-3 space-y-2">
-            <p className="text-[9px] text-mono font-bold tracking-widest uppercase text-accent/80">
-              Learned from your stubs
-            </p>
-            {stubSuggestions.map(s => (
-              <div key={s.field} className="space-y-1.5">
-                <p className="text-[11px]">
-                  <span className="font-semibold">{s.label}</span> looks like{' '}
-                  <span className="text-mono text-success font-bold">{s.suggested}%</span>
-                  {s.current != null && <> , not <span className="text-mono line-through text-destructive">{s.current}%</span></>}
-                </p>
-                <p className="text-[10px] text-mono text-muted-foreground">
-                  {s.sampleCount === 1
-                    ? `From 1 stub (${s.evidence[0]}) — worth a look, not conclusive`
-                    : `${s.sampleCount} stubs agree (${s.evidence.join(', ')}) — strong signal`}
-                </p>
-                <div className="flex gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => applySuggestion(s)}
-                    className="flex-1 rounded-md border border-success/40 bg-success/10 text-success px-2 py-1 text-[10px] font-medium hover:bg-success/20 transition-colors"
-                  >
-                    Update to {s.suggested}%
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => dismissSuggestionFor(s)}
-                    className="rounded-md border border-border bg-secondary/20 text-muted-foreground px-2 py-1 text-[10px] hover:text-foreground transition-colors"
-                  >
-                    Not now
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {!payFound && learnedFromStubs}
 
         {/* Always here, not only while editing — it was tucked inside the edit
             section, where nobody looking for it would find it. */}
@@ -2091,29 +2212,12 @@ export default function CalendarPage() {
   const projectKeyOf = useMemo(() => projectKeysFor(data.jobs, data.employers), [data.jobs, data.employers]);
   const projectGroupKey = (j: Job) => projectKeyOf.get(j.id) ?? j.id;
 
-  // Paid shifts. A payment pays its project, not only the day it was put
-  // against: one check for a two-day gig turns both days green. It covers
-  // the days worked up to the day it came — a run paid weekly keeps its
-  // later days waiting until their own pay is in.
-  const paidJobIds = useMemo(() => {
-    const set = new Set<string>();
-    const jobById = new Map(data.jobs.map(j => [j.id, j]));
-    const paidThrough = new Map<string, string>();
-    for (const income of data.income) {
-      if (income.status !== 'paid' || !income.jobId) continue;
-      set.add(income.jobId);
-      const job = jobById.get(income.jobId);
-      if (!job) continue;
-      const key = projectKeyOf.get(job.id) ?? job.id;
-      const through = paidThrough.get(key);
-      if (!through || income.date > through) paidThrough.set(key, income.date);
-    }
-    for (const j of data.jobs) {
-      const through = paidThrough.get(projectKeyOf.get(j.id) ?? j.id);
-      if (through && j.date <= through && effectiveHoursWorked(j) > 0) set.add(j.id);
-    }
-    return set;
-  }, [data.jobs, data.income, projectKeyOf]);
+  // Paid shifts: see paidShiftIds. It says how a payment reaches past the day
+  // it was put on, and how a project split across pay periods is paid by piece.
+  const paidJobIds = useMemo(
+    () => paidShiftIds(data.jobs, data.income, data.employers, prefs.payer),
+    [data.jobs, data.income, data.employers, prefs.payer],
+  );
 
   // ── Pay, by project ───────────────────────────────────────────────────────
   // The calendar is where jobs and their pay live together now: each project
@@ -2161,6 +2265,15 @@ export default function CalendarPage() {
     return payDueDate(lastDay, employer, employer ? firstDayAt.get(employer.id) : undefined);
   };
 
+  // A project's pay periods, and what each should bring in.
+  const splitPeriods = (jobs: Job[]) => projectPeriods(jobs, resolveEmployer(jobs[0].client, data.employers), data.jobs);
+  const periodExpected = (p: ProjectPeriod) => periodNet(p, data.jobs, data.employers, prefs.payer);
+  /** The pay period a shift is in, when its project is split across more than one. */
+  const pieceOf = (lead: Job) => {
+    const { periods } = splitPeriods(projectOf(lead, data.jobs, data.employers));
+    return periods.length > 1 ? { periods, index: periods.findIndex(p => p.jobs.some(j => j.id === lead.id)) } : null;
+  };
+
   const waitingOnPay = useMemo(() => {
     const todayKey = localToday();
     const groups = new Map<string, Job[]>();
@@ -2170,27 +2283,50 @@ export default function CalendarPage() {
       groups.set(k, [...(groups.get(k) ?? []), j]);
     }
     const waiting: { key: string; jobs: Job[]; lastDay: string; due: string; expected: number }[] = [];
+    const wait = (key: string, jobs: Job[]) => waiting.push({
+      key,
+      jobs,
+      lastDay: jobs[jobs.length - 1].date,
+      due: payDueFor(jobs),
+      expected: jobs.reduce((sum, j) => sum + jobPayBreakdown(j, data.jobs, data.employers, prefs.payer).net, 0),
+    });
     for (const [key, jobs] of groups) {
-      if ((incomeByProject.get(key) ?? []).some(i => i.status === 'paid')) continue;
       const sorted = [...jobs].sort(compareCalls);
-      waiting.push({
-        key,
-        jobs: sorted,
-        lastDay: sorted[sorted.length - 1].date,
-        due: payDueFor(sorted),
-        expected: sorted.reduce((sum, j) => sum + jobPayBreakdown(j, data.jobs, data.employers, prefs.payer).net, 0),
-      });
+      const { periods } = splitPeriods(sorted);
+      if (periods.length > 1) {
+        // Two checks, each with its own due date: one paid leaves the other waiting.
+        for (const p of periods) {
+          const unpaid = sorted.filter(j => p.jobs.includes(j) && !paidJobIds.has(j.id));
+          if (unpaid.length > 0) wait(`${key}|${p.start}`, unpaid);
+        }
+        continue;
+      }
+      if ((incomeByProject.get(key) ?? []).some(i => i.status === 'paid')) continue;
+      wait(key, sorted);
     }
     // Most overdue first: the one the alert is about.
     return waiting.sort((a, b) => a.due.localeCompare(b.due));
     // payDueFor reads firstDayAt, listed here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.jobs, data.employers, incomeByProject, prefs.payer, firstDayAt, projectKeyOf, openInvoiceOf]);
+  }, [data.jobs, data.employers, incomeByProject, prefs.payer, firstDayAt, projectKeyOf, openInvoiceOf, paidJobIds]);
   const oldestWaiting = waitingOnPay[0];
   const daysPastDue = oldestWaiting ? differenceInCalendarDays(new Date(), parseISO(oldestWaiting.due)) : 0;
   const payTier: PayTimingTier = oldestWaiting ? payTimingTier(daysPastDue) : 'none';
   const overdueCount = waitingOnPay.filter(w => w.due <= localToday()).length;
   const totalWaiting = waitingOnPay.reduce((sum, w) => sum + w.expected, 0);
+
+  // The month's plans, for the key: each one, its colour, and its days.
+  const monthPlans = useMemo(() => {
+    const prefix = format(currentDate, 'yyyy-MM');
+    const days = new Map<string, Set<number>>();
+    for (const ev of data.events) {
+      if (!ev.date.startsWith(prefix)) continue;
+      days.set(ev.title, (days.get(ev.title) ?? new Set()).add(Number(ev.date.slice(8))));
+    }
+    return [...days].map(([title, on]) => ({ title, color: planColor(title), days: [...on].sort((a, b) => a - b) }));
+  }, [data.events, currentDate]);
+
+  const [employerForCard, setEmployerForCard] = useState<{ client: string } | null>(null);
 
   const [rainActive, setRainActive] = useState(false);
   const rain = () => { setRainActive(true); setTimeout(() => setRainActive(false), 2100); };
@@ -2202,10 +2338,15 @@ export default function CalendarPage() {
    * The 💰 on a project. If it was paid once and then unmarked, that payment —
    * the real check, the real amount — is still here, set aside; it comes back
    * rather than a new guess being recorded over it. Only a project never paid
-   * gets a new payment, at what its unpaid days were expected to pay.
+   * gets a new payment, at what its unpaid days were expected to pay. On a
+   * project across pay periods, all of that is true of the shift's period.
    */
   const markProjectPaid = async (lead: Job) => {
-    const setAside = (incomeByProject.get(projectGroupKey(lead)) ?? []).filter(i => i.status === 'pending');
+    const project = projectOf(lead, data.jobs, data.employers);
+    const piece = pieceOf(lead);
+    const scope = (piece && piece.periods[piece.index]?.jobs) || project;
+    const setAside = (incomeByProject.get(projectGroupKey(lead)) ?? [])
+      .filter(i => i.status === 'pending' && scope.some(j => j.id === i.jobId));
     if (setAside.length > 0) {
       for (const i of setAside) await updateIncome(i.id, { status: 'paid' });
       rain();
@@ -2215,7 +2356,7 @@ export default function CalendarPage() {
       });
       return;
     }
-    const worked = projectOf(lead, data.jobs, data.employers).filter(j => effectiveHoursWorked(j) > 0 && j.date <= localToday());
+    const worked = scope.filter(j => effectiveHoursWorked(j) > 0 && j.date <= localToday());
     const amount = Math.round(worked.reduce((sum, j) => sum + jobPayBreakdown(j, data.jobs, data.employers, prefs.payer).net, 0) * 100) / 100;
     if (worked.length === 0 || amount <= 0) {
       // Nothing to estimate from: the shift itself has Add pay.
@@ -2234,10 +2375,13 @@ export default function CalendarPage() {
   /**
    * The card's Undo for "paid". The project's payments are set aside, not
    * deleted — so Mark paid, or Undo on the toast, brings back the very same
-   * ones, and a check never has to be entered twice.
+   * ones, and a check never has to be entered twice. On a project across pay
+   * periods it's the payments that paid this shift's period.
    */
   const unmarkProjectPaid = async (lead: Job) => {
-    const paid = (incomeByProject.get(projectGroupKey(lead)) ?? []).filter(i => i.status === 'paid');
+    const all = (incomeByProject.get(projectGroupKey(lead)) ?? []).filter(i => i.status === 'paid');
+    const piece = pieceOf(lead);
+    const paid = piece ? (periodPayments(piece.periods, all, periodExpected).get(piece.index) ?? []) : all;
     for (const i of paid) await updateIncome(i.id, { status: 'pending' });
     undoToast('Set back to waiting on pay', () => { for (const i of paid) void updateIncome(i.id, { status: 'paid' }); });
   };
@@ -2289,11 +2433,11 @@ export default function CalendarPage() {
   const jobPay = useMemo(() => {
     const map: Record<string, number> = {};
     for (const job of data.jobs) {
-      const pay = jobGross(job, data.jobs, data.employers);
+      const pay = jobGross(job, data.jobs, data.employers, prefs.payer);
       if (pay > 0) map[job.id] = pay;
     }
     return map;
-  }, [data.jobs, data.employers]);
+  }, [data.jobs, data.employers, prefs.payer]);
 
   const payByDate = useMemo(() => {
     const map: Record<string, number> = {};
@@ -2317,7 +2461,7 @@ export default function CalendarPage() {
       catch { return false; }
     });
     const monthHours = monthJobs.reduce((s, j) => s + netHoursWorked(j), 0);
-    const monthExpected = monthJobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers), 0);
+    const monthExpected = monthJobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers, prefs.payer), 0);
 
     // A payment belongs to the month of the work it paid for, not the month
     // the cheque turned up. Dating it by arrival put September's money in
@@ -2339,14 +2483,14 @@ export default function CalendarPage() {
     const yearPrefix = format(currentDate, 'yyyy');
     const ytdJobs = data.jobs.filter(j => j.date.startsWith(yearPrefix));
     const ytdHours = ytdJobs.reduce((s, j) => s + netHoursWorked(j), 0);
-    const ytdExpected = ytdJobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers), 0);
+    const ytdExpected = ytdJobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers, prefs.payer), 0);
     const ytdPaid = paidIn(d => d.startsWith(yearPrefix));
 
     return {
       month: { label: format(currentDate, 'MMM'), hours: monthHours, expected: monthExpected, paid: monthPaid, unpaid: Math.max(0, monthExpected - monthPaid) },
       ytd: { label: yearPrefix, hours: ytdHours, expected: ytdExpected, paid: ytdPaid, unpaid: Math.max(0, ytdExpected - ytdPaid) },
     };
-  }, [data.jobs, data.income, data.employers, currentDate]);
+  }, [data.jobs, data.income, data.employers, currentDate, prefs.payer]);
 
   // Dates that are the 6th+ day in a row — marked whether or not the employer
   // pays extra for it, so one that should can be caught, with what it pays.
@@ -2539,6 +2683,7 @@ export default function CalendarPage() {
           <button onClick={() => setViewMode('month')} className={cn("flex-1 text-[10px] text-mono font-medium py-1 px-3 rounded-md transition-colors", viewMode === 'month' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>Month</button>
           <button onClick={() => setViewMode('year')} className={cn("flex-1 text-[10px] text-mono font-medium py-1 px-3 rounded-md transition-colors", viewMode === 'year' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>Year</button>
         </div>
+        {viewMode === 'month' && <CalendarKey month={format(currentDate, 'MMMM')} plans={monthPlans} states={SHIFT_STATES} />}
       </div>
 
       <div className="flex items-stretch justify-between mb-3 gap-2">
@@ -2794,7 +2939,7 @@ export default function CalendarPage() {
                 {selectedDate && sixthSeventhDayDates[selectedDate] && <PremiumDayBanner {...sixthSeventhDayDates[selectedDate]} />}
                 {selectedJobs.map(job => {
                   const hours = netHoursWorked(job);
-                  const earned = jobGross(job, data.jobs, data.employers);
+                  const earned = jobGross(job, data.jobs, data.employers, prefs.payer);
                   const paid = paidJobIds.has(job.id);
                   const overdue = isOverdueUpcoming(job);
                   return (
@@ -2835,7 +2980,9 @@ export default function CalendarPage() {
                               </button>
                             );
                           }
-                          const coming = recorded.some(i => i.status === 'pending');
+                          const piece = pieceOf(job);
+                          const here = piece?.periods[piece.index]?.jobs;
+                          const coming = recorded.some(i => i.status === 'pending' && (!here || here.some(j => j.id === i.jobId)));
                           return (
                             <button type="button" onClick={e => { e.stopPropagation(); void markProjectPaid(job); }}
                               className="pixel-button pick-off flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-foreground">
@@ -2978,8 +3125,11 @@ export default function CalendarPage() {
 
       {(() => {
         const monthPrefix = format(currentDate, 'yyyy-MM');
+        // Every project that touches this month, and all of it: a run over the
+        // month end is one block of work, not two halves on two pages.
+        const monthKeys = new Set(data.jobs.filter(job => job.date.startsWith(monthPrefix)).map(projectGroupKey));
         // Newest day first, but a day's own calls morning first.
-        const monthJobs = data.jobs.filter(job => job.date.startsWith(monthPrefix))
+        const monthJobs = data.jobs.filter(job => monthKeys.has(projectGroupKey(job)))
           .sort((a, b) => a.date === b.date ? compareCalls(a, b) : b.date.localeCompare(a.date));
         if (monthJobs.length === 0) return null;
         const loggedGroups: Record<string, Job[]> = {};
@@ -2992,13 +3142,13 @@ export default function CalendarPage() {
           <div className="mt-4 flex flex-col gap-2">
             <h2 className="text-[9px] font-body uppercase tracking-widest text-muted-foreground/50 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
-              This month's shifts
+              Projects this month
             </h2>
             <div className="flex flex-col gap-2.5">
               {Object.entries(loggedGroups).map(([key, jobs]) => {
                 const first = jobs[0];
                 const totalHours = jobs.reduce((s, j) => s + netHoursWorked(j), 0);
-                const totalEarned = jobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers), 0);
+                const totalEarned = jobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers, prefs.payer), 0);
                 const last = jobs[jobs.length - 1];
                 // A split is two calls on one day, not two days.
                 const dayCount = new Set(jobs.map(j => j.date)).size;
@@ -3006,13 +3156,29 @@ export default function CalendarPage() {
                 const isGroup = jobs.length > 1;
                 const expanded = expandedGroupKey === key;
                 const openJob = (job: Job) => { setSelectedDate(job.date); setSelectedJobId(job.id); };
+                // Across pay periods it's two checks, and every piece of this
+                // card has to say so: the tape, the rows, and the day list.
+                const split = splitPeriods(jobs);
+                const isSplit = split.periods.length > 1;
+                const paidBy = isSplit
+                  ? periodPayments(split.periods, (incomeByProject.get(key) ?? []).filter(i => i.status === 'paid'), periodExpected)
+                  : new Map<number, Income[]>();
+                const periodIndex = new Map(split.periods.flatMap((p, i) => p.jobs.map(j => [j.id, i] as const)));
+                const newPeriodAt = new Set<string>();
+                jobs.reduce<number | undefined>((seen, j) => {
+                  const at = periodIndex.get(j.id);
+                  if (at === undefined) return seen;
+                  if (seen !== undefined && at !== seen) newPeriodAt.add(j.id);
+                  return at;
+                }, undefined);
                 return (
-                  <div key={key} className="relative overflow-hidden rounded-xl border border-border bg-[#0b0910] shadow-lg shadow-black/50">
+                  <div key={key} className={cn("relative overflow-hidden rounded-xl border bg-[#0b0910] shadow-lg shadow-black/50", isSplit ? "border-[#ffe600]" : "border-border")}>
                     {/* The wash is the same colour as the shift's dot, so a row
                         says what it is from across the list without reading it.
                         There was an outlined bolt watermarked behind this; it
                         read as a stray graphic rather than as texture. */}
                     <div aria-hidden className={cn("pointer-events-none absolute inset-0 bg-gradient-to-br", cardTintClass(first, paidJobIds))} />
+                    {isSplit && <div className="hazard-tape relative"><span>⚠ Splits {split.periods.length} pay periods ⚠</span></div>}
                     <div
                       onClick={() => isGroup ? setExpandedGroupKey(expanded ? null : key) : openJob(first)}
                       className="relative p-3 cursor-pointer active:opacity-80 transition-opacity"
@@ -3059,7 +3225,79 @@ export default function CalendarPage() {
                             : <ChevronRight size={14} className="text-muted-foreground shrink-0" />
                         )}
                       </div>
-                      {(() => {
+                      {isSplit && (
+                        <div className="mt-2.5 space-y-1.5 border-t border-border/60 pt-2">
+                          {split.periods.map((p, i) => {
+                            const worked = p.jobs.filter(j => j.date <= localToday() && effectiveHoursWorked(j) > 0);
+                            const days = new Set(p.jobs.map(j => j.date)).size;
+                            const hours = p.jobs.reduce((s, j) => s + netHoursWorked(j), 0);
+                            const amount = p.jobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers, prefs.payer), 0);
+                            const lead = worked[0] ?? p.jobs[0];
+                            const payments = paidBy.get(i) ?? [];
+                            const coming = (incomeByProject.get(key) ?? []).filter(x => x.status === 'pending' && p.jobs.some(j => j.id === x.jobId));
+                            const sum = (list: Income[]) => samePaymentGroups(list).reduce((total, g) => total + g.first.amount, 0).toLocaleString(undefined, { minimumFractionDigits: 2 });
+                            const sameCheck = payments.some(x => [...paidBy].some(([n, list]) => n !== i && list.includes(x)));
+                            const due = worked.length > 0 ? payDueFor(worked) : null;
+                            const late = due ? differenceInCalendarDays(new Date(), parseISO(due)) : 0;
+                            const invoice = p.jobs.map(j => openInvoiceOf.get(j.id)).find(Boolean);
+                            const rowButton = "pixel-button pick-off flex shrink-0 items-center gap-1 px-2 py-1 text-[11px] font-bold";
+                            return (
+                              <Fragment key={p.start}>
+                                {i > 0 && <p className="period-cut">✂ new pay period</p>}
+                                <div data-testid="pay-period">
+                                  <div className="flex items-baseline justify-between gap-2 text-[11px] text-mono">
+                                    <span className="font-bold text-foreground">{periodDates(p)}</span>
+                                    <span className="shrink-0 text-muted-foreground">
+                                      {days} day{days === 1 ? '' : 's'}{hours > 0 ? ` · ${hours}h` : ''}{amount > 0 ? ` · $${Math.round(amount).toLocaleString()}` : ''}
+                                    </span>
+                                  </div>
+                                  <div className="mt-1 flex min-h-[1.5rem] items-center justify-between gap-2">
+                                    {payments.length > 0 ? (
+                                      <>
+                                        <button type="button" onClick={e => { e.stopPropagation(); openJob(lead); }} className="flex min-w-0 items-center gap-1.5 text-[11px] text-mono text-dot-paid hover:underline">
+                                          <Check size={12} className="shrink-0" />
+                                          <span className="truncate">Paid ${sum(payments)} · {format(new Date(payments.map(x => x.date).sort().pop()! + 'T12:00:00'), 'MMM d')}{sameCheck ? ' · same check' : ''}</span>
+                                        </button>
+                                        <button type="button" onClick={e => { e.stopPropagation(); void unmarkProjectPaid(lead); }} className={rowButton}><Undo2 size={12} /> Undo</button>
+                                      </>
+                                    ) : coming.length > 0 ? (
+                                      <>
+                                        <button type="button" onClick={e => { e.stopPropagation(); openJob(lead); }} className="flex min-w-0 items-center gap-1.5 text-[11px] text-mono text-dot-pending hover:underline">
+                                          <Receipt size={12} className="shrink-0" />
+                                          <span className="truncate">{coming.some(x => /stub/i.test(x.description)) ? 'Stub in' : 'Recorded'} · ${sum(coming)} coming</span>
+                                        </button>
+                                        <button type="button" onClick={e => { e.stopPropagation(); void markProjectPaid(lead); }} className={rowButton}><Banknote size={12} /> Money in</button>
+                                      </>
+                                    ) : due ? (
+                                      <>
+                                        <p className={cn('min-w-0 truncate text-[11px] text-mono', late > 0 ? 'text-warning' : 'text-dot-pending')}>
+                                          {invoice ? `${invoice.status === 'draft' ? 'Draft' : 'Invoiced'} ${invoice.number}` : 'Waiting on pay'} · {late > 0 ? `${late}d late` : `due ${format(parseISO(due), 'MMM d')}`}
+                                        </p>
+                                        <button type="button" onClick={e => { e.stopPropagation(); void markProjectPaid(lead); }} className={rowButton}><Wallet size={12} /> Mark paid</button>
+                                      </>
+                                    ) : (
+                                      <p className="text-[11px] text-mono text-muted-foreground">Not worked yet</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </Fragment>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {/* Why the card can or can't say where the pay periods fall, and the way to fix it. */}
+                      {((isSplit && split.assumed) || (!split.known && dayCount > 1)) && (
+                        <button
+                          type="button"
+                          onClick={e => { e.stopPropagation(); setEmployerForCard({ client: first.client }); }}
+                          className="mt-1.5 block text-left text-[10px] text-muted-foreground underline"
+                        >
+                          {split.assumed
+                            ? 'Sun–Sat week assumed. Set the day on the employer.'
+                            : 'Pay periods unknown. Set them on the employer to see if this splits.'}
+                        </button>
+                      )}
+                      {!isSplit && (() => {
                         const payments = (incomeByProject.get(key) ?? []).filter(i => i.status === 'paid');
                         // Recorded but not in yet: a pay stub, or a payment set back.
                         const coming = (incomeByProject.get(key) ?? []).filter(i => i.status === 'pending');
@@ -3144,8 +3382,9 @@ export default function CalendarPage() {
                     {isGroup && expanded && (
                       <div className="border-t border-primary/20 divide-y divide-primary/10">
                         {jobs.map(job => (
+                          <Fragment key={job.id}>
+                          {newPeriodAt.has(job.id) && <p className="period-cut px-3 py-1">✂ new pay period</p>}
                           <div
-                            key={job.id}
                             onClick={() => openJob(job)}
                             className="px-3 py-2 pl-6 flex items-center justify-between gap-2 cursor-pointer hover:bg-primary/10 active:bg-primary/15 transition-colors"
                           >
@@ -3158,6 +3397,7 @@ export default function CalendarPage() {
                               )}
                             </span>
                           </div>
+                          </Fragment>
                         ))}
                       </div>
                     )}
@@ -3168,6 +3408,14 @@ export default function CalendarPage() {
           </div>
         );
       })()}
+
+      {employerForCard && (
+        <EmployerEditor
+          employer={resolveEmployer(employerForCard.client, data.employers)}
+          prefill={{ name: employerForCard.client }}
+          onClose={() => setEmployerForCard(null)}
+        />
+      )}
 
       {unlinkedPayments.length > 0 && (
         <div className="pixel-panel mt-4 p-3 space-y-2">
