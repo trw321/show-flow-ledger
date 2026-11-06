@@ -25,6 +25,10 @@ export interface ParsedJob {
   local?: string;
   /** The contract this call is under, as the dispatch names it. */
   contract?: string | null;
+  /** The role worked, when it was picked. */
+  role?: string;
+  /** Paid by the day: the role's day rate. */
+  dayRate?: number;
   hourlyRate?: number;
   steward?: string;
   parkingCost?: number;

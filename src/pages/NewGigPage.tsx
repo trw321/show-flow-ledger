@@ -9,11 +9,13 @@ import { Upload, Loader2, Check, Plus, X, ChevronRight, ChevronDown, AlertTriang
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { getJobDedupKey, findLikelyDuplicate } from '@/lib/jobDedup';
+import { isDuplicateJob, findLikelyDuplicate } from '@/lib/jobDedup';
 import { PARSER_MODELS, REASONING_EFFORTS, supportsReasoning, loadParserChoice, saveParserChoice, nextLevel, type ReasoningEffort } from '@/lib/parserModels';
-import type { Job, CalendarEvent } from '@/lib/store';
+import type { Job, CalendarEvent, EmployerRole } from '@/lib/store';
+import { contractsWorked } from '@/lib/contracts';
 import VortexCanvas from '@/components/VortexCanvas';
 import EmployerCombobox from '@/components/EmployerCombobox';
+import ManualEmployerPanel from '@/components/ManualEmployerPanel';
 import { useCelebration } from '@/components/Celebration';
 import {
   hourUpdateToEntry, matchEntries as matchHourEntries, calcHours,
@@ -33,8 +35,11 @@ interface ManualEntry {
   startTime: string;
   position: string;
   hourlyRate: string;
+  /** Set when the role picked is paid by the day. */
+  dayRate: string;
   payrollCompany: string;
   venue: string;
+  contract: string;
 }
 
 type VortexPhase = 'idle' | 'pulling' | 'vortex' | 'flash' | 'settling';
@@ -144,6 +149,7 @@ function ShiftCard({
               { label: 'End time', field: 'endTime' as const, value: job.endTime ?? '', type: 'text', placeholder: '05:00 PM' },
               { label: 'Event', field: 'name' as const, value: job.name, type: 'text' },
               { label: 'Venue', field: 'venue' as const, value: job.venue, type: 'text' },
+              { label: 'Role', field: 'role' as const, value: job.role ?? '', type: 'text' },
               { label: 'Contract', field: 'contract' as const, value: job.contract ?? '', type: 'text' },
               { label: 'Payroll co.', field: 'payrollCompany' as const, value: job.payrollCompany ?? '', type: 'text' },
               { label: 'Rate ($/hr)', field: 'hourlyRate' as const, value: job.hourlyRate?.toString() ?? '', type: 'number' },
@@ -200,8 +206,10 @@ const EMPTY_MANUAL: ManualEntry = {
   startTime: '',
   position: '',
   hourlyRate: '',
+  dayRate: '',
   payrollCompany: '',
   venue: '',
+  contract: '',
 };
 
 /**
@@ -261,6 +269,17 @@ export default function NewGigPage({ onComplete, startAs }: {
   const handleManualChange = (field: keyof ManualEntry, value: string) =>
     setManual(prev => ({ ...prev, [field]: value }));
 
+  // Picking a role takes its pay; picking it again puts the employer's back.
+  const pickManualRole = (role: EmployerRole | null) => {
+    const employer = resolveEmployer(manual.client, data.employers);
+    setManual(prev => ({
+      ...prev,
+      position: role?.name ?? '',
+      hourlyRate: role ? (role.hourlyRate?.toString() ?? '') : (employer?.defaultHourlyRate?.toString() ?? ''),
+      dayRate: role?.dayRate?.toString() ?? '',
+    }));
+  };
+
   // Every day tapped on the one calendar, in order. The first is the shift's
   // date; the rest are copies of it, one per day.
   const pickedDays = [manual.date, ...extraDates].filter(Boolean);
@@ -284,7 +303,9 @@ export default function NewGigPage({ onComplete, startAs }: {
       status: 'upcoming',
       payrollCompany: manual.payrollCompany.trim() || undefined,
       hourlyRate: manual.hourlyRate ? parseFloat(manual.hourlyRate) : undefined,
-      notes: manual.position.trim() ? `Position: ${manual.position.trim()}` : undefined,
+      dayRate: manual.dayRate ? parseFloat(manual.dayRate) : undefined,
+      role: manual.position.trim() || undefined,
+      contract: manual.contract.trim() || undefined,
     });
 
     const newJobs = uniqueDates.map(makeJob);
@@ -596,7 +617,7 @@ export default function NewGigPage({ onComplete, startAs }: {
     const toImport = jobs.filter((_, i) => selected.has(i));
     if (toImport.length === 0) { toast.error('Select at least one shift'); return; }
     setIsImporting(true);
-    const existingKeys = new Set(data.jobs.map(j => getJobDedupKey(j)));
+    const onFile: Parameters<typeof isDuplicateJob>[1] = [...data.jobs];
     let imported = 0, skipped = 0, failed = 0;
 
     for (const j of toImport) {
@@ -609,7 +630,7 @@ export default function NewGigPage({ onComplete, startAs }: {
       // when the offer itself named no hourly rate. A rate on the offer is the
       // contract for that job and wins over any default.
       const employerRecord = resolveEmployer(j.client, data.employers);
-      const startsOnDayRate = !j.hourlyRate && !!employerRecord?.defaultDayRate;
+      const startsOnDayRate = !j.hourlyRate && !j.dayRate && !!employerRecord?.defaultDayRate;
       // A shift whose day has already passed, entered with its call and wrap
       // times, is a record of work done — saving after the day is what
       // confirms hours. Left "upcoming", one half of a past split said
@@ -621,8 +642,9 @@ export default function NewGigPage({ onComplete, startAs }: {
         date: j.date, startTime: j.startTime, endTime: j.endTime,
         status: alreadyWorked && j.status !== 'cancelled' ? 'completed' as const : j.status,
         payrollCompany: j.payrollCompany?.trim() || j.client,
-        dayRate: startsOnDayRate ? employerRecord?.defaultDayRate : undefined,
-        dayRateHours: startsOnDayRate ? employerRecord?.dayRateHours : undefined,
+        dayRate: j.dayRate ?? (startsOnDayRate ? employerRecord?.defaultDayRate : undefined),
+        dayRateHours: j.dayRate || startsOnDayRate ? employerRecord?.dayRateHours : undefined,
+        role: j.role,
         local: j.local, needsReview: payrollAssumed || undefined,
         hourlyRate: j.hourlyRate, steward: j.steward, contract: j.contract?.trim() || undefined,
         parkingCost: j.parkingCost, notes: j.notes || '',
@@ -630,9 +652,8 @@ export default function NewGigPage({ onComplete, startAs }: {
         minimumHours: j.minimumHours ?? employerRecord?.minimumCallHours, hoursWorked: j.hoursWorked,
         has6th7thDayRule: false,
       };
-      const key = getJobDedupKey(draft);
-      if (existingKeys.has(key)) { skipped++; continue; }
-      try { await addJob(draft); existingKeys.add(key); imported++; }
+      if (isDuplicateJob(draft, onFile)) { skipped++; continue; }
+      try { await addJob(draft); onFile.push(draft); imported++; }
       catch { failed++; }
     }
 
@@ -860,6 +881,14 @@ export default function NewGigPage({ onComplete, startAs }: {
                 />
               </div>
 
+              {/* The same employer as in Settings: its details, its roles, one Edit away. */}
+              <ManualEmployerPanel
+                name={manual.client}
+                role={manual.position}
+                prefill={{ defaultHourlyRate: manual.hourlyRate, payrollCompany: manual.payrollCompany }}
+                onPickRole={pickManualRole}
+              />
+
               {/* Calendar + right-column fields side by side on desktop */}
               <div className="flex flex-col sm:flex-row gap-3">
 
@@ -912,9 +941,10 @@ export default function NewGigPage({ onComplete, startAs }: {
                       placeholder="0.00"
                       className="h-9 text-xs font-mono bg-background/40 border-border text-foreground/80 placeholder:text-muted-foreground/60 focus:border-primary/40"
                     />
+                    {manual.dayRate && <p className="text-[10px] text-mono text-muted-foreground">${manual.dayRate} a day for this role</p>}
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Position</label>
+                    <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Role</label>
                     <Input
                       value={manual.position}
                       onChange={e => handleManualChange('position', e.target.value)}
@@ -948,6 +978,17 @@ export default function NewGigPage({ onComplete, startAs }: {
                       placeholder="e.g. AVTS"
                       className="h-9 text-xs font-mono bg-background/40 border-border text-foreground/80 placeholder:text-muted-foreground/60 focus:border-primary/40"
                     />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Contract</label>
+                    <Input
+                      value={manual.contract}
+                      onChange={e => handleManualChange('contract', e.target.value)}
+                      list="manual-contracts"
+                      placeholder="As the dispatch names it"
+                      className="h-9 text-xs font-mono bg-background/40 border-border text-foreground/80 placeholder:text-muted-foreground/60 focus:border-primary/40"
+                    />
+                    <datalist id="manual-contracts">{contractsWorked(data.jobs).map(c => <option key={c.name} value={c.name} />)}</datalist>
                   </div>
                 </div>
               </div>

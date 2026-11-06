@@ -1,6 +1,6 @@
 import type { Job } from './store';
 
-type JobIdentity = Pick<Job, 'jobNumber' | 'name' | 'client' | 'date' | 'startTime' | 'contract'>;
+type JobIdentity = Pick<Job, 'jobNumber' | 'name' | 'client' | 'date' | 'startTime' | 'contract' | 'role'>;
 
 const normalize = (value?: string) => value?.trim().toLowerCase().replace(/\s+/g, ' ') ?? '';
 
@@ -28,9 +28,17 @@ export function getJobDedupKey(job: Partial<JobIdentity>) {
   return `fallback|${date}|${normalize(job.client)}|${normalize(job.name)}${contract ? `|${contract}` : ''}`;
 }
 
+/**
+ * Two named roles that differ are two shifts: an A1 call and an A2 call on the
+ * same day, at their own pay. It takes a role on both to say so, so a dispatch
+ * brought in again still matches the shift it made, whatever was picked since.
+ */
+const differentRoles = (a: Partial<JobIdentity>, b: Partial<JobIdentity>) =>
+  !!normalize(a.role) && !!normalize(b.role) && normalize(a.role) !== normalize(b.role);
+
 export function isDuplicateJob(incoming: Partial<JobIdentity>, existing: Partial<JobIdentity>[]) {
   const incomingKey = getJobDedupKey(incoming);
-  return existing.some(ex => getJobDedupKey(ex) === incomingKey);
+  return existing.some(ex => getJobDedupKey(ex) === incomingKey && !differentRoles(incoming, ex));
 }
 
 /**
@@ -50,7 +58,7 @@ export function findLikelyDuplicate<T extends Partial<JobIdentity>>(
 
   const jobNumber = normalize(incoming.jobNumber);
   if (jobNumber) {
-    const match = existing.find(ex => normalize(ex.jobNumber) === jobNumber && normalize(ex.date) === date);
+    const match = existing.find(ex => normalize(ex.jobNumber) === jobNumber && normalize(ex.date) === date && !differentRoles(incoming, ex));
     if (match) return match;
   }
 
@@ -63,7 +71,8 @@ export function findLikelyDuplicate<T extends Partial<JobIdentity>>(
     const contract = normalize(incoming.contract);
     return existing.find(ex => normalize(ex.date) === date && normalize(ex.client) === client
       // Two named contracts that differ are two calls, not one parsed twice.
-      && !(contract && ex.contract && normalize(ex.contract) !== contract));
+      && !(contract && ex.contract && normalize(ex.contract) !== contract)
+      && !differentRoles(incoming, ex));
   }
   return undefined;
 }
