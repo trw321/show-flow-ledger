@@ -16,6 +16,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { useUserPrefs, TabKey } from '@/lib/UserPrefsContext';
 import ReportProblem from '@/components/ReportProblem';
+import { PageBoundary } from '@/components/ErrorBoundary';
 import { logStep } from '@/lib/problemLog';
 
 interface NavItem {
@@ -147,7 +148,7 @@ export default function AppLayout() {
           No max-width/mx-auto here on purpose — the shell fills the viewport edge-to-edge; any readable-width cap belongs to individual pages, not this wrapper. */}
       <main className="flex-1 flex flex-col min-w-0">
         <div className="flex-1 px-4 py-6 md:px-8 md:py-8 mt-[calc(3.5rem+env(safe-area-inset-top))] md:mt-0 mb-[calc(4rem+env(safe-area-inset-bottom))] md:mb-0">
-          <Outlet />
+          <PageBoundary page={pathname}><Outlet /></PageBoundary>
         </div>
       </main>
 

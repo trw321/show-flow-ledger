@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/lib/AuthContext';
 import { useUserPrefs, TAB_LABELS, WORKER_PRESETS, type TabKey, type WorkerType } from '@/lib/UserPrefsContext';
 import { useData, useSync } from '@/lib/DataContext';
+import { saveLedgerCopy } from '@/lib/store';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
 import PageHeader from '@/components/PageHeader';
 import { Switch } from '@/components/ui/switch';
@@ -184,6 +185,9 @@ function AccountSection() {
             className="w-full rounded-xl border border-primary/40 bg-primary/10 text-primary py-2 text-xs font-medium hover:bg-primary/20 transition-colors"
           >
             Create an account or sign in
+          </button>
+          <button onClick={() => void saveLedgerCopy()} className="w-full py-1 text-xs text-muted-foreground underline hover:text-foreground">
+            Save a copy of my data
           </button>
         </div>
       )}

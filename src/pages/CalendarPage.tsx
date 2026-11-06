@@ -2320,7 +2320,7 @@ export default function CalendarPage() {
     const prefix = format(currentDate, 'yyyy-MM');
     const days = new Map<string, Set<number>>();
     for (const ev of data.events) {
-      if (!ev.date.startsWith(prefix)) continue;
+      if (!ev.date?.startsWith(prefix)) continue;
       days.set(ev.title, (days.get(ev.title) ?? new Set()).add(Number(ev.date.slice(8))));
     }
     return [...days].map(([title, on]) => ({ title, color: planColor(title), days: [...on].sort((a, b) => a - b) }));

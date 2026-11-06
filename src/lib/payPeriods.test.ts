@@ -45,6 +45,17 @@ describe('where a pay period falls', () => {
     expect(payPeriodOf('2026-11-07', rule)).toEqual({ start: '2026-11-01', end: '2026-11-07' });
   });
 
+  it('treats a date it cannot read as no date, and never throws', () => {
+    const stub = (payPeriodStart: string) => [shift('a', '2026-11-02', { stubParsed: { employer: 'Odeum', payPeriodStart } as Job['stubParsed'] })];
+    const weekly = employer({ paySchedule: 'weekly' });
+    for (const bad of ['10/25/2026', 'Oct 25, 2026', 'soon', '2026-13-45']) {
+      expect(periodRule(weekly, stub(bad))).toMatchObject({ anchor: '2026-01-04', assumed: true });
+      expect(periodRule(employer({ paySchedule: 'bi-weekly' }), stub(bad))).toBeNull();
+      expect(periodRule(employer({ paySchedule: 'weekly', payPeriodStart: bad }), [])).toMatchObject({ assumed: true });
+    }
+    expect(projectPeriods([shift('a', 'someday')], weekly, []).periods).toEqual([]);
+  });
+
   it('will not guess a bi-weekly start, or an unknown schedule', () => {
     expect(periodRule(employer({ paySchedule: 'bi-weekly' }), [])).toBeNull();
     expect(periodRule(employer(), [])).toBeNull();

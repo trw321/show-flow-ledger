@@ -582,6 +582,39 @@ export async function clearAllData() {
   window.location.href = '/';
 }
 
+/**
+ * Everything of yours in this browser, as a file. Until there's an account this
+ * browser is the only copy, so this is what stands between a bad day and losing
+ * it. Sign-in details are not in it. On a phone it opens the share sheet, which
+ * can save to Files or send it somewhere. False if that was cancelled.
+ */
+export async function saveLedgerCopy(): Promise<boolean> {
+  const copy: Record<string, unknown> = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key || !/^(av-bookkeeper-data|av-prefs|av-payouts-)/.test(key)) continue;
+    const raw = localStorage.getItem(key) ?? '';
+    try { copy[key] = JSON.parse(raw); } catch { copy[key] = raw; }
+  }
+  const name = `show-flow-copy-${localToday()}.json`;
+  const file = new File([JSON.stringify({ savedAt: new Date().toISOString(), copy })], name, { type: 'application/json' });
+  if (navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: 'Show Flow copy' });
+      return true;
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return false;
+    }
+  }
+  const url = URL.createObjectURL(file);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return true;
+}
+
 // ── Main hook ───────────────────────────────────────────────────────────────
 
 interface LedgerState {

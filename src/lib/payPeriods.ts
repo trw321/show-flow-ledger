@@ -1,4 +1,4 @@
-import { addDays, differenceInCalendarDays, endOfMonth, format, parseISO } from 'date-fns';
+import { addDays, differenceInCalendarDays, endOfMonth, format, isValid, parseISO } from 'date-fns';
 import type { Employer, Income, Job } from './store';
 import { resolveEmployer } from './employerMatch';
 import { effectiveHoursWorked, jobPayBreakdown } from './payCalc';
@@ -15,6 +15,12 @@ import { projectKeysFor } from './projectGrouping';
  */
 
 const ymd = (d: Date) => format(d, 'yyyy-MM-dd');
+/**
+ * A date the sums below can use. A stub's dates are read off a photo, so they
+ * can be anything, and one that can't be read used to throw and take the whole
+ * calendar down. An unreadable date is treated as no date.
+ */
+const isDay = (date?: string | null): date is string => !!date && /^\d{4}-\d{2}-\d{2}/.test(date) && isValid(parseISO(date));
 /** A Sunday, for a weekly schedule nobody has said the start of. */
 const A_SUNDAY = '2026-01-04';
 
@@ -41,9 +47,9 @@ export function periodRule(employer: Employer | undefined, allJobs: Job[]): Peri
   const schedule = employer?.paySchedule;
   if (schedule === 'semi-monthly' || schedule === 'monthly') return { schedule, assumed: false };
   if (schedule !== 'weekly' && schedule !== 'bi-weekly') return null;
-  if (employer!.payPeriodStart) return { schedule, anchor: employer!.payPeriodStart, assumed: false };
+  if (isDay(employer!.payPeriodStart)) return { schedule, anchor: employer!.payPeriodStart, assumed: false };
   const fromStub = allJobs
-    .filter(j => j.stubParsed?.payPeriodStart && resolveEmployer(j.client, [employer!]))
+    .filter(j => isDay(j.stubParsed?.payPeriodStart) && resolveEmployer(j.client, [employer!]))
     .map(j => j.stubParsed!.payPeriodStart!)
     .sort()
     .pop();
@@ -84,7 +90,7 @@ export function projectPeriods(jobs: Job[], employer: Employer | undefined, allJ
   if (!rule) return { periods: [], known: false, assumed: false };
   const byStart = new Map<string, ProjectPeriod>();
   for (const job of jobs) {
-    if (job.status === 'cancelled') continue;
+    if (job.status === 'cancelled' || !isDay(job.date)) continue;
     const period = payPeriodOf(job.date, rule);
     const entry = byStart.get(period.start) ?? { ...period, jobs: [] };
     entry.jobs.push(job);

@@ -221,12 +221,11 @@ export default function AuthPage() {
             </>
           )}
         </div>
-        {/* An account only adds sync and backup. Nothing needs one. */}
-        {!resetting && (
-          <button type="button" onClick={() => navigate('/')} className="mt-4 w-full text-center text-xs text-muted-foreground underline hover:text-foreground">
-            Use it without an account
-          </button>
-        )}
+        {/* An account only adds sync and backup. Nothing needs one, so every
+            screen here has a way back: a dead reset link used to be a dead end. */}
+        <button type="button" onClick={() => navigate('/')} className="mt-4 w-full text-center text-xs text-muted-foreground underline hover:text-foreground">
+          {resetting ? 'Back to the app' : 'Use it without an account'}
+        </button>
       </motion.div>
     </div>
   );
