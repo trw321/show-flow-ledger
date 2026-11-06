@@ -3211,16 +3211,18 @@ export default function CalendarPage() {
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
-                          {/* Date leads — it's how a shift gets identified,
-                              and it keeps the card reading like a card. */}
-                          <p className="text-[17px] font-bold text-mono tracking-tight leading-none text-white">{dateRange}</p>
-                          <p className="text-[13px] text-foreground/75 leading-snug truncate mt-1">
-                            {jobs.some(j => j.needsReview) && <Flag size={11} className="inline mr-1 -mt-0.5 text-warning" aria-label="Flagged to check later" />}
-                            {first.name}
-                            {first.role && <span className="text-muted-foreground"> · {first.role}</span>}
-                            {jobs.some(j => j.pto) && <span className="ml-1.5 text-[10px] text-mono font-bold border border-foreground/50 px-1">PTO</span>}
+                          {/* The name leads, then the dates: a job is remembered as
+                              the show it was. Long dispatch names get two lines. */}
+                          <p className="text-[17px] font-bold leading-tight text-white line-clamp-2">
+                            {jobs.some(j => j.needsReview) && <Flag size={13} className="inline mr-1 -mt-0.5 text-warning" aria-label="Flagged to check later" />}
+                            {first.name || first.client}
+                            {jobs.some(j => j.pto) && <span className="ml-1.5 align-middle text-[10px] text-mono font-bold border border-foreground/50 px-1">PTO</span>}
                           </p>
-                          <p className="text-[11px] text-muted-foreground truncate">{first.client}</p>
+                          <p className="text-[13px] text-mono text-foreground/85 leading-snug mt-0.5">{dateRange}</p>
+                          <p className="text-[11px] text-muted-foreground truncate">
+                            {first.client}
+                            {first.role && <span> · {first.role}</span>}
+                          </p>
                         </div>
                         {/* Pay is the reason this list gets opened, so it's the
                             one thing sized to be read without stopping. */}
