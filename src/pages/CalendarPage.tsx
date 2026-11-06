@@ -688,9 +688,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
       enteredByHand: kind ? undefined : true,
     });
     if (kind === 'stub') {
-      toast.success(`Stub in — $${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} on its way for ${target.name}. Tap Money in when it lands.`);
+      toast.success(`Stub in — $${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} on its way for ${target.name}. Tap Money in when it lands.`);
     } else {
-      toast.success(`$${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} recorded for ${target.name}`);
+      toast.success(`$${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} recorded for ${target.name}`);
       setPayRain(true);
       setTimeout(() => setPayRain(false), 2100);
     }
@@ -1129,7 +1129,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                   return (
                     <div key={i.id} className="flex items-center gap-2 text-xs">
                       <PayIcon income={i} className="text-muted-foreground" />
-                      <span className={cn('font-bold text-mono', i.status === 'paid' ? 'text-dot-paid' : 'text-dot-pending')}>${i.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      <span className={cn('font-bold text-mono', i.status === 'paid' ? 'text-dot-paid' : 'text-dot-pending')}>${i.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       <span className="text-muted-foreground text-mono">{format(new Date(i.date + 'T12:00:00'), 'MMM d')}</span>
                       {i.status === 'pending' && (
                         <>
@@ -1159,7 +1159,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                 })}
                 {receivedVsEstimate && receivedVsEstimate.verdict !== 'none' && (
                   <p className="text-[11px] text-mono text-muted-foreground" data-testid="received-vs-estimate">
-                    Estimated ${receivedVsEstimate.lines[1].estimated.toLocaleString(undefined, { minimumFractionDigits: 2 })} · {receivedVsEstimate.headline}
+                    Estimated ${receivedVsEstimate.lines[1].estimated.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {receivedVsEstimate.headline}
                   </p>
                 )}
               </div>
@@ -1168,7 +1168,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             {removedPays.map(batch => (
               <div key={'removed-' + batch[0].id} className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="flex-1">
-                  {batch.length > 1 ? `Removed ${batch.length} repeats of ` : 'Removed '}${batch[0].amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} · {format(new Date(batch[0].date + 'T12:00:00'), 'MMM d')}
+                  {batch.length > 1 ? `Removed ${batch.length} repeats of ` : 'Removed '}${batch[0].amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {format(new Date(batch[0].date + 'T12:00:00'), 'MMM d')}
                 </span>
                 <button type="button" className="pixel-button pick-off px-2 py-0.5 text-[11px] font-bold"
                   onClick={() => { for (const i of batch) void restoreIncome(i); setRemovedPays(prev => prev.filter(b => b !== batch)); }}>
@@ -1283,7 +1283,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                     )}
 
                     <Button size="sm" className="w-full" disabled={!(parseFloat(payAmount) > 0)} onClick={() => void savePayment(job)}>
-                      Add {parseFloat(payAmount) > 0 ? `$${parseFloat(payAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'payment'} to this project
+                      Add {parseFloat(payAmount) > 0 ? `$${parseFloat(payAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'payment'} to this project
                     </Button>
                     {payElsewhere && (
                       <Button size="sm" variant="outline" className="w-full" onClick={() => void savePayment(payElsewhere.project[0])}>
@@ -2354,7 +2354,7 @@ export default function CalendarPage() {
       for (const i of setAside) await updateIncome(i.id, { status: 'paid' });
       rain();
       const back = setAside.reduce((sum, i) => sum + i.amount, 0);
-      undoToast(`Money in — $${back.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, () => {
+      undoToast(`Money in — $${back.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, () => {
         for (const i of setAside) void updateIncome(i.id, { status: 'pending' });
       });
       return;
@@ -2372,7 +2372,7 @@ export default function CalendarPage() {
       date: localToday(), status: 'paid', enteredByHand: true,
     });
     rain();
-    undoToast(`Marked paid — $${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, () => void deleteIncome(created.id));
+    undoToast(`Marked paid — $${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, () => void deleteIncome(created.id));
   };
 
   /**
@@ -3268,7 +3268,7 @@ export default function CalendarPage() {
                             const lead = worked[0] ?? p.jobs[0];
                             const payments = paidBy.get(i) ?? [];
                             const coming = (incomeByProject.get(key) ?? []).filter(x => x.status === 'pending' && p.jobs.some(j => j.id === x.jobId));
-                            const sum = (list: Income[]) => samePaymentGroups(list).reduce((total, g) => total + g.first.amount, 0).toLocaleString(undefined, { minimumFractionDigits: 2 });
+                            const sum = (list: Income[]) => samePaymentGroups(list).reduce((total, g) => total + g.first.amount, 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                             const sameCheck = payments.some(x => [...paidBy].some(([n, list]) => n !== i && list.includes(x)));
                             const due = worked.length > 0 ? payDueFor(worked) : null;
                             const late = due ? differenceInCalendarDays(new Date(), parseISO(due)) : 0;
@@ -3350,10 +3350,10 @@ export default function CalendarPage() {
                               <button
                                 type="button"
                                 onClick={e => { e.stopPropagation(); openJob(first); }}
-                                className="flex min-w-0 items-center gap-1.5 text-[11px] text-mono text-dot-paid hover:underline"
+                                className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-left text-[11px] text-mono text-dot-paid hover:underline"
                               >
                                 <Check size={12} className="shrink-0" />
-                                <span className="truncate">Paid ${total.toLocaleString(undefined, { minimumFractionDigits: 2 })} · {format(new Date(last + 'T12:00:00'), 'MMM d')}</span>
+                                <span>Paid ${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {format(new Date(last + 'T12:00:00'), 'MMM d')}</span>
                                 {kinds.map(i => <PayIcon key={i.id} income={i} />)}
                                 {repeated > 0 && <span className="shrink-0 text-warning">· {repeated} repeated</span>}
                                 {comingTotal > 0 && <span className="shrink-0 text-dot-pending">· ${Math.round(comingTotal).toLocaleString()} coming</span>}
@@ -3379,7 +3379,7 @@ export default function CalendarPage() {
                                 className="flex min-w-0 items-center gap-1.5 text-[11px] text-mono text-dot-pending hover:underline"
                               >
                                 <Receipt size={12} className="shrink-0" />
-                                <span className="truncate">{comingLabel} · ${comingTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })} coming</span>
+                                <span className="truncate">{comingLabel} · ${comingTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} coming</span>
                               </button>
                               <button
                                 type="button"
@@ -3461,7 +3461,7 @@ export default function CalendarPage() {
                 <div className="flex items-center gap-2">
                   <PayIcon income={i} className="text-muted-foreground" />
                   <p className="min-w-0 flex-1 truncate text-xs font-medium">{i.client || i.description}</p>
-                  <span className="shrink-0 text-xs text-mono font-bold text-dot-paid">${i.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  <span className="shrink-0 text-xs text-mono font-bold text-dot-paid">${i.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   <span className="shrink-0 text-[10px] text-mono text-muted-foreground">{format(new Date(i.date + 'T12:00:00'), 'MMM d')}</span>
                 </div>
                 {guess && (
@@ -3477,9 +3477,9 @@ export default function CalendarPage() {
                     </ul>
                   </div>
                 )}
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   {guess && (
-                    <Button size="sm" className="h-7 text-[11px]" onClick={() => void linkPayment(i, guess.project[0])}>
+                    <Button size="sm" className="h-auto min-h-7 max-w-full whitespace-normal py-1 text-left text-[11px]" onClick={() => void linkPayment(i, guess.project[0])}>
                       Link to {guess.project[0].name}
                     </Button>
                   )}
