@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { addDays, format, parseISO, startOfWeek } from 'date-fns';
 import { toast } from 'sonner';
-import { Users, Plus, ChevronLeft, ChevronRight, Pencil, Trash2, Phone, Mail, Wallet, Undo2 } from 'lucide-react';
+import { Users, Plus, ChevronLeft, ChevronRight, Pencil, Trash2, Phone, Mail, Wallet, Undo2, Check } from 'lucide-react';
 import { useData } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
 import { Button } from '@/components/ui/button';
@@ -9,8 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import type { CrewMember, CrewShift } from '@/lib/store';
+import SayIt from '@/components/SayIt';
+import type { CrewMember, CrewShift, PayOutMethod } from '@/lib/store';
 import { crewShiftHours, crewShiftOwed, crewShiftPay, crewShiftWorked } from '@/lib/crew';
+import { parseCrewSpeech, planCrewSpeech, type CrewPlan, type CrewSpeech } from '@/lib/crewVoice';
 import { localToday } from '@/lib/today';
 import { cn } from '@/lib/utils';
 
@@ -93,21 +95,23 @@ function PersonForm({ initial, onSave, onDelete, onCancel }: {
 
 // ── Booking someone, for one day or several ───────────────────────────────
 
-function ScheduleForm({ crew, jobs, firstDay, personId, onSave, onCancel }: {
+function ScheduleForm({ crew, jobs, firstDay, personId, said, onSave, onCancel }: {
   crew: CrewMember[];
   jobs: { id: string; date: string; name: string; venue?: string; startTime?: string }[];
   firstDay?: string;
   personId?: string;
+  /** What was said, to start from. */
+  said?: Pick<CrewSpeech, 'days' | 'start' | 'end' | 'place'>;
   onSave: (shifts: Omit<CrewShift, 'id' | 'createdAt'>[]) => void;
   onCancel: () => void;
 }) {
   const [crewId, setCrewId] = useState(personId ?? crew[0]?.id ?? '');
-  const [days, setDays] = useState<string[]>(firstDay ? [firstDay] : []);
-  const [month, setMonth] = useState<Date>(firstDay ? parseISO(firstDay) : new Date());
-  const [startTime, setStartTime] = useState('');
-  const [endTime, setEndTime] = useState('');
+  const [days, setDays] = useState<string[]>(said?.days ?? (firstDay ? [firstDay] : []));
+  const [month, setMonth] = useState<Date>(() => (days[0] ? parseISO(days[0]) : new Date()));
+  const [startTime, setStartTime] = useState(said?.start ?? '');
+  const [endTime, setEndTime] = useState(said?.end ?? '');
   const [jobId, setJobId] = useState('');
-  const [place, setPlace] = useState('');
+  const [place, setPlace] = useState(said?.place ?? '');
   const [notes, setNotes] = useState('');
 
   // Your shifts near the days picked: the one they are crewing, if any.
@@ -280,7 +284,10 @@ export default function CrewPage() {
   const week = Array.from({ length: 7 }, (_, i) => format(addDays(weekOf, i), 'yyyy-MM-dd'));
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [editingPerson, setEditingPerson] = useState<CrewMember | 'new' | null>(null);
-  const [scheduling, setScheduling] = useState<{ day?: string; personId?: string } | null>(null);
+  const [scheduling, setScheduling] = useState<{ day?: string; personId?: string; said?: CrewSpeech } | null>(null);
+  // What was said, and what it would do, until it's confirmed.
+  const [heard, setHeard] = useState<{ said: CrewSpeech; plan: CrewPlan } | null>(null);
+  const [sayRound, setSayRound] = useState(0);
   const [editingShift, setEditingShift] = useState<CrewShift | null>(null);
 
   const weekShifts = shifts.filter(s => s.date >= week[0] && s.date <= week[6]);
@@ -288,23 +295,53 @@ export default function CrewPage() {
   const owed = shifts.filter(s => crewShiftOwed(s, today));
   const owedTotal = owed.reduce((sum, s) => sum + crewShiftPay(s, byId.get(s.crewId)), 0);
 
-  /** Pays shifts with one payment on Pay Outs, and marks them paid. */
-  const payShifts = async (member: CrewMember, list: CrewShift[]) => {
-    if (list.length === 0) return;
-    const amount = Math.round(list.reduce((sum, s) => sum + crewShiftPay(s, member), 0) * 100) / 100;
+  /** Pays shifts with one payment on Pay Outs, and marks them paid. An amount can be paid with no shifts to settle. */
+  const payShifts = async (member: CrewMember, list: CrewShift[], how?: { amount?: number; date?: string; method?: PayOutMethod }) => {
+    if (list.length === 0 && !how?.amount) return;
+    const amount = how?.amount ?? Math.round(list.reduce((sum, s) => sum + crewShiftPay(s, member), 0) * 100) / 100;
     const dates = list.map(s => s.date).sort();
     const jobNames = [...new Set(list.map(s => data.jobs.find(j => j.id === s.jobId)?.name ?? s.place).filter(Boolean))];
     const payout = await addPayout({
-      workerName: member.name, amount, date: today,
+      workerName: member.name, amount, date: how?.date ?? today, method: how?.method,
       jobRef: jobNames.join(', ') || undefined,
       periodStart: dates[0], periodEnd: dates[dates.length - 1],
-      notes: `${list.length} shift${list.length === 1 ? '' : 's'} on the crew schedule`,
+      notes: list.length > 0 ? `${list.length} shift${list.length === 1 ? '' : 's'} on the crew schedule` : undefined,
     });
     for (const s of list) await updateCrewShift(s.id, { payoutId: payout.id });
     toast.success(`${money(amount)} paid to ${member.name} — on Pay Outs`, {
       duration: 8000,
       action: { label: 'Undo', onClick: () => { void deletePayout(payout.id); for (const s of list) void updateCrewShift(s.id, { payoutId: undefined }); } },
     });
+  };
+
+  const hear = (text: string) => {
+    const said = parseCrewSpeech(text, crew, localToday());
+    setHeard({ said, plan: planCrewSpeech(said, shifts, localToday(), format(new Date(), 'h:mm a')) });
+  };
+  const doneHearing = () => { setHeard(null); setSayRound(n => n + 1); };
+
+  /** What was said, done. It can all be taken back from the toast. */
+  const carryOut = async (plan: CrewPlan) => {
+    doneHearing();
+    const before = plan.update.map(u => ({ ...u, was: shifts.find(s => s.id === u.id) }));
+    const made = plan.book.length > 0 ? await addCrewShifts(plan.book) : [];
+    for (const u of plan.update) await updateCrewShift(u.id, u.updates);
+    if (made.length + before.length > 0) {
+      const scheduled = plan.lines.filter(line => !line.startsWith('Pay '));
+      toast.success(scheduled.length === 1 ? scheduled[0] : `${scheduled.length} changes made`, {
+        duration: 8000,
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            for (const s of made) void deleteCrewShift(s.id);
+            for (const { id, updates, was } of before) {
+              if (was) void updateCrewShift(id, Object.fromEntries(Object.keys(updates).map(k => [k, was[k as keyof CrewShift]])));
+            }
+          },
+        },
+      });
+    }
+    for (const p of plan.pay) await payShifts(p.member, p.shifts, p);
   };
 
   /** Takes a payment off again: every shift it paid goes back to owed. */
@@ -342,6 +379,40 @@ export default function CrewPage() {
             <p className="text-[10px] text-mono text-muted-foreground mt-1">{owed.length} worked, not paid</p>
           </div>
         </div>
+
+        {crew.length > 0 && (
+          <div className="mb-4 space-y-2">
+            <SayIt
+              key={sayRound}
+              label="Say or type what happened"
+              placeholder="Book Jamie Friday 8 to 6"
+              examples="Try: book Sam Friday 8 to 6 · Jamie worked 9 hours yesterday · pay Jamie 400 cash · Dana clocked out."
+              onSay={hear}
+            />
+            {heard && (
+              <div className="pixel-panel space-y-2 p-3" data-testid="crew-plan">
+                {heard.plan.lines.length > 0 && (
+                  <ul className="space-y-1 text-xs text-mono font-semibold">
+                    {heard.plan.lines.map(line => <li key={line}>{line}</li>)}
+                  </ul>
+                )}
+                {heard.plan.notes.map(note => <p key={note} className="text-[11px] text-warning">{note}</p>)}
+                <div className="flex gap-2">
+                  {heard.plan.lines.length > 0 && (
+                    <Button size="sm" className="pixel-button gap-1" onClick={() => void carryOut(heard.plan)}><Check size={13} /> Do it</Button>
+                  )}
+                  {heard.said.action === 'book' && heard.said.people.length === 1 && (
+                    <Button size="sm" variant="outline" className="pixel-button" onClick={() => { setScheduling({ personId: heard.said.people[0].id, said: heard.said }); doneHearing(); }}>
+                      Change it
+                    </Button>
+                  )}
+                  <span className="flex-1" />
+                  <Button size="sm" variant="ghost" onClick={doneHearing}>{heard.plan.lines.length > 0 ? 'Cancel' : 'OK'}</Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-2 mb-4">
           <Button onClick={() => (crew.length ? setScheduling({}) : setEditingPerson('new'))} className="pixel-button gap-1.5">
@@ -504,6 +575,7 @@ export default function CrewPage() {
                 jobs={jobsLite}
                 firstDay={scheduling.day}
                 personId={scheduling.personId}
+                said={scheduling.said}
                 onCancel={() => setScheduling(null)}
                 onSave={async list => {
                   await addCrewShifts(list);

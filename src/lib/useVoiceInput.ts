@@ -2,6 +2,8 @@ import { useState, useRef } from 'react';
 
 export function useVoiceInput(onResult: (text: string) => void) {
   const [listening, setListening] = useState(false);
+  // The browser has the feature but won't run it, which iPhone browsers can do.
+  const [failed, setFailed] = useState(false);
   const recRef = useRef<any>(null);
 
   const supported = typeof window !== 'undefined' &&
@@ -19,10 +21,18 @@ export function useVoiceInput(onResult: (text: string) => void) {
       if (text) onResult(text);
     };
     rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
+    rec.onerror = (e: { error?: string }) => {
+      setListening(false);
+      if (e?.error !== 'no-speech' && e?.error !== 'aborted') setFailed(true);
+    };
     recRef.current = rec;
-    rec.start();
-    setListening(true);
+    setFailed(false);
+    try {
+      rec.start();
+      setListening(true);
+    } catch {
+      setFailed(true);
+    }
   };
 
   const stop = () => {
@@ -30,7 +40,7 @@ export function useVoiceInput(onResult: (text: string) => void) {
     setListening(false);
   };
 
-  return { listening, supported, start, stop };
+  return { listening, supported, failed, start, stop };
 }
 
 // ── Parsers ────────────────────────────────────────────────────────────────

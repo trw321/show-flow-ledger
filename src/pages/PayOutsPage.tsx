@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, Wallet, X } from 'lucide-react';
+import SayIt from '@/components/SayIt';
+import { parsePayoutSpeech } from '@/lib/crewVoice';
+import { localToday } from '@/lib/today';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -71,6 +74,20 @@ export default function PayOutsPage() {
 
   const remove = (id: string) => { void deletePayout(id); };
 
+  // Said or typed, it fills in the form. The form is what saves it.
+  const [sayRound, setSayRound] = useState(0);
+  const hear = (text: string) => {
+    const known = [...new Set([...(data.crew ?? []).map(c => c.name), ...payouts.map(p => p.workerName)])];
+    const said = parsePayoutSpeech(text, known, localToday());
+    if (said.worker) setWorker(said.worker);
+    if (said.amount) setAmount(String(said.amount));
+    if (said.date) setDate(said.date);
+    if (said.method) setMethod(said.method);
+    if (said.jobRef) setJobRef(said.jobRef);
+    setDialog(true);
+    setSayRound(n => n + 1);
+  };
+
   // Summary stats
   const stats = useMemo(() => {
     const total = payouts.reduce((s, p) => s + p.amount, 0);
@@ -124,6 +141,15 @@ export default function PayOutsPage() {
         </div>
       </div>
 
+      <div className="mb-2">
+        <SayIt
+          key={sayRound}
+          label="Say or type a payment"
+          placeholder="Paid Jamie 300 cash for load in"
+          examples="Try: paid Jamie 300 cash yesterday · gave Sam 150 by Venmo for the Fillmore."
+          onSay={hear}
+        />
+      </div>
       <Button onClick={() => setDialog(true)} className="pixel-button w-full mb-4 gap-1.5">
         <Plus size={15} /> Record a payment
       </Button>
