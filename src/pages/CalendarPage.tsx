@@ -2146,7 +2146,10 @@ function EventForm({ initial, onSave, onCancel }: {
 
 export default function CalendarPage() {
   const { data, authReady, updateJob, deleteJob, addEvent, updateEvent, deleteEvent, addJob, addIncome, updateIncome, deleteIncome } = useData();
-  const { prefs } = useUserPrefs();
+  const { prefs, setCalendarPay } = useUserPrefs();
+  // Which estimate the calendar and the project boxes lead with.
+  const payView = prefs.calendarPay ?? 'net';
+  const shownPay = (job: Job) => jobPayBreakdown(job, data.jobs, data.employers, prefs.payer)[payView];
   const [currentDate, setCurrentDate] = useState(new Date());
   // Shifts whose date has passed with no hours on them. This used to be the
   // Dashboard's hero card; it is about shifts, so it belongs here.
@@ -2433,11 +2436,11 @@ export default function CalendarPage() {
   const jobPay = useMemo(() => {
     const map: Record<string, number> = {};
     for (const job of data.jobs) {
-      const pay = jobGross(job, data.jobs, data.employers, prefs.payer);
+      const pay = jobPayBreakdown(job, data.jobs, data.employers, prefs.payer)[payView];
       if (pay > 0) map[job.id] = pay;
     }
     return map;
-  }, [data.jobs, data.employers, prefs.payer]);
+  }, [data.jobs, data.employers, prefs.payer, payView]);
 
   const payByDate = useMemo(() => {
     const map: Record<string, number> = {};
@@ -2462,6 +2465,7 @@ export default function CalendarPage() {
     });
     const monthHours = monthJobs.reduce((s, j) => s + netHoursWorked(j), 0);
     const monthExpected = monthJobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers, prefs.payer), 0);
+    const grossOf = (jobs: Job[]) => jobs.reduce((s, j) => s + jobPayBreakdown(j, data.jobs, data.employers, prefs.payer).gross, 0);
 
     // A payment belongs to the month of the work it paid for, not the month
     // the cheque turned up. Dating it by arrival put September's money in
@@ -2487,8 +2491,8 @@ export default function CalendarPage() {
     const ytdPaid = paidIn(d => d.startsWith(yearPrefix));
 
     return {
-      month: { label: format(currentDate, 'MMM'), hours: monthHours, expected: monthExpected, paid: monthPaid, unpaid: Math.max(0, monthExpected - monthPaid) },
-      ytd: { label: yearPrefix, hours: ytdHours, expected: ytdExpected, paid: ytdPaid, unpaid: Math.max(0, ytdExpected - ytdPaid) },
+      month: { label: format(currentDate, 'MMM'), hours: monthHours, gross: grossOf(monthJobs), expected: monthExpected, paid: monthPaid, unpaid: Math.max(0, monthExpected - monthPaid) },
+      ytd: { label: yearPrefix, hours: ytdHours, gross: grossOf(ytdJobs), expected: ytdExpected, paid: ytdPaid, unpaid: Math.max(0, ytdExpected - ytdPaid) },
     };
   }, [data.jobs, data.income, data.employers, currentDate, prefs.payer]);
 
@@ -2682,6 +2686,19 @@ export default function CalendarPage() {
         <div className="flex flex-1 bg-secondary/30 rounded-lg p-0.5">
           <button onClick={() => setViewMode('month')} className={cn("flex-1 text-[10px] text-mono font-medium py-1 px-3 rounded-md transition-colors", viewMode === 'month' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>Month</button>
           <button onClick={() => setViewMode('year')} className={cn("flex-1 text-[10px] text-mono font-medium py-1 px-3 rounded-md transition-colors", viewMode === 'year' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>Year</button>
+        </div>
+        <div className="flex shrink-0 bg-secondary/30 rounded-lg p-0.5" role="group" aria-label="Which estimate to show">
+          {([{ id: 'net', label: 'Est. net' }, { id: 'gross', label: 'Est. gross' }] as const).map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={payView === id}
+              onClick={() => setCalendarPay(id)}
+              className={cn("text-[10px] text-mono font-medium py-1 px-2 rounded-md transition-colors", payView === id ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground')}
+            >
+              {label}
+            </button>
+          ))}
         </div>
         {viewMode === 'month' && <CalendarKey month={format(currentDate, 'MMMM')} plans={monthPlans} states={SHIFT_STATES} />}
       </div>
@@ -2885,7 +2902,11 @@ export default function CalendarPage() {
                 <span className="text-mono font-semibold">{period.hours.toFixed(1)}h</span>
               </div>
               <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Earned</span>
+                <span className="text-muted-foreground">Est. gross</span>
+                <span className="text-mono font-semibold text-foreground">${period.gross.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Est. net</span>
                 <span className="text-mono font-semibold text-foreground">${period.expected.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
               </div>
               <div className="flex items-center justify-between text-xs">
@@ -2939,7 +2960,7 @@ export default function CalendarPage() {
                 {selectedDate && sixthSeventhDayDates[selectedDate] && <PremiumDayBanner {...sixthSeventhDayDates[selectedDate]} />}
                 {selectedJobs.map(job => {
                   const hours = netHoursWorked(job);
-                  const earned = jobGross(job, data.jobs, data.employers, prefs.payer);
+                  const earned = shownPay(job);
                   const paid = paidJobIds.has(job.id);
                   const overdue = isOverdueUpcoming(job);
                   return (
@@ -2996,7 +3017,7 @@ export default function CalendarPage() {
                 })}
                 {payByDate[selectedDate!] && (
                   <div className="flex items-center justify-between pt-2 border-t border-border text-sm text-mono">
-                    <span className="text-muted-foreground">Estimated pay</span>
+                    <span className="text-muted-foreground">Estimated {payView}</span>
                     <span className={cn("font-bold", moneyTone(jobsByDate[selectedDate!] ?? [], paidJobIds))}>${payByDate[selectedDate!].toLocaleString()}</span>
                   </div>
                 )}
@@ -3148,7 +3169,12 @@ export default function CalendarPage() {
               {Object.entries(loggedGroups).map(([key, jobs]) => {
                 const first = jobs[0];
                 const totalHours = jobs.reduce((s, j) => s + netHoursWorked(j), 0);
-                const totalEarned = jobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers, prefs.payer), 0);
+                const totals = jobs.reduce((sum, j) => {
+                  const b = jobPayBreakdown(j, data.jobs, data.employers, prefs.payer);
+                  return { net: sum.net + b.net, gross: sum.gross + b.gross };
+                }, { net: 0, gross: 0 });
+                const totalEarned = totals[payView];
+                const otherView = payView === 'net' ? 'gross' : 'net';
                 const last = jobs[jobs.length - 1];
                 // A split is two calls on one day, not two days.
                 const dayCount = new Set(jobs.map(j => j.date)).size;
@@ -3200,7 +3226,14 @@ export default function CalendarPage() {
                             one thing sized to be read without stopping. */}
                         <div className="shrink-0 text-right">
                           {totalEarned > 0 ? (
-                            <p className={cn("text-lg font-bold text-mono leading-none", moneyTone(jobs, paidJobIds))}>${Math.round(totalEarned).toLocaleString()}</p>
+                            <>
+                              <p className={cn("text-lg font-bold text-mono leading-none", moneyTone(jobs, paidJobIds))}>
+                                ${Math.round(totalEarned).toLocaleString()}<span className="ml-1 text-[9px] font-normal text-muted-foreground">est. {payView}</span>
+                              </p>
+                              {Math.round(totals[otherView]) !== Math.round(totalEarned) && (
+                                <p className="text-[10px] text-mono text-muted-foreground mt-1">${Math.round(totals[otherView]).toLocaleString()} est. {otherView}</p>
+                              )}
+                            </>
                           ) : (
                             <p className="text-[11px] text-mono text-muted-foreground leading-none">{statusLabel[first.status]}</p>
                           )}
@@ -3231,7 +3264,7 @@ export default function CalendarPage() {
                             const worked = p.jobs.filter(j => j.date <= localToday() && effectiveHoursWorked(j) > 0);
                             const days = new Set(p.jobs.map(j => j.date)).size;
                             const hours = p.jobs.reduce((s, j) => s + netHoursWorked(j), 0);
-                            const amount = p.jobs.reduce((s, j) => s + jobGross(j, data.jobs, data.employers, prefs.payer), 0);
+                            const amount = p.jobs.reduce((s, j) => s + shownPay(j), 0);
                             const lead = worked[0] ?? p.jobs[0];
                             const payments = paidBy.get(i) ?? [];
                             const coming = (incomeByProject.get(key) ?? []).filter(x => x.status === 'pending' && p.jobs.some(j => j.id === x.jobId));
@@ -3246,7 +3279,7 @@ export default function CalendarPage() {
                                 {i > 0 && <p className="period-cut">✂ new pay period</p>}
                                 <div data-testid="pay-period">
                                   <div className="flex items-baseline justify-between gap-2 text-[11px] text-mono">
-                                    <span className="font-bold text-foreground">{periodDates(p)}</span>
+                                    <span className="font-bold text-foreground">{p.firstCheck && 'First check · '}{periodDates(p)}</span>
                                     <span className="shrink-0 text-muted-foreground">
                                       {days} day{days === 1 ? '' : 's'}{hours > 0 ? ` · ${hours}h` : ''}{amount > 0 ? ` · $${Math.round(amount).toLocaleString()}` : ''}
                                     </span>
@@ -3271,7 +3304,7 @@ export default function CalendarPage() {
                                     ) : due ? (
                                       <>
                                         <p className={cn('min-w-0 truncate text-[11px] text-mono', late > 0 ? 'text-warning' : 'text-dot-pending')}>
-                                          {invoice ? `${invoice.status === 'draft' ? 'Draft' : 'Invoiced'} ${invoice.number}` : 'Waiting on pay'} · {late > 0 ? `${late}d late` : `due ${format(parseISO(due), 'MMM d')}`}
+                                          {invoice ? `${invoice.status === 'draft' ? 'Draft' : 'Invoiced'} ${invoice.number}` : p.firstCheck ? 'Waiting on first check' : 'Waiting on pay'} · {late > 0 ? `${late}d late` : `due ${format(parseISO(due), 'MMM d')}`}
                                         </p>
                                         <button type="button" onClick={e => { e.stopPropagation(); void markProjectPaid(lead); }} className={rowButton}><Wallet size={12} /> Mark paid</button>
                                       </>
@@ -3366,7 +3399,7 @@ export default function CalendarPage() {
                         return (
                           <div className="mt-2 flex items-center justify-between gap-2">
                             <p className={cn('text-[11px] text-mono', late > 0 ? 'text-warning' : 'text-dot-pending')}>
-                              {invoice ? `${invoice.status === 'draft' ? 'Draft' : 'Invoiced'} ${invoice.number}` : 'Waiting on pay'} · {late > 0 ? `${late}d late` : `due ${format(parseISO(due), 'MMM d')}`}
+                              {invoice ? `${invoice.status === 'draft' ? 'Draft' : 'Invoiced'} ${invoice.number}` : split.periods[0]?.firstCheck ? 'Waiting on first check' : 'Waiting on pay'} · {late > 0 ? `${late}d late` : `due ${format(parseISO(due), 'MMM d')}`}
                             </p>
                             <button
                               type="button"

@@ -30,6 +30,8 @@ export interface UserPrefs {
   payer: PayerProfile;
   /** Your details at the top of every invoice. */
   invoiceFrom?: InvoiceFrom;
+  /** Which estimate the calendar shows. Unset is take-home. */
+  calendarPay?: 'net' | 'gross';
 }
 
 export const TAB_LABELS: Record<TabKey, { label: string; description: string }> = {
@@ -63,6 +65,7 @@ function loadPrefs(uid?: string | null): UserPrefs {
       // undefined, so every reader can assume the shape is there.
       payer: { ...EMPTY_PROFILE, ...(parsed.payer ?? {}) },
       invoiceFrom: parsed.invoiceFrom,
+      calendarPay: parsed.calendarPay,
     };
   } catch {
     return DEFAULT_PREFS;
@@ -86,6 +89,7 @@ interface UserPrefsContextValue {
   setTabEnabled: (tab: TabKey, enabled: boolean) => void;
   setPayer: (payer: PayerProfile) => void;
   setInvoiceFrom: (from: InvoiceFrom) => void;
+  setCalendarPay: (view: 'net' | 'gross') => void;
 }
 
 const UserPrefsContext = createContext<UserPrefsContextValue | null>(null);
@@ -129,6 +133,7 @@ export function UserPrefsProvider({ children }: { children: React.ReactNode }) {
   // charges — see payerProfile for why these are not the employer's.
   const setPayer = (payer: PayerProfile) => update({ ...prefs, payer });
   const setInvoiceFrom = (invoiceFrom: InvoiceFrom) => update({ ...prefs, invoiceFrom });
+  const setCalendarPay = (calendarPay: 'net' | 'gross') => update({ ...prefs, calendarPay });
 
   const setTabEnabled = (tab: TabKey, enabled: boolean) => {
     const next = { ...prefs.tabs, [tab]: enabled };
@@ -138,7 +143,7 @@ export function UserPrefsProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <UserPrefsContext.Provider value={{ prefs, setWorkerType, setTabEnabled, setPayer, setInvoiceFrom }}>
+    <UserPrefsContext.Provider value={{ prefs, setWorkerType, setTabEnabled, setPayer, setInvoiceFrom, setCalendarPay }}>
       {children}
     </UserPrefsContext.Provider>
   );
