@@ -18,11 +18,13 @@ import { parseDayTimeline, withGapOnClock, type DayTimeline } from '@/lib/dayTim
 import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle, Flame, PenLine, Banknote, Wallet, Flag, Undo2 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO, differenceInCalendarDays } from 'date-fns';
 import type { Employer, Job, CalendarEvent, Income, Invoice } from '@/lib/store';
-import { matchPaymentToProject, betterProject, bestProjectFor, projectOf, type FoundPayment } from '@/lib/paymentMatch';
+import { matchPaymentToProject, betterProject, bestProjectFor, projectOf, type FoundPayment, type ProjectMatch } from '@/lib/paymentMatch';
 import { payDueDate, payTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
 import { paidShiftIds, periodNet, periodPayments, projectPeriods, type PayPeriod, type ProjectPeriod } from '@/lib/payPeriods';
 import { explainPay } from '@/lib/payExplain';
 import PayEstimateCard from '@/components/PayEstimateCard';
+import PaymentProof, { ProofRow } from '@/components/PaymentProof';
+import { proofFromMatch, proofKindOf, type ProofKind } from '@/lib/paymentProof';
 import CalendarKey from '@/components/CalendarKey';
 import EmployerEditor from '@/components/EmployerEditor';
 import { ratesForShift } from '@/lib/payerProfile';
@@ -36,7 +38,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { matchStubToShifts, type MatchConfidence } from '@/lib/stubMatching';
 import { learnFromStubs, dismissSuggestion, type Suggestion } from '@/lib/stubLearning';
-import { uploadStub, stubViewUrl, deleteStub } from '@/lib/stubStorage';
+import { uploadStub, stubViewUrl, deleteStub, isStoredRef } from '@/lib/stubStorage';
 import { useAuth } from '@/lib/AuthContext';
 import { compareStubToShifts, disagreements, type RowStatus } from '@/lib/stubComparison';
 import { resizeImageForStorage, readFileAsDataUrl } from '@/lib/imageResize';
@@ -460,6 +462,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   const [removedPays, setRemovedPays] = useState<Income[][]>([]);
 
   const [editingEmployer, setEditingEmployer] = useState(false);
+  const [proofFor, setProofFor] = useState<Income | null>(null);
   const [parsingStub, setParsingStub] = useState(false);
   const [viewingStub, setViewingStub] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -672,6 +675,10 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     const amount = parseFloat(payAmount);
     if (!(amount > 0)) { toast.error('Enter the amount'); return; }
     const kind = payFound?.kind;
+    // The proof goes with it: the photo, what the photo said, and every
+    // reason it was matched to the project it was saved on.
+    const match = payElsewhere && target.id !== job.id ? payElsewhere.match : payMatch;
+    const proofKind: ProofKind = kind === 'stub' ? 'stub' : kind === 'check' ? 'check' : 'manual';
     await addIncome({
       jobId: target.id,
       client: target.client,
@@ -681,6 +688,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
       status: kind === 'stub' ? 'pending' : 'paid',
       paymentMethod: kind === 'check' ? 'check' : kind ? undefined : payMethod,
       enteredByHand: kind ? undefined : true,
+      proofRef: kind && isStoredRef(payStub) ? payStub : undefined,
+      matchProof: proofFromMatch(proofKind, match, payFound ? { amount: payFound.payment.amount, payer: payFound.payment.payer, date: payFound.payment.date } : undefined),
     });
     if (kind === 'stub') {
       toast.success(`Stub in — $${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} on its way for ${target.name}. Tap Money in when it lands.`);
@@ -1109,6 +1118,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
         )}
 
         <MoneyRain active={payRain} />
+        {proofFor && <PaymentProof income={proofFor} onClose={() => setProofFor(null)} />}
         {/* Pay, first thing: what has come in for this project, and the one
             way to add more — typed, or read off a stub or a check. */}
         <input ref={stubInputRef} id={`stub-input-${job.id}`} type="file" accept="image/*,.pdf" className="hidden" onChange={handleStubUpload} disabled={parsingStub} />
@@ -1143,6 +1153,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                         </button>
                       )}
                       <span className="flex-1" />
+                      <button type="button" onClick={() => setProofFor(i)} className="text-[10px] text-mono text-muted-foreground underline hover:text-foreground">
+                        Proof
+                      </button>
                       {/* Undoable rather than confirmed: the exact payment
                           comes back, so a slip never means re-entering a check. */}
                       <button type="button" aria-label="Remove this payment" className="p-0.5 text-muted-foreground hover:text-destructive"
@@ -1798,7 +1811,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
               type="button"
               onClick={(e) => {
                 e.preventDefault(); e.stopPropagation();
-                deleteStub(payStub);
+                if (!data.income.some(i => i.proofRef === payStub)) deleteStub(payStub);
                 setPayStub(''); setStubParsed(undefined);
                 updateJobDirect(job.id, { payStub: undefined, stubParsed: undefined });
               }}
@@ -2325,6 +2338,7 @@ export default function CalendarPage() {
   }, [data.events, currentDate]);
 
   const [employerForCard, setEmployerForCard] = useState<{ client: string } | null>(null);
+  const [proofForCard, setProofForCard] = useState<Income | null>(null);
 
   const [rainActive, setRainActive] = useState(false);
   const rain = () => { setRainActive(true); setTimeout(() => setRainActive(false), 2100); };
@@ -2363,7 +2377,7 @@ export default function CalendarPage() {
       return;
     }
     const created = await addIncome({
-      jobId: worked[0].id, client: worked[0].client, description: 'Marked paid', amount,
+      jobId: worked[0].id, client: worked[0].client, description: 'Marked paid', amount, matchProof: proofFromMatch('marked'),
       date: localToday(), status: 'paid', enteredByHand: true,
     });
     rain();
@@ -2399,9 +2413,9 @@ export default function CalendarPage() {
     return new Map(unlinkedPayments.map(i => [i.id, bestProjectFor({ amount: i.amount, date: i.date, payer: i.client }, ctx)]));
   }, [unlinkedPayments, data.jobs, data.employers, prefs.payer, paidJobIds]);
 
-  const linkPayment = async (payment: Income, job: Job) => {
-    await updateIncome(payment.id, { jobId: job.id });
-    undoToast(`Linked to ${job.name}`, () => void updateIncome(payment.id, { jobId: undefined }));
+  const linkPayment = async (payment: Income, job: Job, match?: ProjectMatch) => {
+    await updateIncome(payment.id, { jobId: job.id, matchProof: proofFromMatch(proofKindOf(payment), match) });
+    undoToast(`Linked to ${job.name}`, () => void updateIncome(payment.id, { jobId: undefined, matchProof: payment.matchProof }));
   };
   const makeShiftFromPayment = async (payment: Income) => {
     const job = await addJob({
@@ -3281,6 +3295,11 @@ export default function CalendarPage() {
                                       {days} day{days === 1 ? '' : 's'}{hours > 0 ? ` · ${hours}h` : ''}{amount > 0 ? ` · $${Math.round(amount).toLocaleString()}` : ''}
                                     </span>
                                   </div>
+                                  {payments.length > 0 && (
+                                    <div className="mt-1 space-y-1 border-l-2 border-dot-paid/40 pl-2">
+                                      {samePaymentGroups(payments).map(g => <ProofRow key={g.first.id} income={g.first} onOpen={() => setProofForCard(g.first)} />)}
+                                    </div>
+                                  )}
                                   <div className="mt-1 flex min-h-[1.5rem] items-center justify-between gap-2">
                                     {payments.length > 0 ? (
                                       <>
@@ -3342,6 +3361,7 @@ export default function CalendarPage() {
                           const last = payments.map(i => i.date).sort().pop()!;
                           const kinds = [...new Map(groups.map(g => [paymentIcon(g.first).label, g.first])).values()];
                           return (
+                            <>
                             <div className="mt-2 flex items-center justify-between gap-2">
                               {/* Into the project, where its payments are listed and can be changed. */}
                               <button
@@ -3363,12 +3383,18 @@ export default function CalendarPage() {
                                 <Undo2 size={12} /> Undo
                               </button>
                             </div>
+                            {/* What paid it, and how well it's known: each one opens its proof. */}
+                            <div className="mt-1.5 space-y-1 border-l-2 border-dot-paid/40 pl-2">
+                              {groups.map(g => <ProofRow key={g.first.id} income={g.first} onOpen={() => setProofForCard(g.first)} />)}
+                            </div>
+                            </>
                           );
                         }
                         if (coming.length > 0) {
                           // A stub says the money is coming. It is not the money:
                           // the project stays waiting until it lands.
                           return (
+                            <>
                             <div className="mt-2 flex items-center justify-between gap-2">
                               <button
                                 type="button"
@@ -3386,6 +3412,10 @@ export default function CalendarPage() {
                                 <span className="inline-flex items-center gap-1"><Banknote size={12} /> Money in</span>
                               </button>
                             </div>
+                            <div className="mt-1.5 space-y-1 border-l-2 border-dot-pending/40 pl-2">
+                              {samePaymentGroups(coming).map(g => <ProofRow key={g.first.id} income={g.first} onOpen={() => setProofForCard(g.first)} />)}
+                            </div>
+                            </>
                           );
                         }
                         const worked = jobs.filter(j => j.date <= localToday() && effectiveHoursWorked(j) > 0);
@@ -3439,6 +3469,8 @@ export default function CalendarPage() {
         );
       })()}
 
+      {proofForCard && <PaymentProof income={proofForCard} onClose={() => setProofForCard(null)} />}
+
       {employerForCard && (
         <EmployerEditor
           employer={resolveEmployer(employerForCard.client, data.employers)}
@@ -3476,7 +3508,7 @@ export default function CalendarPage() {
                 )}
                 <div className="flex flex-wrap gap-2">
                   {guess && (
-                    <Button size="sm" className="h-auto min-h-7 max-w-full whitespace-normal py-1 text-left text-[11px]" onClick={() => void linkPayment(i, guess.project[0])}>
+                    <Button size="sm" className="h-auto min-h-7 max-w-full whitespace-normal py-1 text-left text-[11px]" onClick={() => void linkPayment(i, guess.project[0], guess.match)}>
                       Link to {guess.project[0].name}
                     </Button>
                   )}

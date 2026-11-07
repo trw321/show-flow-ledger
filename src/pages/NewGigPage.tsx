@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { isDuplicateJob, findLikelyDuplicate } from '@/lib/jobDedup';
 import { findOfferMatch, mergeOffer, type OfferMerge } from '@/lib/offerMerge';
 import { isCallback } from '@/lib/projectGrouping';
+import { proofFromMatch } from '@/lib/paymentProof';
 import { PARSER_MODELS, REASONING_EFFORTS, supportsReasoning, loadParserChoice, saveParserChoice, nextLevel, type ReasoningEffort } from '@/lib/parserModels';
 import type { Job, CalendarEvent, EmployerRole } from '@/lib/store';
 import { contractsWorked } from '@/lib/contracts';
@@ -579,6 +580,7 @@ export default function NewGigPage({ onComplete, startAs }: {
           amount: entry.grossPay,
           date: entry.date,
           status: 'paid',
+          matchProof: proofFromMatch('manual'),
         });
       }
     } else {

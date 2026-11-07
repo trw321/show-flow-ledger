@@ -4,6 +4,7 @@ import { addDays, format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { FileText, Plus, Printer, Send, Check, Undo2, Pencil, Trash2, X, ChevronRight } from 'lucide-react';
 import { useData } from '@/lib/DataContext';
+import { proofFromMatch } from '@/lib/paymentProof';
 import { useUserPrefs, type InvoiceFrom } from '@/lib/UserPrefsContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
 import { Button } from '@/components/ui/button';
@@ -250,6 +251,7 @@ export default function InvoicesPage() {
       const created = await addIncome({
         jobId: p.jobId, client: v.client, description: `Invoice ${v.number}`, amount: p.amount,
         date: today, status: 'paid', invoiceNumber: v.number,
+        matchProof: proofFromMatch('invoice', { percent: 100, level: 'high', expected: p.amount, reasons: [{ text: `Invoice ${v.number} billed these shifts`, good: true }] }),
       });
       ids.push(created.id);
     }
