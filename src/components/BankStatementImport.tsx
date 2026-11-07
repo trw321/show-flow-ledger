@@ -1,11 +1,14 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loader2, Check, X, FileImage } from 'lucide-react';
 import { toast } from 'sonner';
 import { differenceInDays, parseISO, format } from 'date-fns';
-import type { Income } from '@/lib/store';
-import { nameSimilarity } from '@/lib/employerMatch';
+import type { Income, Job } from '@/lib/store';
+import { matchPaymentToProject, withinLookBack, type MatchContext, type ProjectMatch } from '@/lib/paymentMatch';
+import { paidShiftIds } from '@/lib/payPeriods';
+import { proofFromMatch } from '@/lib/paymentProof';
+import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { resizeImageToBase64 } from '@/lib/imageResize';
 import { alreadyRecorded, repeatsInUpload } from '@/lib/paymentRepeats';
 import { useData } from '@/lib/DataContext';
@@ -91,6 +94,8 @@ export interface ReconciliationRowInfo {
   periodLabel: string;
   periodEnd: string; // YYYY-MM-DD
   expectedPay: number;
+  /** The shifts the row is made of: what the deposit is scored against. */
+  jobIds: string[];
 }
 
 interface MatchResult {
@@ -99,6 +104,7 @@ interface MatchResult {
   confidence: 'high' | 'medium' | 'low';
   reasons: string[];
   breakdownDateMatch: boolean;
+  match: ProjectMatch;
 }
 
 interface DepositEntry {
@@ -114,66 +120,35 @@ interface DepositEntry {
   skipReason?: string;
 }
 
-function scoreMatch(deposit: ParsedDeposit, row: ReconciliationRowInfo): MatchResult {
-  let score = 0;
-  const reasons: string[] = [];
+type BankContext = MatchContext & { jobsById: Map<string, Job> };
 
-  // A payment-note date exactly matching this row's (single-day) period is
-  // about as strong a signal as reconciliation gets — the note is naming the
-  // actual shift, not just landing in a plausible amount/timing window.
-  const breakdownDateMatch = !!deposit.breakdown?.some(b => b.date === row.periodEnd);
-  if (breakdownDateMatch) {
-    score += 60;
-    const hrs = deposit.breakdown!.filter(b => b.date === row.periodEnd).map(b => `${b.hours} ${b.type}`).join(' + ');
-    reasons.push(`Date in payment breakdown (${hrs})`);
-  }
-
-  // Amount proximity (most important signal)
-  if (row.expectedPay > 0) {
-    const diff = Math.abs(deposit.amount - row.expectedPay) / row.expectedPay;
-    if (diff < 0.01) { score += 50; reasons.push('Exact amount match'); }
-    else if (diff < 0.05) { score += 35; reasons.push('Amount within 5%'); }
-    else if (diff < 0.15) { score += 15; reasons.push('Amount within 15%'); }
-  }
-
-  // Client name appears in deposit description — word-by-word fuzzy
-  // comparison, not exact-substring, so a near-miss spelling ("Panotechnics"
-  // vs "Panitechnics") still counts instead of scoring zero just because
-  // neither string literally contains the other. Comparing a whole client
-  // name against the whole free-text description directly would also score
-  // poorly here (a 12-char name against a 30-char sentence looks "different"
-  // by pure edit distance even when the name is right there) — comparing
-  // word-to-word finds it.
-  const clientWords = row.client.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-  const descWords = deposit.description.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-  const bestWordSimilarity = clientWords.reduce((best, cw) =>
-    descWords.reduce((b, dw) => Math.max(b, nameSimilarity(cw, dw)), best), 0);
-  if (bestWordSimilarity >= 0.9) { score += 30; reasons.push('Client name in description'); }
-  else if (bestWordSimilarity >= 0.65) { score += 20; reasons.push('Client name closely matches description'); }
-
-  if (deposit.client) {
-    const clientSimilarity = nameSimilarity(row.client, deposit.client);
-    if (clientSimilarity >= 0.9) { score += 15; reasons.push('Client field match'); }
-    else if (clientSimilarity >= 0.65) { score += 10; reasons.push('Client field closely matches'); }
-  }
-
-  // Date: deposit should arrive after period end (payroll lag 1–35 days is normal)
-  const depDate = parseISO(deposit.date);
-  const periodEnd = parseISO(row.periodEnd);
-  const daysAfter = differenceInDays(depDate, periodEnd);
-  if (daysAfter >= 0 && daysAfter <= 7)  { score += 20; reasons.push('Paid within 1 week of period end'); }
-  else if (daysAfter >= 0 && daysAfter <= 21) { score += 14; reasons.push('Paid within 3 weeks of period end'); }
-  else if (daysAfter >= 0 && daysAfter <= 42) { score += 8;  reasons.push('Paid within 6 weeks of period end'); }
-  else if (daysAfter >= 0 && daysAfter <= 90) { score += 5;  reasons.push('Paid within 3 months of period end'); }
-  else if (daysAfter < 0 && daysAfter >= -7) { score += 5;  reasons.push('Paid slightly before period end'); }
-
-  const confidence: 'high' | 'medium' | 'low' =
-    score >= 65 ? 'high' : score >= 35 ? 'medium' : 'low';
-
-  return { row, score, confidence, reasons, breakdownDateMatch };
+/**
+ * A deposit against a row, by the same engine as Add pay on the calendar: the
+ * hours a payment note lists on the row's days, the amount against what they
+ * should pay, the payer, and the timing, up to 45 days after.
+ */
+function scoreMatch(deposit: ParsedDeposit, row: ReconciliationRowInfo, ctx: BankContext): MatchResult {
+  const jobs = row.jobIds.map(id => ctx.jobsById.get(id)).filter((j): j is Job => !!j);
+  const near = jobs.some(j => withinLookBack(deposit.date, j.date));
+  const hoursOn = (deposit.breakdown ?? []).map(b => b.date);
+  const match = matchPaymentToProject({
+    amount: deposit.amount,
+    date: deposit.date,
+    payer: deposit.client || deposit.description,
+    hoursOn: hoursOn.length > 0 ? hoursOn : undefined,
+  }, jobs, ctx);
+  return {
+    row,
+    // Outside the window it isn't offered at all, as on the calendar.
+    score: near ? match.percent : 0,
+    confidence: match.level,
+    reasons: match.reasons.map(r => `${r.good ? '✓' : '✗'} ${r.text}`),
+    breakdownDateMatch: jobs.some(j => hoursOn.includes(j.date)),
+    match,
+  };
 }
 
-function buildEntries(deposits: ParsedDeposit[], rows: ReconciliationRowInfo[], income: Income[]): DepositEntry[] {
+function buildEntries(deposits: ParsedDeposit[], rows: ReconciliationRowInfo[], income: Income[], ctx: BankContext): DepositEntry[] {
   // A stub photographed with its check reads as two deposits of the same
   // amount; one paycheck counted twice. Repeats, and anything already
   // recorded, start out left out — flagged, so a real second deposit of the
@@ -185,7 +160,7 @@ function buildEntries(deposits: ParsedDeposit[], rows: ReconciliationRowInfo[], 
       ? `Same amount as #${repeats[index]! + 1} — likely the stub and its check, which are one payment`
       : recorded ? `Already in your payments (${recorded.date})` : undefined;
     const matches = rows
-      .map(row => scoreMatch(deposit, row))
+      .map(row => scoreMatch(deposit, row, ctx))
       .filter(m => m.score > 0)
       .sort((a, b) => b.score - a.score);
 
@@ -209,6 +184,12 @@ interface Props {
 
 export default function BankStatementImport({ rows, onConfirm, onClose }: Props) {
   const { data: ledger } = useData();
+  const { prefs } = useUserPrefs();
+  const ctx: BankContext = useMemo(() => ({
+    allJobs: ledger.jobs, employers: ledger.employers, payer: prefs.payer,
+    paidJobIds: paidShiftIds(ledger.jobs, ledger.income, ledger.employers, prefs.payer),
+    jobsById: new Map(ledger.jobs.map(j => [j.id, j])),
+  }), [ledger.jobs, ledger.income, ledger.employers, prefs.payer]);
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [entries, setEntries] = useState<DepositEntry[]>([]);
@@ -283,7 +264,7 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
         return;
       }
 
-      const matched = buildEntries(deposits, rows, ledger.income);
+      const matched = buildEntries(deposits, rows, ledger.income, ctx);
       setEntries(matched);
       const autoMatched = matched.filter(e => e.chosenRowKeys.length > 0).length;
       const skipped = matched.filter(e => e.skipped).length;
@@ -293,7 +274,7 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
     } finally {
       setLoading(false);
     }
-  }, [rows, ledger.income]);
+  }, [rows, ledger.income, ctx]);
 
   const toggleSkip = (depIdx: number) => {
     setEntries(prev => prev.map((e, i) => i === depIdx ? { ...e, skipped: !e.skipped } : e));
@@ -318,7 +299,7 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
       if (i !== depIdx) return e;
       const deposit = { ...e.deposit, [field]: value };
       const matches = rows
-        .map(row => scoreMatch(deposit, row))
+        .map(row => scoreMatch(deposit, row, ctx))
         .filter(m => m.score > 0)
         .sort((a, b) => b.score - a.score);
       const validKeys = new Set(matches.map(m => m.row.key));
@@ -345,6 +326,7 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
           date: entry.deposit.date,
           status: 'paid',
           invoiceNumber: entry.deposit.invoiceNumber,
+          matchProof: proofFromMatch('deposit', entry.matches.find(m => m.row.key === row?.key)?.match, { amount: entry.deposit.amount, payer: entry.deposit.client, date: entry.deposit.date }),
         });
         count++;
       } else {
@@ -361,6 +343,7 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
             date: entry.deposit.date,
             status: 'paid',
             invoiceNumber: entry.deposit.invoiceNumber,
+            matchProof: proofFromMatch('deposit', entry.matches.find(m => m.row.key === row.key)?.match, { amount: entry.deposit.amount, payer: entry.deposit.client, date: entry.deposit.date }),
           });
           count++;
         });
@@ -475,7 +458,7 @@ export default function BankStatementImport({ rows, onConfirm, onClose }: Props)
                               m.confidence === 'medium' ? 'bg-warning/20 text-warning' :
                                                           'bg-secondary text-muted-foreground'
                             }`}>
-                              {m.confidence.toUpperCase()}
+                              {m.confidence.toUpperCase()} {m.score}%
                             </span>
                             <span className="text-mono">
                               ${m.row.expectedPay.toLocaleString(undefined, { minimumFractionDigits: 2 })}

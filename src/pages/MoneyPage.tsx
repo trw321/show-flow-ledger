@@ -601,6 +601,7 @@ export default function MoneyPage() {
       periodLabel: r.periodLabel,
       periodEnd: r.periodEnd,
       expectedPay: r.expectedPay,
+      jobIds: r.jobs.map(j => j.id),
     })),
     [reconciliation]
   );

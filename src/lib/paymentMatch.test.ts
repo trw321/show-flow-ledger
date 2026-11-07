@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchPaymentToProject, betterProject, projectOf, type MatchContext } from './paymentMatch';
+import { matchPaymentToProject, betterProject, bestProjectFor, projectOf, type MatchContext } from './paymentMatch';
 import type { Job } from './store';
 
 const shift = (id: string, date: string, extra: Partial<Job> = {}): Job => ({
@@ -44,6 +44,23 @@ describe('how well a payment fits a project', () => {
 
   it('finds the shifts of a project by job number', () => {
     expect(projectOf(gala[0], [...gala, ...launch]).map(j => j.id)).toEqual(['a', 'b']);
+  });
+});
+
+describe('a payment with no shift', () => {
+  it('finds a project worked up to 45 days before it', () => {
+    const best = bestProjectFor({ amount: 800, date: '2026-11-20', payer: 'Odeum' }, ctx(gala));
+    expect(best?.project.map(j => j.id)).toEqual(['a', 'b']);
+  });
+
+  it('looks no further back than that', () => {
+    expect(bestProjectFor({ amount: 800, date: '2026-11-25', payer: 'Odeum' }, ctx(gala))).toBeNull();
+  });
+
+  it('finds a long run by its last days, however long ago it started', () => {
+    const run = [shift('r1', '2026-09-01', { jobNumber: 'R-1' }), shift('r2', '2026-10-20', { jobNumber: 'R-1' })];
+    const best = bestProjectFor({ amount: 800, date: '2026-11-05', payer: 'Odeum' }, ctx(run));
+    expect(best?.project.map(j => j.id)).toEqual(['r1', 'r2']);
   });
 });
 

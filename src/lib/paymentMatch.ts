@@ -168,6 +168,16 @@ export function betterProject(payment: FoundPayment, current: Job, ctx: MatchCon
 }
 
 /**
+ * Whether a worked day is close enough to a payment to be what it paid: up to
+ * 45 days before it (a first check can take weeks), or a week after (a
+ * payment dated partway through a run).
+ */
+export function withinLookBack(paymentDate: string, workDate: string): boolean {
+  const gap = differenceInCalendarDays(parseISO(paymentDate), parseISO(workDate));
+  return !Number.isNaN(gap) && gap >= -7 && gap <= 45;
+}
+
+/**
  * The project a payment with no shift most likely paid — worked within a week
  * after it or six weeks before it — if any fits better than poorly.
  */
@@ -183,10 +193,11 @@ function bestOf(payment: FoundPayment, ctx: MatchContext, skipKey?: string): { p
   for (const job of ctx.allJobs) {
     const key = keys.get(job.id) ?? job.id;
     if (seen.has(key)) continue;
-    seen.add(key);
     if (effectiveHoursWorked(job) <= 0) continue;
-    const gap = differenceInCalendarDays(parseISO(payment.date), parseISO(job.date));
-    if (Number.isNaN(gap) || gap < -7 || gap > 45) continue;
+    if (!withinLookBack(payment.date, job.date)) continue;
+    // Any worked day in the window brings the whole project in: a long run's
+    // first day can be well over six weeks before a check for its last.
+    seen.add(key);
     const project = projectOf(job, ctx.allJobs, ctx.employers);
     const match = matchPaymentToProject(payment, project, ctx);
     if (!best || match.percent > best.match.percent) best = { project, match };

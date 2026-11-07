@@ -1,10 +1,17 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useData } from '@/lib/DataContext';
+import { useAuth } from '@/lib/AuthContext';
+import { useUserPrefs } from '@/lib/UserPrefsContext';
+import { bestProjectFor, type MatchContext, type ProjectMatch } from '@/lib/paymentMatch';
+import { paidShiftIds } from '@/lib/payPeriods';
+import { effectiveHoursWorked } from '@/lib/payCalc';
+import { proofFromMatch, type ProofKind } from '@/lib/paymentProof';
+import { uploadStub } from '@/lib/stubStorage';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Upload, Loader2, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { format, differenceInCalendarDays, parseISO } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import type { Income, Job } from '@/lib/store';
 import { resizeImageToBase64 } from '@/lib/imageResize';
 import { alreadyRecorded, repeatsInUpload } from '@/lib/paymentRepeats';
@@ -37,65 +44,44 @@ export function looksLikeStubOnly(txn: ParsedIncome): boolean {
     && !/\b(check|cheque|deposit|deposited|direct deposit|ach|transfer)\b/.test(what);
 }
 
-export interface PaymentLink {
-  job: Job | null;
-  reasons: string[];
-}
-
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
 const day = (iso: string) => format(parseISO(iso), 'MMM d');
 
-/**
- * The shift a payment most likely paid, and why. The reasons are shown beside
- * the photo, so a match can be checked against the stub instead of taken on
- * trust.
- *
- * A shift has to come before the payment, by no more than 35 days. Then it
- * scores on: the stub listing hours on the shift's own day; the gap being
- * ordinary payroll timing (7–21 days for a bi-weekly run); and the payer
- * being the shift's payroll company or employer.
- */
-export function findLinkedJob(txn: ParsedIncome, jobs: Job[]): PaymentLink {
-  const pay = parseISO(txn.date);
-  const payer = norm(txn.client || '');
-  const about = norm(txn.description || '');
-  const stubDays = new Set((txn.breakdown ?? []).map(b => b.date));
-  const named = (name: string) => {
-    const n = norm(name);
-    if (n.length <= 2) return false;
-    if (n.split(/\s+/).filter(w => w.length > 3).some(w => payer.includes(w) || about.includes(w))) return true;
-    // An empty payer is in every name; it only counts the other way round when there is one.
-    return !!payer && (payer.includes(n) || n.includes(payer));
-  };
+export interface PaymentLink {
+  job: Job | null;
+  /** Every reason, for and against, from the same engine as the calendar. */
+  reasons: { text: string; good: boolean }[];
+  match?: ProjectMatch;
+}
 
-  let best: PaymentLink = { job: null, reasons: [] };
-  let bestScore = 0;
-  for (const job of jobs) {
-    const days = differenceInCalendarDays(pay, parseISO(job.date));
-    if (Number.isNaN(days) || days < 0 || days > 35) continue;
-    let score = 0;
-    const reasons: string[] = [];
-    if (stubDays.has(job.date)) {
-      score += 6;
-      reasons.push(`The stub lists hours on ${day(job.date)}, this shift's day`);
-    }
-    if (days >= 7 && days <= 21) {
-      score += 3;
-      reasons.push(`Paid ${days} days after the shift — usual payroll timing`);
-    } else if (days >= 3 && days <= 28) {
-      score += 1;
-      reasons.push(`Paid ${days} days after the shift`);
-    }
-    if (job.payrollCompany && named(job.payrollCompany)) {
-      score += 5;
-      reasons.push(`Paid by ${job.payrollCompany}, the shift's payroll company`);
-    } else if (job.client && named(job.client)) {
-      score += 3;
-      reasons.push(`Names ${job.client}, the shift's employer`);
-    }
-    if (score > bestScore) { bestScore = score; best = { job, reasons }; }
-  }
-  return bestScore >= 3 ? best : { job: null, reasons: [] };
+/**
+ * The shift a payment most likely paid, and why. It's the same engine as Add
+ * pay on the calendar, so a payment gets the same answer wherever it's added:
+ * a project worked up to 45 days before it, or a week after, scored on the
+ * stub's hours, the amount, the payer and the timing. The reasons are shown
+ * beside the photo, so a match can be checked instead of taken on trust.
+ */
+export function findLinkedJob(txn: ParsedIncome, ctx: MatchContext): PaymentLink {
+  const hoursOn = (txn.breakdown ?? []).map(b => b.date);
+  const best = bestProjectFor({
+    amount: Math.abs(txn.amount),
+    date: txn.date,
+    payer: txn.client || undefined,
+    hoursOn: hoursOn.length > 0 ? hoursOn : undefined,
+  }, ctx);
+  if (!best) return { job: null, reasons: [] };
+  // Linked to its first day still owed, so it shows on the right part of the run.
+  const owed = best.project.filter(j => effectiveHoursWorked(j) > 0 && !ctx.paidJobIds.has(j.id)).sort((a, b) => a.date.localeCompare(b.date));
+  return { job: owed[0] ?? best.project[0], reasons: best.match.reasons, match: best.match };
+}
+
+/** How a payment read off a photo came in. */
+function kindOfRead(txn: ParsedIncome, stubOnly: boolean): ProofKind {
+  if (stubOnly) return 'stub';
+  const what = (txn.description ?? '').toLowerCase();
+  if (/\b(check|cheque)\b/.test(what)) return 'check';
+  if (/\b(deposit|ach|transfer)\b/.test(what)) return 'deposit';
+  if (/\b(stub|earnings|payroll)\b/.test(what)) return 'stub';
+  return 'statement';
 }
 
 /** One "label — value" line in the read-from-the-photo column. */
@@ -111,6 +97,12 @@ function Read({ label, value }: { label: string; value?: string | number | null 
 
 export default function IncomeStatementUpload({ externalOpen, onExternalOpenChange }: { externalOpen?: boolean; onExternalOpenChange?: (open: boolean) => void } = {}) {
   const { addIncome, data } = useData();
+  const { prefs } = useUserPrefs();
+  const { user } = useAuth();
+  const matchCtx = useMemo(() => ({
+    allJobs: data.jobs, employers: data.employers, payer: prefs.payer,
+    paidJobIds: paidShiftIds(data.jobs, data.income, data.employers, prefs.payer),
+  }), [data.jobs, data.employers, data.income, prefs.payer]);
   const isControlled = externalOpen !== undefined;
   const [internalOpen, setInternalOpen] = useState(false);
   const open = isControlled ? externalOpen : internalOpen;
@@ -185,7 +177,7 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
       // be switched.
       setStubOnly(new Set(txns.map((t, i) => (looksLikeStubOnly(t) ? i : -1)).filter(i => i >= 0)));
       setLeftOut(flags);
-      setLinks(txns.map(t => findLinkedJob(t, data.jobs)));
+      setLinks(txns.map(t => findLinkedJob(t, matchCtx)));
       setSelected(new Set(txns.map((_, i) => i).filter(i => flags[i].repeatOf === undefined && !flags[i].recorded)));
       const skipped = flags.filter(f => f.repeatOf !== undefined || f.recorded).length;
       toast[txns.length ? 'success' : 'info'](
@@ -216,6 +208,8 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
     setIsSaving(true);
     let count = 0;
     let failed = 0;
+    // The photo is kept as the proof of everything read off it.
+    const proofRef = user && preview ? await uploadStub(preview, user.id, 'statement') : null;
     for (let i = 0; i < transactions.length; i++) {
       if (!selected.has(i)) continue;
       const txn = transactions[i];
@@ -228,6 +222,8 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
           status: stubOnly.has(i) ? 'pending' : 'paid',
           invoiceNumber: txn.invoiceNumber || undefined,
           jobId: links[i]?.job?.id || undefined,
+          proofRef: proofRef ?? undefined,
+          matchProof: proofFromMatch(kindOfRead(txn, stubOnly.has(i)), links[i]?.match, { amount: Math.abs(txn.amount), payer: txn.client, date: txn.date }),
         });
         count++;
       } catch (err) {
@@ -387,8 +383,9 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
                                 {link.job.name} · {day(link.job.date)}
                                 {link.job.payrollCompany ? <span className="font-normal text-muted-foreground"> · {link.job.payrollCompany}</span> : null}
                               </p>
-                              <ul className="mt-0.5 space-y-0.5 text-[10px] text-muted-foreground">
-                                {link.reasons.map(r => <li key={r}>• {r}</li>)}
+                              {link.match && <p className="text-[10px] text-mono font-bold uppercase text-muted-foreground">{link.match.percent}% {link.match.level}</p>}
+                              <ul className="mt-0.5 space-y-0.5 text-[10px]">
+                                {link.reasons.map(r => <li key={r.text} className={r.good ? 'text-muted-foreground' : 'text-warning'}>{r.good ? '✓' : '✗'} {r.text}</li>)}
                               </ul>
                             </>
                           ) : (
