@@ -184,6 +184,35 @@ export function coveredPeriods(
 }
 
 /**
+ * The shifts one payment paid for: its project's worked days up to the day it
+ * came, or on a project split across pay periods, the periods it paid. The
+ * same rule paidShiftIds uses for the calendar, for just this payment.
+ */
+export function shiftsPaidBy(
+  payment: Income,
+  allJobs: Job[],
+  income: Income[],
+  employers: Employer[],
+  payer: PayerProfile = EMPTY_PROFILE,
+): Job[] {
+  if (!payment.jobId) return [];
+  const keys = projectKeysFor(allJobs, employers);
+  const key = keys.get(payment.jobId);
+  if (!key) return [];
+  const project = allJobs.filter(j => (keys.get(j.id) ?? j.id) === key);
+  const worked = project.filter(j => effectiveHoursWorked(j) > 0).sort((a, b) => a.date.localeCompare(b.date));
+  const { periods } = projectPeriods(project, resolveEmployer(project[0].client, employers), allJobs);
+  if (periods.length > 1) {
+    const payments = income.filter(i => i.jobId && keys.get(i.jobId) === key && (i.status === 'paid' || i.id === payment.id));
+    const by = periodPayments(periods, payments, p => periodNet(p, allJobs, employers, payer));
+    const ids = new Set([...by].filter(([, list]) => list.some(x => x.id === payment.id)).flatMap(([i]) => periods[i].jobs.map(j => j.id)));
+    return worked.filter(j => ids.has(j.id));
+  }
+  const upTo = worked.filter(j => j.date <= payment.date);
+  return upTo.length > 0 ? upTo : worked;
+}
+
+/**
  * Every shift that has been paid. A payment pays its project, not only the day
  * it was put on: one check for a two-day gig turns both days green. It covers
  * the days worked up to the day it came, and when the project is split across

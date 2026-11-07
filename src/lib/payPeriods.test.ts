@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { coveredPeriods, paidShiftIds, payPeriodOf, periodPayments, periodRule, projectPeriods } from './payPeriods';
+import { coveredPeriods, paidShiftIds, payPeriodOf, periodPayments, periodRule, projectPeriods, shiftsPaidBy } from './payPeriods';
 import type { Employer, Income, Job } from './store';
 
 const employer = (over: Partial<Employer> = {}): Employer => ({ id: 'e', name: 'Odeum', overtimeRule: 'daily', createdAt: 'x', ...over });
@@ -174,6 +174,18 @@ describe('what a payment pays', () => {
     const { periods } = projectPeriods(run, e, run);
     const early = paid('c', 1600, '2026-11-01');
     expect(periodPayments(periods, [early], () => 800).get(1)).toEqual([early]);
+  });
+
+  it('says which days one check paid, a period at a time', () => {
+    const first = paid('a', 800, '2026-11-13');
+    const second = paid('c', 800, '2026-11-20');
+    expect(shiftsPaidBy(first, run, [first, second], [e]).map(j => j.id)).toEqual(['a', 'b']);
+    expect(shiftsPaidBy(second, run, [first, second], [e]).map(j => j.id)).toEqual(['c', 'd']);
+  });
+
+  it('says a check for everything paid everything', () => {
+    const all = paid('a', 1600, '2026-11-20');
+    expect(shiftsPaidBy(all, run, [all], [e]).map(j => j.id)).toEqual(['a', 'b', 'c', 'd']);
   });
 
   it('keeps the old rule inside one period: the whole project, up to the day it came', () => {

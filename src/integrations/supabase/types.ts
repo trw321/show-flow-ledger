@@ -786,8 +786,10 @@ export type Database = {
           id: string
           invoice_number: string | null
           job_id: string | null
+          match_proof: Json | null
           modified_at: string | null
           payment_method: string | null
+          proof_ref: string | null
           status: string
           updated_at: string
           user_id: string
@@ -803,8 +805,10 @@ export type Database = {
           id?: string
           invoice_number?: string | null
           job_id?: string | null
+          match_proof?: Json | null
           modified_at?: string | null
           payment_method?: string | null
+          proof_ref?: string | null
           status?: string
           updated_at?: string
           user_id: string
@@ -820,8 +824,10 @@ export type Database = {
           id?: string
           invoice_number?: string | null
           job_id?: string | null
+          match_proof?: Json | null
           modified_at?: string | null
           payment_method?: string | null
+          proof_ref?: string | null
           status?: string
           updated_at?: string
           user_id?: string

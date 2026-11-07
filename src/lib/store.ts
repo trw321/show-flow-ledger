@@ -123,6 +123,10 @@ export interface Income {
   /** Typed in by hand rather than read off a stub, a cheque or a statement. Worth knowing: nothing has been checked against a document. */
   enteredByHand?: boolean;
   invoiceNumber?: string;
+  /** The stub or check photo that proves it: a storage reference. */
+  proofRef?: string;
+  /** How it came in and why it was matched to its project, as it was scored at the time. */
+  matchProof?: import('./paymentProof').MatchProof;
   createdAt: string;
   /** Last edited — see Job.modifiedAt. */
   modifiedAt?: string;

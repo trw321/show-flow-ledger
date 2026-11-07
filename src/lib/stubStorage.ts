@@ -33,8 +33,10 @@ function dataUrlToBlob(dataUrl: string): Blob {
 export async function uploadStub(dataUrl: string, userId: string, jobId: string): Promise<string | null> {
   try {
     const blob = dataUrlToBlob(dataUrl);
-    // Row security keys on the first path segment being the user's id.
-    const path = `${userId}/${jobId}.jpg`;
+    // Row security keys on the first path segment being the user's id. Each
+    // photo gets a name of its own: a payment keeps the one that proved it, so
+    // a newer photo on the same shift must never overwrite it.
+    const path = `${userId}/${jobId}-${Date.now()}.jpg`;
     const { error } = await supabase.storage.from(BUCKET).upload(path, blob, {
       contentType: blob.type,
       upsert: true,
