@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react';
-import { isCallback, sameProject, projectKeysFor } from '@/lib/projectGrouping';
+import { isCallback, sameProject, projectKeysFor, projectOf as projectDays } from '@/lib/projectGrouping';
 import { projectSiblingsToRelabel } from '@/lib/projectGrouping';
 import StubEditor from '@/components/StubEditor';
 import MoneyRain from '@/components/MoneyRain';
@@ -440,6 +440,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   // run, so the rest of the project is offered rather than left behind.
   const [relabelProject, setRelabelProject] = useState(true);
   const [mealPenalties, setMealPenalties] = useState(job.mealPenalties?.toString() ?? '');
+  // Opt-in like a second meal: most days have none. A shift that has one
+  // always shows it, so a penalty is never hidden.
+  const [penaltyOpen, setPenaltyOpen] = useState(false);
   const [nightPremiumConfirmed, setNightPremiumConfirmed] = useState(job.nightPremiumConfirmed ?? true);
   const [nightPremiumActualHours, setNightPremiumActualHours] = useState(job.nightPremiumActualHours?.toString() ?? '');
   const [payStub, setPayStub] = useState(job.payStub ?? '');
@@ -468,7 +471,10 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   const [editing, setEditing] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   const [dupWithTimes, setDupWithTimes] = useState(false);
-  const [dupDates, setDupDates] = useState<string[]>(['']);
+  const [dupDates, setDupDates] = useState<string[]>([]);
+  // The days on offer: the shift's own week and the two after it, and more
+  // on asking, since a conference can run longer than that.
+  const [dupWeeks, setDupWeeks] = useState(3);
   const stubInputRef = useRef<HTMLInputElement>(null);
   // Arriving from a row's stub button means the camera is the only thing
   // wanted, so skip the step of finding the control in the form.
@@ -497,6 +503,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     setMeal2Duration(job.meal2Duration ?? undefined);
     setMeal2OnClock(job.meal2OnClock ?? false);
     setSecondMealOpen(job.meal2Duration !== undefined || !!job.extraMeals?.length);
+    setPenaltyOpen(false);
     setExtraMeals(job.extraMeals ?? []);
     setCallTimeline(job.callTimeline ?? '');
     setGapsOnClock(job.callGapsOnClock ?? []);
@@ -509,7 +516,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     setPayStub(job.payStub ?? '');
     setStubParsed(job.stubParsed);
     setDuplicating(false);
-    setDupDates(['']);
+    setDupDates([]);
+    setDupWeeks(3);
   };
 
   useEffect(() => {
@@ -1478,15 +1486,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             {/* Each further meal gets its own boxes rather than sharing the first's:
                 an hour off at lunch and half an hour on later is a normal day,
                 and the two have nothing to do with each other. */}
-            {!secondMealOpen ? (
-              <button
-                type="button"
-                onClick={() => setSecondMealOpen(true)}
-                className="flex items-center gap-1 text-[11px] text-primary hover:underline pt-0.5"
-              >
-                <Plus size={11} /> Add a second meal
-              </button>
-            ) : (
+            {secondMealOpen && (
               <>
                 <div className="space-y-1.5 pt-1 border-t border-border/60">
                   <div className="flex items-center justify-between">
@@ -1528,22 +1528,46 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                     />
                   </div>
                 ))}
-                <button
-                  type="button"
-                  onClick={() => setExtraMeals(prev => [...prev, { onClock: false }])}
-                  className="flex items-center gap-1 text-[11px] text-primary hover:underline pt-0.5"
-                >
-                  <Plus size={11} /> Add another meal
-                </button>
               </>
             )}
             </div>
-            <div className="pt-0.5">
+            {/* The things most days don't have, as two links in one row. */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-0.5">
+              {!mealsFromTimeline && (
+                <button
+                  type="button"
+                  onClick={() => (secondMealOpen ? setExtraMeals(prev => [...prev, { onClock: false }]) : setSecondMealOpen(true))}
+                  className="flex items-center gap-1 text-[11px] text-primary hover:underline"
+                >
+                  <Plus size={11} /> {secondMealOpen ? 'Add another meal' : 'Add a second meal'}
+                </button>
+              )}
+              {!(penaltyOpen || (parseFloat(mealPenalties) || 0) > 0) && (
+                <button
+                  type="button"
+                  onClick={() => setPenaltyOpen(true)}
+                  className="flex items-center gap-1 text-[11px] text-primary hover:underline"
+                >
+                  <Plus size={11} /> Add a meal penalty
+                </button>
+              )}
+            </div>
+            {(penaltyOpen || (parseFloat(mealPenalties) || 0) > 0) && (
+            <div className="space-y-1.5 pt-1 border-t border-border/60">
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-muted-foreground">Meal Penalties <span className="text-[10px]">· 1 = 1hr at straight rate</span></label>
+                <button
+                  type="button"
+                  onClick={() => { setMealPenalties(''); setPenaltyOpen(false); }}
+                  className="text-[11px] text-destructive hover:underline"
+                >
+                  Remove
+                </button>
+              </div>
               {/* A vertical wheel for a number that is almost always 0, 1 or 2
                   spent a whole column of the form on empty space. A row with
                   the count in the middle is the same control in one line. */}
-              <label className="text-[10px] text-mono uppercase text-muted-foreground">Meal penalties — 1 = 1hr at straight rate</label>
-              <div className="mt-1 flex items-center gap-2">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   aria-label="One fewer meal penalty"
@@ -1574,6 +1598,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                 )}
               </div>
             </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-2">
@@ -1973,7 +1998,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           {duplicating && (
             <div className="border-t border-border p-3 space-y-2">
               <p className="text-[10px] text-muted-foreground">
-                Same project, employer, venue and rate — a new shift per date.
+                Same project, employer, venue and rate — a new shift for each day you tap.
               </p>
               {(job.startTime || job.endTime) && (
                 <label className="flex items-center gap-2 text-[11px] cursor-pointer select-none">
@@ -1981,34 +2006,56 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                   Same call times too ({job.startTime || '?'}{job.endTime ? ` – ${job.endTime}` : ''})
                 </label>
               )}
-              {dupDates.map((d, i) => (
-                <div key={i} className="flex items-center gap-1.5">
-                  <input
-                    type="date"
-                    value={d}
-                    onChange={e => setDupDates(prev => prev.map((v, vi) => vi === i ? e.target.value : v))}
-                    className="flex-1 h-9 rounded-lg bg-secondary/30 border border-border text-foreground text-xs font-mono px-3 focus:outline-none focus:border-primary/40"
-                  />
-                  {dupDates.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setDupDates(prev => prev.filter((_, vi) => vi !== i))}
-                      className="text-muted-foreground hover:text-destructive transition-colors p-1.5"
-                      aria-label="Remove date"
-                    >
-                      <X size={14} />
-                    </button>
-                  )}
-                </div>
-              ))}
-              <div className="flex gap-2 pt-1">
-                <Button variant="outline" size="sm" className="flex-1" onClick={() => setDupDates(prev => [...prev, ''])}>
-                  + Add date
-                </Button>
-                <Button size="sm" className="flex-1" onClick={handleDuplicate}>
-                  Create shift{dupDates.filter(Boolean).length !== 1 ? 's' : ''}
-                </Button>
+              {/* The days as calendar blocks, tapped on and off: a run from load
+                  in to load out is a row of taps, not a date box per day. */}
+              {(() => {
+                const anchor = parseISO(job.date);
+                const from = startOfWeek(isNaN(anchor.getTime()) ? new Date() : anchor);
+                const booked = new Set(projectDays(job, data.jobs, data.employers).map(j => j.date));
+                const days = Array.from({ length: dupWeeks * 7 }, (_, i) => addDays(from, i));
+                return (
+                  <div className="grid grid-cols-7 gap-1" data-testid="extend-days">
+                    {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+                      <span key={i} className="text-center text-[9px] text-mono text-muted-foreground">{d}</span>
+                    ))}
+                    {days.map((d, i) => {
+                      const iso = format(d, 'yyyy-MM-dd');
+                      const isThis = iso === job.date;
+                      const has = !isThis && booked.has(iso);
+                      const picked = dupDates.includes(iso);
+                      return (
+                        <button
+                          key={iso}
+                          type="button"
+                          disabled={isThis || has}
+                          aria-pressed={picked}
+                          aria-label={`${format(d, 'EEE, MMM d')}${isThis ? ', this shift' : has ? ', already booked' : ''}`}
+                          onClick={() => setDupDates(prev => (prev.includes(iso) ? prev.filter(x => x !== iso) : [...prev, iso]))}
+                          className={cn(
+                            'flex h-10 flex-col items-center justify-center rounded-md border text-mono text-xs leading-none transition-colors',
+                            picked ? 'border-primary bg-primary font-bold text-primary-foreground'
+                              : isThis ? 'border-primary/70 text-primary'
+                              : has ? 'border-border/30 text-muted-foreground/40'
+                              : 'border-border bg-secondary/20 text-foreground hover:border-primary/40',
+                          )}
+                        >
+                          {(i === 0 || d.getDate() === 1) && <span className="text-[8px] uppercase">{format(d, 'MMM')}</span>}
+                          <span>{d.getDate()}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+              <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>Outlined: this shift · faded: already on</span>
+                <button type="button" onClick={() => setDupWeeks(w => w + 2)} className="flex items-center gap-1 text-[11px] text-primary hover:underline">
+                  <Plus size={11} /> 2 more weeks
+                </button>
               </div>
+              <Button size="sm" className="w-full" disabled={dupDates.length === 0} onClick={handleDuplicate}>
+                {dupDates.length === 0 ? 'Tap the days to add' : `Add ${dupDates.length} day${dupDates.length === 1 ? '' : 's'}`}
+              </Button>
             </div>
           )}
         </div>
