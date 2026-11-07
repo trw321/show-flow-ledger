@@ -22,6 +22,10 @@ describe('how a payment came in', () => {
     expect(proofKindOf(pay({ description: 'Added by hand', enteredByHand: true }))).toBe('manual');
   });
 
+  it('reads a kind it does not know like an older payment', () => {
+    expect(proofKindOf(pay({ description: 'Check', matchProof: { kind: 'pigeon' as never, at: 'x' } }))).toBe('check');
+  });
+
   it('tells a document from your own word', () => {
     expect(isDocumented('stub')).toBe(true);
     expect(isDocumented('deposit')).toBe(true);

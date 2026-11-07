@@ -39,7 +39,8 @@ export const isDocumented = (kind: ProofKind) => kind !== 'manual' && kind !== '
 
 /** How a payment came in: what was saved, or for an older one what its description says. */
 export function proofKindOf(i: Income): ProofKind {
-  if (i.matchProof?.kind) return i.matchProof.kind;
+  // Only a kind this version knows: one it doesn't is read like an older payment.
+  if (i.matchProof?.kind && i.matchProof.kind in PROOF_LABELS) return i.matchProof.kind;
   const what = (i.description ?? '').toLowerCase();
   if (/^invoice\b/.test(what) || i.invoiceNumber) return 'invoice';
   if (what === 'marked paid' || what.startsWith('payment — full project')) return 'marked';
@@ -73,6 +74,6 @@ export function photoForOlderPayment(i: Income, project: Job[]): Job | undefined
 
 /** Whether the photo's amount agrees with the payment's. Undefined when the photo's amount isn't known. */
 export function photoAgrees(i: Income): boolean | undefined {
-  const said = i.matchProof?.read?.amount;
-  return said == null ? undefined : Math.abs(said - i.amount) < 0.005;
+  const said = Number(i.matchProof?.read?.amount);
+  return i.matchProof?.read?.amount == null || Number.isNaN(said) ? undefined : Math.abs(said - i.amount) < 0.005;
 }

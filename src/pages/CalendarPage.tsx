@@ -45,7 +45,7 @@ import { resizeImageForStorage, readFileAsDataUrl } from '@/lib/imageResize';
 import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import EventIntake from '@/components/EventIntake';
 import NewGigPage from '@/pages/NewGigPage';
-import { localToday } from '@/lib/today';
+import { localToday, showDay } from '@/lib/today';
 import { ptoBalance } from '@/lib/pto';
 
 const statusDot: Record<Job['status'], string> = {
@@ -1135,7 +1135,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                     <div key={i.id} className="flex items-center gap-2 text-xs">
                       <PayIcon income={i} className="text-muted-foreground" />
                       <span className={cn('font-bold text-mono', i.status === 'paid' ? 'text-dot-paid' : 'text-dot-pending')}>${i.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                      <span className="text-muted-foreground text-mono">{format(new Date(i.date + 'T12:00:00'), 'MMM d')}</span>
+                      <span className="text-muted-foreground text-mono">{showDay(i.date)}</span>
                       {i.status === 'pending' && (
                         <>
                           <span className="text-[10px] text-mono text-dot-pending">{/stub/i.test(i.description) ? 'stub · not in yet' : 'not in yet'}</span>
@@ -3305,7 +3305,7 @@ export default function CalendarPage() {
                                       <>
                                         <button type="button" onClick={e => { e.stopPropagation(); openJob(lead); }} className="flex min-w-0 items-center gap-1.5 text-[11px] text-mono text-dot-paid hover:underline">
                                           <Check size={12} className="shrink-0" />
-                                          <span className="truncate">Paid ${sum(payments)} · {format(new Date(payments.map(x => x.date).sort().pop()! + 'T12:00:00'), 'MMM d')}{sameCheck ? ' · same check' : ''}</span>
+                                          <span className="truncate">Paid ${sum(payments)} · {showDay(payments.map(x => x.date).sort().pop()!, 'MMM d')}{sameCheck ? ' · same check' : ''}</span>
                                         </button>
                                         <button type="button" onClick={e => { e.stopPropagation(); void unmarkProjectPaid(lead); }} className={rowButton}><Undo2 size={12} /> Undo</button>
                                       </>
@@ -3370,7 +3370,7 @@ export default function CalendarPage() {
                                 className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-left text-[11px] text-mono text-dot-paid hover:underline"
                               >
                                 <Check size={12} className="shrink-0" />
-                                <span>Paid ${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {format(new Date(last + 'T12:00:00'), 'MMM d')}</span>
+                                <span>Paid ${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {showDay(last)}</span>
                                 {kinds.map(i => <PayIcon key={i.id} income={i} />)}
                                 {repeated > 0 && <span className="shrink-0 text-warning">· {repeated} repeated</span>}
                                 {comingTotal > 0 && <span className="shrink-0 text-dot-pending">· ${Math.round(comingTotal).toLocaleString()} coming</span>}
@@ -3491,7 +3491,7 @@ export default function CalendarPage() {
                   <PayIcon income={i} className="text-muted-foreground" />
                   <p className="min-w-0 flex-1 truncate text-xs font-medium">{i.client || i.description}</p>
                   <span className="shrink-0 text-xs text-mono font-bold text-dot-paid">${i.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  <span className="shrink-0 text-[10px] text-mono text-muted-foreground">{format(new Date(i.date + 'T12:00:00'), 'MMM d')}</span>
+                  <span className="shrink-0 text-[10px] text-mono text-muted-foreground">{showDay(i.date)}</span>
                 </div>
                 {guess && (
                   <div className="text-[11px]">

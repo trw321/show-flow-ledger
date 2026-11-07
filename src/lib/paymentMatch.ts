@@ -1,4 +1,4 @@
-import { differenceInCalendarDays, format, parseISO } from 'date-fns';
+import { differenceInCalendarDays, format, isValid, parseISO } from 'date-fns';
 import type { Employer, Job } from './store';
 import { effectiveHoursWorked, jobPayBreakdown } from './payCalc';
 import { EMPTY_PROFILE, type PayerProfile } from './payerProfile';
@@ -131,7 +131,7 @@ export function matchPaymentToProject(payment: FoundPayment, project: Job[], ctx
 
   // 4. When it was paid.
   const workedDays = worked.map(j => j.date).sort();
-  if (workedDays.length > 0 && payment.date) {
+  if (workedDays.length > 0 && payment.date && isValid(parseISO(payment.date))) {
     possible += 10;
     const first = workedDays[0];
     const last = workedDays[workedDays.length - 1];

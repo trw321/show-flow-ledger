@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { format, parseISO } from 'date-fns';
 import { Banknote, Camera, FileText, Landmark, Loader2, PenLine, Receipt, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -16,10 +15,10 @@ import { isDocumented, photoAgrees, photoForOlderPayment, PROOF_LABELS, proofFro
 import { projectOf } from '@/lib/projectGrouping';
 import type { Income } from '@/lib/store';
 import { stubViewUrl, uploadStub } from '@/lib/stubStorage';
+import { showDay as day } from '@/lib/today';
 import { cn } from '@/lib/utils';
 
 const money = (n: number) => '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const day = (iso: string) => format(parseISO(iso), 'MMM d');
 
 const KIND_ICON: Record<ProofKind, typeof Wallet> = {
   stub: Receipt, check: Banknote, statement: FileText, deposit: Landmark, invoice: FileText, manual: PenLine, marked: Wallet,
@@ -36,9 +35,10 @@ export function ProofRow({ income, onOpen }: { income: Income; onOpen: () => voi
   const kind = proofKindOf(income);
   const Icon = KIND_ICON[kind];
   const m = income.matchProof;
+  const level = m?.level && m.level in LEVEL_TONE ? m.level : undefined;
   const verdict = !isDocumented(kind)
     ? 'no proof'
-    : m?.level ? `${m.percent}% ${m.level}`
+    : level ? `${m!.percent}% ${level}`
     : income.proofRef ? 'photo' : 'not scored';
   return (
     <button
@@ -49,7 +49,7 @@ export function ProofRow({ income, onOpen }: { income: Income; onOpen: () => voi
     >
       <Icon size={12} aria-hidden className="shrink-0 text-muted-foreground" />
       <span className="min-w-0 flex-1 truncate">{PROOF_LABELS[kind]} · {money(income.amount)}</span>
-      <span className={cn('shrink-0 uppercase', m?.level && isDocumented(kind) ? LEVEL_TONE[m.level] : 'text-muted-foreground')}>{verdict}</span>
+      <span className={cn('shrink-0 uppercase', level && isDocumented(kind) ? LEVEL_TONE[level] : 'text-muted-foreground')}>{verdict}</span>
       <span className="shrink-0 text-muted-foreground">Proof ›</span>
     </button>
   );
@@ -85,7 +85,7 @@ export default function PaymentProof({ income, onClose }: { income: Income; onCl
   }, [photoRef]);
 
   // Why it's this project: as scored when it was linked, or for an older one worked out now.
-  const saved = live.matchProof?.reasons ? live.matchProof : undefined;
+  const saved = Array.isArray(live.matchProof?.reasons) && live.matchProof!.level! in LEVEL_TONE ? live.matchProof : undefined;
   const now = useMemo(() => (
     saved || kind === 'marked' || project.length === 0 ? null
       : matchPaymentToProject({ amount: live.amount, date: live.date, payer: live.client }, project, { allJobs: data.jobs, employers: data.employers, payer: prefs.payer, paidJobIds: paidIds })
@@ -198,8 +198,8 @@ export default function PaymentProof({ income, onClose }: { income: Income; onCl
           {agrees !== undefined && (
             <p className={cn('text-[11px] font-semibold', agrees ? 'text-dot-paid' : 'text-warning')}>
               {agrees
-                ? `✓ Read off the ${PROOF_LABELS[kind].toLowerCase()}: ${money(live.matchProof!.read!.amount!)}, the same as the payment.`
-                : `Read off the ${PROOF_LABELS[kind].toLowerCase()}: ${money(live.matchProof!.read!.amount!)}. The payment is ${money(live.amount)}.`}
+                ? `✓ Read off the ${PROOF_LABELS[kind].toLowerCase()}: ${money(Number(live.matchProof!.read!.amount))}, the same as the payment.`
+                : `Read off the ${PROOF_LABELS[kind].toLowerCase()}: ${money(Number(live.matchProof!.read!.amount))}. The payment is ${money(live.amount)}.`}
             </p>
           )}
 
@@ -220,7 +220,7 @@ export default function PaymentProof({ income, onClose }: { income: Income; onCl
                   ))}
                 </ul>
                 <p className="text-[10px] text-muted-foreground">
-                  {saved ? `Scored ${day(saved.at.slice(0, 10))}, when it was matched.` : 'Worked out now. This payment is from before reasons were kept.'}
+                  {saved ? (saved.at ? `Scored ${day(String(saved.at).slice(0, 10))}, when it was matched.` : 'Scored when it was matched.') : 'Worked out now. This payment is from before reasons were kept.'}
                 </p>
               </>
             ) : (

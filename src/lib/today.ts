@@ -1,3 +1,16 @@
+import { format, isValid, parseISO } from 'date-fns';
+
+/**
+ * A stored date for showing, as `MMM d` or another pattern. A date that
+ * isn't a real YYYY-MM-DD (one read off a photo, or from an old version)
+ * shows as it was written, rather than taking the page down with it.
+ */
+export function showDay(date: string | undefined | null, pattern = 'MMM d'): string {
+  if (!date) return '';
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(date) ? parseISO(date) : null;
+  return d && isValid(d) ? format(d, pattern) : date;
+}
+
 /**
  * Today's date where you are, as YYYY-MM-DD — the form shift dates are kept in.
  *
