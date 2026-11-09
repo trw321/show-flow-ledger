@@ -22,6 +22,12 @@ export interface Job {
   hourlyRate?: number;
   minimumHours?: number;
   has6th7thDayRule?: boolean;
+  /**
+   * A composite team call (IATSE Local 16): lunch comes after four hours, so a
+   * meal penalty is owed past four unfed, and a Saturday pays time and a half
+   * all day, a Sunday double time. Ticked by hand.
+   */
+  compositeTeam?: boolean;
   steward?: string;
   parkingCost?: number;
   hoursWorked?: number;

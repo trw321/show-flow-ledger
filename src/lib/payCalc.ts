@@ -57,6 +57,8 @@ export interface OvertimeOptions {
   dayRate?: number;
   /** How many hours the day rate covers before overtime starts. Default 10. */
   dayRateHours?: number;
+  /** Why the whole day pays dayMultiplier, for the breakdown: "6th day", "composite Sunday". */
+  dayPremiumLabel?: string;
   /** Union dues as a percent of this day's gross (base/OT/DT/night/meal-penalty
    *  pay) — deducted here so every caller of calculateDayPay picks it up
    *  automatically. Does NOT apply a second time to weekly-OT-bonus or
@@ -257,7 +259,7 @@ export function calculateDayPay(
   }
 
   if (dayMultiplier > 1) {
-    breakdown.unshift(`Day multiplier: ${dayMultiplier}× (${dayMultiplier === 1.5 ? '6th day' : '7th day'})`);
+    breakdown.unshift(`Day multiplier: ${dayMultiplier}× (${overtimeOptions?.dayPremiumLabel ?? (dayMultiplier === 1.5 ? '6th day' : '7th day')})`);
   }
 
   return { billableHours: billableHours + (overtimeOptions?.minimumPaddingHours ?? 0), totalPay: pay, breakdown, duesAmount, taxAmount, nightHours };
@@ -466,6 +468,7 @@ export function jobPayBreakdown(
     nightLeftAtEnd: dayNightLeft,
     minimumPaddingHours: isSplitDay ? splitMinimumPadding(dayShifts) : 0,
     nightMultiplier: employer?.nightPremiumMultiplier,
+    dayPremiumLabel: dayPremiumLabel(job, employer, allJobs),
     unionDuesPercent: rates.unionDuesPercent,
     estimatedTaxPercent: rates.estimatedTaxPercent,
   });
@@ -661,12 +664,39 @@ export function dayInARow(job: Job, employer: Employer | undefined, allJobs: Job
  * What the 6th and 7th days in a row pay: 1.5×, then 2×, for an employer whose
  * terms say so. The shift can also carry the rule itself, as old ones may.
  */
-export function dayMultiplierFor(job: Job, employer: Employer | undefined, allJobs: Job[]): number {
+function streakMultiplier(job: Job, employer: Employer | undefined, allJobs: Job[]): number {
   if (!job.has6th7thDayRule && !employer?.sixthSeventhDayRule) return 1;
   const days = dayInARow(job, employer, allJobs);
   if (days >= 7) return 2;
   if (days >= 6) return 1.5;
   return 1;
+}
+
+/** A composite team call pays a Saturday at time and a half all day, a Sunday at double. */
+export function compositeWeekendMultiplier(job: Job): number {
+  if (!job.compositeTeam) return 1;
+  const day = parseISO(job.date);
+  if (Number.isNaN(day.getTime())) return 1;
+  return day.getDay() === 0 ? 2 : day.getDay() === 6 ? 1.5 : 1;
+}
+
+/**
+ * What the whole day pays, at the least: the 6th or 7th day in a row, or a
+ * composite weekend, whichever is more. The two don't multiply: a 7th day that
+ * is also a composite Sunday is double time, not quadruple. Overtime past it
+ * goes higher only where its own tier already does, as on any premium day.
+ */
+export function dayMultiplierFor(job: Job, employer: Employer | undefined, allJobs: Job[]): number {
+  return Math.max(streakMultiplier(job, employer, allJobs), compositeWeekendMultiplier(job));
+}
+
+/** Why a day pays its premium, for the breakdown. */
+export function dayPremiumLabel(job: Job, employer: Employer | undefined, allJobs: Job[]): string | undefined {
+  const weekend = compositeWeekendMultiplier(job);
+  const streak = streakMultiplier(job, employer, allJobs);
+  if (weekend > 1 && weekend >= streak) return weekend === 2 ? 'composite Sunday' : 'composite Saturday';
+  if (streak > 1) return streak === 2 ? '7th day' : '6th day';
+  return undefined;
 }
 
 /**

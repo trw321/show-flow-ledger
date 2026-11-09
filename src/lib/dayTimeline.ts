@@ -34,6 +34,9 @@ export const SPLIT_BREAK_MINUTES = 120;
  */
 export const MEAL_PENALTY_AFTER_HOURS = 5;
 
+/** A composite team call takes its lunch after four hours, so it is owed a penalty past four. */
+export const COMPOSITE_LUNCH_AFTER_HOURS = 4;
+
 /**
  * Hours you are guaranteed after an off-the-clock meal before they can send you
  * home. Come up short and the difference is paid at straight time anyway.
@@ -63,6 +66,8 @@ export interface DayGap {
 
 export interface DayTimeline {
   calls: DayCall[];
+  /** Hours worked unfed before a meal penalty is owed: five, or four on a composite call. */
+  penaltyAfterHours: number;
   gaps: DayGap[];
   /** First in to last out, including every gap. */
   spreadHours: number;
@@ -126,7 +131,7 @@ function resolve(hour: number, minute: number, meridiem: string | undefined, aft
  * the same with stray "lunch"/"meal" words) into calls and the gaps between
  * them. Returns null when no time range can be found at all.
  */
-export function parseDayTimeline(input: string, gapsOnClock: boolean[] = []): DayTimeline | null {
+export function parseDayTimeline(input: string, gapsOnClock: boolean[] = [], penaltyAfterHours: number = MEAL_PENALTY_AFTER_HOURS): DayTimeline | null {
   const pieces = input.split(RANGE_SPLIT).map(p => p.trim()).filter(Boolean);
   const ranges: Array<{ start: number; end: number }> = [];
   let cursor: number | null = null;
@@ -166,7 +171,7 @@ export function parseDayTimeline(input: string, gapsOnClock: boolean[] = []): Da
   const spreadMinutes = ranges[ranges.length - 1].end - ranges[0].start;
   const offClockMinutes = gaps.reduce((sum, g) => sum + (g.onClock ? 0 : g.minutes), 0);
 
-  return { calls, gaps, spreadHours: spreadMinutes / 60, workedHours: (spreadMinutes - offClockMinutes) / 60, offClockMinutes, ...derive(calls, gaps) };
+  return { calls, gaps, spreadHours: spreadMinutes / 60, workedHours: (spreadMinutes - offClockMinutes) / 60, offClockMinutes, penaltyAfterHours, ...derive(calls, gaps, penaltyAfterHours) };
 }
 
 /**
@@ -174,7 +179,7 @@ export function parseDayTimeline(input: string, gapsOnClock: boolean[] = []): Da
  * where the day splits, how long it was worked without a break, and what the
  * five-hour rule implies.
  */
-function derive(calls: DayCall[], gaps: DayGap[]) {
+function derive(calls: DayCall[], gaps: DayGap[], penaltyAfterHours: number) {
   const shifts: DayCall[][] = [];
   const workedStretches: number[] = [];
   // Whether each stretch ended in a meal. One that did owes nothing; one that ran
@@ -206,7 +211,7 @@ function derive(calls: DayCall[], gaps: DayGap[]) {
   // however long it ran, because they fed you.
   const suggestedMealPenalties = workedStretches.reduce((n, hours, i) => {
     if (stretchClosedByMeal[i]) return n;
-    const pastDue = hours - MEAL_PENALTY_AFTER_HOURS;
+    const pastDue = hours - penaltyAfterHours;
     return n + (pastDue > 0 ? Math.ceil(pastDue) : 0);
   }, 0);
 
@@ -240,6 +245,6 @@ export function withGapOnClock(timeline: DayTimeline, gapIndex: number, onClock:
     gaps,
     offClockMinutes,
     workedHours: (timeline.spreadHours * 60 - offClockMinutes) / 60,
-    ...derive(timeline.calls, gaps),
+    ...derive(timeline.calls, gaps, timeline.penaltyAfterHours),
   };
 }

@@ -14,7 +14,7 @@ import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
   AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
-import { parseDayTimeline, withGapOnClock, type DayTimeline } from '@/lib/dayTimeline';
+import { parseDayTimeline, withGapOnClock, COMPOSITE_LUNCH_AFTER_HOURS, MEAL_PENALTY_AFTER_HOURS, type DayTimeline } from '@/lib/dayTimeline';
 import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle, Flame, PenLine, Banknote, Wallet, Flag, Undo2 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO, differenceInCalendarDays } from 'date-fns';
 import type { Employer, Job, CalendarEvent, Income, Invoice } from '@/lib/store';
@@ -31,7 +31,7 @@ import { ratesForShift } from '@/lib/payerProfile';
 import { contractFor, contractsWorked, shiftContract } from '@/lib/contracts';
 import { alreadyRecorded } from '@/lib/paymentRepeats';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
-import { calculateDayPay, dayInARow, dayMultiplierFor, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross, jobPayBreakdown, compareCalls } from '@/lib/payCalc';
+import { calculateDayPay, dayInARow, dayMultiplierFor, dayPremiumLabel, compositeWeekendMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross, jobPayBreakdown, compareCalls } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { useSwipe } from '@/lib/useSwipe';
 import { cn } from '@/lib/utils';
@@ -436,6 +436,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   const [gapsOnClock, setGapsOnClock] = useState<boolean[]>(job.callGapsOnClock ?? []);
   const [callsOpen, setCallsOpen] = useState(!!job.callTimeline);
   const [needsReview, setNeedsReview] = useState(job.needsReview ?? false);
+  const [compositeTeam, setCompositeTeam] = useState(job.compositeTeam ?? false);
   // Changing an employer on one shift usually means it was wrong on the whole
   // run, so the rest of the project is offered rather than left behind.
   const [relabelProject, setRelabelProject] = useState(true);
@@ -470,7 +471,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   const [viewingStub, setViewingStub] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
-  const [dupWithTimes, setDupWithTimes] = useState(false);
+  // Which call times the new days get: none while a run is unconfirmed, the
+  // start alone when only the call is known, or both when the days repeat.
+  const [dupTimes, setDupTimes] = useState<'none' | 'start' | 'both'>('none');
   const [dupDates, setDupDates] = useState<string[]>([]);
   // The days on offer: the shift's own week and the two after it, and more
   // on asking, since a conference can run longer than that.
@@ -509,6 +512,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     setGapsOnClock(job.callGapsOnClock ?? []);
     setCallsOpen(!!job.callTimeline);
     setNeedsReview(job.needsReview ?? false);
+    setCompositeTeam(job.compositeTeam ?? false);
     setMealOnClock(job.mealOnClock ?? false);
     setMealPenalties(job.mealPenalties?.toString() ?? '');
     setNightPremiumConfirmed(job.nightPremiumConfirmed ?? true);
@@ -751,10 +755,10 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
         // day it was worked, and carrying them over means every copy arrives
         // pre-filled with hours nobody has done yet. The call times are a
         // choice: the same call on each day is common.
-        startTime: dupWithTimes ? job.startTime : undefined,
-        endTime: dupWithTimes ? job.endTime : undefined,
+        startTime: dupTimes !== 'none' ? job.startTime : undefined,
+        endTime: dupTimes === 'both' ? job.endTime : undefined,
         // A day already gone, with its times, is a record of work done.
-        status: dupWithTimes && job.startTime && job.endTime && date < localToday() ? 'completed' : 'upcoming',
+        status: dupTimes === 'both' && job.startTime && job.endTime && date < localToday() ? 'completed' : 'upcoming',
         dayRate: job.dayRate,
         dayRateHours: job.dayRateHours,
         paySchedule: job.paySchedule,
@@ -763,6 +767,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
         hourlyRate: job.hourlyRate,
         minimumHours: job.minimumHours,
         has6th7thDayRule: job.has6th7thDayRule,
+        compositeTeam: job.compositeTeam,
         steward: job.steward,
         mealDuration: job.mealDuration,
         mealOnClock: job.mealOnClock,
@@ -807,8 +812,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   // Everything below reads the timeline, so it has to be built first — reading a
   // const above its own declaration is a dead zone, not a hoist, and it took the
   // whole page down with "Cannot access 'timeline' before initialization".
+  const penaltyAfter = compositeTeam ? COMPOSITE_LUNCH_AFTER_HOURS : MEAL_PENALTY_AFTER_HOURS;
   const timeline: DayTimeline | null = callsOpen && callTimeline.trim()
-    ? parseDayTimeline(callTimeline, gapsOnClock)
+    ? parseDayTimeline(callTimeline, gapsOnClock, penaltyAfter)
     : null;
   // What the day you typed turns out to be decides how the meals are shown:
   // nothing to show for a straight call, the boxed buttons for a single lunch
@@ -832,6 +838,11 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     : ((mealDuration && !mealOnClock) ? mealDuration : 0) + ((meal2Duration && !meal2OnClock) ? meal2Duration : 0)
       + extraMeals.reduce((sum, m) => sum + (m.duration && !m.onClock ? m.duration : 0), 0);
   const mealDeductionHours = offClockMealMins / 60;
+  // A composite call marked no meal (MP): every hour, or part of one, past the
+  // four is a penalty, as on a run of calls. A lunch taken is taken at four.
+  const unfedComposite = compositeTeam && !timeline && mealDuration === 0 && actualHours > COMPOSITE_LUNCH_AFTER_HOURS
+    ? Math.ceil(actualHours - COMPOSITE_LUNCH_AFTER_HOURS)
+    : 0;
   const paidHours = Math.max(0, actualHours - mealDeductionHours);
   const billableHours = Math.max(paidHours, minHours);
   const minimumApplied = minHours > 0 && paidHours < minHours && paidHours > 0;
@@ -841,7 +852,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   // employer's W-4 — exactly as every other pay figure takes them.
   const previewRates = ratesForShift(job, employer, prefs.payer);
   const payPreview = rate > 0 && billableHours > 0
-    ? calculateDayPay(actualHours, rate, minHours, mealPenaltyUnits, dayMultiplierFor(job, employer, data.jobs), { duration: mealDuration, onClock: mealOnClock, offClockMinutesTotal: offClockMealMins }, { nightHours, nightMultiplier: employer?.nightPremiumMultiplier, unionDuesPercent: previewRates.unionDuesPercent, estimatedTaxPercent: previewRates.estimatedTaxPercent })
+    ? calculateDayPay(actualHours, rate, minHours, mealPenaltyUnits, dayMultiplierFor({ ...job, compositeTeam }, employer, data.jobs), { duration: mealDuration, onClock: mealOnClock, offClockMinutesTotal: offClockMealMins }, { nightHours, nightMultiplier: employer?.nightPremiumMultiplier, unionDuesPercent: previewRates.unionDuesPercent, estimatedTaxPercent: previewRates.estimatedTaxPercent, dayPremiumLabel: dayPremiumLabel({ ...job, compositeTeam }, employer, data.jobs) })
     : null;
   // calculateDayPay's own breakdown stops at dues/tax — vacation is applied
   // on top of that (same as jobGross/jobPayBreakdown), so it needs its own
@@ -963,6 +974,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
       if (!isFuture) updates.status = 'completed';
     }
     if (needsReview !== (job.needsReview ?? false)) updates.needsReview = needsReview || undefined;
+    if (compositeTeam !== (job.compositeTeam ?? false)) updates.compositeTeam = compositeTeam || undefined;
     // A reminder goes once what it asked for is done: hours on a shift made
     // from a payment, or the payroll company the app had assumed, changed.
     if (job.needsReview && needsReview) {
@@ -1018,6 +1030,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     (callsOpen && callTimeline.trim() ? callTimeline.trim() : undefined) !== (job.callTimeline ?? undefined) ||
     (!!callTimeline.trim() && JSON.stringify(gapsOnClock) !== JSON.stringify(job.callGapsOnClock ?? [])) ||
     needsReview !== (job.needsReview ?? false) ||
+    compositeTeam !== (job.compositeTeam ?? false) ||
     meal2Duration !== (job.meal2Duration ?? undefined) ||
     (!!meal2Duration && meal2OnClock !== (job.meal2OnClock ?? false)) ||
     extraMealsChanged ||
@@ -1460,7 +1473,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                     >
                       <AlertTriangle size={10} className="shrink-0 mt-0.5" />
                       <span>
-                        {timeline.workedStretches.filter(h => h > 5).map(h => `${h}h`).join(' and ')} with no food —
+                        {timeline.workedStretches.filter(h => h > penaltyAfter).map(h => `${h}h`).join(' and ')} with no food —
                         {' '}{timeline.suggestedMealPenalties} meal {timeline.suggestedMealPenalties === 1 ? 'penalty' : 'penalties'} owed. Tap to set.
                       </span>
                     </button>
@@ -1476,6 +1489,25 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
               partial break AND still be owed a penalty for it running late,
               so picking one no longer hides the other. */}
           <div className="space-y-1.5">
+            <label className="flex items-start gap-2 cursor-pointer select-none rounded-md border border-border p-2.5">
+              <input
+                type="checkbox"
+                checked={compositeTeam}
+                onChange={e => setCompositeTeam(e.target.checked)}
+                className="mt-0.5 rounded border-border shrink-0"
+              />
+              <span className="text-[11px] leading-tight">
+                <span className="font-medium">Composite team</span>
+                <span className="block text-[10px] text-muted-foreground mt-0.5">
+                  Lunch after 4 hours: a penalty past 4 unfed · Saturday 1.5× all day · Sunday 2× all day
+                </span>
+                {compositeTeam && compositeWeekendMultiplier({ ...job, compositeTeam }) > 1 && (
+                  <span className="mt-1 block text-[10px] font-bold text-dot-paid">
+                    {compositeWeekendMultiplier({ ...job, compositeTeam }) === 2 ? 'A Sunday: double time all day.' : 'A Saturday: time and a half all day.'}
+                  </span>
+                )}
+              </span>
+            </label>
             {/* The meal buttons stay the default and the right control for one
                 lunch, but once the calls already say where the meals are, setting
                 them again here would be a second source for the same fact. A
@@ -1552,6 +1584,18 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                 </button>
               )}
             </div>
+            {unfedComposite > 0 && (parseFloat(mealPenalties) || 0) !== unfedComposite && (
+              <button
+                type="button"
+                onClick={() => setMealPenalties(String(unfedComposite))}
+                className="flex items-start gap-1.5 text-left text-[10px] text-warning hover:underline"
+              >
+                <AlertTriangle size={10} className="shrink-0 mt-0.5" />
+                <span>
+                  {actualHours}h with no lunch on a composite call — {unfedComposite} meal {unfedComposite === 1 ? 'penalty' : 'penalties'} owed past 4 hours. Tap to set.
+                </span>
+              </button>
+            )}
             {(penaltyOpen || (parseFloat(mealPenalties) || 0) > 0) && (
             <div className="space-y-1.5 pt-1 border-t border-border/60">
               <div className="flex items-center justify-between">
@@ -2000,11 +2044,29 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
               <p className="text-[10px] text-muted-foreground">
                 Same project, employer, venue and rate — a new shift for each day you tap.
               </p>
-              {(job.startTime || job.endTime) && (
-                <label className="flex items-center gap-2 text-[11px] cursor-pointer select-none">
-                  <input type="checkbox" checked={dupWithTimes} onChange={e => setDupWithTimes(e.target.checked)} className="accent-primary" />
-                  Same call times too ({job.startTime || '?'}{job.endTime ? ` – ${job.endTime}` : ''})
-                </label>
+              {job.startTime && (
+                <div className="space-y-1">
+                  <p className="text-[10px] text-mono uppercase text-muted-foreground">Call times on the new days</p>
+                  <div className={cn('grid gap-1.5', job.endTime ? 'grid-cols-3' : 'grid-cols-2')} role="radiogroup" aria-label="Call times on the new days">
+                    {([
+                      { value: 'none', label: 'None', sub: 'left blank' },
+                      { value: 'start', label: 'Start', sub: job.startTime },
+                      ...(job.endTime ? [{ value: 'both' as const, label: 'Start & end', sub: `${job.startTime}–${job.endTime}` }] : []),
+                    ] as { value: typeof dupTimes; label: string; sub: string }[]).map(({ value, label, sub }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        role="radio"
+                        aria-checked={dupTimes === value}
+                        onClick={() => setDupTimes(value)}
+                        className={cn('rounded-md border px-1 py-1.5 text-center transition-colors', dupTimes === value ? 'border-primary/50 bg-primary/15' : 'border-border bg-secondary/20 hover:border-primary/30')}
+                      >
+                        <p className={cn('text-xs font-bold', dupTimes === value && 'text-primary')}>{label}</p>
+                        <p className="truncate text-[9px] text-mono text-muted-foreground">{sub}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
               {/* The days as calendar blocks, tapped on and off: a run from load
                   in to load out is a row of taps, not a date box per day. */}
