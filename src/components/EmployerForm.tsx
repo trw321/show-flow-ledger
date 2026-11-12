@@ -7,7 +7,8 @@ import { X } from 'lucide-react';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { CONTRACTS } from '@/lib/contracts';
 import { payLagDays, payScheduleLabel } from '@/lib/payTiming';
-import type { Employer } from '@/lib/store';
+import type { Employer, EmployerTaxProfile } from '@/lib/store';
+import { FILING_STATUS_LABELS, type FilingStatus } from '@/lib/taxEstimate';
 import { cn } from '@/lib/utils';
 
 /**
@@ -40,6 +41,9 @@ export interface EmployerFormState {
   ptoStartingHours: string;
   /** The W-4 filed with this employer says exempt. */
   w4Exempt: boolean;
+  /** Filing status on the W-4 filed with this employer. */
+  filingStatus: FilingStatus | '';
+  taxProfiles: EmployerTaxProfile[];
   /** When they pay, as picked: weekly, bi-weekly, or anything else. */
   schedule: 'weekly' | 'bi-weekly' | 'other';
   /** The first check takes weeks to arrive, and then the schedule starts. */
@@ -59,7 +63,7 @@ export const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyR
   // Breaking the hour is a union contract term. Some employers pay it and
   // some (Odeum) do not, so a new employer starts without it.
   workerStatus: 'w2', breakTheHour: false, roles: [], ptoEarnHours: '', ptoPerHoursWorked: '', ptoStartingHours: '',
-  w4Exempt: false, schedule: 'other', slowFirstCheck: false, firstCheckWeeks: '3', payLagDays: '',
+  w4Exempt: false, filingStatus: '', taxProfiles: [], schedule: 'other', slowFirstCheck: false, firstCheckWeeks: '3', payLagDays: '',
   contract: '', dtThreshold: '', minimumCall: '', mealPenaltyAfter: '', nightEndHour: '', sixthSeventh: false,
   payrollCompany: '', payPeriodStart: '' };
 
@@ -89,6 +93,8 @@ export function employerToForm(e: Employer, legacyExempt = false): EmployerFormS
     ptoPerHoursWorked: e.ptoPerHoursWorked?.toString() ?? '',
     ptoStartingHours: e.ptoStartingHours?.toString() ?? '',
     w4Exempt: e.w4Exempt ?? legacyExempt,
+    filingStatus: e.filingStatus ?? '',
+    taxProfiles: e.taxProfiles ?? [],
     schedule: e.paySchedule === 'weekly' || e.paySchedule === 'bi-weekly' ? e.paySchedule : 'other',
     slowFirstCheck: !!e.firstCheckWeeks,
     firstCheckWeeks: e.firstCheckWeeks?.toString() ?? '3',
@@ -148,6 +154,8 @@ function formTerms(form: EmployerFormState): Partial<Employer> {
     ptoStartingHours: num(form.ptoStartingHours),
     // A W-4 is a W2 thing; 1099 withholds nothing either way.
     w4Exempt: form.workerStatus === 'w2' ? form.w4Exempt : undefined,
+    filingStatus: form.workerStatus === 'w2' ? (form.filingStatus || undefined) : undefined,
+    taxProfiles: form.workerStatus === 'w2' ? form.taxProfiles : undefined,
     // When they pay. A delay only counts while the switch is on, so a stale
     // one cannot sit behind a plain weekly schedule.
     paySchedule: form.schedule === 'other' ? undefined : form.schedule,
@@ -170,6 +178,17 @@ export function EmployerForm({ initial, onSave, onCancel }: {
   const [form, setForm] = useState(initial);
   const { prefs } = useUserPrefs();
   const yourRate = prefs.payer.tax?.federalEffectivePercent;
+  const setTaxProfile = (year: number, patch: Partial<EmployerTaxProfile>) => setForm(f => ({
+    ...f,
+    taxProfiles: f.taxProfiles.map(profile => profile.taxYear === year ? { ...profile, ...patch } : profile),
+  }));
+  const addTaxProfile = () => setForm(f => {
+    const currentYear = new Date().getFullYear();
+    const taxYear = f.taxProfiles.some(profile => profile.taxYear === currentYear)
+      ? Math.max(currentYear, ...f.taxProfiles.map(profile => profile.taxYear)) + 1
+      : currentYear;
+    return { ...f, taxProfiles: [...f.taxProfiles, { taxYear }].sort((a, b) => a.taxYear - b.taxYear) };
+  });
   return (
     <div className="flex flex-col gap-2 p-3 rounded-xl border border-primary/30 bg-primary/5">
       <Input
@@ -219,6 +238,18 @@ export function EmployerForm({ initial, onSave, onCancel }: {
       {form.workerStatus === 'w2' ? (
         <div className="space-y-1.5 pt-1">
           <p className="text-xs">Federal tax this employer takes out</p>
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] text-muted-foreground">Filing status on this W-4</span>
+            <Select value={form.filingStatus || 'unset'} onValueChange={v => setForm(f => ({ ...f, filingStatus: v === 'unset' ? '' : v as FilingStatus }))}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unset">Not recorded</SelectItem>
+                {(Object.keys(FILING_STATUS_LABELS) as FilingStatus[]).map(status => (
+                  <SelectItem key={status} value={status}>{FILING_STATUS_LABELS[status]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </label>
           <div className="grid grid-cols-2 gap-1.5">
             {([
               { exempt: false, label: 'Withheld' },
@@ -251,6 +282,51 @@ export function EmployerForm({ initial, onSave, onCancel }: {
               className="h-8 text-xs"
             />
           )}
+          <details className="rounded-md border border-border px-2.5 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <summary className="cursor-pointer text-[11px] font-medium">Tax settings by year</summary>
+              <button type="button" className="text-[11px] text-primary" onClick={addTaxProfile}>Add year</button>
+            </div>
+            <p className="py-2 text-[10px] text-muted-foreground">Blank fields use the global tax profile above. Keep a separate row when this employer's state or W-4 changes.</p>
+            <div className="space-y-2">
+              {form.taxProfiles.map(profile => (
+                <div key={profile.taxYear} className="space-y-1.5 rounded-md bg-secondary/20 p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold">{profile.taxYear}</span>
+                    <button type="button" className="text-[10px] text-destructive" aria-label={`Remove ${profile.taxYear} tax profile`}
+                      onClick={() => setForm(f => ({ ...f, taxProfiles: f.taxProfiles.filter(item => item.taxYear !== profile.taxYear) }))}>Remove</button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <Input maxLength={2} placeholder={`State · ${prefs.payer.tax?.state ?? 'global'}`} value={profile.state ?? ''}
+                      onChange={event => setTaxProfile(profile.taxYear, { state: event.target.value.toUpperCase() || undefined })} className="h-8 text-xs" aria-label={`${profile.taxYear} state`} />
+                    <Select value={profile.filingStatus ?? 'inherit'} onValueChange={value => setTaxProfile(profile.taxYear, { filingStatus: value === 'inherit' ? undefined : value as FilingStatus })}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="inherit">Global filing status</SelectItem>
+                        {(Object.keys(FILING_STATUS_LABELS) as FilingStatus[]).map(status => <SelectItem key={status} value={status}>{FILING_STATUS_LABELS[status]}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Select value={profile.w4Exempt === undefined ? 'inherit' : profile.w4Exempt ? 'exempt' : 'withheld'} onValueChange={value => setTaxProfile(profile.taxYear, { w4Exempt: value === 'inherit' ? undefined : value === 'exempt' })}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="inherit">Use default exempt setting</SelectItem>
+                      <SelectItem value="exempt">W-4 exempt this year</SelectItem>
+                      <SelectItem value="withheld">Not exempt this year</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <Input type="number" min="0" step="0.1" placeholder={`Fed %${yourRate ? ` · ${yourRate}` : ''}`} value={profile.federalWithholdingPercent ?? ''}
+                      onChange={event => setTaxProfile(profile.taxYear, { federalWithholdingPercent: event.target.value ? Number(event.target.value) : undefined })} className="h-8 text-xs" aria-label={`${profile.taxYear} federal withholding percent`} />
+                    <Input type="number" min="0" step="0.1" placeholder={`State %${prefs.payer.tax?.stateTaxPercent ? ` · ${prefs.payer.tax.stateTaxPercent}` : ''}`} value={profile.stateTaxPercent ?? ''}
+                      onChange={event => setTaxProfile(profile.taxYear, { stateTaxPercent: event.target.value ? Number(event.target.value) : undefined })} className="h-8 text-xs" aria-label={`${profile.taxYear} state tax percent`} />
+                    <Input type="number" min="0" step="0.1" placeholder="SDI %" value={profile.stateDisabilityPercent ?? ''}
+                      onChange={event => setTaxProfile(profile.taxYear, { stateDisabilityPercent: event.target.value ? Number(event.target.value) : undefined })} className="h-8 text-xs" aria-label={`${profile.taxYear} disability percent`} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </details>
         </div>
       ) : (
         <p className="text-[10px] text-muted-foreground">Nothing is withheld. The tax on it shows on Money as still to pay.</p>

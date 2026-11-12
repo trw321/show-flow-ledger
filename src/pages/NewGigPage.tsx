@@ -3,6 +3,7 @@ import { resolveEmployer } from '@/lib/employerMatch';
 import { logParseFailure } from '@/lib/parseFailures';
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { useData } from '@/lib/DataContext';
+import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Upload, Loader2, Check, Plus, X, ChevronRight, ChevronDown, AlertTriangle, Trash2, Camera, PenLine, Phone, ChevronsUp, Clock } from 'lucide-react';
@@ -240,6 +241,7 @@ export default function NewGigPage({ onComplete, startAs }: {
   startAs?: 'hours';
 } = {}) {
   const { data, addJob, updateJob: updateExistingJob, addIncome, addEvent } = useData();
+  const { prefs } = useUserPrefs();
   const { fire: fireCelebration, Burst } = useCelebration();
 
   const [text, setText] = useState('');
@@ -439,6 +441,7 @@ export default function NewGigPage({ onComplete, startAs }: {
    * the person pasting it always knows which it is.
    */
   const handleParse = async (override?: { model: string; effort: ReasoningEffort }, forceType?: 'jobs' | 'hours') => {
+    if (prefs.aiFreeMode) { toast.info('AI is off. Use Manual entry or import a spreadsheet.'); return; }
     if (!text.trim()) { toast.error('Paste dispatch text first'); return; }
 
     // "Add to today and yesterday the same Odeum shift I logged on Monday" is
@@ -739,6 +742,7 @@ export default function NewGigPage({ onComplete, startAs }: {
   };
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (prefs.aiFreeMode) { toast.info('AI is off. Use Manual entry or import a spreadsheet.'); return; }
     const file = e.target.files?.[0];
     if (!file) return;
     setIsParsing(true);
@@ -1092,21 +1096,19 @@ export default function NewGigPage({ onComplete, startAs }: {
                 aria-label="Paste a dispatch offer or schedule"
               />
               <div className="flex items-center gap-2 flex-wrap">
-                <Button
+                {!prefs.aiFreeMode && <Button
                   onClick={() => handleParse(undefined, startAs)}
                   disabled={isParsing || !text.trim()}
                   size="sm"
                   className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground border-0 font-medium"
                 >
-                  {isParsing
-                    ? <><Loader2 size={13} className="animate-spin" />{parseProgress || 'Parsing…'}</>
-                    : <><Upload size={13} />Parse</>}
-                </Button>
+                  {isParsing ? <><Loader2 size={13} className="animate-spin" />{parseProgress || 'Parsing…'}</> : <><Upload size={13} />Parse</>}
+                </Button>}
                 {/* Telling it beats guessing. A future offer written casually
                     reads a lot like a note about hours already worked, and that
                     is the one call the classifier gets wrong often enough to
                     matter — while the person pasting always knows which it is. */}
-                <Button
+                {!prefs.aiFreeMode && <Button
                   onClick={() => parseAs('hours')}
                   disabled={isParsing || !text.trim()}
                   size="sm"
@@ -1115,8 +1117,8 @@ export default function NewGigPage({ onComplete, startAs }: {
                   title="A note about hours already worked, not an offer"
                 >
                   <Clock size={13} /> Add hours
-                </Button>
-                <Button
+                </Button>}
+                {!prefs.aiFreeMode && <Button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isParsing}
                   size="sm"
@@ -1124,7 +1126,7 @@ export default function NewGigPage({ onComplete, startAs }: {
                   className="gap-1.5 bg-background/40 border-border text-foreground/80 hover:bg-background/60 hover:text-white"
                 >
                   <Camera size={13} /> Photo
-                </Button>
+                </Button>}
                 {step === 'input' && (
                   <Button
                     onClick={() => setManualOpen(true)}
@@ -1161,7 +1163,7 @@ export default function NewGigPage({ onComplete, startAs }: {
                   trying harder. Every retry is recorded so the prompt or a
                   fixture can be fixed rather than the failure just retried
                   away. */}
-              {hasParsed && text.trim() && !isParsing && (
+              {!prefs.aiFreeMode && hasParsed && text.trim() && !isParsing && (
                 <div className="flex items-center gap-2 flex-wrap">
                   {upLevel ? (
                     <button

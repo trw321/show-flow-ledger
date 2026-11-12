@@ -367,6 +367,8 @@ export default function MoneyPage() {
     let w2 = 0;
     let selfEmployed = 0;
     let federalWithheld = 0;
+    let stateOwed = 0;
+    let stateDisabilityOwed = 0;
     const exemptAt = new Set<string>();
     for (const job of data.jobs) {
       if (!job.date.startsWith(year)) continue;
@@ -375,17 +377,31 @@ export default function MoneyPage() {
       // Vacation is wages too.
       const earned = b.gross + b.vacation;
       const employer = resolveEmployer(job.client, data.employers);
+      const employerTax = employer?.taxProfiles?.find(profile => profile.taxYear === Number(year));
+      stateOwed += earned * ((employerTax?.stateTaxPercent ?? prefs.payer.tax?.stateTaxPercent ?? 0) / 100);
+      stateDisabilityOwed += earned * ((employerTax?.stateDisabilityPercent ?? prefs.payer.tax?.stateDisabilityPercent ?? 0) / 100);
       if (employer?.workerStatus === '1099') {
         selfEmployed += earned;
       } else {
         w2 += earned;
         federalWithheld += b.tax;
-        if (withholdsNothing(employer, prefs.payer)) exemptAt.add(employer?.name ?? job.client);
+        if (withholdsNothing(employer, prefs.payer, Number(year))) exemptAt.add(employer?.name ?? job.client);
       }
     }
+    const estimate = estimateYearFromEarnings(
+      w2,
+      selfEmployed,
+      { ...(prefs.payer.tax ?? {}), stateTaxPercent: 0, stateDisabilityPercent: 0 },
+      Number(year),
+      federalWithheld,
+    );
+    estimate.state = stateOwed;
+    estimate.stateDisability = stateDisabilityOwed;
+    estimate.totalOwed += stateOwed + stateDisabilityOwed;
+    estimate.stillOwed += stateOwed + stateDisabilityOwed;
     return {
       year, w2, selfEmployed, exemptAt: [...exemptAt],
-      estimate: estimateYearFromEarnings(w2, selfEmployed, prefs.payer.tax ?? {}, Number(year), federalWithheld),
+      estimate,
     };
   }, [data.jobs, data.employers, prefs.payer]);
 

@@ -68,6 +68,20 @@ describe('which source owns which number', () => {
     expect(ratesForShift(job({ local: 'ia16' }), employer(), exempt).estimatedTaxPercent).toBe(0);
   });
 
+  it('uses the employer tax profile for that year and falls back outside it', () => {
+    const employerWithHistory = employer({
+      taxProfiles: [{ taxYear: 2026, state: 'CA', w4Exempt: true, federalWithholdingPercent: 0, stateTaxPercent: 6 }],
+    });
+    expect(ratesForShift(job({ date: '2026-09-21' }), employerWithHistory, profile).estimatedTaxPercent).toBe(0);
+    expect(ratesForShift(job({ date: '2025-09-21' }), employerWithHistory, profile).estimatedTaxPercent).toBe(22);
+  });
+
+  it('can override a global exempt setting for one employer and tax year', () => {
+    const globalExempt = { ...profile, tax: { ...profile.tax, federalExempt: true } };
+    const employerWithholding = employer({ taxProfiles: [{ taxYear: 2026, w4Exempt: false, federalWithholdingPercent: 11 }] });
+    expect(ratesForShift(job(), employerWithholding, globalExempt).estimatedTaxPercent).toBe(11);
+  });
+
   it('falls back to the employer for a ledger built before locals existed', () => {
     const r = ratesForShift(job(), employer({ unionDuesPercent: 3.5, vacationPercent: 8 }), EMPTY_PROFILE);
     expect(r.unionDuesPercent).toBe(3.5);

@@ -55,8 +55,12 @@ export function findLocalRates(profile: PayerProfile, localName?: string): Local
  * W-4 filed exempt with it. Exempt used to be one switch for every employer,
  * and an employer with no answer of its own still follows that switch.
  */
-export function withholdsNothing(employer: Employer | undefined, profile?: PayerProfile): boolean {
+export function withholdsNothing(employer: Employer | undefined, profile?: PayerProfile, taxYear?: number): boolean {
   if (employer?.workerStatus === '1099') return true;
+  const employerTax = taxYear === undefined
+    ? undefined
+    : employer?.taxProfiles?.find(item => item.taxYear === taxYear);
+  if (employerTax?.w4Exempt !== undefined) return employerTax.w4Exempt;
   return employer?.w4Exempt ?? profile?.tax?.federalExempt ?? false;
 }
 
@@ -73,6 +77,9 @@ export function ratesForShift(
   profile: PayerProfile,
 ): { unionDuesPercent?: number; estimatedTaxPercent?: number; vacationPercent?: number } {
   const fromLocal = findLocalRates(profile, job.local ?? employer?.unionLocal);
+  const taxYear = Number(job.date.slice(0, 4));
+  const employerTax = employer?.taxProfiles?.find(item => item.taxYear === taxYear);
+  const exempt = withholdsNothing(employer, profile, taxYear);
   return {
     unionDuesPercent: fromLocal?.unionDuesPercent ?? employer?.unionDuesPercent,
     vacationPercent: fromLocal?.vacationPercent ?? employer?.vacationPercent,
@@ -80,8 +87,8 @@ export function ratesForShift(
     // withholding, not Social Security or Medicare — those are in the
     // year-end estimate, which says so plainly. A 1099 employer withholds
     // nothing; what is owed on it shows in the year-end estimate instead.
-    estimatedTaxPercent: withholdsNothing(employer, profile)
+    estimatedTaxPercent: exempt
       ? 0
-      : employer?.estimatedTaxPercent ?? profile.tax?.federalEffectivePercent,
+      : employerTax?.federalWithholdingPercent ?? employer?.estimatedTaxPercent ?? profile.tax?.federalEffectivePercent,
   };
 }

@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Trash2, AlertTriangle } from 'lucide-react';
-import { FILING_STATUS_LABELS, SOCIAL_SECURITY_WAGE_BASE, type FilingStatus } from '@/lib/taxEstimate';
+import { estimateYearFromEarnings, FILING_STATUS_LABELS, SOCIAL_SECURITY_WAGE_BASE, type FilingStatus } from '@/lib/taxEstimate';
 import type { LocalRates } from '@/lib/payerProfile';
 
 /**
@@ -45,6 +45,15 @@ export default function TaxAndLocalsSettings() {
 
   const thisYear = new Date().getFullYear();
   const ssaBase = SOCIAL_SECURITY_WAGE_BASE[thisYear];
+  const budgetYear = tax.budgetYear ?? thisYear;
+  const hasAnnualBudget = (tax.expectedAnnualW2Income ?? 0) > 0 || (tax.expectedAnnual1099Income ?? 0) > 0;
+  const budgetEstimate = estimateYearFromEarnings(
+    tax.expectedAnnualW2Income ?? 0,
+    tax.expectedAnnual1099Income ?? 0,
+    tax,
+    budgetYear,
+    tax.expectedAnnualFederalWithholding,
+  );
 
   const setLocal = (index: number, patch: Partial<LocalRates>) =>
     setPayer({ ...payer, locals: payer.locals.map((l, i) => (i === index ? { ...l, ...patch } : l)) });
@@ -52,12 +61,14 @@ export default function TaxAndLocalsSettings() {
   return (
     <div className="space-y-6">
       {/* ── Your tax ──────────────────────────────────────────────────── */}
-      <section>
-        <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/60 uppercase mb-3">
-          Your tax
-        </p>
-
-        <div className="space-y-3">
+      <details className="group rounded-xl border border-border bg-card px-3 py-2.5">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-[9px] text-mono font-bold tracking-widest text-muted-foreground/60 uppercase">
+          Tax & year-end budget
+          <span className="text-[10px] font-normal normal-case tracking-normal">{budgetYear} estimate</span>
+        </summary>
+        <div className="space-y-4 pt-3">
+          <section className="space-y-3">
+            <p className="text-xs font-semibold">Your tax profile</p>
           <div className="grid grid-cols-2 gap-2">
             <label className="flex flex-col gap-1">
               <span className={LABEL}>Filing status</span>
@@ -174,8 +185,57 @@ export default function TaxAndLocalsSettings() {
               </div>
             </div>
           )}
+          </section>
+
+          <section className="space-y-2 border-t border-border/60 pt-3">
+            <div>
+              <p className="text-xs font-semibold">Year-end tax budget</p>
+              <p className="text-[10px] text-muted-foreground">Enter your expected full-year income and federal withholding. This is a planning estimate, not a filed return.</p>
+            </div>
+            <label className="flex flex-col gap-1">
+              <span className={LABEL}>Budget year</span>
+              <Input type="number" min="2020" max="2100" step="1" className={FIELD}
+                value={budgetYear}
+                onChange={e => setTax({ budgetYear: num(e.target.value) ?? thisYear })} />
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="flex flex-col gap-1">
+                <span className={LABEL}>Expected annual W-2 wages</span>
+                <Input type="number" min="0" step="1000" className={FIELD} placeholder="0"
+                  value={tax.expectedAnnualW2Income ?? ''}
+                  onChange={e => setTax({ expectedAnnualW2Income: num(e.target.value) })} />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className={LABEL}>Expected annual 1099 income</span>
+                <Input type="number" min="0" step="1000" className={FIELD} placeholder="0"
+                  value={tax.expectedAnnual1099Income ?? ''}
+                  onChange={e => setTax({ expectedAnnual1099Income: num(e.target.value) })} />
+              </label>
+            </div>
+            <label className="flex flex-col gap-1">
+              <span className={LABEL}>Expected federal withholding across W-2 jobs</span>
+              <Input type="number" min="0" step="100" className={FIELD} placeholder="Uses your effective rate if blank"
+                value={tax.expectedAnnualFederalWithholding ?? ''}
+                onChange={e => setTax({ expectedAnnualFederalWithholding: num(e.target.value) })} />
+            </label>
+            {hasAnnualBudget && (
+              <div className="rounded-md border border-primary/25 bg-primary/5 p-3 space-y-1.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">Estimated total tax for {budgetYear}</span>
+                  <span className="text-sm font-bold text-mono">${Math.round(budgetEstimate.totalOwed).toLocaleString()}</span>
+                </div>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">Expected amount to reserve after withholding</span>
+                  <span className="text-sm font-bold text-mono">${Math.round(Math.max(0, budgetEstimate.stillOwed)).toLocaleString()}</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Includes federal, Social Security, Medicare, state and self-employment tax where configured. W-4 filing status is recorded per employer; withholding is estimated from your rate or the annual amount above.
+                </p>
+              </div>
+            )}
+          </section>
         </div>
-      </section>
+      </details>
 
       {/* ── Your locals ───────────────────────────────────────────────── */}
       <section>

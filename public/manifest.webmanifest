@@ -1,0 +1,20 @@
+{
+  "id": "/",
+  "name": "Show Flow",
+  "short_name": "Show Flow",
+  "description": "Work calendar, hours, and pay estimates",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#101311",
+  "theme_color": "#101311",
+  "icons": [
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

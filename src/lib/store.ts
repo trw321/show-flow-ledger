@@ -160,6 +160,16 @@ export interface EmployerRole {
   dayRate?: number;
 }
 
+export interface EmployerTaxProfile {
+  taxYear: number;
+  state?: string;
+  filingStatus?: 'single' | 'married_jointly' | 'married_separately' | 'head_of_household';
+  w4Exempt?: boolean;
+  federalWithholdingPercent?: number;
+  stateTaxPercent?: number;
+  stateDisabilityPercent?: number;
+}
+
 export interface Employer {
   id: string;
   name: string;
@@ -218,6 +228,10 @@ export interface Employer {
   unionLocal?: string;
   /** What this employer withholds for federal income tax, as a percent of gross — set by the W-4 you filed with it. Unset uses your own federal rate. Ignored for 1099 work and an exempt W-4, which withhold nothing. */
   estimatedTaxPercent?: number;
+  /** Tax details can change by employer and year; unset fields inherit global defaults. */
+  taxProfiles?: EmployerTaxProfile[];
+  /** Filing status on the W-4 filed with this employer; recorded per employer. */
+  filingStatus?: 'single' | 'married_jointly' | 'married_separately' | 'head_of_household';
   /** The W-4 filed with this employer says exempt: no federal income tax comes out. Social Security and Medicare still do. Unset follows the old account-wide switch. */
   w4Exempt?: boolean;
   /** Vacation/fringe pay as a percent of gross earnings, added on top (e.g. 6 = 6%) — common IATSE benefit. Undefined/0 = not paid. */

@@ -8,6 +8,12 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import UpdateChecker from "./components/UpdateChecker";
 import { startProblemLog } from "./lib/problemLog";
 
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register('/sw.js');
+  });
+}
+
 posthog.init("phc_udVxe34hMTHqcfzkfPno3idfPZGS7NeFwVGG9PgNT4t6", {
   api_host: "https://us.i.posthog.com",
   person_profiles: "identified_only",

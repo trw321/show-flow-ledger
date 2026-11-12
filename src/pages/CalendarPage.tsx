@@ -3,6 +3,7 @@ import { isCallback, sameProject, projectKeysFor, projectOf as projectDays } fro
 import { projectSiblingsToRelabel } from '@/lib/projectGrouping';
 import StubEditor from '@/components/StubEditor';
 import MoneyRain from '@/components/MoneyRain';
+import WorkClock from '@/components/WorkClock';
 import { useNeedsHours } from '@/lib/useNeedsHours';
 import { useSearchParams } from 'react-router-dom';
 import { useData } from '@/lib/DataContext';
@@ -829,6 +830,10 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   // The clocked figure for a multi-call day is the whole spread, first in to last
   // out; the gaps come off it below, exactly as a single meal does.
   const actualHours = timeline ? timeline.spreadHours : (parseFloat(hoursWorked) || 0);
+  const enteredHours = parseFloat(hoursWorked);
+  const clockSpanHours = startTime && endTime ? calcHours(startTime, endTime) : 0;
+  const hoursDifferFromClockSpan = !timeline && clockSpanHours > 0 && Number.isFinite(enteredHours)
+    && Math.abs(enteredHours - clockSpanHours) > 0.01;
   const minHours = parseFloat(minimumHours) || 0;
   // Mirrors calculateDayPay: an off-the-clock meal comes out of the hours
   // before the minimum-call floor applies. Without this the on/off toggle
@@ -852,7 +857,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   // employer's W-4 — exactly as every other pay figure takes them.
   const previewRates = ratesForShift(job, employer, prefs.payer);
   const payPreview = rate > 0 && billableHours > 0
-    ? calculateDayPay(actualHours, rate, minHours, mealPenaltyUnits, dayMultiplierFor({ ...job, compositeTeam }, employer, data.jobs), { duration: mealDuration, onClock: mealOnClock, offClockMinutesTotal: offClockMealMins }, { nightHours, nightMultiplier: employer?.nightPremiumMultiplier, unionDuesPercent: previewRates.unionDuesPercent, estimatedTaxPercent: previewRates.estimatedTaxPercent, dayPremiumLabel: dayPremiumLabel({ ...job, compositeTeam }, employer, data.jobs) })
+    ? calculateDayPay(actualHours, rate, minHours, mealPenaltyUnits, dayMultiplierFor({ ...job, compositeTeam }, employer, data.jobs), { duration: mealDuration, onClock: mealOnClock, offClockMinutesTotal: offClockMealMins }, { nightHours, nightMultiplier: employer?.nightPremiumMultiplier, roundUpToWholeHours: employer?.roundUpToWholeHours, unionDuesPercent: previewRates.unionDuesPercent, estimatedTaxPercent: previewRates.estimatedTaxPercent, dayPremiumLabel: dayPremiumLabel({ ...job, compositeTeam }, employer, data.jobs) })
     : null;
   // calculateDayPay's own breakdown stops at dues/tax — vacation is applied
   // on top of that (same as jobGross/jobPayBreakdown), so it needs its own
@@ -1655,6 +1660,11 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                   what calculateDayPay expects. The number that matters when you are
                   looking at it is the hours actually worked, so it sits right here —
                   the meal toggle just above is what changes it. */}
+              {hoursDifferFromClockSpan && (
+                <p className="text-[10px] leading-tight text-warning">
+                  Pay uses the {enteredHours}h entered here, not the {clockSpanHours}h time span. Use Calls for multiple calls, or correct the hours if this is wrong.
+                </p>
+              )}
               {actualHours > 0 && (offClockMealMins > 0 || (mealDuration !== undefined && mealDuration > 0)) && (
                 <p className="text-[11px] text-mono leading-tight">
                   {mealDeductionHours > 0 ? (
@@ -2737,6 +2747,8 @@ export default function CalendarPage() {
         </div>
       }
     >
+      <WorkClock />
+
       {jobsNeedingHours.length > 0 && (
         <button
           onClick={() => { setSelectedDate(jobsNeedingHours[0].date); setSelectedJobId(jobsNeedingHours[0].id); }}

@@ -324,6 +324,7 @@ export type Database = {
           dismissed_suggestions: Json | null
           doubletime_multiplier: number | null
           estimated_tax_percent: number | null
+          filing_status: string | null
           first_check_weeks: number | null
           id: string
           meal_penalty_after_hours: number | null
@@ -347,6 +348,7 @@ export type Database = {
           pto_starting_hours: number | null
           retirement_match_percent: number | null
           roles: Json | null
+          tax_profiles: Json | null
           round_up_to_whole_hours: boolean | null
           sixth_seventh_day: boolean | null
           timekeeping_app: string | null
@@ -371,6 +373,7 @@ export type Database = {
           dismissed_suggestions?: Json | null
           doubletime_multiplier?: number | null
           estimated_tax_percent?: number | null
+          filing_status?: string | null
           first_check_weeks?: number | null
           id?: string
           meal_penalty_after_hours?: number | null
@@ -394,6 +397,7 @@ export type Database = {
           pto_starting_hours?: number | null
           retirement_match_percent?: number | null
           roles?: Json | null
+          tax_profiles?: Json | null
           round_up_to_whole_hours?: boolean | null
           sixth_seventh_day?: boolean | null
           timekeeping_app?: string | null
@@ -418,6 +422,7 @@ export type Database = {
           dismissed_suggestions?: Json | null
           doubletime_multiplier?: number | null
           estimated_tax_percent?: number | null
+          filing_status?: string | null
           first_check_weeks?: number | null
           id?: string
           meal_penalty_after_hours?: number | null
@@ -441,6 +446,7 @@ export type Database = {
           pto_starting_hours?: number | null
           retirement_match_percent?: number | null
           roles?: Json | null
+          tax_profiles?: Json | null
           round_up_to_whole_hours?: boolean | null
           sixth_seventh_day?: boolean | null
           timekeeping_app?: string | null

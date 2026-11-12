@@ -75,6 +75,12 @@ export interface TaxProfile {
   /** Credit per child under 17, and per other dependent. Yearly figures. */
   creditPerChild?: number;
   creditPerOtherDependent?: number;
+  /** Full-year income budget used for the Settings projection. */
+  budgetYear?: number;
+  expectedAnnualW2Income?: number;
+  expectedAnnual1099Income?: number;
+  /** Federal income tax expected to be withheld across W-2 jobs this year. */
+  expectedAnnualFederalWithholding?: number;
 }
 
 export interface TaxEstimate {

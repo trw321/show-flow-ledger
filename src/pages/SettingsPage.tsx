@@ -18,6 +18,7 @@ import { ptoBalance } from '@/lib/pto';
 import { payScheduleLabel } from '@/lib/payTiming';
 import { EMPTY_EMPLOYER_FORM, EmployerForm, employerFromForm, employerToForm, type EmployerFormState } from '@/components/EmployerForm';
 import { CONTRACTS, contractFor, contractsWorked } from '@/lib/contracts';
+import { FILING_STATUS_LABELS } from '@/lib/taxEstimate';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -210,7 +211,7 @@ function AccountSection() {
 }
 
 export default function SettingsPage() {
-  const { prefs, setWorkerType, setTabEnabled } = useUserPrefs();
+  const { prefs, setWorkerType, setTabEnabled, setAIFreeMode } = useUserPrefs();
   const { data, addEmployer, updateEmployer, deleteEmployer, deleteEverything } = useData();
   const { user } = useAuth();
   const [addingEmployer, setAddingEmployer] = useState(false);
@@ -231,16 +232,10 @@ export default function SettingsPage() {
       <div className="max-w-lg mx-auto space-y-8">
         <PageHeader title="Mode" description="Customize which sections appear in your app" showDot={false} />
 
-      <AccountSection />
-
-      <ThemePicker />
-
-      <TaxAndLocalsSettings />
-
-      {/* Worker profile */}
+      {/* User profile */}
       <section>
         <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/60 uppercase mb-3">
-          Worker Profile
+          User
         </p>
         <div className="grid grid-cols-3 gap-3">
           {WORKER_OPTIONS.map(({ type, label, subtitle, icon: Icon }) => {
@@ -272,6 +267,20 @@ export default function SettingsPage() {
           </div>
         )}
       </section>
+
+      <section className="flex items-center justify-between gap-4 rounded-xl border border-border bg-card px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium">AI-free mode</p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">AI readers off. Manual entry and spreadsheet import still work.</p>
+        </div>
+        <Switch checked={prefs.aiFreeMode} onCheckedChange={setAIFreeMode} aria-label="AI-free mode" />
+      </section>
+
+      <AccountSection />
+
+      <ThemePicker />
+
+      <TaxAndLocalsSettings />
 
       {/* Section toggles */}
       <section>
@@ -389,7 +398,8 @@ export default function SettingsPage() {
                   <p className="text-[10px] text-mono text-foreground/75 mt-0.5">
                     {emp.workerStatus === '1099' ? '1099' : 'W2'}
                     {contractFor(emp) && ` · ${contractFor(emp)!.short}`}
-                    {emp.workerStatus !== '1099' && (emp.w4Exempt ? ' · W-4 exempt' : emp.estimatedTaxPercent ? ` · withholds ${emp.estimatedTaxPercent}%` : '')}
+                    {emp.workerStatus !== '1099' && ` · W-4 ${emp.filingStatus ? FILING_STATUS_LABELS[emp.filingStatus] : 'status not recorded'}`}
+                    {emp.workerStatus !== '1099' && (emp.w4Exempt ? ' · exempt' : emp.estimatedTaxPercent ? ` · withholds ${emp.estimatedTaxPercent}%` : '')}
                     {payScheduleLabel(emp) && ` · ${payScheduleLabel(emp)}`}
                     {emp.roundUpToWholeHours && ' · breaks the hour'}
                     {(emp.roles?.length ?? 0) > 0 && ` · ${emp.roles!.map(r => r.name).join(', ')}`}
@@ -439,10 +449,12 @@ export default function SettingsPage() {
       </section>
 
       {/* The contracts, to read and to see who is on them. */}
-      <section>
-        <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/60 uppercase mb-3">
+      <details className="rounded-xl border border-border bg-card px-3 py-2.5 group">
+        <summary className="cursor-pointer list-none flex items-center justify-between gap-2 text-[9px] text-mono font-bold tracking-widest text-muted-foreground/60 uppercase">
           Contracts
-        </p>
+          <ChevronRight size={14} className="transition-transform group-open:rotate-90" />
+        </summary>
+        <div className="pt-3">
         {/* Built from the dispatches themselves: each shift keeps the one it was called under. */}
         <div className="mb-3 rounded-xl border border-border bg-card px-3 py-2.5">
           <p className="text-sm font-medium">On your shifts</p>
@@ -492,7 +504,8 @@ export default function SettingsPage() {
             );
           })}
         </div>
-      </section>
+        </div>
+      </details>
 
       {/* Danger zone */}
       <section className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 space-y-3">

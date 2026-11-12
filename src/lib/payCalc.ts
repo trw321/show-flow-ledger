@@ -625,7 +625,11 @@ export function getConsecutiveDayStreak(
   payrollCompany?: string,
 ): number {
   const targetDate = startOfDay(parseISO(entryDate));
-  const sameRun = (j: Job) => (payrollCompany ? (j.payrollCompany ?? j.client) === payrollCompany : j.client === client);
+  const sameRun = (j: Job) => {
+    const actual = payrollCompany ? (j.payrollCompany ?? j.client) : j.client;
+    const target = payrollCompany ?? client;
+    return String(actual ?? '').toLowerCase() === String(target ?? '').toLowerCase();
+  };
 
   // A day off, paid or not, breaks a run of days worked.
   const relevantJobs = allJobs.filter(
@@ -803,7 +807,8 @@ export function calculateExpectedPay(
   }
 
   for (const [date, { hours, mealPenalties, rate, offClockMealMinutes, postMealPadding, mealDuration, mealOnClock, sides }] of byDate.entries()) {
-    const dayMultiplier = dayMultiplierFor({ ...referenceJob, date }, employer, allJobs);
+    const representative = sides[0] ?? referenceJob;
+    const dayMultiplier = dayMultiplierFor({ ...representative, date }, employer, allJobs);
     // Every call's night hours count. This used to keep only the last call
     // seen, so a split day's after-midnight time could lose its premium
     // entirely depending on which call happened to be listed last.

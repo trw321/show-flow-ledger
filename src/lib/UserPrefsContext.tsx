@@ -32,6 +32,8 @@ export interface UserPrefs {
   invoiceFrom?: InvoiceFrom;
   /** Which estimate the calendar shows. Unset is take-home. */
   calendarPay?: 'net' | 'gross';
+  /** Turns off every AI-powered reader; manual entry remains available. */
+  aiFreeMode: boolean;
 }
 
 export const TAB_LABELS: Record<TabKey, { label: string; description: string }> = {
@@ -48,7 +50,7 @@ export const WORKER_PRESETS: Record<'w2' | '1099' | 'boss', Record<TabKey, boole
   boss:   { expenses: true,  income: true, payouts: true,  crew: true,  invoices: true },
 };
 
-const DEFAULT_PREFS: UserPrefs = { workerType: '1099', tabs: WORKER_PRESETS['1099'], payer: EMPTY_PROFILE };
+const DEFAULT_PREFS: UserPrefs = { workerType: '1099', tabs: WORKER_PRESETS['1099'], payer: EMPTY_PROFILE, aiFreeMode: false };
 
 function loadPrefs(uid?: string | null): UserPrefs {
   try {
@@ -66,6 +68,7 @@ function loadPrefs(uid?: string | null): UserPrefs {
       payer: { ...EMPTY_PROFILE, ...(parsed.payer ?? {}) },
       invoiceFrom: parsed.invoiceFrom,
       calendarPay: parsed.calendarPay,
+      aiFreeMode: parsed.aiFreeMode ?? false,
     };
   } catch {
     return DEFAULT_PREFS;
@@ -90,6 +93,7 @@ interface UserPrefsContextValue {
   setPayer: (payer: PayerProfile) => void;
   setInvoiceFrom: (from: InvoiceFrom) => void;
   setCalendarPay: (view: 'net' | 'gross') => void;
+  setAIFreeMode: (enabled: boolean) => void;
 }
 
 const UserPrefsContext = createContext<UserPrefsContextValue | null>(null);
@@ -134,6 +138,7 @@ export function UserPrefsProvider({ children }: { children: React.ReactNode }) {
   const setPayer = (payer: PayerProfile) => update({ ...prefs, payer });
   const setInvoiceFrom = (invoiceFrom: InvoiceFrom) => update({ ...prefs, invoiceFrom });
   const setCalendarPay = (calendarPay: 'net' | 'gross') => update({ ...prefs, calendarPay });
+  const setAIFreeMode = (enabled: boolean) => update({ ...prefs, aiFreeMode: enabled });
 
   const setTabEnabled = (tab: TabKey, enabled: boolean) => {
     const next = { ...prefs.tabs, [tab]: enabled };
@@ -143,7 +148,7 @@ export function UserPrefsProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <UserPrefsContext.Provider value={{ prefs, setWorkerType, setTabEnabled, setPayer, setInvoiceFrom, setCalendarPay }}>
+    <UserPrefsContext.Provider value={{ prefs, setWorkerType, setTabEnabled, setPayer, setInvoiceFrom, setCalendarPay, setAIFreeMode }}>
       {children}
     </UserPrefsContext.Provider>
   );
