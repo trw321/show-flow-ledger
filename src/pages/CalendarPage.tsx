@@ -3,7 +3,7 @@ import { isCallback, sameProject, projectKeysFor, projectOf as projectDays } fro
 import { projectSiblingsToRelabel } from '@/lib/projectGrouping';
 import StubEditor from '@/components/StubEditor';
 import MoneyRain from '@/components/MoneyRain';
-import WorkClock from '@/components/WorkClock';
+import LiveWorkPay from '@/components/LiveWorkPay';
 import { useNeedsHours } from '@/lib/useNeedsHours';
 import { useSearchParams } from 'react-router-dom';
 import { useData } from '@/lib/DataContext';
@@ -2747,7 +2747,7 @@ export default function CalendarPage() {
         </div>
       }
     >
-      <WorkClock />
+        <LiveWorkPay />
 
       {jobsNeedingHours.length > 0 && (
         <button

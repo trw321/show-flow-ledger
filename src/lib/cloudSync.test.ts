@@ -312,7 +312,7 @@ describe('every field survives the trip to the database and back', () => {
     weeklyOvertimeThresholdHours: 40, overtimeMultiplier: 1.5, doubletimeMultiplier: 2, nightPremiumEnabled: true,
     nightPremiumStartHour: 0, nightPremiumEndHour: 6, nightPremiumMultiplier: 2, defaultDayRate: 400, dayRateHours: 10,
     retirementMatchPercent: 6, roundUpToWholeHours: true, postMealMinimumHours: 2, mealPenaltyAfterHours: 5,
-    unionDuesPercent: 3.5, unionLocal: '16', estimatedTaxPercent: 20, filingStatus: 'married_jointly',
+    unionDuesPercent: 3.5, unionLocal: '16', estimatedTaxPercent: 20, filingStatus: 'married_jointly', lateArrivalRule: 'actual_clock_in',
     taxProfiles: [{ taxYear: 2026, state: 'CA', filingStatus: 'married_jointly', w4Exempt: true, federalWithholdingPercent: 0, stateTaxPercent: 6, stateDisabilityPercent: 1.1 }],
     w4Exempt: true, vacationPercent: 8,
     firstCheckWeeks: 3, payLagDays: 30, payPeriodStart: '2026-11-01', contract: 'ia16-basic', minimumCallHours: 5, sixthSeventhDayRule: true,

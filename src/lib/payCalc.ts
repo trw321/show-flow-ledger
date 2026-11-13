@@ -281,7 +281,7 @@ export function compareCalls(a: Job, b: Job): number {
   return Number.isNaN(gap) ? 0 : gap;
 }
 
-function parseTimeToMinutes(t: string): number {
+export function parseTimeToMinutes(t: string): number {
   const m = t.match(/(\d{1,2}):?(\d{2})?\s*(am|pm|a|p)?/i);
   if (!m) return NaN;
   let h = parseInt(m[1]);

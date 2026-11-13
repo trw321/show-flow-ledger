@@ -214,6 +214,8 @@ export interface Employer {
   defaultDayRate?: number;
   /** How many hours this employer's day rate covers. Default 10. */
   dayRateHours?: number;
+  /** How a late arrival changes the live pay estimate for this employer. */
+  lateArrivalRule?: 'actual_clock_in' | 'scheduled_start';
   /** Employers like Odeum match into a retirement plan — a percentage of gross they owe on top of the pay, to the plan rather than to you. Tracked so a missing one is visible; never part of take-home. */
   retirementMatchPercent?: number;
   /** Union hours "break the hour": any part of an hour worked bills as a whole hour, so 6h06m pays 7. Off by default — not every contract rounds. */

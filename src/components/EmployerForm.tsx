@@ -31,6 +31,7 @@ export interface EmployerFormState {
   payBy: 'hour' | 'day';
   defaultDayRate: string;
   dayRateHours: string;
+  lateArrivalRule: Employer['lateArrivalRule'] | '';
   workerStatus: 'w2' | '1099';
   breakTheHour: boolean;
   roles: { name: string; rate: string; by: 'hour' | 'day' }[];
@@ -60,6 +61,7 @@ export interface EmployerFormState {
 }
 
 export const EMPTY_EMPLOYER_FORM: EmployerFormState = { name: '', defaultHourlyRate: '', timekeepingApp: '', overtimeRule: 'daily', threshold: '', nightPremiumEnabled: true, unionDuesPercent: '', unionLocal: '', estimatedTaxPercent: '', vacationPercent: '', retirementMatchPercent: '', payBy: 'hour', defaultDayRate: '', dayRateHours: '',
+  lateArrivalRule: '',
   // Breaking the hour is a union contract term. Some employers pay it and
   // some (Odeum) do not, so a new employer starts without it.
   workerStatus: 'w2', breakTheHour: false, roles: [], ptoEarnHours: '', ptoPerHoursWorked: '', ptoStartingHours: '',
@@ -84,6 +86,7 @@ export function employerToForm(e: Employer, legacyExempt = false): EmployerFormS
     payBy: e.defaultDayRate ? 'day' : 'hour',
     defaultDayRate: e.defaultDayRate?.toString() ?? '',
     dayRateHours: e.dayRateHours?.toString() ?? '',
+    lateArrivalRule: e.lateArrivalRule ?? '',
     workerStatus: e.workerStatus ?? 'w2',
     breakTheHour: e.roundUpToWholeHours ?? false,
     roles: (e.roles ?? []).map(r => ({ name: r.name, rate: (r.hourlyRate ?? r.dayRate)?.toString() ?? '', by: r.dayRate && !r.hourlyRate ? 'day' as const : 'hour' as const })),
@@ -141,6 +144,7 @@ function formTerms(form: EmployerFormState): Partial<Employer> {
   const num = (v: string) => (v.trim() ? parseFloat(v) : undefined);
   return {
     workerStatus: form.workerStatus,
+    lateArrivalRule: form.lateArrivalRule || undefined,
     roundUpToWholeHours: form.breakTheHour,
     roles: form.roles
       .filter(r => r.name.trim())
@@ -217,6 +221,18 @@ export function EmployerForm({ initial, onSave, onCancel }: {
             this employer's past shifts too. The minimum call is for new shifts.
           </p>
         )}
+      </div>
+      <div className="space-y-1">
+        <p className="text-xs">Late arrival estimate</p>
+        <Select value={form.lateArrivalRule || 'unset'} onValueChange={value => setForm(f => ({ ...f, lateArrivalRule: value === 'unset' ? '' : value as EmployerFormState['lateArrivalRule'] }))}>
+          <SelectTrigger className="h-8 text-xs" aria-label="Late arrival estimate"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="unset">Not set</SelectItem>
+            <SelectItem value="actual_clock_in">Use actual clock-in time</SelectItem>
+            <SelectItem value="scheduled_start">Keep scheduled start</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-[10px] text-muted-foreground">Used when you mark a shift late. The offer still supplies its rate and pay terms.</p>
       </div>
       {/* W2 takes tax out of each check; 1099 takes nothing, and it is all
           still owed at the year end, self-employment tax included. */}

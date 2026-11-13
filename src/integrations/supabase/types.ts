@@ -329,6 +329,7 @@ export type Database = {
           id: string
           meal_penalty_after_hours: number | null
           minimum_call_hours: number | null
+          late_arrival_rule: string | null
           modified_at: string | null
           name: string
           night_premium_enabled: boolean | null
@@ -378,6 +379,7 @@ export type Database = {
           id?: string
           meal_penalty_after_hours?: number | null
           minimum_call_hours?: number | null
+          late_arrival_rule?: string | null
           modified_at?: string | null
           name: string
           night_premium_enabled?: boolean | null
@@ -427,6 +429,7 @@ export type Database = {
           id?: string
           meal_penalty_after_hours?: number | null
           minimum_call_hours?: number | null
+          late_arrival_rule?: string | null
           modified_at?: string | null
           name?: string
           night_premium_enabled?: boolean | null
