@@ -21,7 +21,12 @@ serve(async (req) => {
       ? `Available jobs to match against: ${jobs.map((j: { name: string; client: string }) => `"${j.name}" (client: ${j.client})`).join(", ")}`
       : "";
 
-    const systemPrompt = isPaystub
+    // The model doesn't know what year it is, and left to itself it read a
+    // check dated "10/23/26" as 2023-10-23. Every document type gets told.
+    const today = new Date().toISOString().split("T")[0];
+    const datesNote = `\n\nDATES. Today is ${today}. Documents you are shown are recent: dated within the last few months, never more than a few days in the future. A two-digit year belongs to this century: "10/23/26" is ${today.slice(0, 2)}26-10-23, never 2023. Read slashed or dashed US dates month first ("10/23/26" is October 23). When no year is printed, use the year that puts the date closest before today. Never use a year earlier than the one printed.`;
+
+    const basePrompt = isPaystub
       ? `You are a pay stub parser for an AV/entertainment industry technician. Analyze the uploaded pay stub or check-stub image and extract its full structured breakdown — this is used to verify calculated pay against what was actually paid, so accuracy on the dollar figures matters more than completeness of any narrative text.
 
 Extract:
@@ -53,6 +58,7 @@ NEVER INVENT THE BREAKDOWN. Only include an entry when a specific calendar date 
 
 If you can't determine the date, use today's date. Return ONLY valid JSON.`
       : `You are a financial document parser specializing in bank statements and receipts. Extract all transactions/line items you can identify. For each transaction extract: description, amount (as a number), date (as YYYY-MM-DD), and category. Categories should be one of: Travel, Gear Rental, Consumables, Fuel, Meals, Lodging, Labor, Insurance, Software, Tools, Entertainment, Medical, Rent, IATSE Union Dues, Other. If you can't determine the category, use "Other". If you can't determine the date, use today's date. Return ONLY valid JSON.`;
+    const systemPrompt = basePrompt + datesNote;
 
     const userPrompt = isPaystub
       ? "Extract the full structured breakdown from this pay stub image: employer, pay period, hours, rate, gross, dues, tax, vacation, and net pay."

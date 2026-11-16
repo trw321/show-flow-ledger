@@ -204,3 +204,28 @@ function bestOf(payment: FoundPayment, ctx: MatchContext, skipKey?: string): { p
   }
   return best;
 }
+
+/**
+ * A payment date whose year the photo reader got wrong. A check dated
+ * "10/23/26" came back as 2023-10-23: three years before any shift, so it
+ * matched nothing. When the date as read sits near no worked shift, but the
+ * same month and day this year (or last) sits near your work, that's the date,
+ * and the year it was read as is kept so the screen can say what changed. A
+ * date that already fits your shifts, or that fits none either way, is left
+ * exactly as read.
+ */
+export function settleReadYear(date: string, jobs: Job[], today: string): { date: string; readAs?: string } {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { date };
+  const worked = jobs.filter(j => effectiveHoursWorked(j) > 0);
+  const fits = (d: string) => worked.some(j => withinLookBack(d, j.date));
+  if (fits(date)) return { date };
+  const thisYear = Number(today.slice(0, 4));
+  for (const year of [thisYear, thisYear - 1]) {
+    const candidate = `${year}${date.slice(4)}`;
+    if (candidate === date || !isValid(parseISO(candidate)) || candidate.slice(5) !== date.slice(5)) continue;
+    // A payment can't be dated more than a week ahead.
+    if (differenceInCalendarDays(parseISO(candidate), parseISO(today)) > 7) continue;
+    if (fits(candidate)) return { date: candidate, readAs: date };
+  }
+  return { date };
+}

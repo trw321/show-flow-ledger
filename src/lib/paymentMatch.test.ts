@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchPaymentToProject, betterProject, bestProjectFor, projectOf, type MatchContext } from './paymentMatch';
+import { matchPaymentToProject, betterProject, bestProjectFor, projectOf, settleReadYear, type MatchContext } from './paymentMatch';
 import type { Job } from './store';
 
 const shift = (id: string, date: string, extra: Partial<Job> = {}): Job => ({
@@ -74,5 +74,29 @@ describe('a payment that belongs to another project', () => {
   it('stays quiet when this project is the right one', () => {
     const all = [...gala, ...launch];
     expect(betterProject({ amount: 800, date: '2026-10-16', payer: 'Odeum', hoursOn: ['2026-10-08'] }, gala[0], ctx(all))).toBeNull();
+  });
+});
+
+describe('a payment year the photo reader got wrong', () => {
+  const shift = (date: string) => ({
+    id: date, name: 'THE RUSH TRIBUTE PROJECT', client: 'PALACE OF FINE ARTS', venue: 'Palace of Fine Arts',
+    date, status: 'completed', hoursWorked: 5, hourlyRate: 54.09, has6th7thDayRule: false, notes: '', createdAt: 'x',
+  } as Job);
+  const jobs = [shift('2026-10-16')];
+
+  it('moves a check read as 2023 to 2026 when that is when the work was', () => {
+    expect(settleReadYear('2023-10-23', jobs, '2026-11-15')).toEqual({ date: '2026-10-23', readAs: '2023-10-23' });
+  });
+
+  it('leaves a date that already fits the shifts alone', () => {
+    expect(settleReadYear('2026-10-23', jobs, '2026-11-15')).toEqual({ date: '2026-10-23' });
+  });
+
+  it('leaves an old date alone when no shift fits either way', () => {
+    expect(settleReadYear('2023-03-02', jobs, '2026-11-15')).toEqual({ date: '2023-03-02' });
+  });
+
+  it('never moves a date into the future', () => {
+    expect(settleReadYear('2023-12-20', [shift('2025-12-15')], '2026-11-15')).toEqual({ date: '2025-12-20', readAs: '2023-12-20' });
   });
 });

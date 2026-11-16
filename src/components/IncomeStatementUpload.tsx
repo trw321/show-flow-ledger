@@ -2,7 +2,8 @@ import { useState, useRef, useMemo } from 'react';
 import { useData } from '@/lib/DataContext';
 import { useAuth } from '@/lib/AuthContext';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
-import { bestProjectFor, type MatchContext, type ProjectMatch } from '@/lib/paymentMatch';
+import { bestProjectFor, settleReadYear, type MatchContext, type ProjectMatch } from '@/lib/paymentMatch';
+import { localToday } from '@/lib/today';
 import { paidShiftIds } from '@/lib/payPeriods';
 import { effectiveHoursWorked } from '@/lib/payCalc';
 import { proofFromMatch, type ProofKind } from '@/lib/paymentProof';
@@ -34,6 +35,20 @@ export interface ParsedIncome {
   invoiceNumber?: string;
   /** Hours the stub itemises by day, when it does — the surest sign of which shift it paid. */
   breakdown?: { date: string; hours: number; type: 'ST' | 'OT' | 'DT' }[];
+  /** The date as the photo was read, when its year was corrected to match your shifts. */
+  readAs?: string;
+}
+
+/**
+ * The year a payment was read with, checked against your shifts. When it's
+ * corrected, the stub's per-day dates move to the same year with it.
+ */
+export function withSettledYear(txn: ParsedIncome, jobs: Job[], today: string): ParsedIncome {
+  const { date, readAs } = settleReadYear(txn.date, jobs, today);
+  if (!readAs) return txn;
+  const wrongYear = readAs.slice(0, 4);
+  const breakdown = txn.breakdown?.map(b => (b.date.startsWith(wrongYear) ? { ...b, date: date.slice(0, 4) + b.date.slice(4) } : b));
+  return { ...txn, date, readAs, breakdown };
 }
 
 /** The shift a payment was matched to, and every reason it was picked. */
@@ -162,7 +177,8 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
       }
 
       const responseData = await resp.json();
-      const txns: ParsedIncome[] = responseData.transactions || [];
+      const today = localToday();
+      const txns: ParsedIncome[] = (responseData.transactions || []).map((t: ParsedIncome) => withSettledYear(t, data.jobs, today));
       // The same money read twice — a stub and the check stapled to it — or
       // already in the ledger starts out unticked, so adding everything that
       // was found cannot count one paycheck twice.
@@ -368,7 +384,7 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
                           <p className="mb-1 text-[9px] text-mono uppercase tracking-widest text-muted-foreground">Read from the photo</p>
                           <dl className="space-y-0.5 text-[11px]">
                             <Read label="Paid by" value={txn.client} />
-                            <Read label="Paid on" value={txn.date ? format(parseISO(txn.date), 'MMM d, yyyy') : ''} />
+                            <Read label="Paid on" value={txn.date ? format(parseISO(txn.date), 'MMM d, yyyy') + (txn.readAs ? ` (photo read ${txn.readAs.slice(0, 4)}; changed to match your shifts)` : '') : ''} />
                             <Read label="Amount" value={`$${Math.abs(txn.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`} />
                             <Read label="What" value={txn.description} />
                             <Read label="Invoice" value={txn.invoiceNumber} />
