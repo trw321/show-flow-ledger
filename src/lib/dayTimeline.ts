@@ -97,11 +97,33 @@ const RANGE_SPLIT = /(?:,|;|\band\b|&|\bthen\b|\n|\/)+/i;
 /** One call written out: a time, a dash or "to", another time. */
 const RANGE = /(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?|a|p)?\s*(?:-|–|—|\bto\b|\btill\b|\buntil\b)\s*(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?|a|p)?/i;
 /**
- * A date written into the calls ("11/12 jewish museum 8am-12:30", "2026-11-12
- * 8-5"). Its numbers are not times, and the slash in it is not a break between
- * calls. A slash right after a dash ("8-12/1-5") is a break, so that is left.
+ * A date written into the calls: "11/12", "11.12", "11/12/26", "11-12-26",
+ * "11.12.26", "2026-11-12". Its numbers are not times, and its slash is not a
+ * break between calls. A slash or dot right next to a dash ("8-12/1-5",
+ * "8.30-5") belongs to the calls, so that is left alone.
  */
-const DATES = /(?<![-–—\d:])\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b(?![-–—])|\b\d{4}-\d{1,2}-\d{1,2}\b/g;
+const SURE_DATES = [
+  /(?<![-–—\d:./])\b\d{1,2}([/.])\d{1,2}(?:\1(?:\d{4}|\d{2}))?\b(?![-–—/]|\.\d)/g,
+  /(?<![-–—\d:./])\b\d{1,2}-\d{1,2}-(?:\d{4}|\d{2})\b(?![-–—])/g,
+  /\b\d{4}-\d{1,2}-\d{1,2}\b/g,
+];
+/**
+ * "11-12" on its own reads just like a call from 11 to 12. It's the date when
+ * it's the shift's own month and day and words follow it, as a show or venue
+ * name does ("11-12 jewish museum 8am-12:30"), but not a meal word ("8-12
+ * lunch 1-5" is two calls).
+ */
+const DASH_DATE = /(?<![-–—\d:./])\b(\d{1,2})-(\d{1,2})\b(?=\s+(?!lunch|meal|break|dinner|walk|mp\b)[a-z])/gi;
+
+/** The text with any dates in it blanked out, so only times are left to read. */
+export function withoutDates(input: string, onDate?: string): string {
+  let text = SURE_DATES.reduce((t, re) => t.replace(re, ' '), input);
+  const [, month, day] = (onDate ?? '').split('-').map(Number);
+  if (month && day) {
+    text = text.replace(DASH_DATE, (whole, m, d) => (Number(m) === month && Number(d) === day ? ' ' : whole));
+  }
+  return text;
+}
 
 function fmt(totalMinutes: number): string {
   const mins = ((totalMinutes % 1440) + 1440) % 1440;
@@ -139,8 +161,8 @@ function resolve(hour: number, minute: number, meridiem: string | undefined, aft
  * the same with stray "lunch"/"meal" words) into calls and the gaps between
  * them. Returns null when no time range can be found at all.
  */
-export function parseDayTimeline(input: string, gapsOnClock: boolean[] = [], penaltyAfterHours: number = MEAL_PENALTY_AFTER_HOURS): DayTimeline | null {
-  const pieces = input.replace(DATES, ' ').split(RANGE_SPLIT).map(p => p.trim()).filter(Boolean);
+export function parseDayTimeline(input: string, gapsOnClock: boolean[] = [], penaltyAfterHours: number = MEAL_PENALTY_AFTER_HOURS, onDate?: string): DayTimeline | null {
+  const pieces = withoutDates(input, onDate).split(RANGE_SPLIT).map(p => p.trim()).filter(Boolean);
   const ranges: Array<{ start: number; end: number }> = [];
   let cursor: number | null = null;
 

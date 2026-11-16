@@ -389,3 +389,33 @@ describe('a date written in with the calls', () => {
     expect(calls('room 4 8am-12p, 1-6p')).toEqual(['08:00 AM-12:00 PM', '01:00 PM-06:00 PM']);
   });
 });
+
+describe('every way a date gets written in front of the calls', () => {
+  const calls = (text: string, onDate = '2026-11-12') => parseDayTimeline(text, [], undefined, onDate)?.calls.map(c => `${c.start}-${c.end}`);
+  const right = ['08:00 AM-12:30 PM', '01:30 PM-10:00 PM'];
+
+  it.each([
+    '11/12 jewish museum 8am-12:30, 1:30-10p',
+    '11-12 jewish museum 8am-12:30, 1:30-10p',
+    '11.12 jewish museum 8am-12:30, 1:30-10p',
+    '11/12/26 jewish museum 8am-12:30, 1:30-10p',
+    '11-12-26 jewish museum 8am-12:30, 1:30-10p',
+    '11.12.26 jewish museum 8am-12:30, 1:30-10p',
+    '11/12/2026 8am-12:30, 1:30-10p',
+    '11-12-2026 8am-12:30, 1:30-10p',
+  ])('reads "%s" as a date', text => {
+    expect(calls(text)).toEqual(right);
+  });
+
+  it('keeps "11-12" as a call when it is followed by another call', () => {
+    expect(calls('11-12, 1-5')).toEqual(['11:00 AM-12:00 PM', '01:00 PM-05:00 PM']);
+  });
+
+  it('keeps "11-12" as a call on a different day', () => {
+    expect(calls('11-12 jewish museum, 1-5', '2026-08-03')).toEqual(['11:00 AM-12:00 PM', '01:00 PM-05:00 PM']);
+  });
+
+  it('keeps a call followed by a meal word as a call, even on that date', () => {
+    expect(calls('8-12 lunch, 1-5', '2026-08-12')).toEqual(['08:00 AM-12:00 PM', '01:00 PM-05:00 PM']);
+  });
+});
