@@ -5,6 +5,7 @@ import { parseISO, differenceInCalendarDays, startOfDay, startOfWeek, endOfWeek 
 import { resolveEmployer } from './employerMatch';
 import { contractFor } from './contracts';
 import { localToday } from './today';
+import { breaksTheHour } from './local16';
 
 export interface OvertimeOptions {
   rule?: 'daily' | 'weekly' | 'none';
@@ -327,7 +328,7 @@ export function offClockMealMinutes(job: Job): number {
   // A day entered as a run of calls derives its meals from the gaps, which can be
   // any length, so the timeline wins over the two fixed-duration meal fields.
   if (job.callTimeline) {
-    const timeline = parseDayTimeline(job.callTimeline, job.callGapsOnClock ?? []);
+    const timeline = parseDayTimeline(job.callTimeline, job.callGapsOnClock ?? [], undefined, job.date);
     if (timeline) return timeline.offClockMinutes;
   }
   const first = job.mealDuration && !job.mealOnClock ? job.mealDuration : 0;
@@ -344,7 +345,7 @@ export function offClockMealMinutes(job: Job): number {
 export function postMealPaddingHours(job: Job, employer?: Employer): number {
   const guaranteed = employer?.postMealMinimumHours ?? 0;
   if (!guaranteed || !job.callTimeline) return 0;
-  const timeline = parseDayTimeline(job.callTimeline, job.callGapsOnClock ?? []);
+  const timeline = parseDayTimeline(job.callTimeline, job.callGapsOnClock ?? [], undefined, job.date);
   if (!timeline) return 0;
   // The timeline works to the IATSE-standard two hours; scale if the contract
   // guarantees something else.
@@ -457,7 +458,7 @@ export function jobPayBreakdown(
     otThresholdHours: employer?.dailyOvertimeThresholdHours,
     dtThresholdHours: employer?.dailyDoubletimeThresholdHours,
     otMultiplier: employer?.overtimeMultiplier,
-    roundUpToWholeHours: employer?.roundUpToWholeHours,
+    roundUpToWholeHours: breaksTheHour(job, employer),
     postMealPaddingHours: postMealPaddingHours(job, employer),
     // The shift's own day rate, if it has one — the employer's is only where a
     // new shift starts from. On a split day the whole day is one day rate.
@@ -766,7 +767,7 @@ export function calculateExpectedPay(
     otMultiplier: employer?.overtimeMultiplier ?? 1.5,
     dtMultiplier: employer?.doubletimeMultiplier ?? 2.0,
     nightMultiplier: employer?.nightPremiumMultiplier ?? 2.0,
-    roundUpToWholeHours: employer?.roundUpToWholeHours,
+    roundUpToWholeHours: breaksTheHour(referenceJob, employer),
     unionDuesPercent: employer?.unionDuesPercent,
     // A 1099 employer withholds nothing, so nothing comes off what it sends;
     // neither does one whose W-4 says exempt.

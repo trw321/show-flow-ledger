@@ -34,6 +34,7 @@ import { alreadyRecorded } from '@/lib/paymentRepeats';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { calculateDayPay, dayInARow, dayMultiplierFor, dayPremiumLabel, compositeWeekendMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross, jobPayBreakdown, compareCalls } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
+import { breakTheHourLabel, breaksTheHour, isLocal16Shift } from '@/lib/local16';
 import { useSwipe } from '@/lib/useSwipe';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -815,7 +816,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   // whole page down with "Cannot access 'timeline' before initialization".
   const penaltyAfter = compositeTeam ? COMPOSITE_LUNCH_AFTER_HOURS : MEAL_PENALTY_AFTER_HOURS;
   const timeline: DayTimeline | null = callsOpen && callTimeline.trim()
-    ? parseDayTimeline(callTimeline, gapsOnClock, penaltyAfter)
+    ? parseDayTimeline(callTimeline, gapsOnClock, penaltyAfter, job.date)
     : null;
   // What the day you typed turns out to be decides how the meals are shown:
   // nothing to show for a straight call, the boxed buttons for a single lunch
@@ -857,7 +858,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   // employer's W-4 — exactly as every other pay figure takes them.
   const previewRates = ratesForShift(job, employer, prefs.payer);
   const payPreview = rate > 0 && billableHours > 0
-    ? calculateDayPay(actualHours, rate, minHours, mealPenaltyUnits, dayMultiplierFor({ ...job, compositeTeam }, employer, data.jobs), { duration: mealDuration, onClock: mealOnClock, offClockMinutesTotal: offClockMealMins }, { nightHours, nightMultiplier: employer?.nightPremiumMultiplier, roundUpToWholeHours: employer?.roundUpToWholeHours, unionDuesPercent: previewRates.unionDuesPercent, estimatedTaxPercent: previewRates.estimatedTaxPercent, dayPremiumLabel: dayPremiumLabel({ ...job, compositeTeam }, employer, data.jobs) })
+    ? calculateDayPay(actualHours, rate, minHours, mealPenaltyUnits, dayMultiplierFor({ ...job, compositeTeam }, employer, data.jobs), { duration: mealDuration, onClock: mealOnClock, offClockMinutesTotal: offClockMealMins }, { nightHours, nightMultiplier: employer?.nightPremiumMultiplier, roundUpToWholeHours: breaksTheHour(job, employer), unionDuesPercent: previewRates.unionDuesPercent, estimatedTaxPercent: previewRates.estimatedTaxPercent, dayPremiumLabel: dayPremiumLabel({ ...job, compositeTeam }, employer, data.jobs) })
     : null;
   // calculateDayPay's own breakdown stops at dues/tax — vacation is applied
   // on top of that (same as jobGross/jobPayBreakdown), so it needs its own
@@ -1494,6 +1495,17 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
               partial break AND still be owed a penalty for it running late,
               so picking one no longer hides the other. */}
           <div className="space-y-1.5">
+            {(() => {
+              const rule = breakTheHourLabel(job, employer);
+              return rule && (
+                <p className="rounded-md border border-primary/40 bg-primary/10 px-2.5 py-2 text-[11px] leading-tight">
+                  <span className="font-medium">{rule}</span>
+                  <span className="block text-[10px] text-muted-foreground mt-0.5">
+                    Any part of an hour is paid as a whole hour on this shift{isLocal16Shift(job) ? ': every Local 16 call does' : ''}.
+                  </span>
+                </p>
+              );
+            })()}
             <label className="flex items-start gap-2 cursor-pointer select-none rounded-md border border-border p-2.5">
               <input
                 type="checkbox"
@@ -3100,10 +3112,14 @@ export default function CalendarPage() {
                         <span className="text-[10px] text-mono uppercase font-medium opacity-70">{paid ? 'Paid' : overdue ? 'Needs Hours' : job.status}</span>
                       </div>
                       {job.venue && <p className="text-xs opacity-60">{job.venue}</p>}
+                      {(() => {
+                        const rule = breakTheHourLabel(job, resolveEmployer(job.client, data.employers));
+                        return rule && <p><span className="inline-block border border-current px-1.5 py-0.5 text-[10px] font-bold text-mono uppercase tracking-wider">{rule}</span></p>;
+                      })()}
                       <div className="flex items-center gap-3 text-xs text-mono">
                         {job.startTime && <span>{job.startTime}{job.endTime ? ` – ${job.endTime}` : ''}</span>}
                         {hours > 0 && <span>{hours}h</span>}
-                        {earned > 0 && <span className="font-semibold">${earned.toLocaleString()}</span>}
+                        {earned > 0 && <span className="font-semibold">${earned.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
                         {job.hoursPlanned && <span className="text-[10px] text-mono uppercase tracking-wider text-accent">planned</span>}
                         <button
                           type="button"
@@ -3148,7 +3164,7 @@ export default function CalendarPage() {
                 {payByDate[selectedDate!] && (
                   <div className="flex items-center justify-between pt-2 border-t border-border text-sm text-mono">
                     <span className="text-muted-foreground">Estimated {payView}</span>
-                    <span className={cn("font-bold", moneyTone(jobsByDate[selectedDate!] ?? [], paidJobIds))}>${payByDate[selectedDate!].toLocaleString()}</span>
+                    <span className={cn("font-bold", moneyTone(jobsByDate[selectedDate!] ?? [], paidJobIds))}>${payByDate[selectedDate!].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 )}
 
