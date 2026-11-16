@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CircleStop, Clock3 } from 'lucide-react';
+import { CircleStop, Clock3, Utensils } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -15,6 +15,7 @@ import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { jobPayBreakdown, parseTimeToMinutes } from '@/lib/payCalc';
 import { localToday } from '@/lib/today';
+import { liveCallsText, lunchMs, openBreak, startsInLabel, workEnd, workedMs, type WorkBreak } from '@/lib/liveWork';
 import type { Job } from '@/lib/store';
 
 const SESSION_KEY = 'show-flow-live-work-session-v1';
@@ -27,6 +28,13 @@ interface WorkSession {
   lateClockInTime?: string;
   lateCheckPending: boolean;
   lateArrivalPending?: boolean;
+  /** Lunches taken so far; the counter pauses for each. */
+  breaks?: WorkBreak[];
+}
+
+function savedBreaks(value: unknown): WorkBreak[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((b): b is WorkBreak => !!b && typeof b.start === 'number' && (b.end === undefined || typeof b.end === 'number'));
 }
 
 function readSession(): WorkSession | null {
@@ -43,6 +51,7 @@ function readSession(): WorkSession | null {
         lateClockInTime: value.lateClockInTime,
         lateCheckPending: value.lateCheckPending ?? false,
         lateArrivalPending: value.lateArrivalPending ?? false,
+        breaks: savedBreaks(value.breaks),
       }
       : null;
   } catch {
@@ -127,14 +136,28 @@ export default function LiveWorkPay() {
       : session.scheduledAt
     : now;
   const counterNow = endingAt ?? now;
-  const elapsedMs = session ? Math.max(0, counterNow - startedAt) : 0;
+  const breaks = session?.breaks ?? [];
+  const lunch = openBreak(breaks);
+  const elapsedMs = session ? workedMs(startedAt, counterNow, breaks) : 0;
+  const liveEnd = workEnd(breaks, counterNow);
+  // Priced on what has actually happened: the clocked span with the lunches
+  // tapped so far as gaps. A meal or calls planned on the shift ahead of time
+  // would come off hours not yet worked, so they're left out here.
+  const liveCalls = session ? liveCallsText(startedAt, counterNow, breaks) : '';
   const liveJob = activeJob && session
     ? {
       ...activeJob,
       status: 'in-progress' as const,
       hoursPlanned: false,
-      hoursWorked: elapsedMs / 3_600_000,
-      endTime: clockTime(counterNow),
+      hoursWorked: Math.max(0, liveEnd - startedAt) / 3_600_000,
+      endTime: clockTime(liveEnd),
+      callTimeline: liveCalls || undefined,
+      callGapsOnClock: undefined,
+      mealDuration: undefined,
+      mealOnClock: undefined,
+      meal2Duration: undefined,
+      meal2OnClock: undefined,
+      extraMeals: undefined,
     }
     : null;
   const pricedLiveJob = liveJob
@@ -174,19 +197,35 @@ export default function LiveWorkPay() {
       : { ...current, lateClockInAt, lateArrivalPending: false };
   });
 
+  const startLunch = () => setSession(current => current
+    ? { ...current, breaks: [...(current.breaks ?? []), { start: Date.now() }] }
+    : null);
+  const endLunch = () => setSession(current => {
+    if (!current?.breaks?.length) return current;
+    const done = current.breaks.map((b, i) => (i === current.breaks!.length - 1 && b.end === undefined ? { ...b, end: Date.now() } : b));
+    return { ...current, breaks: done };
+  });
+
   const beginEndDay = () => {
     const endedAt = Date.now();
     setEndingAt(endedAt);
-    setConfirmedHours(((endedAt - actualClockInAt) / 3_600_000).toFixed(2));
+    setConfirmedHours((workedMs(actualClockInAt, endedAt, breaks) / 3_600_000).toFixed(2));
   };
 
+  const endedAtWork = endingAt !== null ? workEnd(breaks, endingAt) : null;
+  const lunchTakenMs = endedAtWork !== null ? lunchMs(actualClockInAt, endedAtWork, breaks) : 0;
+
   const confirmEndDay = async () => {
-    if (!activeJob || endingAt === null) return;
+    if (!activeJob || endingAt === null || endedAtWork === null) return;
     const hours = Number(confirmedHours);
     if (!Number.isFinite(hours) || hours <= 0) return;
+    const calls = liveCallsText(actualClockInAt, endingAt, breaks);
     await updateJob(activeJob.id, {
-      endTime: clockTime(endingAt),
-      hoursWorked: hours,
+      endTime: clockTime(endedAtWork),
+      // The app keeps hoursWorked as the clocked span and takes off-the-clock
+      // lunches off it from the calls, so the lunch goes back on here.
+      hoursWorked: calls ? hours + lunchTakenMs / 3_600_000 : hours,
+      ...(calls ? { callTimeline: calls, callGapsOnClock: [] } : {}),
       hoursPlanned: undefined,
       status: 'completed',
     });
@@ -202,13 +241,20 @@ export default function LiveWorkPay() {
             <Clock3 size={15} className="shrink-0 text-muted-foreground" aria-hidden="true" />
             <div className="min-w-0">
               <p className="truncate text-xs font-medium">{activeJob.name} · {lateRuleMissing ? 'Late rule not set' : elapsedLabel(elapsedMs)}</p>
-              <p className="text-[10px] text-muted-foreground">Started {clockTime(startedAt)} · estimated net</p>
+              <p className="text-[10px] text-muted-foreground">
+                {lunch
+                  ? `On lunch since ${clockTime(lunch.start)} · paused, off the clock`
+                  : `Started ${clockTime(startedAt)}${breaks.length ? ` · ${elapsedLabel(lunchMs(startedAt, liveEnd, breaks))} lunch off` : ''} · estimated net`}
+              </p>
             </div>
           </div>
           <div className="ml-auto flex items-center gap-3">
             <p className="font-mono text-sm font-semibold tabular-nums" aria-live="off">
               {lateRuleMissing ? 'Set late rule in Settings' : hasRate && pay !== null ? money(pay) : 'Rate needed'}
             </p>
+            <Button type="button" size="sm" variant={lunch ? 'default' : 'outline'} className="h-8 gap-1.5 px-2.5" onClick={lunch ? endLunch : startLunch}>
+              <Utensils size={14} /> {lunch ? 'Back from lunch' : 'Lunch'}
+            </Button>
             <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5 px-2.5" onClick={beginEndDay}>
               <CircleStop size={14} /> End work day
             </Button>
@@ -220,7 +266,7 @@ export default function LiveWorkPay() {
         {reminder && (
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Work starts in about an hour</DialogTitle>
+              <DialogTitle>{startsInLabel(reminder.startAt - now)}</DialogTitle>
               <DialogDescription>
                 {reminder.job.name} is scheduled to start at {clockTime(reminder.startAt)}. The live estimate will start automatically at that time.
               </DialogDescription>
@@ -278,7 +324,9 @@ export default function LiveWorkPay() {
             <DialogHeader>
               <DialogTitle>End work day?</DialogTitle>
               <DialogDescription>
-                Clocked in {clockTime(actualClockInAt)}; ending {endingAt !== null ? clockTime(endingAt) : ''}. Confirm or adjust the hours before saving them to {activeJob.name}.
+                Clocked in {clockTime(actualClockInAt)}; ending {endedAtWork !== null ? clockTime(endedAtWork) : ''}
+                {lunch && endedAtWork !== null ? ', when your lunch started' : ''}.
+                {lunchTakenMs > 0 ? ` ${elapsedLabel(lunchTakenMs)} of lunch is off the clock and not counted.` : ''} Confirm or adjust the hours before saving them to {activeJob.name}.
               </DialogDescription>
             </DialogHeader>
             <label className="grid gap-1.5 text-sm" htmlFor="confirmed-work-hours">
