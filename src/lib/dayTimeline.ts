@@ -94,6 +94,14 @@ export interface DayTimeline {
 
 const TIME = /(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?|a|p)?/gi;
 const RANGE_SPLIT = /(?:,|;|\band\b|&|\bthen\b|\n|\/)+/i;
+/** One call written out: a time, a dash or "to", another time. */
+const RANGE = /(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?|a|p)?\s*(?:-|–|—|\bto\b|\btill\b|\buntil\b)\s*(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?|a|p)?/i;
+/**
+ * A date written into the calls ("11/12 jewish museum 8am-12:30", "2026-11-12
+ * 8-5"). Its numbers are not times, and the slash in it is not a break between
+ * calls. A slash right after a dash ("8-12/1-5") is a break, so that is left.
+ */
+const DATES = /(?<![-–—\d:])\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b(?![-–—])|\b\d{4}-\d{1,2}-\d{1,2}\b/g;
 
 function fmt(totalMinutes: number): string {
   const mins = ((totalMinutes % 1440) + 1440) % 1440;
@@ -132,17 +140,28 @@ function resolve(hour: number, minute: number, meridiem: string | undefined, aft
  * them. Returns null when no time range can be found at all.
  */
 export function parseDayTimeline(input: string, gapsOnClock: boolean[] = [], penaltyAfterHours: number = MEAL_PENALTY_AFTER_HOURS): DayTimeline | null {
-  const pieces = input.split(RANGE_SPLIT).map(p => p.trim()).filter(Boolean);
+  const pieces = input.replace(DATES, ' ').split(RANGE_SPLIT).map(p => p.trim()).filter(Boolean);
   const ranges: Array<{ start: number; end: number }> = [];
   let cursor: number | null = null;
 
   for (const piece of pieces) {
-    TIME.lastIndex = 0;
-    const found = [...piece.matchAll(TIME)].filter(m => m[0].trim() !== '');
-    if (found.length < 2) continue;
-    const [a, b] = found;
-    const start = resolve(parseInt(a[1]), parseInt(a[2] || '0'), a[3], cursor);
-    const end = resolve(parseInt(b[1]), parseInt(b[2] || '0'), b[3], start + 1);
+    // A written-out range wins over whatever other numbers share the piece, so
+    // a stray number (a room, a date) can't pair up with a call's start.
+    const r = piece.match(RANGE);
+    let a: [number, number, string | undefined];
+    let b: [number, number, string | undefined];
+    if (r) {
+      a = [parseInt(r[1]), parseInt(r[2] || '0'), r[3]];
+      b = [parseInt(r[4]), parseInt(r[5] || '0'), r[6]];
+    } else {
+      TIME.lastIndex = 0;
+      const found = [...piece.matchAll(TIME)].filter(m => m[0].trim() !== '');
+      if (found.length < 2) continue;
+      a = [parseInt(found[0][1]), parseInt(found[0][2] || '0'), found[0][3]];
+      b = [parseInt(found[1][1]), parseInt(found[1][2] || '0'), found[1][3]];
+    }
+    const start = resolve(a[0], a[1], a[2], cursor);
+    const end = resolve(b[0], b[1], b[2], start + 1);
     ranges.push({ start, end });
     cursor = end;
   }

@@ -368,3 +368,24 @@ describe('a planned shift waiting to be confirmed', () => {
     } as never)).toBe(false);
   });
 });
+
+describe('a date written in with the calls', () => {
+  const calls = (text: string) => parseDayTimeline(text)?.calls.map(c => `${c.start}-${c.end}`);
+
+  it('ignores "11/12" in front of the calls instead of reading noon to 8am', () => {
+    expect(calls('11/12 jewish museum 8am-12:30, 1:30-10p')).toEqual(['08:00 AM-12:30 PM', '01:30 PM-10:00 PM']);
+  });
+
+  it('ignores a full date, with or without the year', () => {
+    expect(calls('11/12/26 8-12:30, 1:30-10p')).toEqual(['08:00 AM-12:30 PM', '01:30 PM-10:00 PM']);
+    expect(calls('2026-11-12 8a-5p')).toEqual(['08:00 AM-05:00 PM']);
+  });
+
+  it('still reads a slash right after a call as a break between calls', () => {
+    expect(calls('8-12/1-5')).toEqual(['08:00 AM-12:00 PM', '01:00 PM-05:00 PM']);
+  });
+
+  it('pairs the times joined by a dash, not a stray number before them', () => {
+    expect(calls('room 4 8am-12p, 1-6p')).toEqual(['08:00 AM-12:00 PM', '01:00 PM-06:00 PM']);
+  });
+});
