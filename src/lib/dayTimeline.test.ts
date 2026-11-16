@@ -1,6 +1,6 @@
 import { localToday } from './today';
 import { describe, it, expect } from 'vitest';
-import { parseDayTimeline, withGapOnClock } from './dayTimeline';
+import { callText, explicitCalls, parseDayTimeline, withGapOnClock } from './dayTimeline';
 import { calculateDayPay, offClockMealMinutes, netHoursWorked } from './payCalc';
 import { needsHours } from './useNeedsHours';
 
@@ -417,5 +417,38 @@ describe('every way a date gets written in front of the calls', () => {
 
   it('keeps a call followed by a meal word as a call, even on that date', () => {
     expect(calls('8-12 lunch, 1-5', '2026-08-12')).toEqual(['08:00 AM-12:00 PM', '01:00 PM-05:00 PM']);
+  });
+});
+
+describe('one box, read against the shift\'s start time', () => {
+  const at = (h: number, m = 0) => h * 60 + m;
+  const calls = (text: string, anchor?: number) => parseDayTimeline(text, [], undefined, '2026-11-14', anchor)?.calls.map(c => `${c.start}-${c.end}`);
+
+  it('reads a night call from a 10pm start: 10-2 is 10pm to 2am', () => {
+    expect(calls('10-2', at(22))).toEqual(['10:00 PM-02:00 AM']);
+  });
+
+  it('reads a morning call from an 8am start', () => {
+    expect(calls('8-12, 1-6, 7-9', at(8))).toEqual(['08:00 AM-12:00 PM', '01:00 PM-06:00 PM', '07:00 PM-09:00 PM']);
+  });
+
+  it('takes the nearer of am and pm, so a 1pm start reads 1-6 as the afternoon', () => {
+    expect(calls('1-6', at(13))).toEqual(['01:00 PM-06:00 PM']);
+    expect(calls('6-2', at(22))).toEqual(['06:00 PM-02:00 AM']);
+  });
+
+  it('never overrides am or pm that is typed', () => {
+    expect(calls('8a-9p', at(22))).toEqual(['08:00 AM-09:00 PM']);
+  });
+
+  it('reads as before with no start time', () => {
+    expect(calls('8-12, 1-6, 7-9p')).toEqual(['08:00 AM-12:00 PM', '01:00 PM-06:00 PM', '07:00 PM-09:00 PM']);
+  });
+
+  it('writes the calls out with am and pm, which read back the same with no start time', () => {
+    const night = parseDayTimeline('10-2, 3-6', [], undefined, undefined, at(22))!;
+    expect(explicitCalls(night)).toBe('10pm-2am, 3am-6am');
+    expect(parseDayTimeline(explicitCalls(night))!.calls).toEqual(night.calls);
+    expect(callText('08:00 AM', '06:30 PM')).toBe('8am-6:30pm');
   });
 });

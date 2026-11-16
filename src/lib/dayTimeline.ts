@@ -139,11 +139,19 @@ function fmt(totalMinutes: number): string {
  * out am/pm, so each time is read as the earliest reading that still comes after
  * the previous one: in "11-3", the 3 can only be the afternoon.
  */
-function resolve(hour: number, minute: number, meridiem: string | undefined, after: number | null): number {
+function resolve(hour: number, minute: number, meridiem: string | undefined, after: number | null, anchor?: number): number {
   const ap = (meridiem || '').toLowerCase().replace(/\./g, '');
   let h = hour;
   if (ap.startsWith('p')) { if (h < 12) h += 12; }
   else if (ap.startsWith('a')) { if (h === 12) h = 0; }
+  else if (after === null && anchor !== undefined && h >= 1 && h <= 12) {
+    // The first time of the day, and the shift's start time is known: whichever
+    // of am or pm is nearer it. On a 10pm call "10-2" is 10pm to 2am; on an 8am
+    // call "8-12" is the morning.
+    const am = (h % 12) * 60 + minute;
+    const near = (m: number) => { const d = Math.abs(m - anchor) % 1440; return Math.min(d, 1440 - d); };
+    h = near(am + 720) < near(am) ? (h % 12) + 12 : h % 12;
+  }
   else if (after === null) {
     // The first time of the day, with nothing to anchor it: a call at 1–5 is an
     // afternoon call, 6–11 is a morning one. 12 stays noon.
@@ -161,7 +169,7 @@ function resolve(hour: number, minute: number, meridiem: string | undefined, aft
  * the same with stray "lunch"/"meal" words) into calls and the gaps between
  * them. Returns null when no time range can be found at all.
  */
-export function parseDayTimeline(input: string, gapsOnClock: boolean[] = [], penaltyAfterHours: number = MEAL_PENALTY_AFTER_HOURS, onDate?: string): DayTimeline | null {
+export function parseDayTimeline(input: string, gapsOnClock: boolean[] = [], penaltyAfterHours: number = MEAL_PENALTY_AFTER_HOURS, onDate?: string, anchorMinutes?: number): DayTimeline | null {
   const pieces = withoutDates(input, onDate).split(RANGE_SPLIT).map(p => p.trim()).filter(Boolean);
   const ranges: Array<{ start: number; end: number }> = [];
   let cursor: number | null = null;
@@ -182,7 +190,8 @@ export function parseDayTimeline(input: string, gapsOnClock: boolean[] = [], pen
       a = [parseInt(found[0][1]), parseInt(found[0][2] || '0'), found[0][3]];
       b = [parseInt(found[1][1]), parseInt(found[1][2] || '0'), found[1][3]];
     }
-    const start = resolve(a[0], a[1], a[2], cursor);
+    const anchor = cursor === null && anchorMinutes !== undefined && Number.isFinite(anchorMinutes) ? anchorMinutes : undefined;
+    const start = resolve(a[0], a[1], a[2], cursor, anchor);
     const end = resolve(b[0], b[1], b[2], start + 1);
     ranges.push({ start, end });
     cursor = end;
@@ -288,4 +297,24 @@ export function withGapOnClock(timeline: DayTimeline, gapIndex: number, onClock:
     workedHours: (timeline.spreadHours * 60 - offClockMinutes) / 60,
     ...derive(timeline.calls, gaps, timeline.penaltyAfterHours),
   };
+}
+
+/** "08:00 AM" as "8am", "12:30 PM" as "12:30pm". */
+function compactTime(t: string): string {
+  const m = t.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!m) return t;
+  return `${Number(m[1])}${m[2] === '00' ? '' : ':' + m[2]}${m[3].toLowerCase()}`;
+}
+
+/**
+ * The calls written out with am and pm on every time ("10pm-2am, 3am-6am"), so
+ * the text reads the same wherever it's read later, with no start time to go by.
+ */
+export function explicitCalls(timeline: Pick<DayTimeline, 'calls'>): string {
+  return timeline.calls.map(c => `${compactTime(c.start)}-${compactTime(c.end)}`).join(', ');
+}
+
+/** One call as typed shorthand: "8am-6pm". */
+export function callText(start: string, end: string): string {
+  return `${compactTime(start)}-${compactTime(end)}`;
 }

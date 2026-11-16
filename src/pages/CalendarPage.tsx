@@ -15,7 +15,7 @@ import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
   AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
-import { parseDayTimeline, withGapOnClock, COMPOSITE_LUNCH_AFTER_HOURS, MEAL_PENALTY_AFTER_HOURS, type DayTimeline } from '@/lib/dayTimeline';
+import { callText, explicitCalls, parseDayTimeline, withGapOnClock, COMPOSITE_LUNCH_AFTER_HOURS, MEAL_PENALTY_AFTER_HOURS, type DayTimeline } from '@/lib/dayTimeline';
 import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle, Flame, PenLine, Banknote, Wallet, Flag, Undo2 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO, differenceInCalendarDays } from 'date-fns';
 import type { Employer, Job, CalendarEvent, Income, Invoice } from '@/lib/store';
@@ -181,13 +181,15 @@ function normalizeTyped(t: string): string {
   return isNaN(mins) ? t : minutesToTimeStr(mins);
 }
 
-function resolveTypedEnd(start: string, end: string): string {
-  if (!end.trim()) return end;
-  const s = parseTimeToMins(start);
-  if (isNaN(s)) return normalizeTyped(end);
-  const e = resolveEndMins(s, end);
-  return isNaN(e) ? end : minutesToTimeStr(e);
+/** What the hours box shows for a saved shift: its calls, or its one call, or nothing yet. */
+function hoursTextOf(job: Job): string {
+  if (job.callTimeline) return job.callTimeline;
+  if (job.startTime && job.endTime) return callText(job.startTime, job.endTime);
+  return '';
 }
+
+/** Only a start time typed so far: "7a", "10pm", "8:30 -". */
+const START_ONLY = /^\s*\d{1,2}(?::\d{2})?\s*(?:a\.?m?\.?|p\.?m?\.?)?\s*-?\s*$/i;
 
 /**
  * Whether the stub for a shift has been photographed yet. Lit when it has,
@@ -437,6 +439,12 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   const [callTimeline, setCallTimeline] = useState(job.callTimeline ?? '');
   const [gapsOnClock, setGapsOnClock] = useState<boolean[]>(job.callGapsOnClock ?? []);
   const [callsOpen, setCallsOpen] = useState(!!job.callTimeline);
+  // The one box the hours are typed into: "8a-9p", or calls "8-12, 1-6, 7-9p".
+  const [hoursText, setHoursText] = useState(() => hoursTextOf(job));
+  // The start time the shift came with (from the offer) settles am or pm for a
+  // bare number: on a 10pm call "10-2" is 10pm to 2am.
+  const anchorMins = job.startTime ? parseTimeToMins(job.startTime) : NaN;
+  const anchor = Number.isFinite(anchorMins) ? anchorMins : undefined;
   const [needsReview, setNeedsReview] = useState(job.needsReview ?? false);
   const [compositeTeam, setCompositeTeam] = useState(job.compositeTeam ?? false);
   // Changing an employer on one shift usually means it was wrong on the whole
@@ -513,6 +521,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     setCallTimeline(job.callTimeline ?? '');
     setGapsOnClock(job.callGapsOnClock ?? []);
     setCallsOpen(!!job.callTimeline);
+    setHoursText(hoursTextOf(job));
     setNeedsReview(job.needsReview ?? false);
     setCompositeTeam(job.compositeTeam ?? false);
     setMealOnClock(job.mealOnClock ?? false);
@@ -783,19 +792,46 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     onDuplicated(dates.length);
   };
 
-  const handleEndTimeChange = (val: string) => {
-    setEndTime(val);
-    if (startTime && val) {
-      const h = calcHours(startTime, val);
-      if (h > 0) setHoursWorked(parseFloat(h.toFixed(2)).toString());
+  /**
+   * The hours box, read as it's typed. One call fills in the start, end and
+   * clocked hours, as the two time boxes did. Several are a day of calls, kept
+   * written out with am and pm, so they read the same later with no start time
+   * to go by. Something it can't read yet leaves the last good reading alone.
+   */
+  const handleHoursText = (text: string) => {
+    setHoursText(text);
+    if (!text.trim()) {
+      setEndTime(''); setCallTimeline(''); setCallsOpen(false);
+      return;
+    }
+    const read = parseDayTimeline(text, [], undefined, job.date, anchor);
+    if (!read) {
+      if (START_ONLY.test(text)) {
+        setStartTime(normalizeTyped(text.replace(/-\s*$/, '').trim()));
+        setEndTime(''); setCallTimeline(''); setCallsOpen(false);
+      }
+      return;
+    }
+    const first = read.calls[0];
+    const last = read.calls[read.calls.length - 1];
+    setStartTime(first.start);
+    setEndTime(last.end);
+    if (read.calls.length === 1) {
+      setCallTimeline(''); setCallsOpen(false);
+      setHoursWorked(parseFloat(first.hours.toFixed(2)).toString());
+    } else {
+      setCallTimeline(explicitCalls(read)); setCallsOpen(true);
     }
   };
+  const hoursTextReads = !hoursText.trim() || START_ONLY.test(hoursText) || !!parseDayTimeline(hoursText, [], undefined, job.date, anchor);
 
   const handleHoursWorkedChange = (val: string) => {
     setHoursWorked(val);
     const h = parseFloat(val);
-    if (startTime && !isNaN(h) && h > 0) {
-      setEndTime(addHoursToTime(startTime, h));
+    if (startTime && !isNaN(h) && h > 0 && !callsOpen) {
+      const end = addHoursToTime(startTime, h);
+      setEndTime(end);
+      setHoursText(callText(startTime, end));
     }
   };
 
@@ -807,7 +843,11 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     // minimum call and actual hours worked are frequently different numbers.
     if (!isActive && !hoursWorked) {
       setHoursWorked(hours.toString());
-      if (startTime && !endTime) setEndTime(addHoursToTime(startTime, hours));
+      if (startTime && !endTime) {
+        const end = addHoursToTime(startTime, hours);
+        setEndTime(end);
+        setHoursText(callText(startTime, end));
+      }
     }
   };
 
@@ -816,7 +856,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   // whole page down with "Cannot access 'timeline' before initialization".
   const penaltyAfter = compositeTeam ? COMPOSITE_LUNCH_AFTER_HOURS : MEAL_PENALTY_AFTER_HOURS;
   const timeline: DayTimeline | null = callsOpen && callTimeline.trim()
-    ? parseDayTimeline(callTimeline, gapsOnClock, penaltyAfter, job.date)
+    ? parseDayTimeline(callTimeline, gapsOnClock, penaltyAfter, job.date, anchor)
     : null;
   // What the day you typed turns out to be decides how the meals are shown:
   // nothing to show for a straight call, the boxed buttons for a single lunch
@@ -1342,67 +1382,38 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           <p className={cn("text-[9px] text-mono font-bold tracking-widest uppercase", actualHours === 0 ? "text-accent" : "text-muted-foreground/50")}>
             {actualHours === 0 ? 'Log Hours' : 'Hours & Pay'}
           </p>
+          {/* One box for the day, typed the way it arrives: "8a-9p" for one
+              call, "8-12, 1-6, 7-9p" for several. A bare number is read near the
+              start time the shift came with, so on a 10pm call "10-2" is 10pm to
+              2am. Several calls are shown below with the meals read out of the
+              gaps, so the hours and the meals cannot disagree. */}
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Start Time</label>
+            <label className="text-xs text-muted-foreground" htmlFor="shift-hours">Hours</label>
             <Input
-              value={startTime}
-              onBlur={() => setStartTime(normalizeTyped(startTime))}
-              onChange={e => setStartTime(e.target.value)}
-              placeholder="e.g. 08:00 AM"
-              className="h-10 text-base text-mono"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">End Time</label>
-            <Input
+              id="shift-hours"
               autoFocus={actualHours === 0}
-              value={endTime}
-              onBlur={() => handleEndTimeChange(resolveTypedEnd(startTime, endTime))}
-              onChange={e => handleEndTimeChange(e.target.value)}
-              placeholder="e.g. 18:00 or 6:00 PM"
+              value={hoursText}
+              onChange={e => handleHoursText(e.target.value)}
+              placeholder="8a-6p, or calls: 8-12, 1-6, 7-9p"
               className="h-10 text-base text-mono"
+              spellCheck={false}
+              inputMode="text"
             />
-            {startTime && endTime && calcHours(startTime, endTime) > 0 && (
+            {hoursText.trim() && !hoursTextReads ? (
+              <p className="text-[10px] text-warning">Can't read that yet. Try 8a-6p, or 8-12, 1-6 for calls.</p>
+            ) : !timeline && startTime && endTime && calcHours(startTime, endTime) > 0 ? (
               <p className="text-[10px] text-mono text-muted-foreground">{startTime} → {endTime} = <span className="text-accent font-semibold">{calcHours(startTime, endTime).toFixed(1)}h</span></p>
+            ) : !timeline && startTime && !endTime ? (
+              <p className="text-[10px] text-mono text-muted-foreground">Starts {startTime}. Add the end after a dash.</p>
+            ) : (
+              <p className="text-[10px] text-muted-foreground">Commas between calls; the gaps become the meals.{anchor !== undefined && job.startTime ? ` Times without am/pm are read near the ${job.startTime} start.` : ''}</p>
             )}
           </div>
 
-          {/* A day of several calls. Typed as one line, because that is how it
-              arrives, and the meals are read out of the gaps rather than entered
-              again beside them — so the hours and the meals cannot disagree. */}
-          {!callsOpen ? (
-            <button
-              type="button"
-              onClick={() => setCallsOpen(true)}
-              className="flex items-center gap-1 text-[11px] text-primary hover:underline self-start"
-            >
-              <Plus size={11} /> More than one call today
-            </button>
-          ) : (
+          {timeline && (
             <div className="space-y-1.5 rounded-md border border-primary/30 bg-primary/5 p-2.5">
-              <div className="flex items-center justify-between">
-                <label className="text-[10px] text-mono uppercase tracking-wider text-primary" htmlFor="call-timeline">Calls</label>
-                <button
-                  type="button"
-                  onClick={() => { setCallsOpen(false); setCallTimeline(''); setGapsOnClock([]); }}
-                  className="text-[11px] text-destructive hover:underline"
-                >
-                  Remove
-                </button>
-              </div>
-              <Input
-                id="call-timeline"
-                value={callTimeline}
-                onChange={e => setCallTimeline(e.target.value)}
-                placeholder="8-10, 11-3, 4-7"
-                className="h-9 text-sm text-mono"
-                spellCheck={false}
-              />
-              {!timeline ? (
-                <p className="text-[10px] text-muted-foreground">
-                  Commas between calls. The gaps become the meals — 🌭 marks each one.
-                </p>
-              ) : (
+              <p className="text-[10px] text-mono uppercase tracking-wider text-primary">Calls</p>
+              {(
                 <>
                   <div className="rounded-md border border-border overflow-hidden">
                     {timeline.calls.map((call, i) => {
@@ -1489,7 +1500,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             </div>
           )}
 
-          {/* Meal break — 2nd most important question after End Time, so it
+          {/* Meal break — 2nd most important question after the hours, so it
               lives right here instead of buried in Edit shift. Break duration
               and meal-penalty units are independent now: you can take a
               partial break AND still be owed a penalty for it running late,
