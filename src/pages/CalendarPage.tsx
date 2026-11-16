@@ -24,7 +24,7 @@ import { payDueDate, payTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from
 import { paidShiftIds, periodNet, periodPayments, projectPeriods, type PayPeriod, type ProjectPeriod } from '@/lib/payPeriods';
 import { explainPay } from '@/lib/payExplain';
 import PayEstimateCard from '@/components/PayEstimateCard';
-import PaymentProof, { ProofRow } from '@/components/PaymentProof';
+import PaymentProof, { ProofRow, SourceTag } from '@/components/PaymentProof';
 import { proofFromMatch, proofKindOf, type ProofKind } from '@/lib/paymentProof';
 import CalendarKey from '@/components/CalendarKey';
 import EmployerEditor from '@/components/EmployerEditor';
@@ -1159,8 +1159,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                     can go in a tap. Old money-bag taps left runs of these behind. */}
                 {samePaymentGroups(projectPayments).map(({ first: i, repeats }) => {
                   return (
-                    <div key={i.id} className="flex items-center gap-2 text-xs">
-                      <PayIcon income={i} className="text-muted-foreground" />
+                    <div key={i.id} className="flex flex-wrap items-center gap-2 text-xs">
+                      <SourceTag income={i} />
                       <span className={cn('font-bold text-mono', i.status === 'paid' ? 'text-dot-paid' : 'text-dot-pending')}>${i.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       <span className="text-muted-foreground text-mono">{showDay(i.date)}</span>
                       {i.status === 'pending' && (
@@ -3119,7 +3119,7 @@ export default function CalendarPage() {
                       <div className="flex items-center gap-3 text-xs text-mono">
                         {job.startTime && <span>{job.startTime}{job.endTime ? ` – ${job.endTime}` : ''}</span>}
                         {hours > 0 && <span>{hours}h</span>}
-                        {earned > 0 && <span className="font-semibold">${earned.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+                        {earned > 0 && <span className="font-semibold">{paid && <span className="font-normal opacity-70">exp. </span>}${earned.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
                         {job.hoursPlanned && <span className="text-[10px] text-mono uppercase tracking-wider text-accent">planned</span>}
                         <button
                           type="button"
@@ -3131,6 +3131,33 @@ export default function CalendarPage() {
                           {!job.payStub && <span>+ stub</span>}
                         </button>
                       </div>
+                      {/* What actually came in for the project, beside what it was
+                          expected to pay, and what each payment was: a check, a
+                          stub, a deposit, or only marked paid. */}
+                      {(() => {
+                        const key = projectGroupKey(job);
+                        const groups = samePaymentGroups((incomeByProject.get(key) ?? []).filter(i => i.status === 'paid'));
+                        if (groups.length === 0) return null;
+                        const actual = groups.reduce((sum, g) => sum + g.first.amount, 0);
+                        const expected = data.jobs
+                          .filter(j => projectGroupKey(j) === key && effectiveHoursWorked(j) > 0)
+                          .reduce((sum, j) => sum + shownPay(j), 0);
+                        const gap = actual - expected;
+                        const fmt = (n: number) => '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        return (
+                          <div className="space-y-1 border-t border-current/20 pt-1.5 text-[11px] text-mono">
+                            <p>
+                              <span className="font-bold">Paid {fmt(actual)}</span>
+                              <span className="opacity-70"> · expected {fmt(expected)} {payView}</span>
+                              {Math.abs(gap) >= 0.01 && <span className={cn('ml-1 font-bold', gap > 0 ? 'text-dot-paid' : 'text-warning')}>({gap > 0 ? '+' : '−'}{fmt(Math.abs(gap))})</span>}
+                              <span className="opacity-60"> · whole project</span>
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {groups.map(g => <SourceTag key={g.first.id} income={g.first} />)}
+                            </div>
+                          </div>
+                        );
+                      })()}
                       {job.startTime && !job.endTime && (
                         <p className="text-[10px] text-warning font-medium">⚠ No end time set — tap to add it</p>
                       )}

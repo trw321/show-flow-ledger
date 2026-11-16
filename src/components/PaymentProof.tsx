@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Banknote, Camera, FileText, Landmark, Loader2, PenLine, Receipt, Wallet } from 'lucide-react';
+import { Banknote, Camera, CircleHelp, FileText, Landmark, Loader2, PenLine, Receipt, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import PayEstimateCard from '@/components/PayEstimateCard';
@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils';
 const money = (n: number) => '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const KIND_ICON: Record<ProofKind, typeof Wallet> = {
-  stub: Receipt, check: Banknote, statement: FileText, deposit: Landmark, invoice: FileText, manual: PenLine, marked: Wallet,
+  stub: Receipt, check: Banknote, statement: FileText, deposit: Landmark, invoice: FileText, manual: PenLine, marked: Wallet, unknown: CircleHelp,
 };
 
 const LEVEL_TONE = { high: 'text-dot-paid', medium: 'text-dot-pending', low: 'text-warning' } as const;
@@ -31,6 +31,29 @@ const LEVEL_BAR = { high: 'bg-dot-paid', medium: 'bg-dot-pending', low: 'bg-warn
  * One payment, in a line: what it is, and how well it's known to be this
  * project's. Tapping it opens the proof.
  */
+/**
+ * Where a payment came from, as a tag: a check, a pay stub, a deposit, typed
+ * in, marked paid, or not recorded. Documents someone else made are solid;
+ * your own word for it is outlined, so the difference reads at a glance.
+ */
+export function SourceTag({ income, className }: { income: Income; className?: string }) {
+  const kind = proofKindOf(income);
+  const Icon = KIND_ICON[kind];
+  return (
+    <span
+      className={cn(
+        'inline-flex shrink-0 items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold text-mono uppercase tracking-wide',
+        isDocumented(kind) ? 'bg-foreground/90 text-background' : 'border border-current text-muted-foreground',
+        className,
+      )}
+    >
+      <Icon size={11} aria-hidden />
+      {PROOF_LABELS[kind]}
+      {income.proofRef && <Camera size={11} aria-label="with photo" />}
+    </span>
+  );
+}
+
 export function ProofRow({ income, onOpen }: { income: Income; onOpen: () => void }) {
   const kind = proofKindOf(income);
   const Icon = KIND_ICON[kind];

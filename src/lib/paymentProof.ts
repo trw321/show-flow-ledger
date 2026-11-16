@@ -10,7 +10,7 @@ import type { Income, Job } from './store';
  * before it was saved have none, and say so rather than borrow a guess.
  */
 
-export type ProofKind = 'stub' | 'check' | 'statement' | 'deposit' | 'invoice' | 'manual' | 'marked';
+export type ProofKind = 'stub' | 'check' | 'statement' | 'deposit' | 'invoice' | 'manual' | 'marked' | 'unknown';
 
 export interface MatchProof {
   kind: ProofKind;
@@ -32,27 +32,34 @@ export const PROOF_LABELS: Record<ProofKind, string> = {
   invoice: 'Invoice',
   manual: 'Typed in',
   marked: 'Marked paid',
+  unknown: 'Source not recorded',
 };
 
 /** A document someone else made says it was paid. Typed in or marked by you is your word for it. */
-export const isDocumented = (kind: ProofKind) => kind !== 'manual' && kind !== 'marked';
+export const isDocumented = (kind: ProofKind) => kind !== 'manual' && kind !== 'marked' && kind !== 'unknown';
 
-/** How a payment came in: what was saved, or for an older one what its description says. */
+/**
+ * How a payment came in: what was saved, or for an older one what its
+ * description says. When nothing says, it says so: an older payment with a
+ * bare description was not necessarily typed in.
+ */
 export function proofKindOf(i: Income): ProofKind {
   // Only a kind this version knows: one it doesn't is read like an older payment.
-  if (i.matchProof?.kind && i.matchProof.kind in PROOF_LABELS) return i.matchProof.kind;
+  if (i.matchProof?.kind && i.matchProof.kind in PROOF_LABELS && i.matchProof.kind !== 'unknown') return i.matchProof.kind;
   const what = (i.description ?? '').toLowerCase();
-  if (/^invoice\b/.test(what) || i.invoiceNumber) return 'invoice';
+  if (/^invoice\b/.test(what)) return 'invoice';
   if (what === 'marked paid' || what.startsWith('payment — full project')) return 'marked';
   if (i.enteredByHand || what === 'added by hand' || what.startsWith('add hours')) return 'manual';
+  // A check's number gets read as an invoice number, so the words come first.
   if (i.paymentMethod === 'check' || /\b(check|cheque)\b/.test(what)) return 'check';
   if (/\b(stub|earnings|payroll|pay statement)\b/.test(what)) return 'stub';
   if (i.paymentMethod === 'direct_deposit' || /\b(deposit|ach|transfer)\b/.test(what)) return 'deposit';
-  return 'manual';
+  if (i.invoiceNumber) return 'invoice';
+  return 'unknown';
 }
 
 /** The match, kept as it was scored. */
-export function proofFromMatch(kind: ProofKind, match?: ProjectMatch | null, read?: MatchProof['read']): MatchProof {
+export function proofFromMatch(kind: ProofKind, match?: Pick<ProjectMatch, 'percent' | 'level' | 'reasons'> & Partial<ProjectMatch> | null, read?: MatchProof['read']): MatchProof {
   return {
     kind,
     at: new Date().toISOString(),
