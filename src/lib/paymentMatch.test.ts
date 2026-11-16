@@ -53,8 +53,23 @@ describe('a payment with no shift', () => {
     expect(best?.project.map(j => j.id)).toEqual(['a', 'b']);
   });
 
-  it('looks no further back than that', () => {
-    expect(bestProjectFor({ amount: 800, date: '2026-11-25', payer: 'Odeum' }, ctx(gala))).toBeNull();
+  it('looks further back, up to a year, when nothing fits in the 45 days, and says so', () => {
+    const near = bestProjectFor({ amount: 800, date: '2026-11-20', payer: 'Odeum' }, ctx(gala));
+    expect(near?.match.farBack).toBeUndefined();
+    const backlogged = bestProjectFor({ amount: 800, date: '2026-11-25', payer: 'Odeum' }, ctx(gala));
+    expect(backlogged?.project.map(j => j.id)).toEqual(['a', 'b']);
+    expect(backlogged?.match.farBack).toBe(true);
+  });
+
+  it('keeps to the 45 days when something fits there', () => {
+    const recent = [shift('n1', '2026-11-10', { jobNumber: 'N-1' })];
+    const best = bestProjectFor({ amount: 400, date: '2026-11-25', payer: 'Odeum' }, ctx([...gala, ...recent]));
+    expect(best?.project.map(j => j.id)).toEqual(['n1']);
+    expect(best?.match.farBack).toBeUndefined();
+  });
+
+  it('stops at a year', () => {
+    expect(bestProjectFor({ amount: 800, date: '2027-12-01', payer: 'Odeum' }, ctx(gala))).toBeNull();
   });
 
   it('finds a long run by its last days, however long ago it started', () => {

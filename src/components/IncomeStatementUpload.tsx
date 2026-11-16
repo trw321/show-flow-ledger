@@ -94,7 +94,8 @@ export interface PaymentLink {
 /**
  * The shift a payment most likely paid, and why. It's the same engine as Add
  * pay on the calendar, so a payment gets the same answer wherever it's added:
- * a project worked up to 45 days before it, or a week after, scored on the
+ * a project worked up to 45 days before it (or, when nothing fits there, up to
+ * a year before), or a week after, scored on the
  * stub's hours, the amount, the payer and the timing. The reasons are shown
  * beside the photo, so a match can be checked instead of taken on trust.
  */
@@ -185,6 +186,12 @@ function ProjectOption({ link, amount, chosen, onChoose }: { link: PaymentLink; 
         </span>
         <span className={cn('shrink-0 text-[11px] font-bold text-mono uppercase', tone)}>{m.percent}% {m.level}</span>
       </button>
+
+      {m.farBack && (
+        <p className="mt-1 text-[10px] text-warning">
+          Found by looking further back: nothing fit in the 45 days before the payment, so shifts up to a year back were checked.
+        </p>
+      )}
 
       {/* What the amount is checked against, by date, since dates are what tie a payment to work. */}
       <p className="mt-1.5 text-[11px] text-mono">
@@ -600,7 +607,7 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
                             </div>
                           ) : (
                             <p className="text-[11px] text-warning">
-                              No shift was worked near this date{periodOf(txn) ? ' or in its pay period' : ''}, so it is saved on its own, under Payments with no shift, where it can be made into one.
+                              No shift was worked in the year before this date{periodOf(txn) ? ' or in its pay period' : ''}, so it is saved on its own, under Payments with no shift, where it can be made into one.
                             </p>
                           )}
                           {!link.job && (options[i] ?? []).length > 0 && (

@@ -54,6 +54,8 @@ export interface ProjectMatch {
   parts: MatchPart[];
   /** Every shift in the project, by date. */
   shifts: MatchShift[];
+  /** Found only by looking past the first 45 days, up to a year back. */
+  farBack?: boolean;
 }
 
 export interface MatchContext {
@@ -256,31 +258,66 @@ export function payPeriodIn(text?: string): { start: string; end: string } | und
 }
 
 /**
- * Every project the payment could have paid, best first: worked within a week
- * after it or six weeks before it, or inside its pay period.
+ * The first look: work up to 45 days before a payment (a first check can take
+ * weeks) or a week after it (a payment dated partway through a run).
  */
-export function rankedProjectsFor(payment: FoundPayment, ctx: MatchContext, limit = 3): { project: Job[]; match: ProjectMatch }[] {
+export const NEAR_LOOK_BACK_DAYS = 45;
+/**
+ * The second look, only when nothing fits in the first: up to a year before.
+ * Work gets backlogged, and a check can come months late.
+ */
+export const FAR_LOOK_BACK_DAYS = 366;
+
+type Found = { project: Job[]; match: ProjectMatch };
+const byPercent = (a: Found, b: Found) => b.match.percent - a.match.percent;
+
+/**
+ * Every project worked inside the window, scored. A day inside the payment's
+ * pay period always counts, however far back it is. Projects in `skip` are
+ * left out.
+ */
+function candidates(payment: FoundPayment, ctx: MatchContext, days: number, skip: Set<string>): Found[] {
   const keys = projectKeysFor(ctx.allJobs, ctx.employers);
-  const seen = new Set<string>();
-  const found: { project: Job[]; match: ProjectMatch }[] = [];
+  const seen = new Set(skip);
+  const found: Found[] = [];
   for (const job of ctx.allJobs) {
     const key = keys.get(job.id) ?? job.id;
     if (seen.has(key)) continue;
     if (effectiveHoursWorked(job) <= 0) continue;
     const inPeriod = !!payment.period && job.date >= payment.period.start && job.date <= payment.period.end;
-    if (!inPeriod && !withinLookBack(payment.date, job.date)) continue;
+    if (!inPeriod && !withinLookBack(payment.date, job.date, days)) continue;
+    // Any worked day in the window brings the whole project in: a long run's
+    // first day can be well over six weeks before a check for its last.
     seen.add(key);
     const project = projectOf(job, ctx.allJobs, ctx.employers);
     found.push({ project, match: matchPaymentToProject(payment, project, ctx) });
   }
-  return found.sort((a, b) => b.match.percent - a.match.percent).slice(0, limit);
+  return found;
+}
+
+/**
+ * Both looks: the last 45 days, then, if nothing there fits better than
+ * poorly, up to a year back. What the second look adds says so (farBack).
+ */
+function nearThenFar(payment: FoundPayment, ctx: MatchContext, skip: Set<string>): Found[] {
+  const near = candidates(payment, ctx, NEAR_LOOK_BACK_DAYS, skip);
+  if (near.some(f => f.match.level !== 'low')) return near.sort(byPercent);
+  const keys = projectKeysFor(ctx.allJobs, ctx.employers);
+  const looked = new Set([...skip, ...near.flatMap(f => f.project.map(j => keys.get(j.id) ?? j.id))]);
+  const far = candidates(payment, ctx, FAR_LOOK_BACK_DAYS, looked).map(f => ({ ...f, match: { ...f.match, farBack: true } }));
+  return [...near, ...far].sort(byPercent);
+}
+
+/** Every project the payment could have paid, best first. */
+export function rankedProjectsFor(payment: FoundPayment, ctx: MatchContext, limit = 3): Found[] {
+  return nearThenFar(payment, ctx, new Set()).slice(0, limit);
 }
 
 /**
  * Another project the payment fits clearly better, if there is one — so a
  * stub for last week's job, opened on this week's shift, says so.
  */
-export function betterProject(payment: FoundPayment, current: Job, ctx: MatchContext): { project: Job[]; match: ProjectMatch } | null {
+export function betterProject(payment: FoundPayment, current: Job, ctx: MatchContext): Found | null {
   const here = matchPaymentToProject(payment, projectOf(current, ctx.allJobs, ctx.employers), ctx);
   const best = bestOf(payment, ctx, projectKeysFor(ctx.allJobs, ctx.employers).get(current.id));
   return best && best.match.percent >= here.percent + 20 && best.match.level !== 'low' ? best : null;
@@ -288,41 +325,24 @@ export function betterProject(payment: FoundPayment, current: Job, ctx: MatchCon
 
 /**
  * Whether a worked day is close enough to a payment to be what it paid: up to
- * 45 days before it (a first check can take weeks), or a week after (a
- * payment dated partway through a run).
+ * `days` before it (45 unless the search has widened), or a week after.
  */
-export function withinLookBack(paymentDate: string, workDate: string): boolean {
+export function withinLookBack(paymentDate: string, workDate: string, days: number = NEAR_LOOK_BACK_DAYS): boolean {
   const gap = differenceInCalendarDays(parseISO(paymentDate), parseISO(workDate));
-  return !Number.isNaN(gap) && gap >= -7 && gap <= 45;
+  return !Number.isNaN(gap) && gap >= -7 && gap <= days;
 }
 
 /**
- * The project a payment with no shift most likely paid — worked within a week
- * after it or six weeks before it — if any fits better than poorly.
+ * The project a payment with no shift most likely paid, if any fits better
+ * than poorly: the last 45 days first, then up to a year back.
  */
-export function bestProjectFor(payment: FoundPayment, ctx: MatchContext): { project: Job[]; match: ProjectMatch } | null {
+export function bestProjectFor(payment: FoundPayment, ctx: MatchContext): Found | null {
   const best = bestOf(payment, ctx);
   return best && best.match.level !== 'low' ? best : null;
 }
 
-function bestOf(payment: FoundPayment, ctx: MatchContext, skipKey?: string): { project: Job[]; match: ProjectMatch } | null {
-  const seen = new Set<string>(skipKey ? [skipKey] : []);
-  const keys = projectKeysFor(ctx.allJobs, ctx.employers);
-  let best: { project: Job[]; match: ProjectMatch } | null = null;
-  for (const job of ctx.allJobs) {
-    const key = keys.get(job.id) ?? job.id;
-    if (seen.has(key)) continue;
-    if (effectiveHoursWorked(job) <= 0) continue;
-    const inPeriod = !!payment.period && job.date >= payment.period.start && job.date <= payment.period.end;
-    if (!inPeriod && !withinLookBack(payment.date, job.date)) continue;
-    // Any worked day in the window brings the whole project in: a long run's
-    // first day can be well over six weeks before a check for its last.
-    seen.add(key);
-    const project = projectOf(job, ctx.allJobs, ctx.employers);
-    const match = matchPaymentToProject(payment, project, ctx);
-    if (!best || match.percent > best.match.percent) best = { project, match };
-  }
-  return best;
+function bestOf(payment: FoundPayment, ctx: MatchContext, skipKey?: string): Found | null {
+  return nearThenFar(payment, ctx, new Set(skipKey ? [skipKey] : []))[0] ?? null;
 }
 
 /**
