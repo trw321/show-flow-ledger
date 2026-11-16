@@ -1,7 +1,7 @@
 import { localToday } from './today';
 import { describe, it, expect } from 'vitest';
 import { hourUpdateToEntry, matchEntries, notedAsCallback, type SmartImportHourUpdate, type HoursEntry } from './hoursMatching';
-import { calculateDayPay, offClockMealMinutes, netHoursWorked, jobPayBreakdown, effectiveHoursWorked } from './payCalc';
+import { calculateDayPay, calculateExpectedPay, offClockMealMinutes, netHoursWorked, jobPayBreakdown, effectiveHoursWorked, dayMultiplierFor } from './payCalc';
 import type { Employer, Job } from './store';
 import { EMPTY_PROFILE } from './payerProfile';
 
@@ -310,6 +310,28 @@ describe('union hours break the hour', () => {
     });
     expect(r.nightHours).toBe(6);
   });
+
+  it('combines two calls, deducts the meal gap, then breaks the worked hour for union pay', () => {
+    const day = {
+      id: 'call-day',
+      name: 'Show',
+      client: 'Acme',
+      date: localToday(),
+      status: 'completed',
+      startTime: '08:00 AM',
+      endTime: '07:15 PM',
+      hoursWorked: 11.25,
+      callTimeline: '8a-1p, 2p-7:15p',
+      hourlyRate: 50,
+      has6th7thDayRule: false,
+      notes: '',
+      createdAt: 'x',
+    } as Job;
+    const local = { id: 'Acme', name: 'Acme', overtimeRule: 'daily', roundUpToWholeHours: true, createdAt: 'x' } as Employer;
+
+    expect(netHoursWorked(day)).toBe(10.25);
+    expect(jobPayBreakdown(day, [day], [local]).gross).toBe(8 * 50 + 3 * 75);
+  });
 });
 
 describe('a split day that runs past midnight', () => {
@@ -463,6 +485,37 @@ describe('a shift that has not happened yet', () => {
 
   it('counts nothing for a future shift with no times at all', () => {
     expect(effectiveHoursWorked(scheduled(dayOffset(7), { startTime: undefined, endTime: undefined }))).toBe(0);
+  });
+});
+
+describe('day-premium calculations stay date-specific across a multi-day range', () => {
+  const employer = (over: Record<string, unknown> = {}) => ({
+    id: 'e1', name: 'Acme', overtimeRule: 'daily', createdAt: '2026-01-01',
+    sixthSeventhDayRule: true, dailyOvertimeThresholdHours: 8, dailyDoubletimeThresholdHours: 12,
+    overtimeMultiplier: 1.5, doubletimeMultiplier: 2, ...over,
+  }) as never;
+
+  it('uses the right 6th and 7th day premium for each date in the total', () => {
+    const jobs = Array.from({ length: 7 }, (_, i) => ({
+      id: `j${i + 1}`,
+      name: 'Show',
+      client: 'Acme',
+      venue: 'Hall',
+      date: `2026-10-${String(i + 1).padStart(2, '0')}`,
+      status: 'completed',
+      hoursWorked: 8,
+      hourlyRate: 50,
+      has6th7thDayRule: false,
+      notes: '',
+      createdAt: 'x',
+    } as Job));
+
+    expect(dayMultiplierFor(jobs[5], employer(), jobs)).toBe(1.5);
+    expect(dayMultiplierFor(jobs[6], employer(), jobs)).toBe(2);
+
+    const total = calculateExpectedPay(jobs, jobs[0], jobs, employer()).total;
+    const expected = jobs.reduce((sum, job) => sum + jobPayBreakdown(job, jobs, [employer()]).gross, 0);
+    expect(total).toBeCloseTo(expected, 2);
   });
 });
 

@@ -4,23 +4,29 @@
 
 Phase A introduces the contract and contract-version concepts as
 first-class database entities. This is the architectural foundation
-for labor-rule modeling. Nothing else changes.
+for labor-rule modeling: later gigs and payroll calculations need a
+stable, dated source of terms. Nothing else changes.
 
 ## What was added
 
 ### Database
-- `contracts` table — identity of labor agreements
+- `contracts` table — identity of labor agreements, separate from the
+   employer or venue because one employer can work under several agreements
 - `contract_versions` table — versioned rules (rates, OT, meal penalty,
-  fringe, rounding, minimums, turnaround, forced call, pay schedule)
+   fringe, rounding, minimums, turnaround, forced call, pay schedule), so
+   changes over time do not rewrite the terms of past work
 - `set_updated_at()` Postgres function (if not already present)
-- Updated_at triggers on both new tables
-- RLS policies — user-scoped via `auth.uid()`
+- Updated_at triggers on both new tables, so edits have reliable timestamps
+- RLS policies — user-scoped via `auth.uid()`, so one account cannot read or
+   alter another account's contract data
 - `employers.default_contract_id` column — only if `employers` table
-  already existed in the DB
+   already existed in the DB; this is a convenience default, not a rule that
+   forces every call for that employer to use the same contract
 
 ### Codebase
 - `/types/contracts.ts` — TypeScript types for `Contract`,
-  `ContractVersion`, `OvertimeTier`, and `ContractSnapshot`
+   `ContractVersion`, `OvertimeTier`, and `ContractSnapshot`, so app code can
+   represent the persisted rules without untyped JSON or duplicated shapes
 
 ## What is intentionally NOT in this phase
 
@@ -71,18 +77,29 @@ Through the Supabase Table Editor:
 
 Phase B (next, when ready):
 - Add the rest of the labor-model tables: `employers`, `gigs`,
-  `payments`, `payment_allocations`, `union_dues`, `discrepancies`
-- Wire up the contract snapshot column on `gigs`
+   `payments`, `payment_allocations`, `union_dues`, `discrepancies` —
+   these give each work record, incoming payment, deduction, and mismatch a
+   clear home instead of overloading the bookkeeping tables
+- Wire up the contract snapshot column on `gigs` — the gig must retain the
+   exact terms it was created under even after a contract is edited
 - Build the contract-version resolver (given a work date, find the
-  applicable version)
+   applicable version) — calculations need deterministic rules for that date,
+   not whichever version happens to be current today
 
 Phase C:
-- Build out `/lib/payroll/` calculation engine on top of the new schema
-- Snapshot logic on gig creation
+- Build out `/lib/payroll/` calculation engine on top of the new schema —
+   rates, overtime, meals, dues, and rounding should come from the gig's
+   applicable contract rather than scattered employer defaults
+- Snapshot logic on gig creation — capture the resolved version once, so
+   later edits cannot silently change an existing gig's expected pay
 
 Phase D:
-- UI for managing contracts and logging gigs against them
+- UI for managing contracts and versions — users need a safe way to maintain
+   the rules the engine will rely on
+- UI for logging gigs against them — users need to choose or review the
+   agreement for each call, since it can vary even for the same employer
 
 Phase E (much later):
 - Migrate historical `jobs` data into `gigs` one at a time with
-  inferred contracts (manual, not bulk)
+   inferred contracts (manual, not bulk) — old records are incomplete or
+   ambiguous, so review avoids silently assigning the wrong labor rules
