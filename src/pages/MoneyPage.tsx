@@ -7,12 +7,12 @@ import { Plus } from 'lucide-react';
 import { useData } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
 import IncomeStatementUpload from '@/components/IncomeStatementUpload';
-import BankStatementImport, { type ReconciliationRowInfo } from '@/components/BankStatementImport';
+import { SourceTag } from '@/components/PaymentProof';
 import EmployerCombobox from '@/components/EmployerCombobox';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { DollarSign, Mic, MicOff, Trash2, Pencil, Clock, Upload } from 'lucide-react';
+import { DollarSign, Mic, MicOff, Trash2, Pencil, Clock } from 'lucide-react';
 import { format, differenceInDays, addDays, endOfMonth, parseISO, startOfWeek, isWithinInterval, endOfWeek, startOfMonth } from 'date-fns';
 import { calculateExpectedPay, effectiveHoursWorked, netHoursWorked } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
@@ -79,14 +79,6 @@ function namesMatch(a?: string, b?: string): boolean {
   if (na.length >= 3 && nb.includes(na)) return true;
   if (nb.length >= 3 && na.includes(nb)) return true;
   return false;
-}
-
-/** What the shifts in a row were: the project names, so two projects for the same employer read apart. */
-function projectLabel(row: { jobName: string; jobs: Job[] }): string {
-  const names = [...new Set(row.jobs.map(j => j.name?.trim()).filter(Boolean))];
-  if (names.length === 0) return row.jobName;
-  const number = names.length === 1 ? row.jobs.find(j => j.jobNumber?.trim())?.jobNumber?.trim() : undefined;
-  return names.join(' · ') + (number ? ` #${number}` : '');
 }
 
 interface RowCandidate {
@@ -406,7 +398,6 @@ export default function MoneyPage() {
   }, [data.jobs, data.employers, prefs.payer]);
 
   const [addOpen, setAddOpen] = useState(false);
-  const [showImport, setShowImport] = useState(false);
 
   const editingInc = editId ? data.income.find(i => i.id === editId) : undefined;
   const jobs = data.jobs.map(j => ({ id: j.id, name: j.name }));
@@ -603,29 +594,6 @@ export default function MoneyPage() {
     });
   }, [data.jobs, data.employers]);
 
-  const importRows: ReconciliationRowInfo[] = useMemo(() =>
-    reconciliation.map(r => ({
-      // jobId included on purpose — periodLabel alone is "Full project" for
-      // every non-scheduled shift of the same client, so three separate
-      // one-day jobs collapsed onto one identical key. That made them
-      // indistinguishable in the match list (React couldn't tell the rows
-      // apart, and picking one silently "picked" all three at once).
-      key: `${r.client}-${r.periodLabel}-${r.jobId}`,
-      jobId: r.jobId,
-      client: r.client,
-      projectName: projectLabel(r),
-      periodLabel: r.periodLabel,
-      periodEnd: r.periodEnd,
-      expectedPay: r.expectedPay,
-      jobIds: r.jobs.map(j => j.id),
-    })),
-    [reconciliation]
-  );
-
-  const handleImportConfirm = (income: Omit<Income, 'id' | 'createdAt'>) => {
-    addIncome(income);
-  };
-
   return (
     <SpacePageWrapper
       title={
@@ -644,6 +612,26 @@ export default function MoneyPage() {
       description={totalLogged}
     >
       <div className="max-w-lg mx-auto">
+      {/* Adding income is what the page is opened for most, so it comes
+          first: the photo box, then typing it in. One way to send a photo. */}
+      {!addOpen ? (
+        <Button onClick={() => setAddOpen(true)} className="pixel-button w-full mb-4 gap-1.5">
+          <Plus size={15} /> Add income
+        </Button>
+      ) : (
+        <div className="pixel-panel mb-4 p-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-body uppercase tracking-widest text-muted-foreground">Add income</p>
+            <button type="button" onClick={() => setAddOpen(false)} className="text-[11px] text-muted-foreground hover:text-foreground">Close</button>
+          </div>
+          <IncomeStatementUpload />
+          <IncomeMadlib
+            jobs={jobs}
+            onAdd={(inc) => { addIncome(inc); toast.success('income added'); setAddOpen(false); }}
+          />
+        </div>
+      )}
+
       {/* The three figures the page exists to answer, before any of the tools
           for changing them. Still owed is the one you came for, so it is the
           one that is big. */}
@@ -732,29 +720,6 @@ export default function MoneyPage() {
         </div>
       )}
 
-      {/* Three ways in, behind one button — both of these were sitting open and
-          taking the top of the page whether or not anything was being added. */}
-      {!addOpen ? (
-        <Button onClick={() => setAddOpen(true)} className="pixel-button w-full mb-4 gap-1.5">
-          <Plus size={15} /> Add income
-        </Button>
-      ) : (
-        <div className="pixel-panel mb-4 p-3 space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] font-body uppercase tracking-widest text-muted-foreground">Add income</p>
-            <button type="button" onClick={() => setAddOpen(false)} className="text-[11px] text-muted-foreground hover:text-foreground">Close</button>
-          </div>
-          <Button size="sm" variant="outline" className="w-full gap-1.5" onClick={() => setShowImport(true)}>
-            <Upload size={13} /> From a screenshot or statement
-          </Button>
-          <IncomeStatementUpload />
-          <IncomeMadlib
-            jobs={jobs}
-            onAdd={(inc) => { addIncome(inc); toast.success('income added'); setAddOpen(false); }}
-          />
-        </div>
-      )}
-
       {(taxYear.w2 > 0 || taxYear.selfEmployed > 0) && (() => {
         const owed = taxYear.estimate.stillOwed;
         const dollars = (n: number) => '$' + Math.round(n).toLocaleString();
@@ -779,23 +744,6 @@ export default function MoneyPage() {
           </div>
         );
       })()}
-
-      {/* Import dialog */}
-      <Dialog open={showImport} onOpenChange={setShowImport}>
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-mono">Import Bank Statement</DialogTitle>
-            <p className="text-xs text-muted-foreground mt-1">
-              Upload a screenshot or PDF of your bank statement, check, or pay stub. AI will extract the amount and suggest which job it belongs to.
-            </p>
-          </DialogHeader>
-          <BankStatementImport
-            rows={importRows}
-            onConfirm={handleImportConfirm}
-            onClose={() => setShowImport(false)}
-          />
-        </DialogContent>
-      </Dialog>
 
       <ExportButton onClick={() => exportWeeklyToExcel(data.jobs, data.expenses, data.income, data.employers)} />
 
@@ -827,6 +775,7 @@ export default function MoneyPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-semibold text-sm">{inc.client}</p>
+                  <SourceTag income={inc} />
                   <span className={cn("text-[9px] font-bold text-mono uppercase rounded-full px-2 py-0.5 border", statusColors[inc.status])}>
                     {inc.status}
                   </span>
