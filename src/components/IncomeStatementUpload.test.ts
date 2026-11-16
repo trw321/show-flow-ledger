@@ -66,3 +66,20 @@ describe('a stub is not the money', () => {
     expect(looksLikeStubOnly({ client: 'EP', description: 'Direct deposit', amount: 812, date: '2026-10-30' })).toBe(false);
   });
 });
+
+describe('a pay period read with the payment', () => {
+  it('uses the reader’s pay period, else one written in the description', async () => {
+    const { periodOf } = await import('./IncomeStatementUpload');
+    const base = { client: 'Odeum', amount: 822.25, date: '2026-11-06' } as ParsedIncome;
+    expect(periodOf({ ...base, description: 'Pay stub', payPeriodStart: '2026-10-26', payPeriodEnd: '2026-11-01' })).toEqual({ start: '2026-10-26', end: '2026-11-01' });
+    expect(periodOf({ ...base, description: 'Pay stub for the period 10/26/2026 to 11/01/2026' })).toEqual({ start: '2026-10-26', end: '2026-11-01' });
+    expect(periodOf({ ...base, description: 'Payroll check' })).toBeUndefined();
+  });
+
+  it('moves the pay period with the year when the year is corrected', async () => {
+    const { withSettledYear } = await import('./IncomeStatementUpload');
+    const work = { id: 'w', name: 'roar', client: 'odeum', date: '2026-10-26', status: 'completed', hoursWorked: 11, hourlyRate: 37, has6th7thDayRule: false, notes: '', createdAt: 'x' } as Job;
+    const read = withSettledYear({ client: 'Odeum', description: 'Pay stub', amount: 822.25, date: '2023-11-06', payPeriodStart: '2023-10-26', payPeriodEnd: '2023-11-01' }, [work], '2026-11-16');
+    expect(read).toMatchObject({ date: '2026-11-06', readAs: '2023-11-06', payPeriodStart: '2026-10-26', payPeriodEnd: '2026-11-01' });
+  });
+});

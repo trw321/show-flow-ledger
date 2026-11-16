@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchPaymentToProject, betterProject, bestProjectFor, projectOf, settleReadYear, type MatchContext } from './paymentMatch';
+import { matchPaymentToProject, betterProject, bestProjectFor, projectOf, settleReadYear, payPeriodIn, rankedProjectsFor, type MatchContext } from './paymentMatch';
 import type { Job } from './store';
 
 const shift = (id: string, date: string, extra: Partial<Job> = {}): Job => ({
@@ -98,5 +98,44 @@ describe('a payment year the photo reader got wrong', () => {
 
   it('never moves a date into the future', () => {
     expect(settleReadYear('2023-12-20', [shift('2025-12-15')], '2026-11-15')).toEqual({ date: '2025-12-20', readAs: '2023-12-20' });
+  });
+});
+
+describe('a stub that prints its pay period', () => {
+  // The real week: an Odeum stub for 10/26–11/01, paid Nov 6, $822.25.
+  const odeum = { id: 'o', name: 'odeum', overtimeRule: 'weekly', weeklyOvertimeThresholdHours: 40, createdAt: 'x' } as never;
+  const roar = (date: string) => shift(`roar-${date}`, date, { name: 'roar', client: 'odeum', payrollCompany: undefined, jobNumber: undefined, hoursWorked: 11, hourlyRate: 37 });
+  const phl = (date: string) => shift(`phl-${date}`, date, { name: 'PHL Crew Lead - Electrician', client: 'Odeum', payrollCompany: undefined, jobNumber: 'ROAR', hoursWorked: 11, hourlyRate: 37 });
+  const jobs = [phl('2026-10-19'), roar('2026-10-20'), roar('2026-10-21'), phl('2026-10-23'), roar('2026-10-26'), roar('2026-10-27')];
+  const ctx: MatchContext = { allJobs: jobs, employers: [odeum], paidJobIds: new Set(['roar-2026-10-20', 'roar-2026-10-21', 'phl-2026-10-19', 'phl-2026-10-23']) };
+  const payment = { amount: 822.25, date: '2026-11-06', payer: 'Odeum Labor Services 2 LLC', period: { start: '2026-10-26', end: '2026-11-01' } };
+
+  it('reads the period out of the description', () => {
+    expect(payPeriodIn('Pay stub for the period 10/26/2026 to 11/01/2026')).toEqual({ start: '2026-10-26', end: '2026-11-01' });
+    expect(payPeriodIn('period 10/26/26 - 11/1/26')).toEqual({ start: '2026-10-26', end: '2026-11-01' });
+    expect(payPeriodIn('Payroll check')).toBeUndefined();
+  });
+
+  it('picks the project worked inside the period, checked against just those days', () => {
+    const [best] = rankedProjectsFor(payment, ctx);
+    const inside = best.match.shifts.filter(s => s.inPeriod).map(s => s.job.date);
+    expect(inside).toEqual(['2026-10-26', '2026-10-27']);
+    expect(best.match.expected).toBeCloseTo(2 * 11 * 37, 2);
+    expect(best.match.level).toBe('high');
+  });
+
+  it('shows the score kind by kind', () => {
+    const [best] = rankedProjectsFor(payment, ctx);
+    const period = best.match.parts.find(p => p.label === 'Pay period');
+    expect(period).toMatchObject({ points: 40, of: 40 });
+    expect(best.match.parts.map(p => p.label)).toEqual(['Pay period', 'Amount', 'Payer', 'Timing']);
+    expect(best.match.parts.reduce((n, p) => n + p.of, 0)).toBe(100);
+  });
+
+  it('ranks the other project below it, with no day in the period', () => {
+    const ranked = rankedProjectsFor(payment, ctx);
+    const other = ranked.find(r => r.project.some(j => j.name.startsWith('PHL')));
+    expect(other!.match.percent).toBeLessThan(ranked[0].match.percent);
+    expect(other!.match.parts[0]).toMatchObject({ label: 'Pay period', points: 0 });
   });
 });

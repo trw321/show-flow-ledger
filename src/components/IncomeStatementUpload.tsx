@@ -2,7 +2,8 @@ import { useState, useRef, useMemo } from 'react';
 import { useData } from '@/lib/DataContext';
 import { useAuth } from '@/lib/AuthContext';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
-import { bestProjectFor, settleReadYear, type MatchContext, type ProjectMatch } from '@/lib/paymentMatch';
+import { bestProjectFor, payPeriodIn, rankedProjectsFor, settleReadYear, type FoundPayment, type MatchContext, type MatchShift, type ProjectMatch } from '@/lib/paymentMatch';
+import { pdfToImageDataUrl } from '@/lib/pdfImage';
 import { localToday } from '@/lib/today';
 import { paidShiftIds } from '@/lib/payPeriods';
 import { effectiveHoursWorked } from '@/lib/payCalc';
@@ -37,6 +38,28 @@ export interface ParsedIncome {
   breakdown?: { date: string; hours: number; type: 'ST' | 'OT' | 'DT' }[];
   /** The date as the photo was read, when its year was corrected to match your shifts. */
   readAs?: string;
+  /** The pay period a stub prints, when the reader found one. */
+  payPeriodStart?: string;
+  payPeriodEnd?: string;
+}
+
+/** The days a stub paid for: the reader's pay period, else one written into its description. */
+export function periodOf(txn: ParsedIncome): { start: string; end: string } | undefined {
+  if (txn.payPeriodStart && txn.payPeriodEnd && txn.payPeriodStart <= txn.payPeriodEnd) {
+    return { start: txn.payPeriodStart, end: txn.payPeriodEnd };
+  }
+  return payPeriodIn(txn.description);
+}
+
+function foundPayment(txn: ParsedIncome): FoundPayment {
+  const hoursOn = (txn.breakdown ?? []).map(b => b.date);
+  return {
+    amount: Math.abs(txn.amount),
+    date: txn.date,
+    payer: txn.client || undefined,
+    hoursOn: hoursOn.length > 0 ? hoursOn : undefined,
+    period: periodOf(txn),
+  };
 }
 
 /**
@@ -47,11 +70,11 @@ export function withSettledYear(txn: ParsedIncome, jobs: Job[], today: string): 
   const { date, readAs } = settleReadYear(txn.date, jobs, today);
   if (!readAs) return txn;
   const wrongYear = readAs.slice(0, 4);
-  const breakdown = txn.breakdown?.map(b => (b.date.startsWith(wrongYear) ? { ...b, date: date.slice(0, 4) + b.date.slice(4) } : b));
-  return { ...txn, date, readAs, breakdown };
+  const moved = (d?: string) => (d && d.startsWith(wrongYear) ? date.slice(0, 4) + d.slice(4) : d);
+  const breakdown = txn.breakdown?.map(b => ({ ...b, date: moved(b.date)! }));
+  return { ...txn, date, readAs, breakdown, payPeriodStart: moved(txn.payPeriodStart), payPeriodEnd: moved(txn.payPeriodEnd) };
 }
 
-/** The shift a payment was matched to, and every reason it was picked. */
 /** A pay stub read on its own — no check, no deposit in the picture. */
 export function looksLikeStubOnly(txn: ParsedIncome): boolean {
   const what = (txn.description ?? '').toLowerCase();
@@ -76,18 +99,25 @@ export interface PaymentLink {
  * beside the photo, so a match can be checked instead of taken on trust.
  */
 export function findLinkedJob(txn: ParsedIncome, ctx: MatchContext): PaymentLink {
-  const hoursOn = (txn.breakdown ?? []).map(b => b.date);
-  const best = bestProjectFor({
-    amount: Math.abs(txn.amount),
-    date: txn.date,
-    payer: txn.client || undefined,
-    hoursOn: hoursOn.length > 0 ? hoursOn : undefined,
-  }, ctx);
-  if (!best) return { job: null, reasons: [] };
-  // Linked to its first day still owed, so it shows on the right part of the run.
-  const owed = best.project.filter(j => effectiveHoursWorked(j) > 0 && !ctx.paidJobIds.has(j.id)).sort((a, b) => a.date.localeCompare(b.date));
-  return { job: owed[0] ?? best.project[0], reasons: best.match.reasons, match: best.match };
+  const best = bestProjectFor(foundPayment(txn), ctx);
+  return best ? linkTo(best.project, best.match, ctx) : { job: null, reasons: [] };
 }
+
+function linkTo(project: Job[], match: ProjectMatch, ctx: MatchContext): PaymentLink {
+  // Linked to its first counted day, else the first still owed, so it shows on
+  // the right part of the run.
+  const counted = match.shifts.find(s => s.counted)?.job;
+  const owed = project.filter(j => effectiveHoursWorked(j) > 0 && !ctx.paidJobIds.has(j.id)).sort((a, b) => a.date.localeCompare(b.date));
+  return { job: counted ?? owed[0] ?? project[0], reasons: match.reasons, match };
+}
+
+/** The projects a payment could have paid, best first, to pick from. */
+export function matchOptions(txn: ParsedIncome, ctx: MatchContext): PaymentLink[] {
+  return rankedProjectsFor(foundPayment(txn), ctx, 3).map(r => linkTo(r.project, r.match, ctx));
+}
+
+/** Which option starts picked: the best, unless even that is a poor fit. */
+const firstChoice = (options: PaymentLink[]) => (options[0]?.match && options[0].match.level !== 'low' ? 0 : -1);
 
 /** How a payment read off a photo came in. */
 function kindOfRead(txn: ParsedIncome, stubOnly: boolean): ProofKind {
@@ -110,6 +140,101 @@ function Read({ label, value }: { label: string; value?: string | number | null 
   );
 }
 
+const dollars = (n: number) => '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const shortDay = (iso: string) => format(parseISO(iso), 'EEE MMM d');
+
+/** "Oct 26 – Oct 27", or one day on its own. */
+function daySpan(dates: string[]): string {
+  if (dates.length === 0) return '';
+  const sorted = [...dates].sort();
+  return sorted[0] === sorted[sorted.length - 1] ? day(sorted[0]) : `${day(sorted[0])} – ${day(sorted[sorted.length - 1])}`;
+}
+
+/** The little labels on a shift in the fold-out list. */
+function shiftTags(s: MatchShift): { text: string; good?: boolean }[] {
+  const tags: { text: string; good?: boolean }[] = [];
+  if (s.inPeriod === true) tags.push({ text: 'in pay period', good: true });
+  if (s.inPeriod === false) tags.push({ text: 'outside pay period' });
+  if (s.onStub === true) tags.push({ text: 'on the stub', good: true });
+  if (s.paid) tags.push({ text: 'already paid' });
+  if (s.expected === 0) tags.push({ text: 'no hours yet' });
+  return tags;
+}
+
+/**
+ * One project the payment could have paid: the score kind by kind, the days
+ * its expected amount covers, and every shift in it, folded away until asked.
+ */
+function ProjectOption({ link, amount, chosen, onChoose }: { link: PaymentLink; amount: number; chosen: boolean; onChoose: () => void }) {
+  const [open, setOpen] = useState(false);
+  const m = link.match;
+  if (!m) return null;
+  const lead = m.shifts[0]?.job;
+  const counted = m.shifts.filter(s => s.counted);
+  const gap = amount - m.expected;
+  const tone = m.level === 'high' ? 'text-dot-paid' : m.level === 'medium' ? 'text-warning' : 'text-destructive';
+  return (
+    <div className={cn('border p-2 transition-colors', chosen ? 'border-dot-paid bg-dot-paid/10' : 'border-border')}>
+      <button type="button" onClick={onChoose} aria-pressed={chosen} className="flex w-full items-start gap-2 text-left">
+        <span className={cn('mt-1 h-3 w-3 shrink-0 rounded-full border-2', chosen ? 'border-dot-paid bg-dot-paid' : 'border-muted-foreground')} aria-hidden="true" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[12px] font-semibold">{lead ? `${lead.name} · ${lead.client}` : 'Project'}</span>
+          <span className="block text-[10px] text-mono text-muted-foreground">
+            {daySpan(m.shifts.map(s => s.job.date))} · {m.shifts.length} shift{m.shifts.length === 1 ? '' : 's'}
+          </span>
+        </span>
+        <span className={cn('shrink-0 text-[11px] font-bold text-mono uppercase', tone)}>{m.percent}% {m.level}</span>
+      </button>
+
+      {/* What the amount is checked against, by date, since dates are what tie a payment to work. */}
+      <p className="mt-1.5 text-[11px] text-mono">
+        {dollars(m.expected)} expected for {counted.length ? counted.map(s => day(s.job.date)).join(', ') : 'these shifts'}
+        <span className={cn('ml-1', Math.abs(gap) <= Math.max(1, m.expected * 0.02) ? 'text-dot-paid' : 'text-warning')}>
+          · paid {dollars(amount)} ({gap >= 0 ? '+' : '−'}{dollars(Math.abs(gap))})
+        </span>
+      </p>
+
+      <dl className="mt-1.5 space-y-1.5">
+        {m.parts.map(p => (
+          <div key={p.label} className="text-[10px] leading-snug">
+            <div className="flex items-baseline justify-between gap-2 border-b border-border/40">
+              <dt className="uppercase tracking-wider text-muted-foreground">{p.label}</dt>
+              <dd className={cn('text-mono font-bold', p.of > 0 && p.points >= p.of * 0.7 ? 'text-dot-paid' : p.points > 0 ? 'text-warning' : 'text-destructive')}>
+                {p.points < 0 ? '−' + Math.abs(p.points) : p.points}/{p.of}
+              </dd>
+            </div>
+            <dd className="mt-0.5 min-w-0">
+              {p.reasons.map(r => <span key={r.text} className={cn('block', r.good ? 'text-foreground/80' : 'text-warning')}>{r.good ? '✓' : '✗'} {r.text}</span>)}
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} className="mt-1.5 text-[10px] text-mono uppercase tracking-wider text-primary">
+        {open ? '▴ Hide' : '▾ Show'} the {m.shifts.length} shift{m.shifts.length === 1 ? '' : 's'}
+      </button>
+      {open && (
+        <ul className="mt-1 divide-y divide-border/60 border-t border-border/60">
+          {m.shifts.map(s => (
+            <li key={s.job.id} className={cn('py-1 text-[10px]', s.counted ? '' : 'opacity-60')}>
+              <div className="flex items-baseline gap-3">
+                <span className="text-mono font-semibold">{shortDay(s.job.date)}</span>
+                <span className="text-mono">{s.job.hoursWorked ? `${s.job.hoursWorked}h` : s.expected > 0 ? 'from clock times' : 'no hours'}</span>
+                <span className="ml-auto text-mono">{s.expected > 0 ? dollars(s.expected) : ''}</span>
+              </div>
+              <div className="mt-0.5 flex flex-wrap gap-1">
+                {shiftTags(s).map(t => (
+                  <span key={t.text} className={cn('border px-1 uppercase tracking-wide', t.good ? 'border-dot-paid/60 text-dot-paid' : 'border-border text-muted-foreground')}>{t.text}</span>
+                ))}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function IncomeStatementUpload({ externalOpen, onExternalOpenChange }: { externalOpen?: boolean; onExternalOpenChange?: (open: boolean) => void } = {}) {
   const { addIncome, data } = useData();
   const { prefs } = useUserPrefs();
@@ -124,7 +249,14 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
   const setOpen = (v: boolean) => { if (isControlled) onExternalOpenChange?.(v); else setInternalOpen(v); };
   const [loading, setLoading] = useState(false);
   const [transactions, setTransactions] = useState<ParsedIncome[]>([]);
-  const [links, setLinks] = useState<PaymentLink[]>([]);
+  // Up to three projects each payment could have paid, and which one is picked
+  // (-1: none, saved without a shift).
+  const [options, setOptions] = useState<PaymentLink[][]>([]);
+  const [choice, setChoice] = useState<number[]>([]);
+  const links: PaymentLink[] = useMemo(
+    () => options.map((o, i) => o[choice[i]] ?? { job: null, reasons: [] }),
+    [options, choice],
+  );
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [leftOut, setLeftOut] = useState<LeftOut[]>([]);
   // Rows that are a pay stub and nothing more: what is coming, not money in.
@@ -139,19 +271,41 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
   const dragCounter = useRef(0);
 
   const reset = () => {
-    setTransactions([]); setLinks([]); setSelected(new Set()); setLeftOut([]); setStubOnly(new Set());
+    setTransactions([]); setOptions([]); setChoice([]); setSelected(new Set()); setLeftOut([]); setStubOnly(new Set());
     setPreview(null); setEditing(null); setPhotoBig(false);
   };
 
   // A photo goes to the editor before anything else happens, so whatever is
   // blacked out there never reaches the reader, or anywhere else.
-  const pickFile = (file: File) => {
-    if (!file.type.startsWith('image/')) { toast.error('Please upload an image file'); return; }
+  const pickFile = async (file: File) => {
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    if (!isPdf && !file.type.startsWith('image/')) { toast.error('Please upload an image or a PDF'); return; }
     if (file.size > 15 * 1024 * 1024) { toast.error('File too large (max 15MB)'); return; }
     reset();
+    if (isPdf) {
+      // The reader only takes pictures, so a PDF's pages become one image first.
+      try {
+        const { dataUrl, truncated } = await pdfToImageDataUrl(file);
+        if (truncated) toast.info('Only the first pages of the PDF were read');
+        setOpen(true); setEditing(dataUrl);
+      } catch (err) {
+        console.error(err);
+        toast.error('Could not open that PDF');
+      }
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => { setOpen(true); setEditing(reader.result as string); };
     reader.readAsDataURL(file);
+  };
+
+  /** A correction to what was read: the matches are worked out again from it. */
+  const updateTxn = (i: number, patch: Partial<ParsedIncome>) => {
+    const next = transactions.map((t, j) => (j === i ? { ...t, ...patch, ...(patch.date ? { readAs: undefined } : {}) } : t));
+    const fresh = matchOptions(next[i], matchCtx);
+    setTransactions(next);
+    setOptions(prev => prev.map((o, j) => (j === i ? fresh : o)));
+    setChoice(prev => prev.map((c, j) => (j === i ? firstChoice(fresh) : c)));
   };
 
   const readStatement = async (edited: string) => {
@@ -193,7 +347,9 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
       // be switched.
       setStubOnly(new Set(txns.map((t, i) => (looksLikeStubOnly(t) ? i : -1)).filter(i => i >= 0)));
       setLeftOut(flags);
-      setLinks(txns.map(t => findLinkedJob(t, matchCtx)));
+      const found = txns.map(t => matchOptions(t, matchCtx));
+      setOptions(found);
+      setChoice(found.map(firstChoice));
       setSelected(new Set(txns.map((_, i) => i).filter(i => flags[i].repeatOf === undefined && !flags[i].recorded)));
       const skipped = flags.filter(f => f.repeatOf !== undefined || f.recorded).length;
       toast[txns.length ? 'success' : 'info'](
@@ -263,7 +419,7 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
       <input
         id="income-statement-input"
         type="file"
-        accept="image/*"
+        accept="image/*,application/pdf"
         className="hidden"
         onChange={e => {
           const f = e.target.files?.[0];
@@ -295,7 +451,7 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
           {dragging ? 'drop to scan' : 'load screenshot'}
         </span>
         <span className="text-xs text-muted-foreground/50">
-          {dragging ? '' : 'paystub, invoice, or bank statement · drag & drop or click'}
+          {dragging ? '' : 'check, pay stub, invoice or bank statement · photo or PDF · drag & drop or click'}
         </span>
       </button>
 
@@ -332,10 +488,10 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
 
             {/* The photo beside what was taken from it: what is being saved
                 and why it matches, laid against the stub they came from. */}
-            <div className={cn('grid gap-3 items-start', photoBig ? 'grid-cols-1' : 'grid-cols-[minmax(0,2fr)_minmax(0,3fr)]')}>
+            <div className={cn('grid gap-3 items-start', photoBig ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]')}>
               {preview && (
                 <button type="button" onClick={() => setPhotoBig(b => !b)} className="sm:sticky sm:top-0 text-left">
-                  <img src={preview} alt="The statement, as it was read" className="w-full border border-border" />
+                  <img src={preview} alt="The statement, as it was read" className={cn("w-full border border-border object-contain object-left", photoBig ? "" : "max-h-48 sm:max-h-none")} />
                   <span className="mt-1 block text-[10px] text-muted-foreground">
                     As it was sent{photoBig ? ' · tap to shrink' : ' · tap to enlarge'}
                   </span>
@@ -379,35 +535,76 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
                         </div>
                       )}
 
-                      <div className="mt-2 grid gap-x-3 gap-y-2 sm:grid-cols-2">
+                      <div className="mt-2 space-y-3">
                         <div className="min-w-0">
-                          <p className="mb-1 text-[9px] text-mono uppercase tracking-widest text-muted-foreground">Read from the photo</p>
-                          <dl className="space-y-0.5 text-[11px]">
+                          <p className="mb-1 text-[9px] text-mono uppercase tracking-widest text-muted-foreground">Read from the photo · fix anything it got wrong</p>
+                          <dl className="space-y-1 text-[11px]">
                             <Read label="Paid by" value={txn.client} />
-                            <Read label="Paid on" value={txn.date ? format(parseISO(txn.date), 'MMM d, yyyy') + (txn.readAs ? ` (photo read ${txn.readAs.slice(0, 4)}; changed to match your shifts)` : '') : ''} />
-                            <Read label="Amount" value={`$${Math.abs(txn.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`} />
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <dt className="shrink-0 text-muted-foreground">Paid on</dt>
+                              <dd>
+                                <input
+                                  type="date"
+                                  value={txn.date}
+                                  onChange={e => e.target.value && updateTxn(i, { date: e.target.value })}
+                                  className="border border-border bg-background px-1.5 py-0.5 text-[11px] text-mono"
+                                  aria-label="Date paid"
+                                />
+                              </dd>
+                              <dt className="shrink-0 text-muted-foreground ml-2">Amount</dt>
+                              <dd>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  defaultValue={Math.abs(txn.amount).toFixed(2)}
+                                  onBlur={e => { const n = Number(e.target.value); if (Number.isFinite(n) && n > 0 && n !== Math.abs(txn.amount)) updateTxn(i, { amount: n }); }}
+                                  className="w-24 border border-border bg-background px-1.5 py-0.5 text-[11px] text-mono"
+                                  aria-label="Amount paid"
+                                />
+                              </dd>
+                            </div>
+                            {txn.readAs && (
+                              <p className="text-[10px] text-warning">The photo read the year as {txn.readAs.slice(0, 4)}; changed to match your shifts.</p>
+                            )}
+                            {(() => {
+                              const p = periodOf(txn);
+                              return <Read label="Pay period" value={p ? `${format(parseISO(p.start), 'EEE MMM d')} – ${format(parseISO(p.end), 'EEE MMM d, yyyy')}` : ''} />;
+                            })()}
                             <Read label="What" value={txn.description} />
                             <Read label="Invoice" value={txn.invoiceNumber} />
                             <Read label="Hours" value={txn.breakdown?.length ? txn.breakdown.map(b => `${day(b.date)} ${b.hours} ${b.type}`).join(', ') : ''} />
                           </dl>
                         </div>
                         <div className="min-w-0">
-                          <p className="mb-1 text-[9px] text-mono uppercase tracking-widest text-muted-foreground">Why it matches</p>
-                          {link.job ? (
-                            <>
-                              <p className="text-[11px] font-semibold text-dot-paid">
-                                {link.job.name} · {day(link.job.date)}
-                                {link.job.payrollCompany ? <span className="font-normal text-muted-foreground"> · {link.job.payrollCompany}</span> : null}
-                              </p>
-                              {link.match && <p className="text-[10px] text-mono font-bold uppercase text-muted-foreground">{link.match.percent}% {link.match.level}</p>}
-                              <ul className="mt-0.5 space-y-0.5 text-[10px]">
-                                {link.reasons.map(r => <li key={r.text} className={r.good ? 'text-muted-foreground' : 'text-warning'}>{r.good ? '✓' : '✗'} {r.text}</li>)}
-                              </ul>
-                            </>
+                          <p className="mb-1 text-[9px] text-mono uppercase tracking-widest text-muted-foreground">Which project it paid · tap to pick</p>
+                          {(options[i] ?? []).length > 0 ? (
+                            <div className="space-y-1.5">
+                              {options[i].map((opt, k) => (
+                                <ProjectOption
+                                  key={opt.match?.shifts[0]?.job.id ?? k}
+                                  link={opt}
+                                  amount={Math.abs(txn.amount)}
+                                  chosen={choice[i] === k}
+                                  onChoose={() => setChoice(prev => prev.map((c, j) => (j === i ? k : c)))}
+                                />
+                              ))}
+                              <button
+                                type="button"
+                                aria-pressed={choice[i] === -1}
+                                onClick={() => setChoice(prev => prev.map((c, j) => (j === i ? -1 : c)))}
+                                className={cn('w-full border px-2 py-1.5 text-left text-[11px]', choice[i] === -1 ? 'border-foreground/60 bg-foreground/5 font-semibold' : 'border-border text-muted-foreground')}
+                              >
+                                None of these: save it without a shift
+                              </button>
+                            </div>
                           ) : (
                             <p className="text-[11px] text-warning">
-                              No shift matches — it is saved on its own, under Payments with no shift, where it can be made into one.
+                              No shift was worked near this date{periodOf(txn) ? ' or in its pay period' : ''}, so it is saved on its own, under Payments with no shift, where it can be made into one.
                             </p>
+                          )}
+                          {!link.job && (options[i] ?? []).length > 0 && (
+                            <p className="mt-1 text-[10px] text-muted-foreground">Nothing picked: it will be saved without a shift.</p>
                           )}
                           {leftOut[i]?.repeatOf !== undefined && (
                             <p className="mt-1.5 text-[11px] text-warning">

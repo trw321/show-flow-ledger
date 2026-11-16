@@ -11,12 +11,36 @@ export interface FoundPayment {
   payer?: string;
   /** Days the stub lists hours for, when it itemises them. */
   hoursOn?: string[];
+  /** The pay period a stub prints ("10/26/2026 to 11/01/2026"): the days it paid for. */
+  period?: { start: string; end: string };
 }
 
 export interface MatchReason {
   text: string;
   /** For the match (true) or against it (false). */
   good: boolean;
+}
+
+/** One kind of evidence, and how many of its points it earned. */
+export interface MatchPart {
+  label: 'Pay period' | 'Hours on the stub' | 'Amount' | 'Payer' | 'Timing';
+  points: number;
+  of: number;
+  reasons: MatchReason[];
+}
+
+/** One shift of the project, as the match sees it. */
+export interface MatchShift {
+  job: Job;
+  /** Expected take-home for this shift; 0 when it has no hours yet. */
+  expected: number;
+  paid: boolean;
+  /** Inside the stub's pay period, when it prints one. */
+  inPeriod?: boolean;
+  /** Listed on the stub's per-day hours, when it has them. */
+  onStub?: boolean;
+  /** Counted in the amount this payment is checked against. */
+  counted: boolean;
 }
 
 export interface ProjectMatch {
@@ -26,6 +50,10 @@ export interface ProjectMatch {
   reasons: MatchReason[];
   /** Expected take-home for the project's worked days the payment would cover. */
   expected: number;
+  /** The score, kind by kind, so it can be read instead of trusted. */
+  parts: MatchPart[];
+  /** Every shift in the project, by date. */
+  shifts: MatchShift[];
 }
 
 export interface MatchContext {
@@ -71,13 +99,43 @@ export function matchPaymentToProject(payment: FoundPayment, project: Job[], ctx
   const reasons: MatchReason[] = [];
   let score = 0;
   let possible = 0;
+  const parts: MatchPart[] = [];
+  // Each kind of evidence is scored in its own block; this records what that
+  // block earned, out of what it could have, with its reasons.
+  let mark = { score: 0, possible: 0, reasons: 0 };
+  const begin = () => { mark = { score, possible, reasons: reasons.length }; };
+  const end = (label: MatchPart['label']) => {
+    if (possible === mark.possible && score === mark.score && reasons.length === mark.reasons) return;
+    parts.push({ label, points: score - mark.score, of: possible - mark.possible, reasons: reasons.slice(mark.reasons) });
+  };
 
   const worked = project.filter(j => effectiveHoursWorked(j) > 0);
   const unpaid = worked.filter(j => !ctx.paidJobIds.has(j.id));
-  const basis = unpaid.length > 0 ? unpaid : worked;
-  const expected = basis.reduce((sum, j) => sum + jobPayBreakdown(j, ctx.allJobs, ctx.employers, ctx.payer ?? EMPTY_PROFILE).net, 0);
+  const period = payment.period && payment.period.start <= payment.period.end ? payment.period : undefined;
+  const inPeriod = (j: Job) => !!period && j.date >= period.start && j.date <= period.end;
+  const workedInPeriod = worked.filter(inPeriod);
+  // A stub's pay period says exactly which days it paid for, so those are what
+  // the amount is checked against; without one, the days still owed.
+  const basis = workedInPeriod.length > 0 ? workedInPeriod : unpaid.length > 0 ? unpaid : worked;
+  const shiftPay = new Map(worked.map(j => [j.id, jobPayBreakdown(j, ctx.allJobs, ctx.employers, ctx.payer ?? EMPTY_PROFILE).net]));
+  const expected = basis.reduce((sum, j) => sum + (shiftPay.get(j.id) ?? 0), 0);
+
+  // 0. The pay period, against the days this project was worked.
+  begin();
+  if (period) {
+    possible += 40;
+    const span = `${day(period.start)} – ${day(period.end)}`;
+    if (workedInPeriod.length > 0) {
+      score += 40;
+      reasons.push({ good: true, text: `Worked ${workedInPeriod.map(j => day(j.date)).join(', ')}: inside the stub's pay period, ${span}` });
+    } else {
+      reasons.push({ good: false, text: `No day of this project falls in the stub's pay period, ${span}` });
+    }
+  }
+  end('Pay period');
 
   // 1. Hours on the stub, on this project's days.
+  begin();
   const projectDays = [...new Set(project.map(j => j.date))].sort();
   if (payment.hoursOn && payment.hoursOn.length > 0) {
     possible += 40;
@@ -90,8 +148,10 @@ export function matchPaymentToProject(payment: FoundPayment, project: Job[], ctx
       reasons.push({ good: false, text: `The stub lists hours on ${[...new Set(payment.hoursOn)].sort().map(day).join(', ')}, none of them this project's days` });
     }
   }
+  end('Hours on the stub');
 
   // 2. The amount, against what the days were expected to pay.
+  begin();
   if (expected > 0) {
     possible += 30;
     const off = Math.abs(payment.amount - expected) / expected;
@@ -113,8 +173,10 @@ export function matchPaymentToProject(payment: FoundPayment, project: Job[], ctx
   } else {
     reasons.push({ good: false, text: 'No rate or hours on these shifts yet, so the amount can’t be checked' });
   }
+  end('Amount');
 
   // 3. Who paid it.
+  begin();
   const lead = project[0];
   if (payment.payer?.trim()) {
     possible += 20;
@@ -128,8 +190,10 @@ export function matchPaymentToProject(payment: FoundPayment, project: Job[], ctx
       reasons.push({ good: false, text: `Paid by ${payment.payer} — not this project's employer or payroll company` });
     }
   }
+  end('Payer');
 
   // 4. When it was paid.
+  begin();
   const workedDays = worked.map(j => j.date).sort();
   if (workedDays.length > 0 && payment.date && isValid(parseISO(payment.date))) {
     possible += 10;
@@ -152,9 +216,64 @@ export function matchPaymentToProject(payment: FoundPayment, project: Job[], ctx
       reasons.push({ good: false, text: `Paid ${sinceLast} days after the last day — a long way after` });
     }
   }
+  end('Timing');
+
+  const onStub = new Set(payment.hoursOn ?? []);
+  const counted = new Set(basis.map(j => j.id));
+  const shifts: MatchShift[] = [...project].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)).map(job => ({
+    job,
+    expected: shiftPay.get(job.id) ?? 0,
+    paid: ctx.paidJobIds.has(job.id),
+    inPeriod: period ? inPeriod(job) : undefined,
+    onStub: payment.hoursOn?.length ? onStub.has(job.date) : undefined,
+    counted: counted.has(job.id),
+  }));
 
   const percent = possible > 0 ? Math.max(0, Math.min(100, Math.round((score / possible) * 100))) : 0;
-  return { percent, level: percent >= 70 ? 'high' : percent >= 40 ? 'medium' : 'low', reasons, expected };
+  return { percent, level: percent >= 70 ? 'high' : percent >= 40 ? 'medium' : 'low', reasons, expected, parts, shifts };
+}
+
+/**
+ * The pay period a stub prints, read from wherever it ended up in the text:
+ * "Pay stub for the period 10/26/2026 to 11/01/2026", "10/26/26 - 11/1/26",
+ * "2026-10-26 through 2026-11-01".
+ */
+export function payPeriodIn(text?: string): { start: string; end: string } | undefined {
+  if (!text) return undefined;
+  const DATE = String.raw`(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}/\d{1,2}/\d{2,4})`;
+  const m = text.match(new RegExp(`${DATE}\\s*(?:-|–|—|to|thru|through)\\s*${DATE}`, 'i'));
+  if (!m) return undefined;
+  const iso = (s: string): string | undefined => {
+    let y: number, mo: number, d: number;
+    if (s.includes('-')) [y, mo, d] = s.split('-').map(Number);
+    else { [mo, d, y] = s.split('/').map(Number); if (y < 100) y += 2000; }
+    const out = `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    return isValid(parseISO(out)) && parseISO(out).getDate() === d ? out : undefined;
+  };
+  const start = iso(m[1]);
+  const end = iso(m[2]);
+  return start && end && start <= end ? { start, end } : undefined;
+}
+
+/**
+ * Every project the payment could have paid, best first: worked within a week
+ * after it or six weeks before it, or inside its pay period.
+ */
+export function rankedProjectsFor(payment: FoundPayment, ctx: MatchContext, limit = 3): { project: Job[]; match: ProjectMatch }[] {
+  const keys = projectKeysFor(ctx.allJobs, ctx.employers);
+  const seen = new Set<string>();
+  const found: { project: Job[]; match: ProjectMatch }[] = [];
+  for (const job of ctx.allJobs) {
+    const key = keys.get(job.id) ?? job.id;
+    if (seen.has(key)) continue;
+    if (effectiveHoursWorked(job) <= 0) continue;
+    const inPeriod = !!payment.period && job.date >= payment.period.start && job.date <= payment.period.end;
+    if (!inPeriod && !withinLookBack(payment.date, job.date)) continue;
+    seen.add(key);
+    const project = projectOf(job, ctx.allJobs, ctx.employers);
+    found.push({ project, match: matchPaymentToProject(payment, project, ctx) });
+  }
+  return found.sort((a, b) => b.match.percent - a.match.percent).slice(0, limit);
 }
 
 /**
@@ -194,7 +313,8 @@ function bestOf(payment: FoundPayment, ctx: MatchContext, skipKey?: string): { p
     const key = keys.get(job.id) ?? job.id;
     if (seen.has(key)) continue;
     if (effectiveHoursWorked(job) <= 0) continue;
-    if (!withinLookBack(payment.date, job.date)) continue;
+    const inPeriod = !!payment.period && job.date >= payment.period.start && job.date <= payment.period.end;
+    if (!inPeriod && !withinLookBack(payment.date, job.date)) continue;
     // Any worked day in the window brings the whole project in: a long run's
     // first day can be well over six weeks before a check for its last.
     seen.add(key);

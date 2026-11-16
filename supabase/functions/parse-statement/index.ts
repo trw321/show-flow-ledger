@@ -56,6 +56,8 @@ PAYMENT NOTE DATE/HOURS BREAKDOWN — payroll payment notes and stubs often item
 
 NEVER INVENT THE BREAKDOWN. Only include an entry when a specific calendar date is printed next to specific hours on the document. If the document shows only period totals (e.g. "Regular Pay 24.00 hours" for a week, with no per-day rows), you must omit the breakdown field entirely — do NOT split, distribute, spread or infer a total across dates, and do not assume standard 8-hour days. A fabricated date/hours split is far worse than no breakdown at all, because it silently mis-matches a payment to the wrong shifts. When in doubt, omit.
 
+PAY PERIOD. A pay stub usually prints the pay period it covers ("Pay period 10/26/2026 - 11/01/2026", "Period ending 11/01/2026"). Put its first and last days in payPeriodStart and payPeriodEnd. They are the days the work was done, not the check date. Use null for both when no period is printed; never work one out from the check date.
+
 If you can't determine the date, use today's date. Return ONLY valid JSON.`
       : `You are a financial document parser specializing in bank statements and receipts. Extract all transactions/line items you can identify. For each transaction extract: description, amount (as a number), date (as YYYY-MM-DD), and category. Categories should be one of: Travel, Gear Rental, Consumables, Fuel, Meals, Lodging, Labor, Insurance, Software, Tools, Entertainment, Medical, Rent, IATSE Union Dues, Other. If you can't determine the category, use "Other". If you can't determine the date, use today's date. Return ONLY valid JSON.`;
     const systemPrompt = basePrompt + datesNote;
@@ -155,6 +157,8 @@ If you can't determine the date, use today's date. Return ONLY valid JSON.`
                     amount: { type: "number" },
                     date: { type: "string", description: "YYYY-MM-DD format" },
                     invoiceNumber: { type: ["string", "null"] },
+                    payPeriodStart: { type: ["string", "null"], description: "First day of the pay period the stub covers, YYYY-MM-DD. Null if none is printed." },
+                    payPeriodEnd: { type: ["string", "null"], description: "Last day of the pay period the stub covers, YYYY-MM-DD. Null if none is printed." },
                     breakdown: {
                       type: ["array", "null"],
                       description: "Per-date hours breakdown from a payment note, e.g. '8/16 8 ST 1 OT' -> two entries for 2026-08-16. Null if the payment note doesn't itemize dates/hours.",
@@ -170,7 +174,7 @@ If you can't determine the date, use today's date. Return ONLY valid JSON.`
                       },
                     },
                   },
-                  required: ["client", "description", "amount", "date", "invoiceNumber", "breakdown"],
+                  required: ["client", "description", "amount", "date", "invoiceNumber", "payPeriodStart", "payPeriodEnd", "breakdown"],
                   additionalProperties: false,
                 },
               },
