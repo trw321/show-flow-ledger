@@ -75,3 +75,10 @@ describe('the photo against the payment', () => {
     expect(photoAgrees(pay())).toBeUndefined();
   });
 });
+
+describe('a bank line from a payroll company', () => {
+  it('is a deposit, not a stub', () => {
+    expect(proofKindOf(pay({ client: 'ODEUM LABOR', description: 'SERV PAYROLL' }))).toBe('deposit');
+    expect(proofKindOf(pay({ description: 'Pay stub for the period 10/26/2026 to 11/01/2026' }))).toBe('stub');
+  });
+});

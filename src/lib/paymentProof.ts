@@ -52,8 +52,10 @@ export function proofKindOf(i: Income): ProofKind {
   if (i.enteredByHand || what === 'added by hand' || what.startsWith('add hours')) return 'manual';
   // A check's number gets read as an invoice number, so the words come first.
   if (i.paymentMethod === 'check' || /\b(check|cheque)\b/.test(what)) return 'check';
-  if (/\b(stub|earnings|payroll|pay statement)\b/.test(what)) return 'stub';
-  if (i.paymentMethod === 'direct_deposit' || /\b(deposit|ach|transfer)\b/.test(what)) return 'deposit';
+  if (/\b(stub|earnings|pay statement)\b/.test(what)) return 'stub';
+  // "PAYROLL" is how a bank names a payroll company's deposit ("ODEUM LABOR
+  // SERV PAYROLL"), so on its own it's a deposit line, not a stub.
+  if (i.paymentMethod === 'direct_deposit' || /\b(deposit|ach|transfer|payroll)\b/.test(what)) return 'deposit';
   if (i.invoiceNumber) return 'invoice';
   return 'unknown';
 }
