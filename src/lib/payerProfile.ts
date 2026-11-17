@@ -28,11 +28,31 @@ export interface LocalRates {
   vacationPercent?: number;
 }
 
+/**
+ * Terms you've told the app for one contract, by the name the dispatch gives
+ * it ("2023-2028 BASIC ENTERTAINMENT"), or for an employer's own work when a
+ * shift names no contract. Kept here rather than on the employer because the
+ * same employer works under different contracts, and here they sync with you.
+ */
+export interface ContractRule {
+  name: string;
+  /**
+   * A call that starts between midnight and 7 AM: the premium runs until
+   * 8 AM, all day, or there is none. Unset means not asked yet, and no
+   * premium is counted until it's answered.
+   */
+  earlyCall?: 'until8' | 'allDay' | 'none';
+  /** Forced call: back with less than restHours off pays double time until they've been had. Unset: on for union work. */
+  forcedCall?: boolean;
+  restHours?: number;
+}
+
 /** Numbers that follow you rather than any employer or local. */
 export interface PayerProfile {
   /** Filing status, dependents, state, exempt — see taxEstimate. */
   tax?: TaxProfile;
   locals: LocalRates[];
+  contractRules?: ContractRule[];
 }
 
 export const EMPTY_PROFILE: PayerProfile = { locals: [] };

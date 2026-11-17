@@ -450,7 +450,7 @@ export default function MoneyPage() {
         return j.date < todayStr;
       });
       const employer = resolveEmployer(referenceJob.client, data.employers);
-      const payResult = calculateExpectedPay(periodJobs, referenceJob, data.jobs, employer);
+      const payResult = calculateExpectedPay(periodJobs, referenceJob, data.jobs, employer, prefs.payer);
       const dates = (periodJobs.length > 0 ? periodJobs : prodJobs).map(j => j.date).sort();
       return { referenceJob, period, prodJobs, periodJobs, payResult, expected: payResult.total, workStart: dates[0], workEnd: dates[dates.length - 1] };
     });
@@ -521,7 +521,7 @@ export default function MoneyPage() {
     });
 
     return { rows, owner };
-  }, [data]);
+  }, [data, prefs.payer]);
 
   const reconciliation = ledgerRows.rows;
 

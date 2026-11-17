@@ -6,6 +6,7 @@ import { resolveEmployer } from './employerMatch';
 import { contractFor } from './contracts';
 import { localToday } from './today';
 import { breaksTheHour } from './local16';
+import { shiftPremiums, type StartPremium } from './premiums';
 
 export interface OvertimeOptions {
   rule?: 'daily' | 'weekly' | 'none';
@@ -60,6 +61,13 @@ export interface OvertimeOptions {
   dayRateHours?: number;
   /** Why the whole day pays dayMultiplier, for the breakdown: "6th day", "composite Sunday". */
   dayPremiumLabel?: string;
+  /**
+   * Premiums that run from the start of the call — an early call, a forced
+   * call (see premiums.ts). They are the day's first hours, so they still
+   * count towards overtime; each of those hours pays the higher of the
+   * premium and its own overtime tier, never one stacked on the other.
+   */
+  premiums?: StartPremium[];
   /** Union dues as a percent of this day's gross (base/OT/DT/night/meal-penalty
    *  pay) — deducted here so every caller of calculateDayPay picks it up
    *  automatically. Does NOT apply a second time to weekly-OT-bonus or
@@ -208,6 +216,39 @@ export function calculateDayPay(
     breakdown.push(`${otThreshold}h straight × ${effectiveRate.toFixed(2)} = ${straightPay.toFixed(2)}`);
     breakdown.push(`${otHours}h OT × ${otRate.toFixed(2)} = ${otPay.toFixed(2)}`);
     breakdown.push(`${dtHours}h DT × ${dtRate.toFixed(2)} = ${dtPay.toFixed(2)}`);
+  }
+
+  // Premiums from the start of the call. Those hours were already paid above
+  // at their place on the ladder; what's added is the difference up to the
+  // premium, so an hour that was overtime anyway isn't paid twice.
+  const startPremiums = (overtimeOptions?.premiums ?? []).filter(p => p.hours > 0);
+  if (startPremiums.length > 0 && ladderHours > 0 && !(dayRate > 0)) {
+    const dayFloor = Math.max(dayMultiplier, 1);
+    const tierAt = (at: number) => {
+      if (otRule !== 'daily' || at < otThreshold) return dayFloor;
+      return Math.max(dayMultiplier, at < dtThreshold ? otMultiplier : dtMultiplier);
+    };
+    const cuts = [0, ladderHours, otThreshold, dtThreshold, ...startPremiums.map(p => p.hours)]
+      .filter(x => x >= 0 && x <= ladderHours);
+    const points = [...new Set(cuts)].sort((a, b) => a - b);
+    const added = new Map<string, { hours: number; multiplier: number; pay: number }>();
+    for (let k = 0; k + 1 < points.length; k++) {
+      const from = points[k];
+      const span = points[k + 1] - from;
+      const covering = startPremiums.filter(p => p.hours > from);
+      if (covering.length === 0 || span <= 0) continue;
+      const best = covering.reduce((a, b) => (b.multiplier > a.multiplier ? b : a));
+      const lift = Math.max(dayMultiplier, best.multiplier) - tierAt(from);
+      if (lift <= 0) continue;
+      const entry = added.get(best.label) ?? { hours: 0, multiplier: Math.max(dayMultiplier, best.multiplier), pay: 0 };
+      entry.hours += span;
+      entry.pay += span * rate * lift;
+      added.set(best.label, entry);
+    }
+    for (const [label, entry] of added) {
+      pay += entry.pay;
+      breakdown.push(`${Math.round(entry.hours * 100) / 100}h ${label}: paid at ${entry.multiplier}×, +$${entry.pay.toFixed(2)}`);
+    }
   }
 
   if (paddingHours > 0 && !(overtimeOptions?.dayRate && overtimeOptions.dayRate > 0)) {
@@ -470,6 +511,8 @@ export function jobPayBreakdown(
     minimumPaddingHours: isSplitDay ? splitMinimumPadding(dayShifts) : 0,
     nightMultiplier: employer?.nightPremiumMultiplier,
     dayPremiumLabel: dayPremiumLabel(job, employer, allJobs),
+    // The day's first call is where an early or forced call starts.
+    premiums: shiftPremiums(firstCall(sides), allJobs, employer, payer),
     unionDuesPercent: rates.unionDuesPercent,
     estimatedTaxPercent: rates.estimatedTaxPercent,
   });
@@ -572,6 +615,15 @@ function shiftNight(job: Job, employer?: Employer): { hours: number; leftAtEnd: 
   const hours = resolveConfirmedNightHours(raw, job.nightPremiumConfirmed, job.nightPremiumActualHours);
   // Hours confirmed as padding rather than worked earn no broken hour either.
   return { hours, leftAtEnd: hours > 0 ? nightLeftAtEnd(job.startTime, job.endTime, start, employer?.nightPremiumEndHour) : 0 };
+}
+
+/** The day's first call: the one that starts earliest. */
+function firstCall(sides: Job[]): Job {
+  const start = (j: Job) => {
+    const m = j.startTime ? parseTimeToMinutes(j.startTime) : NaN;
+    return Number.isNaN(m) ? Infinity : m;
+  };
+  return sides.reduce((earliest, j) => (start(j) < start(earliest) ? j : earliest), sides[0]);
 }
 
 /** The day's last call: the one that starts latest. */
@@ -755,7 +807,8 @@ export function calculateExpectedPay(
   jobs: Job[],
   referenceJob: Job,
   allJobs: Job[],
-  employer?: Employer
+  employer?: Employer,
+  payer?: PayerProfile,
 ): { total: number; details: { date: string; hours: number; pay: number; breakdown: string[] }[] } {
   const details: { date: string; hours: number; pay: number; breakdown: string[] }[] = [];
   let total = 0;
@@ -821,7 +874,7 @@ export function calculateExpectedPay(
     const fallbackMinimum = referenceJob.minimumHours ?? 0;
     const dayMinimum = isSplit ? 0 : (sides[0].minimumHours ?? fallbackMinimum);
     const dayEntry = byDate.get(date);
-    const result = calculateDayPay(hours, rate, dayMinimum, mealPenalties, dayMultiplier, { duration: mealDuration, onClock: mealOnClock, offClockMinutesTotal: offClockMealMinutes }, { ...overtimeOptions, nightHours, nightLeftAtEnd: nightLeft, minimumPaddingHours: isSplit ? splitMinimumPadding(sides, fallbackMinimum) : 0, postMealPaddingHours: postMealPadding, dayRate: dayEntry?.dayRate, dayRateHours: dayEntry?.dayRateHours });
+    const result = calculateDayPay(hours, rate, dayMinimum, mealPenalties, dayMultiplier, { duration: mealDuration, onClock: mealOnClock, offClockMinutesTotal: offClockMealMinutes }, { ...overtimeOptions, nightHours, nightLeftAtEnd: nightLeft, minimumPaddingHours: isSplit ? splitMinimumPadding(sides, fallbackMinimum) : 0, postMealPaddingHours: postMealPadding, dayRate: dayEntry?.dayRate, dayRateHours: dayEntry?.dayRateHours, premiums: shiftPremiums({ ...firstCall(sides), date }, allJobs, employer, payer) });
     total += result.totalPay;
     details.push({ date, hours, pay: result.totalPay, breakdown: result.breakdown });
   }

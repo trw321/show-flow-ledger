@@ -19,7 +19,7 @@ import { callText, explicitCalls, parseDayTimeline, withGapOnClock, COMPOSITE_LU
 import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle, Flame, PenLine, Banknote, Wallet, Flag, Undo2 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO, differenceInCalendarDays } from 'date-fns';
 import type { Employer, Job, CalendarEvent, Income, Invoice } from '@/lib/store';
-import { matchPaymentToProject, betterProject, bestProjectFor, projectOf, type FoundPayment, type ProjectMatch } from '@/lib/paymentMatch';
+import { matchPaymentToProject, betterProject, rankedProjectsFor, projectOf, type FoundPayment, type ProjectMatch } from '@/lib/paymentMatch';
 import { payDueDate, payTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
 import { paidShiftIds, periodNet, periodPayments, projectPeriods, type PayPeriod, type ProjectPeriod } from '@/lib/payPeriods';
 import { explainPay } from '@/lib/payExplain';
@@ -35,6 +35,8 @@ import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { calculateDayPay, dayInARow, dayMultiplierFor, dayPremiumLabel, compositeWeekendMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross, jobPayBreakdown, compareCalls } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { breakTheHourLabel, breaksTheHour, isLocal16Shift } from '@/lib/local16';
+import { shiftPremiums } from '@/lib/premiums';
+import CallPremiums from '@/components/CallPremiums';
 import { useSwipe } from '@/lib/useSwipe';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -898,7 +900,18 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   // employer's W-4 — exactly as every other pay figure takes them.
   const previewRates = ratesForShift(job, employer, prefs.payer);
   const payPreview = rate > 0 && billableHours > 0
-    ? calculateDayPay(actualHours, rate, minHours, mealPenaltyUnits, dayMultiplierFor({ ...job, compositeTeam }, employer, data.jobs), { duration: mealDuration, onClock: mealOnClock, offClockMinutesTotal: offClockMealMins }, { nightHours, nightMultiplier: employer?.nightPremiumMultiplier, roundUpToWholeHours: breaksTheHour(job, employer), unionDuesPercent: previewRates.unionDuesPercent, estimatedTaxPercent: previewRates.estimatedTaxPercent, dayPremiumLabel: dayPremiumLabel({ ...job, compositeTeam }, employer, data.jobs) })
+    ? calculateDayPay(actualHours, rate, minHours, mealPenaltyUnits, dayMultiplierFor({ ...job, compositeTeam }, employer, data.jobs), { duration: mealDuration, onClock: mealOnClock, offClockMinutesTotal: offClockMealMins }, {
+      // The employer's own overtime terms, as every other pay figure uses
+      // them. Left out, this preview fell back to daily OT after 8 for
+      // everyone, so a weekly-overtime employer showed overtime it never pays.
+      rule: employer?.overtimeRule ?? 'daily',
+      otThresholdHours: employer?.dailyOvertimeThresholdHours,
+      dtThresholdHours: employer?.dailyDoubletimeThresholdHours,
+      otMultiplier: employer?.overtimeMultiplier,
+      dtMultiplier: employer?.doubletimeMultiplier,
+      nightHours, nightMultiplier: employer?.nightPremiumMultiplier, roundUpToWholeHours: breaksTheHour(job, employer), unionDuesPercent: previewRates.unionDuesPercent, estimatedTaxPercent: previewRates.estimatedTaxPercent, dayPremiumLabel: dayPremiumLabel({ ...job, compositeTeam }, employer, data.jobs),
+      premiums: shiftPremiums({ ...job, startTime, endTime }, data.jobs, employer, prefs.payer),
+    })
     : null;
   // calculateDayPay's own breakdown stops at dues/tax — vacation is applied
   // on top of that (same as jobGross/jobPayBreakdown), so it needs its own
@@ -1131,29 +1144,33 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             right, all the same size on the same baseline. Previously back and
             delete sat in the title row while the close button was absolutely
             positioned 8px higher, so the three never lined up. */}
+        {/* The date is what you look for first, so it's big and sits in the
+            toolbar row, where there was only empty space between the buttons.
+            Delete keeps a gap from close: side by side they were one slip apart. */}
         <div className="flex items-center gap-1 -mx-1.5 -mt-1.5">
           <button onClick={onBack} aria-label="Back" className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-2 rounded-lg hover:bg-secondary">
             <ArrowLeft size={18} />
           </button>
-          {/* Delete in the middle, well away from close: side by side they
-              were one slip apart. */}
-          <span className="flex-1" />
+          <p className="min-w-0 flex-1 flex items-baseline gap-1.5" data-testid="shift-date">
+            <span className="text-xl font-bold leading-none text-foreground truncate">{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}</span>
+            <span className="text-xs text-mono text-muted-foreground shrink-0">{format(new Date(job.date + 'T12:00:00'), 'yyyy')}</span>
+            {isCallback(job, data.jobs, data.employers) && <Phone size={13} className="self-center text-destructive shrink-0" aria-label="Callback" />}
+          </p>
           <button onClick={handleDelete} aria-label="Delete shift" className="shrink-0 text-muted-foreground hover:text-destructive transition-colors p-2 rounded-lg hover:bg-destructive/10">
             <Trash2 size={18} />
           </button>
-          <span className="flex-1" />
+          <span className="w-5 shrink-0" />
           <DialogClose asChild>
             <button aria-label="Close" className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-2 rounded-lg hover:bg-secondary">
               <X size={18} />
             </button>
           </DialogClose>
         </div>
-        <div className="min-w-0">
-          <p className="text-[10px] font-body uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <span>{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d, yyyy')}</span>
-            {isCallback(job, data.jobs, data.employers) && <Phone size={11} className="text-destructive shrink-0" aria-label="Callback" />}
-          </p>
-          <DialogTitle className="text-mono text-sm truncate">{job.name}</DialogTitle>
+        <div className="min-w-0 flex items-center gap-2">
+          <DialogTitle className="min-w-0 flex-1 text-left text-mono text-sm leading-snug break-words">{job.name}</DialogTitle>
+          <span className={cn("shrink-0 inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold text-mono uppercase tracking-wider border", isOverdueUpcoming(job) ? "bg-warning/20 text-warning border-warning/30" : statusColors[job.status])}>
+            {isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
+          </span>
         </div>
       </DialogHeader>
       <AlertDialog open={confirmingDelete} onOpenChange={setConfirmingDelete}>
@@ -1176,10 +1193,6 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
         </AlertDialogContent>
       </AlertDialog>
       <div className="space-y-4">
-        <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold text-mono uppercase tracking-wider border", isOverdueUpcoming(job) ? "bg-warning/20 text-warning border-warning/30" : statusColors[job.status])}>
-          {isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
-        </span>
-
         {dayInARow(job, employer, data.jobs) >= 6 && (
           <PremiumDayBanner day={dayInARow(job, employer, data.jobs)} pays={dayMultiplierFor(job, employer, data.jobs)} who={job.client} />
         )}
@@ -1517,6 +1530,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                 </p>
               );
             })()}
+            <CallPremiums job={{ ...job, startTime, endTime }} allJobs={data.jobs} employer={employer} />
+          </div>
+          <div className="space-y-1.5">
             <label className="flex items-start gap-2 cursor-pointer select-none rounded-md border border-border p-2.5">
               <input
                 type="checkbox"
@@ -1675,7 +1691,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
 
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground flex items-center gap-1.5">
+              {/* Both labels are one fixed height, so the boxes under them line
+                  up whether or not this one carries a callback or split mark. */}
+              <label className="h-5 text-xs text-muted-foreground flex items-center gap-1.5">
                 <CallbackMark job={job} allJobs={data.jobs} employers={data.employers} />Clocked hours<SplitMark job={job} allJobs={data.jobs} />
               </label>
               <Input type="number" min="0" step="0.5" value={hoursWorked} onChange={e => handleHoursWorkedChange(e.target.value)} placeholder="e.g. 8" className="h-9 text-sm text-mono" />
@@ -1702,7 +1720,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
               )}
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Rate ($/hr)</label>
+              <label className="h-5 text-xs text-muted-foreground flex items-center">Rate ($/hr)</label>
               <Input type="number" min="0" step="0.01" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} placeholder="e.g. 45" className="h-9 text-sm text-mono" />
             </div>
           </div>
@@ -2552,30 +2570,12 @@ export default function CalendarPage() {
   }, [data.jobs, data.income, data.invoices]);
   const linkSuggestions = useMemo(() => {
     const ctx = { allJobs: data.jobs, employers: data.employers, payer: prefs.payer, paidJobIds };
-    return new Map(unlinkedPayments.map(i => [i.id, bestProjectFor({ amount: i.amount, date: i.date, payer: i.client }, ctx)]));
+    return new Map(unlinkedPayments.map(i => [i.id, rankedProjectsFor({ amount: i.amount, date: i.date, payer: i.client }, ctx)]));
   }, [unlinkedPayments, data.jobs, data.employers, prefs.payer, paidJobIds]);
 
   const linkPayment = async (payment: Income, job: Job, match?: ProjectMatch) => {
     await updateIncome(payment.id, { jobId: job.id, matchProof: proofFromMatch(proofKindOf(payment), match) });
     undoToast(`Linked to ${job.name}`, () => void updateIncome(payment.id, { jobId: undefined, matchProof: payment.matchProof }));
-  };
-  const makeShiftFromPayment = async (payment: Income) => {
-    const job = await addJob({
-      name: payment.description || 'Shift from a payment',
-      client: payment.client,
-      venue: '',
-      date: payment.date,
-      // Not completed: with no hours yet, that would hide it from Log hours.
-      status: 'upcoming',
-      notes: 'Made from a $' + payment.amount.toLocaleString() + ' payment dated ' + payment.date
-        + ' — move it to the day you worked, then add the hours and rate.',
-      needsReview: true,
-      has6th7thDayRule: false,
-    } as never);
-    if (!job) return;
-    await updateIncome(payment.id, { jobId: job.id });
-    setSelectedDate(job.date);
-    setSelectedJobId(job.id);
   };
 
   // Per-job expected pay — the single source of truth behind the calendar's
@@ -3657,9 +3657,12 @@ export default function CalendarPage() {
       {unlinkedPayments.length > 0 && (
         <div className="pixel-panel mt-4 p-3 space-y-2">
           <p className="text-[10px] text-mono uppercase tracking-widest text-warning">Payments with no shift · {unlinkedPayments.length}</p>
-          <p className="text-[11px] text-muted-foreground">Money that came in but isn't tied to a shift yet. Link it to the project it paid, or make a shift from it.</p>
+          <p className="text-[11px] text-muted-foreground">Money that came in but isn't tied to a shift yet. Link it to the project it paid. A payment is never a shift of its own: if the work isn't on the calendar, add the shift on the day you worked, then link this to it.</p>
           {unlinkedPayments.map(i => {
-            const guess = linkSuggestions.get(i.id);
+            const options = linkSuggestions.get(i.id) ?? [];
+            const guess = options[0]?.match.level !== 'low' ? options[0] : undefined;
+            // Only projects something points to: a 0% option is noise.
+            const others = options.filter(o => o !== guess && o.match.percent > 0);
             return (
               <div key={i.id} className="border-t border-border pt-2 space-y-1.5">
                 <div className="flex items-center gap-2">
@@ -3687,9 +3690,14 @@ export default function CalendarPage() {
                       Link to {guess.project[0].name}
                     </Button>
                   )}
-                  <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => void makeShiftFromPayment(i)}>
-                    Make a shift
-                  </Button>
+                  {others.map(o => (
+                    <Button key={o.project[0].id} size="sm" variant="outline" className="h-auto min-h-7 max-w-full whitespace-normal py-1 text-left text-[11px]" onClick={() => void linkPayment(i, o.project[0], o.match)}>
+                      {o.project[0].name} · {format(new Date(o.project[0].date + 'T12:00:00'), 'MMM d')} · {o.match.percent}%
+                    </Button>
+                  ))}
+                  {options.length === 0 && (
+                    <p className="text-[10px] text-muted-foreground">No shift from this payer in the year before it. Add the shift on the day you worked.</p>
+                  )}
                 </div>
               </div>
             );
