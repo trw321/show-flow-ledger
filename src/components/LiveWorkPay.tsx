@@ -16,7 +16,7 @@ import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { jobPayBreakdown, parseTimeToMinutes } from '@/lib/payCalc';
 import { localToday } from '@/lib/today';
-import { liveCallsText, lunchMs, MEAL_LENGTHS, openBreak, startsInLabel, toFiveMinutes, withMeal, workEnd, workedMs, type WorkBreak } from '@/lib/liveWork';
+import { liveDay, lunchMs, MEAL_LENGTHS, openBreak, startsInLabel, toFiveMinutes, withMeal, workEnd, workedMs, type WorkBreak } from '@/lib/liveWork';
 import { cn } from '@/lib/utils';
 import type { Job } from '@/lib/store';
 
@@ -102,6 +102,7 @@ export default function LiveWorkPay() {
   // The meal being entered: when it started and how long (null: still going).
   const [mealStart, setMealStart] = useState<number | null>(null);
   const [mealLength, setMealLength] = useState<number | null>(30);
+  const [mealOnClock, setMealOnClock] = useState(false);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -165,7 +166,8 @@ export default function LiveWorkPay() {
   // Priced on what has actually happened: the clocked span with the lunches
   // tapped so far as gaps. A meal or calls planned on the shift ahead of time
   // would come off hours not yet worked, so they're left out here.
-  const liveCalls = session ? liveCallsText(startedAt, counterNow, breaks) : '';
+  const live = session ? liveDay(startedAt, counterNow, breaks) : { text: '', gapsOnClock: [] };
+  const liveCalls = live.text;
   const liveJob = activeJob && session
     ? {
       ...activeJob,
@@ -174,7 +176,7 @@ export default function LiveWorkPay() {
       hoursWorked: Math.max(0, liveEnd - startedAt) / 3_600_000,
       endTime: clockTime(liveEnd),
       callTimeline: liveCalls || undefined,
-      callGapsOnClock: undefined,
+      callGapsOnClock: liveCalls ? live.gapsOnClock : undefined,
       mealDuration: undefined,
       mealOnClock: undefined,
       meal2Duration: undefined,
@@ -230,10 +232,11 @@ export default function LiveWorkPay() {
   const openMeal = () => {
     setMealStart(Math.max(toFiveMinutes(startedAt), toFiveMinutes(Date.now() - 30 * 60_000)));
     setMealLength(30);
+    setMealOnClock(false);
   };
   const saveMeal = () => {
     if (mealStart === null) return;
-    setSession(current => current ? { ...current, breaks: withMeal(current.breaks ?? [], mealStart, mealLength) } : null);
+    setSession(current => current ? { ...current, breaks: withMeal(current.breaks ?? [], mealStart, mealLength, mealOnClock) } : null);
     setMealStart(null);
   };
   const removeMeal = (index: number) => setSession(current => current
@@ -258,13 +261,14 @@ export default function LiveWorkPay() {
     if (!activeJob || endingAt === null || endedAtWork === null) return;
     const hours = Number(confirmedHours);
     if (!Number.isFinite(hours) || hours <= 0) return;
-    const calls = liveCallsText(actualClockInAt, endingAt, breaks);
+    const day = liveDay(actualClockInAt, endingAt, breaks);
+    const calls = day.text;
     await updateJob(activeJob.id, {
       endTime: clockTime(endedAtWork),
       // The app keeps hoursWorked as the clocked span and takes off-the-clock
       // lunches off it from the calls, so the lunch goes back on here.
       hoursWorked: calls ? hours + lunchTakenMs / 3_600_000 : hours,
-      ...(calls ? { callTimeline: calls, callGapsOnClock: [] } : {}),
+      ...(calls ? { callTimeline: calls, callGapsOnClock: day.gapsOnClock } : {}),
       hoursPlanned: undefined,
       status: 'completed',
     });
@@ -282,8 +286,10 @@ export default function LiveWorkPay() {
               <p className="truncate text-xs font-medium">{activeJob.name} · {lateRuleMissing ? 'Late rule not set' : elapsedLabel(elapsedMs)}</p>
               <p className="text-[10px] text-muted-foreground">
                 {lunch
-                  ? `On a meal since ${clockTime(lunch.start)} · paused, off the clock`
-                  : `Started ${clockTime(startedAt)}${breaks.length ? ` · ${elapsedLabel(lunchMs(startedAt, liveEnd, breaks))} meal off` : ''} · estimated net`}
+                  ? lunch.onClock
+                    ? `On a meal since ${clockTime(lunch.start)} · on the clock, still paid`
+                    : `On a meal since ${clockTime(lunch.start)} · paused, off the clock`
+                  : `Started ${clockTime(startedAt)}${lunchMs(startedAt, liveEnd, breaks) > 0 ? ` · ${elapsedLabel(lunchMs(startedAt, liveEnd, breaks))} meal off the clock` : ''}${breaks.some(x => x.onClock) ? ' · meal on the clock, paid' : ''} · estimated net`}
               </p>
             </div>
           </div>
@@ -369,7 +375,7 @@ export default function LiveWorkPay() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Meal</DialogTitle>
-              <DialogDescription>Slide to when it started, then pick how long. It comes off the clock.</DialogDescription>
+              <DialogDescription>Slide to when it started, then pick how long, and whether it was paid.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
@@ -396,9 +402,24 @@ export default function LiveWorkPay() {
                   </button>
                 ))}
               </div>
+              <div className="space-y-1">
+                <div className="grid grid-cols-2 gap-2">
+                  {([false, true] as const).map(on => (
+                    <button key={String(on)} type="button" onClick={() => setMealOnClock(on)} aria-pressed={mealOnClock === on}
+                      className={cn('pixel-button py-2 text-xs font-bold', mealOnClock === on ? 'pick-on' : 'pick-off')}>
+                      {on ? 'On the clock' : 'Off the clock'}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-center text-[11px] text-muted-foreground">
+                  {mealOnClock ? 'Paid: counts as worked, nothing comes off.' : 'Not paid: it comes off your hours.'}
+                </p>
+              </div>
               <p className="text-center text-xs text-muted-foreground">
                 {mealLength === null
-                  ? `From ${clockTime(mealStart)}: the counter pauses until you tap Back from meal.`
+                  ? mealOnClock
+                    ? `From ${clockTime(mealStart)}, on the clock: the counter keeps going.`
+                    : `From ${clockTime(mealStart)}: the counter pauses until you tap Back from meal.`
                   : `${clockTime(mealStart)} to ${clockTime(mealStart + mealLength * 60_000)}`}
               </p>
               {breaks.length > 0 && (
@@ -406,7 +427,7 @@ export default function LiveWorkPay() {
                   <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Meals so far</p>
                   {breaks.map((b, i) => (
                     <div key={b.start} className="flex items-center justify-between text-xs font-mono">
-                      <span>{clockTime(b.start)} – {b.end ? clockTime(b.end) : 'still on it'}</span>
+                      <span>{clockTime(b.start)} – {b.end ? clockTime(b.end) : 'still on it'} · {b.onClock ? 'on the clock' : 'off the clock'}</span>
                       <button type="button" aria-label="Remove this meal" onClick={() => removeMeal(i)} className="p-1 text-muted-foreground hover:text-destructive"><X size={13} /></button>
                     </div>
                   ))}

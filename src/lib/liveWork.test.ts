@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { liveCallsText, lunchMs, startsInLabel, toFiveMinutes, withMeal, workEnd, workedMs } from './liveWork';
+import { liveCallsText, liveDay, lunchMs, startsInLabel, toFiveMinutes, withMeal, workEnd, workedMs } from './liveWork';
 import { jobPayBreakdown } from './payCalc';
 import { EMPTY_PROFILE } from './payerProfile';
 import { localToday } from './today';
@@ -88,5 +88,27 @@ describe('a meal entered on the slider', () => {
 
   it('snaps to five minutes', () => {
     expect(toFiveMinutes(at(12, 33))).toBe(at(12, 30));
+  });
+});
+
+describe('a meal on the clock', () => {
+  it('is paid: nothing comes off the hours, and the counter keeps going', () => {
+    const breaks = withMeal([], at(12, 30), 30, true);
+    expect(workedMs(at(8), at(17), breaks)).toBe(9 * 60 * MIN);
+    expect(workedMs(at(8), at(13), withMeal([], at(12, 30), null, true))).toBe(5 * 60 * MIN);
+  });
+
+  it('is saved as a gap on the clock, so the pay maths agrees', () => {
+    const breaks = [...withMeal([], at(12), 60), ...withMeal([], at(18), 30, true)];
+    const day = liveDay(at(8), at(21), breaks);
+    expect(day.text).toBe('8:00am-12:00pm, 1:00pm-6:00pm, 6:30pm-9:00pm');
+    expect(day.gapsOnClock).toEqual([false, true]);
+  });
+
+  it('pays the same as typing that day with the gap on the clock', () => {
+    const breaks = withMeal([], at(12, 30), 30, true);
+    const day = liveDay(at(8), at(17), breaks);
+    const job = { id: 'l', name: 'x', client: 'x', venue: '', date: '2026-10-01', status: 'completed', notes: '', has6th7thDayRule: false, createdAt: 'x', hourlyRate: 50, startTime: '8:00 AM', endTime: '5:00 PM', hoursWorked: 9, callTimeline: day.text, callGapsOnClock: day.gapsOnClock } as Job;
+    expect(jobPayBreakdown(job, [job], [], EMPTY_PROFILE).gross).toBeCloseTo(8 * 50 + 1 * 75);
   });
 });

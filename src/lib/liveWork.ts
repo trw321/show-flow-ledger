@@ -3,10 +3,12 @@
  * can be tested without a clock.
  */
 
-/** A lunch taken while the counter runs. No end yet means it's still going. */
+/** A meal taken while the counter runs. No end yet means it's still going. */
 export interface WorkBreak {
   start: number;
   end?: number;
+  /** Paid, so it counts as worked and isn't taken off the hours. Unset: off the clock. */
+  onClock?: boolean;
 }
 
 /** A break shorter than this was a mis-tap, not a meal. */
@@ -30,20 +32,22 @@ export function openBreak(breaks: WorkBreak[] = []): WorkBreak | undefined {
  * the day mid-lunch ends it where the lunch started.
  */
 export function workEnd(breaks: WorkBreak[] = [], now: number): number {
-  return openBreak(breaks)?.start ?? now;
+  // A meal on the clock is paid, so the clock keeps running through it.
+  const open = openBreak(breaks);
+  return open && !open.onClock ? open.start : now;
 }
 
 /** Finished lunches, each a minute or more, inside the working span. */
-function takenBreaks(breaks: WorkBreak[], from: number, to: number): Array<{ start: number; end: number }> {
+function takenBreaks(breaks: WorkBreak[], from: number, to: number): Array<{ start: number; end: number; onClock: boolean }> {
   return breaks
-    .filter((b): b is { start: number; end: number } => b.end !== undefined)
-    .map(b => ({ start: Math.max(b.start, from), end: Math.min(b.end, to) }))
+    .filter((b): b is WorkBreak & { end: number } => b.end !== undefined)
+    .map(b => ({ start: Math.max(b.start, from), end: Math.min(b.end, to), onClock: !!b.onClock }))
     .filter(b => b.end - b.start >= MIN_BREAK_MS);
 }
 
-/** Time out on lunch between clocking in and the end of work. */
+/** Time out on meals off the clock between clocking in and the end of work. A meal on the clock is paid and isn't counted. */
 export function lunchMs(from: number, to: number, breaks: WorkBreak[] = []): number {
-  return takenBreaks(breaks, from, to).reduce((sum, b) => sum + (b.end - b.start), 0);
+  return takenBreaks(breaks, from, to).filter(b => !b.onClock).reduce((sum, b) => sum + (b.end - b.start), 0);
 }
 
 /** Time worked: clock-in to the end of work, minus every lunch. */
@@ -66,17 +70,34 @@ function shortTime(timestamp: number): string {
  * the hours. Empty when no lunch was taken.
  */
 export function liveCallsText(from: number, now: number, breaks: WorkBreak[] = []): string {
+  return liveDay(from, now, breaks).text;
+}
+
+/**
+ * The day as calls with the meals as the gaps, and which gaps were on the
+ * clock, in the shape a typed day is saved in (callTimeline and
+ * callGapsOnClock), so the pay maths treats a live meal exactly like a typed
+ * one: off the clock it comes off the hours, on the clock it's paid.
+ */
+export function liveDay(from: number, now: number, breaks: WorkBreak[] = []): { text: string; gapsOnClock: boolean[] } {
   const to = workEnd(breaks, now);
   const taken = takenBreaks(breaks, from, to);
-  if (taken.length === 0) return '';
+  if (taken.length === 0) return { text: '', gapsOnClock: [] };
   const calls: string[] = [];
+  const gapsOnClock: boolean[] = [];
   let start = from;
+  let gapBefore: boolean | null = null;
+  const addCall = (a: number, b: number) => {
+    if (calls.length > 0 && gapBefore !== null) gapsOnClock.push(gapBefore);
+    calls.push(`${shortTime(a)}-${shortTime(b)}`);
+  };
   for (const b of taken) {
-    if (b.start > start) calls.push(`${shortTime(start)}-${shortTime(b.start)}`);
+    if (b.start > start) addCall(start, b.start);
+    gapBefore = b.onClock;
     start = b.end;
   }
-  if (to > start) calls.push(`${shortTime(start)}-${shortTime(to)}`);
-  return calls.join(', ');
+  if (to > start) addCall(start, to);
+  return { text: calls.join(', '), gapsOnClock };
 }
 
 /** Meal lengths offered, in minutes. */
@@ -88,8 +109,9 @@ export const MEAL_LENGTHS = [30, 45, 60] as const;
  * fact, so it can't be missed by not tapping on time. A meal it overlaps
  * is replaced, not doubled.
  */
-export function withMeal(breaks: WorkBreak[], start: number, minutes: number | null): WorkBreak[] {
+export function withMeal(breaks: WorkBreak[], start: number, minutes: number | null, onClock = false): WorkBreak[] {
   const meal: WorkBreak = minutes == null ? { start } : { start, end: start + minutes * 60_000 };
+  if (onClock) meal.onClock = true;
   const end = meal.end ?? Infinity;
   const kept = breaks.filter(b => (b.end ?? Infinity) <= start || b.start >= end);
   // A meal still going is the last break: openBreak looks there.
