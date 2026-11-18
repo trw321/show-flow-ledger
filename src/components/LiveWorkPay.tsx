@@ -18,6 +18,7 @@ import { dayInARow, dayMultiplierFor, jobPayBreakdown, parseTimeToMinutes } from
 import { localToday } from '@/lib/today';
 import { liveDay, lunchMs, MEAL_LENGTHS, openBreak, startsInLabel, toFiveMinutes, withMeal, workEnd, workedMs, type WorkBreak } from '@/lib/liveWork';
 import { cn } from '@/lib/utils';
+import MoneyRain from '@/components/MoneyRain';
 import type { Job } from '@/lib/store';
 
 const SESSION_KEY = 'show-flow-live-work-session-v1';
@@ -103,6 +104,8 @@ export default function LiveWorkPay() {
   const [mealStart, setMealStart] = useState<number | null>(null);
   const [mealLength, setMealLength] = useState<number | null>(30);
   const [mealOnClock, setMealOnClock] = useState(false);
+  // Tapping the counter (anywhere but its buttons) makes it rain.
+  const [rain, setRain] = useState(0);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -281,7 +284,12 @@ export default function LiveWorkPay() {
   return (
     <>
       {session && activeJob && (
-        <section className={cn('mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-md border px-3 py-2', premium || 'border-border bg-card/70')} aria-label="Live work pay estimate" data-premium={premium || undefined}>
+        <section
+          className={cn('mb-3 flex cursor-pointer select-none flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-md border px-3 py-2', premium || 'border-border bg-card/70')}
+          aria-label="Live work pay estimate"
+          data-premium={premium || undefined}
+          onClick={e => { if (!(e.target as HTMLElement).closest('button')) setRain(n => n + 1); }}
+        >
           <div className="flex min-w-0 items-center gap-2">
             <Clock3 size={15} className="shrink-0 text-muted-foreground" aria-hidden="true" />
             <div className="min-w-0">
@@ -315,6 +323,8 @@ export default function LiveWorkPay() {
           </div>
         </section>
       )}
+
+      <MoneyRain burst={rain} party />
 
       <Dialog open={!!reminder && reminderDismissedFor !== reminder.job.id} onOpenChange={open => { if (!open && reminder) setReminderDismissedFor(reminder.job.id); }}>
         {reminder && (
