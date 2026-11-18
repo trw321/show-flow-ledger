@@ -5,7 +5,7 @@ import { parseISO, differenceInCalendarDays, startOfDay, startOfWeek, endOfWeek 
 import { resolveEmployer } from './employerMatch';
 import { contractFor } from './contracts';
 import { localToday } from './today';
-import { breaksTheHour } from './local16';
+import { breaksTheHour, isLocal16Shift } from './local16';
 import { callMinimum, shiftPremiums, splitSideMinimum, type StartPremium } from './premiums';
 import { clockSpanHours, endAfterStart } from './clock';
 
@@ -734,18 +734,27 @@ export function getConsecutiveDayStreak(
 
 /** Which day in a row this shift is, counted the way its employer's contract counts them. */
 export function dayInARow(job: Job, employer: Employer | undefined, allJobs: Job[]): number {
+  // Local 16 counts the days across a payroll company, and so does any
+  // contract that says so.
+  const byPayroll = isLocal16Shift(job) || contractFor(employer)?.countDaysByPayrollCompany;
   return getConsecutiveDayStreak(
     job.date, job.client, allJobs,
-    contractFor(employer)?.countDaysByPayrollCompany ? job.payrollCompany : undefined,
+    byPayroll ? (job.payrollCompany || job.client) : undefined,
   );
 }
 
+/** Whether a shift's 6th and 7th days in a row pay extra: every Local 16 call does, like breaking the hour. */
+export function paysSixthSeventh(job: Job, employer: Employer | undefined): boolean {
+  return isLocal16Shift(job) || !!job.has6th7thDayRule || !!employer?.sixthSeventhDayRule;
+}
+
 /**
- * What the 6th and 7th days in a row pay: 1.5×, then 2×, for an employer whose
- * terms say so. The shift can also carry the rule itself, as old ones may.
+ * What the 6th and 7th days in a row pay: 1.5×, then 2×. Built in for Local
+ * 16; other work when its employer's terms say so. The shift can also carry
+ * the rule itself, as old ones may.
  */
 function streakMultiplier(job: Job, employer: Employer | undefined, allJobs: Job[]): number {
-  if (!job.has6th7thDayRule && !employer?.sixthSeventhDayRule) return 1;
+  if (!paysSixthSeventh(job, employer)) return 1;
   const days = dayInARow(job, employer, allJobs);
   if (days >= 7) return 2;
   if (days >= 6) return 1.5;

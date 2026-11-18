@@ -44,3 +44,32 @@ describe('a Local 16 shift', () => {
     expect(jobPayBreakdown(notUnion, [notUnion], [], EMPTY_PROFILE).gross).toBe(8 * 50 + 2.25 * 75);
   });
 });
+
+describe('6th and 7th days on Local 16', () => {
+  const day = (id: string, date: string, over: Partial<Job> = {}) => ({
+    id, name: 'CIO SUMMIT', client: 'PRODUCTION SUPPORT SERVICES INC', payrollCompany: 'PRODUCTION SUPPORT SERVICES INC',
+    jobNumber: '2026-4046', venue: '', date, status: 'completed', hoursWorked: 8, hourlyRate: 70.4,
+    has6th7thDayRule: false, notes: '', createdAt: 'x', ...over,
+  } as Job);
+  const run = ['2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16', '2026-10-17', '2026-10-18', '2026-10-19'].map((d, i) => day('d' + i, d));
+
+  it('pay without any setting: the 6th 1.5× all day, the 7th 2×', async () => {
+    const { dayInARow, dayMultiplierFor } = await import('./payCalc');
+    expect(dayInARow(run[5], undefined, run)).toBe(6);
+    expect(dayMultiplierFor(run[5], undefined, run)).toBe(1.5);
+    expect(dayMultiplierFor(run[6], undefined, run)).toBe(2);
+    expect(dayMultiplierFor(run[4], undefined, run)).toBe(1);
+  });
+
+  it('count across one payroll company, whoever the employer', async () => {
+    const { dayInARow } = await import('./payCalc');
+    const mixed = run.map((j, i) => (i === 2 ? { ...j, client: 'ANOTHER SHOW LLC' } : j));
+    expect(dayInARow(mixed[5], undefined, mixed)).toBe(6);
+  });
+
+  it('leave other work to its employer', async () => {
+    const { dayMultiplierFor } = await import('./payCalc');
+    const odeum = run.map(j => ({ ...j, jobNumber: 'ROAR', client: 'odeum', payrollCompany: 'odeum' }));
+    expect(dayMultiplierFor(odeum[5], undefined, odeum)).toBe(1);
+  });
+});
