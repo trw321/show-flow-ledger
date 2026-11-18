@@ -116,8 +116,10 @@ export default function LiveWorkPay() {
   }, [session]);
 
   const today = localToday();
+  // Today's calls the counter can run for: not done yet, or marked done with
+  // hours typed in but no end time, which is a day still being worked.
   const scheduledJobs = useMemo(() => data.jobs
-    .filter(job => job.date === today && !job.pto && (job.status === 'upcoming' || job.status === 'in-progress'))
+    .filter(job => job.date === today && !job.pto && (job.status === 'upcoming' || job.status === 'in-progress' || (job.status === 'completed' && !job.endTime)))
     .map(job => ({ job, startAt: scheduledStart(job) }))
     .filter((entry): entry is { job: Job; startAt: number } => entry.startAt !== null)
     .sort((a, b) => a.startAt - b.startAt),
@@ -125,6 +127,19 @@ export default function LiveWorkPay() {
 
   const startDue = scheduledJobs.find(entry => entry.startAt <= now);
   const reminder = scheduledJobs.find(entry => entry.startAt > now && entry.startAt <= now + ONE_HOUR_MS);
+
+  // A counter left running from an earlier day (End work day never tapped)
+  // goes, so it can't sit there for a day and block today's from starting.
+  // An overnight call keeps running past midnight: only a run of 16 hours or
+  // more, or another call of today's coming due, ends it.
+  useEffect(() => {
+    if (!session || data.jobs.length === 0) return;
+    const job = data.jobs.find(j => j.id === session.jobId);
+    const fromEarlierDay = !!job && job.date < today
+      && (now - session.scheduledAt > 16 * ONE_HOUR_MS || (!!startDue && startDue.job.id !== job.id));
+    const gone = !job || job.status === 'cancelled' || (job.status === 'completed' && !!job.endTime);
+    if (fromEarlierDay || gone) setSession(null);
+  }, [session, data.jobs, today, now, startDue]);
 
   useEffect(() => {
     if (session || !startDue) return;
