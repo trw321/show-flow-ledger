@@ -6,6 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { estimateYearFromEarnings, FILING_STATUS_LABELS, SOCIAL_SECURITY_WAGE_BASE, type FilingStatus } from '@/lib/taxEstimate';
 import type { LocalRates } from '@/lib/payerProfile';
+import YearOfServiceCard from '@/components/YearOfServiceCard';
+import { LOCAL8_2026 } from '@/lib/yearOfService';
 
 /**
  * The numbers that are yours rather than any employer's, and the ones that
@@ -294,6 +296,8 @@ export default function TaxAndLocalsSettings() {
             ))}
           </div>
         )}
+
+        <YearOfServiceCard rule={LOCAL8_2026} />
       </section>
     </div>
   );

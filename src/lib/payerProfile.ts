@@ -26,6 +26,8 @@ export interface LocalRates {
   local: string;
   unionDuesPercent?: number;
   vacationPercent?: number;
+  /** Year of Service training finished, as "2026:osha" keys (see yearOfService). */
+  trainingDone?: string[];
 }
 
 /**
