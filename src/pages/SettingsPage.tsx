@@ -544,6 +544,11 @@ export default function SettingsPage() {
           </AlertDialog>
         </div>
       </section>
+      {/* Which build this is, so you can tell whether the latest fix is live. */}
+      <p className="mt-6 text-center text-[10px] text-mono text-muted-foreground" data-testid="app-version">
+        Version {typeof __APP_COMMIT__ !== 'undefined' ? __APP_COMMIT__ : 'dev'}
+        {typeof __APP_BUILT_AT__ !== 'undefined' && <> · built {formatDistanceToNow(new Date(__APP_BUILT_AT__), { addSuffix: true })}</>}
+      </p>
       </div>
     </SpacePageWrapper>
   );
