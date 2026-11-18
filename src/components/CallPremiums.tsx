@@ -3,7 +3,7 @@ import { shiftContract } from '@/lib/contracts';
 import type { ContractRule } from '@/lib/payerProfile';
 import {
   contractRuleFor, EARLY_CALL_BEFORE_HOUR, EARLY_CALL_UNTIL_HOUR, FORCED_CALL_REST_HOURS,
-  forcedCallFor, isEarlyCall, isUnionShift, splitSideMinimum, withContractRule,
+  forcedCallFor, HEAD_CALL_MINIMUM_HOURS, headCallIn, isEarlyCall, isUnionShift, splitSideMinimum, withContractRule,
 } from '@/lib/premiums';
 import type { Employer, Job } from '@/lib/store';
 import { showDay as day } from '@/lib/today';
@@ -36,11 +36,21 @@ export default function CallPremiums({ job, allJobs, employer }: { job: Job; all
   const forced = forcedCallFor(job, allJobs, rest);
   // A split: another call the same day for the same employer.
   const split = allJobs.some(o => o.id !== job.id && o.date === job.date && o.client === job.client && !o.pto && o.status !== 'cancelled');
-  if (!early && !forced && !split) return null;
+  // A head call, by what the offer says: 8 hours unless the shift says otherwise.
+  const head = !split && isUnionShift(job, employer) ? headCallIn(job) : undefined;
+  if (!early && !forced && !split && !head) return null;
   const sideMinimum = splitSideMinimum({ ...job, minimumHours: undefined }, employer, prefs.payer);
 
   return (
     <div className="space-y-1.5">
+      {head && (
+        <div className="rounded-md border border-primary/40 bg-primary/10 px-2.5 py-2 text-[11px] leading-tight" data-testid="head-call">
+          <span className="font-medium">Head call · {job.minimumHours != null ? `${job.minimumHours}h minimum, set on the shift` : `${HEAD_CALL_MINIMUM_HOURS}h minimum`}</span>
+          <span className="block text-[10px] text-muted-foreground mt-0.5">
+            The offer says {head}. Hours past what you worked are minimum padding, paid straight time.
+          </span>
+        </div>
+      )}
       {split && (
         <div className="rounded-md border border-primary/40 bg-primary/10 px-2.5 py-2 text-[11px] leading-tight" data-testid="split-minimum">
           <span className="font-medium">Split call · minimum each side</span>
@@ -51,8 +61,8 @@ export default function CallPremiums({ job, allJobs, employer }: { job: Job; all
             Under {under}: {sideMinimum ? `${sideMinimum}h on the front and ${sideMinimum}h on the back` : 'none'}
             {rule?.splitMinimumHours == null && sideMinimum ? ' (the usual)' : ''}. Hours past what you worked are minimum padding, paid straight time.
           </span>
-          <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-            {[4, 5, 8].map(h => (
+          <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+            {[4, 5].map(h => (
               <button key={h} type="button" onClick={() => save({ splitMinimumHours: h })} aria-pressed={sideMinimum === h}
                 className={cn('pixel-button py-1 text-[11px] font-bold', sideMinimum === h ? 'pick-on' : 'pick-off')}>
                 {h}h a side

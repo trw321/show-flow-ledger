@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { jobPayBreakdown } from './payCalc';
 import { EMPTY_PROFILE, type PayerProfile } from './payerProfile';
-import { earlyCallHours, forcedCallFor, isEarlyCall, shiftPremiums, withContractRule } from './premiums';
+import { callMinimum, earlyCallHours, forcedCallFor, headCallIn, isEarlyCall, shiftPremiums, withContractRule } from './premiums';
 import type { Employer, Job } from './store';
 
 const shift = (id: string, over: Partial<Job> = {}): Job => ({
@@ -194,5 +194,47 @@ describe('the live counter', () => {
     const live = shift('l', { date: '2026-10-02', startTime: '1:00 PM', endTime: '4:50 PM', hoursWorked: 3 + 50 / 60, minimumHours: 5 });
     expect(jobPayBreakdown(live, [live], [], EMPTY_PROFILE, { asWorked: true }).gross).toBeCloseTo((3 + 50 / 60) * 50);
     expect(jobPayBreakdown(live, [live], [], EMPTY_PROFILE).gross).toBeCloseTo(5 * 50);
+  });
+});
+
+describe('a head call', () => {
+  it('is known by the position the offer names', () => {
+    expect(headCallIn({ notes: 'SETUP; T ELEC HEAD; GRAND BALLROOM' })).toBe('T ELEC HEAD');
+    expect(headCallIn({ notes: 'Skill: V1 HEAD VIDEO\nJob Notes: BRING ID' })).toBe('V1 HEAD VIDEO');
+    expect(headCallIn({ notes: 'HEAD TO THE LOADING DOCK; T ELEC X' })).toBeUndefined();
+    expect(headCallIn({ notes: 'BRING A HEADLAMP' })).toBeUndefined();
+  });
+
+  it('has an 8 hour minimum on union work, unless the shift says otherwise', () => {
+    const head = shift('h', { notes: 'T ELEC HEAD; LOADING DOCK', startTime: '9:00 AM', endTime: '3:00 PM', hoursWorked: 6 });
+    expect(callMinimum(head)).toBe(8);
+    expect(gross(head)).toBeCloseTo(8 * 50);
+    expect(callMinimum({ ...head, minimumHours: 5 })).toBe(5);
+    expect(callMinimum({ ...head, jobNumber: undefined, contract: undefined, client: 'odeum' })).toBe(0);
+  });
+
+  it('is never 8 hours a side on a split', () => {
+    const front = shift('f', { notes: 'T ELEC HEAD', startTime: '8:00 AM', endTime: '10:00 AM', hoursWorked: 2 });
+    const back = shift('b', { notes: 'T ELEC HEAD', startTime: '6:00 PM', endTime: '8:00 PM', hoursWorked: 2 });
+    expect(gross(front, [front, back]) + gross(back, [front, back])).toBeCloseTo(8 * 50);
+  });
+});
+
+describe('a split day breaks the hour', () => {
+  it('on each side, so 11:30 PM to 12:15 AM is an hour on its side', () => {
+    const pal = (id: string, over: Partial<Job>) => shift(id, { date: '2026-10-16', contract: 'PALACE OF FINE ARTS 2025-2027', hourlyRate: 54.09, minimumHours: 5, ...over });
+    const front = pal('f', { startTime: '1:00 PM', endTime: '3:00 PM', hoursWorked: 2 });
+    const back = pal('b', { startTime: '11:30 PM', endTime: '12:15 AM', hoursWorked: 0.75 });
+    // Front: 2 working + 3 padding. Back: 1 working (half of it after
+    // midnight, at double) + 4 padding.
+    const total = gross(front, [front, back]) + gross(back, [front, back]);
+    expect(total).toBeCloseTo((2 + 3 + 0.5 + 0.5 * 2 + 4) * 54.09);
+  });
+
+  it('rounds each side up on its own when both run past their minimum', () => {
+    const a = shift('a', { startTime: '8:00 AM', endTime: '1:15 PM', hoursWorked: 5.25, minimumHours: 4 });
+    const b = shift('b', { startTime: '6:00 PM', endTime: '11:15 PM', hoursWorked: 5.25, minimumHours: 4 });
+    // 6 + 6 = 12 working hours: 8 straight and 4 at time and a half.
+    expect(gross(a, [a, b]) + gross(b, [a, b])).toBeCloseTo(8 * 50 + 4 * 75);
   });
 });

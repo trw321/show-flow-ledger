@@ -35,7 +35,7 @@ import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { calculateDayPay, dayInARow, dayMultiplierFor, dayPremiumLabel, compositeWeekendMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross, jobPayBreakdown, compareCalls } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { breakTheHourLabel, breaksTheHour, isLocal16Shift } from '@/lib/local16';
-import { shiftPremiums } from '@/lib/premiums';
+import { callMinimum, shiftPremiums, splitSideMinimum } from '@/lib/premiums';
 import CallPremiums from '@/components/CallPremiums';
 import { useSwipe } from '@/lib/useSwipe';
 import { cn } from '@/lib/utils';
@@ -878,7 +878,12 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   const clockSpanHours = startTime && endTime ? calcHours(startTime, endTime) : 0;
   const hoursDifferFromClockSpan = !timeline && clockSpanHours > 0 && Number.isFinite(enteredHours)
     && Math.abs(enteredHours - clockSpanHours) > 0.01;
-  const minHours = parseFloat(minimumHours) || 0;
+  // Nothing typed: the minimum the rules give it (a split side's, or 8 for a
+  // head call), the same as the rest of the app uses.
+  const splitToday = data.jobs.some(o => o.id !== job.id && o.date === job.date && o.client === job.client && !o.pto && o.status !== 'cancelled');
+  const minHours = minimumHours.trim() !== ''
+    ? (parseFloat(minimumHours) || 0)
+    : splitToday ? splitSideMinimum({ ...job, minimumHours: undefined }, employer, prefs.payer) : callMinimum({ ...job, minimumHours: undefined }, employer);
   // Mirrors calculateDayPay: an off-the-clock meal comes out of the hours
   // before the minimum-call floor applies. Without this the on/off toggle
   // changed the pay but every hours figure on screen stayed put.

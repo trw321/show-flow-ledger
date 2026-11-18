@@ -84,6 +84,30 @@ export function earlyCallHours(job: Pick<Job, 'startTime' | 'endTime'>, rule?: C
 
 /** A split day's side with no minimum of its own gets this on union work. */
 export const SPLIT_SIDE_MINIMUM_HOURS = 4;
+/** A head call's minimum: the offer names the position ("T ELEC HEAD", "V1 HEAD VIDEO"). */
+export const HEAD_CALL_MINIMUM_HOURS = 8;
+
+const DEPARTMENT = '(?:ELEC(?:TRICS?|TRICIAN)?|AUDIO|VIDEO|LIGHT(?:ING)?|LX|PROPS?|CARP(?:ENTER)?|RIGG(?:ER|ING)?|SOUND|A\\/?V|WARDROBE|CAMERA|FLY(?:MAN)?|STAGE)';
+const HEAD_POSITION = new RegExp(`\\b(?:[A-Z]\\d?\\s+)?${DEPARTMENT}\\s+HEAD\\b|\\b(?:[A-Z]\\d\\s+)?HEAD\\s+${DEPARTMENT}\\b`, 'i');
+
+/** The head position an offer names, as written ("T ELEC HEAD"), or nothing. */
+export function headCallIn(job: Pick<Job, 'role' | 'notes'>): string | undefined {
+  for (const text of [job.role, job.notes]) {
+    const found = text?.match(HEAD_POSITION)?.[0];
+    if (found) return found.trim().toUpperCase();
+  }
+  return undefined;
+}
+
+/**
+ * The minimum call on a day that isn't split: the shift's own, else 8 hours
+ * when a union offer says it's a head call. Splits have their own (see
+ * splitSideMinimum); a split is never 8 hours a side.
+ */
+export function callMinimum(job: Job, employer?: Employer): number {
+  if (job.minimumHours != null) return job.minimumHours;
+  return isUnionShift(job, employer) && headCallIn(job) ? HEAD_CALL_MINIMUM_HOURS : 0;
+}
 
 /**
  * The minimum call a side of a split day is owed: its own, else its
