@@ -175,7 +175,13 @@ export default function LiveWorkPay() {
   const todayJobs = pricedLiveJob
     ? estimateJobs.filter(job => job.date === today && job.status !== 'cancelled')
     : [];
+  // The counter ticks on the working minutes so far. Rounded up to whole
+  // hours (Local 16 breaks the hour) or held at a minimum call, it only moved
+  // once an hour; that figure shows underneath as what the day pays so far.
   const pay = pricedLiveJob
+    ? todayJobs.reduce((total, job) => total + jobPayBreakdown(job, estimateJobs, data.employers, prefs.payer, { asWorked: true }).net, 0)
+    : null;
+  const paysSoFar = pricedLiveJob
     ? todayJobs.reduce((total, job) => total + jobPayBreakdown(job, estimateJobs, data.employers, prefs.payer).net, 0)
     : null;
   const hasRate = !!(pricedLiveJob?.hourlyRate || pricedLiveJob?.dayRate);
@@ -249,9 +255,16 @@ export default function LiveWorkPay() {
             </div>
           </div>
           <div className="ml-auto flex items-center gap-3">
-            <p className="font-mono text-sm font-semibold tabular-nums" aria-live="off">
-              {lateRuleMissing ? 'Set late rule in Settings' : hasRate && pay !== null ? money(pay) : 'Rate needed'}
-            </p>
+            <div className="text-right">
+              <p className="font-mono text-sm font-semibold tabular-nums" aria-live="off" data-testid="live-pay">
+                {lateRuleMissing ? 'Set late rule in Settings' : hasRate && pay !== null ? money(pay) : 'Rate needed'}
+              </p>
+              {!lateRuleMissing && hasRate && pay !== null && paysSoFar !== null && paysSoFar - pay >= 0.005 && (
+                <p className="font-mono text-[10px] text-muted-foreground tabular-nums" data-testid="live-pays">
+                  pays {money(paysSoFar)} so far
+                </p>
+              )}
+            </div>
             <Button type="button" size="sm" variant={lunch ? 'default' : 'outline'} className="h-8 gap-1.5 px-2.5" onClick={lunch ? endLunch : startLunch}>
               <Utensils size={14} /> {lunch ? 'Back from lunch' : 'Lunch'}
             </Button>
