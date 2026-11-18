@@ -19,25 +19,80 @@ export const LOCAL16_HW = {
   quarterContributions: 1_940,
   /** Self-pay can make up a shortfall for at most this many quarters in a row. */
   selfPayMaxQuarters: 3,
-  plan: [
-    'A multi-employer defined-benefit plan. Contributions go into the plan and pay care providers through the third-party administrator.',
-    'Anthem Blue Cross is the preferred provider (PPO).',
-    'BeneSys is the third-party administrator.',
-    'Dental: the plan pays the coverage and a monthly fee to get Cigna rates.',
-    'Prescriptions: Optum Rx.',
-    'Deductible: $300 a person a year, $900 a family at most, PPO and non-PPO covered charges.',
-    'Out of pocket at most: $6,000 a participant a year, $12,000 a family.',
-  ],
-  selfPay: [
-    'You can self-pay the difference: $1,940 minus the employer contributions is what you owe for the quarter.',
-    'A free quarter is no longer available.',
-    'Self-pay can make up a shortfall for no more than three (3) consecutive quarters, if no employer contributions are made on your behalf during those three quarters.',
+  /** A summary of the Local 16 H&W and Pension presentation (updated 02/09/2025). */
+  summary: [
+    {
+      title: 'Qualifying, staying on, self-pay',
+      points: [
+        'Qualify: $50,000 earned within 12 months ($7,750 in employer contributions).',
+        'Stay on: $12,500 earned in each work period ($1,940 in contributions).',
+        'Short? Self-pay the difference: $1,940 minus what employers paid. No free quarter any more.',
+        'Self-pay must be paid on time, and can cover at most 3 quarters in a row with no employer contributions.',
+        'Check it on the benefits site: My Benefits, then My Eligibility shows each month and what was credited; the contributions list shows each employer by work date.',
+      ],
+    },
+    {
+      title: 'What the plan pays',
+      points: [
+        'Anthem Blue Cross PPO, run by BeneSys. Prescriptions: Optum Rx. Dental at Cigna rates.',
+        'Deductible $300 a person a year, $900 a family. Out of pocket at most $6,000 a person, $12,000 a family.',
+        'Preventive care: 100% with a PPO provider.',
+        'Medical and surgical: 80% in network, 50% out. Hospital stay: 90% PPO, 60% not. Outpatient: 80% / 50%. True emergency: 80%.',
+        'Virtual visits, mental health, acupuncture, chiropractic: 80% PPO, 50% not.',
+        'Vision exam: 80% up to $400 a year. Hearing aids after 3 years on the plan.',
+        'LiveHealth video doctor, 24/7: you pay $11.80.',
+        'Urgent care finder: anthem.com/ca, Find Care, member ID prefix BAY.',
+        'Also covered: addiction treatment, home care, hospice. Active participants also get life insurance, AD&D and supplemental disability. Most care needs a doctor referral.',
+      ],
+    },
+    {
+      title: 'Prescriptions (Optum Rx)',
+      points: [
+        'No co-pay for preventive drugs in network (birth control, quitting smoking, statins).',
+        'Maintenance drugs: have the doctor send them to Optum Rx for a 3-month supply, and ask for the generic.',
+      ],
+    },
+    {
+      title: 'Dental (after 2 years of continuous coverage)',
+      points: [
+        'Up to $2,500 a person a plan year. $75 deductible a year, except diagnostic and preventive.',
+        'Diagnostic and preventive 90%, basic 70%, major 50%, TMJ 70%, orthodontia 50%.',
+        'Cigna Dental PPO dentists: (800) 797-3381, cignadentalsaTaftHartley.com ("Cigna Dental PPO Shared Administration Plus").',
+      ],
+    },
+    {
+      title: 'Supplemental disability (active participants)',
+      points: [
+        '$27.35 a day (taxed) for each day on state disability, another disability payer, or workers’ comp.',
+        'Apply to BeneSys within 90 days of the first payment. At most 20 weeks (140 days) in any 4 years.',
+        'Workers’ comp: on the plan at least 1 year. State disability: at least 3 years in a row. Either way you must be out of work, and send BeneSys proof of each payment.',
+      ],
+    },
+    {
+      title: 'Pension',
+      points: [
+        'Paid for entirely by employer contributions under the contracts.',
+        'Normal retirement at 65 with 5 years of credited service. Early at 55 with 10 years and 100% vested. Or postponed past 65.',
+        'Vesting: under 3 years 0%, 3 years 20%, 4 years 40%, 5 years 60%, 6 years 80%, 7 or more 100%.',
+        'A year of service is 1,000 covered hours (hours an employer contributed for) in a plan year, at most one a year.',
+        'Accrual: 1.5% for 2022 through 2026. Early retirement pays a percentage by age, from about 39% at 55 to 99% just before 65.',
+        'Keep your beneficiary form, address, marital status and dependents up to date.',
+      ],
+    },
+    {
+      title: 'Retiree HRA (from Jan 1, 2025)',
+      points: [
+        'Medicare-eligible retirees with 35 years of continuous service, and Medicare disability retirees: $325 a month, plus $325 for an eligible Medicare spouse.',
+        'Stops adding at $12,000 ($24,000 joint). Claims within 180 days. Forfeited after 24 months with no activity.',
+      ],
+    },
   ],
   contacts: [
     { label: 'BeneSys (pension and H&W)', phones: ['(855) 704-5273', '(925) 398-7043'] },
-    { label: 'Trust Fund Office', phones: ['(925) 398-7060', '(855) 704-7767'] },
+    { label: 'Trust Fund Office (account setup)', phones: ['(925) 398-7060', '(855) 704-7767'] },
   ],
   mail: ['IATSE Local 16 Trust Funds', 'PO Box 1607', 'San Ramon, CA 94583'],
+  claims: 'Medical, dental and vision claim forms: PO Box 240127, Apple Valley, MN 55124 · fax (925) 297-6655. Attach the itemized bill.',
   portal: 'https://www.ourbenefitoffice.com/IATSE16/Benefits/',
 } as const;
 

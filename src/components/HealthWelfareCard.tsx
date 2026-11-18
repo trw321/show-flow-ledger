@@ -7,106 +7,112 @@ import { localToday } from '@/lib/today';
 import { cn } from '@/lib/utils';
 
 const money = (n: number) => '$' + Math.round(n).toLocaleString();
+const shortDate = (d: string) => new Date(d + 'T12:00:00').toLocaleString('en-US', { month: 'short', day: 'numeric' });
 
-/** The work-month to coverage-quarter table, which decides everything else. */
+/** The rule itself: which three work months pay for which quarter. */
 const QUARTERS = [
-  ['Aug–Oct', 'Q1 · the following Jan–Mar'],
-  ['Nov–Jan', 'Q2 · the following Apr–Jun'],
-  ['Feb–Apr', 'Q3 · the following Jul–Sep'],
-  ['May–Jul', 'Q4 · the following Oct–Dec'],
+  ['Aug–Oct', 'Qtr 1', 'the following Jan–Mar'],
+  ['Nov–Jan', 'Qtr 2', 'the following Apr–Jun'],
+  ['Feb–Apr', 'Qtr 3', 'Jul–Sep'],
+  ['May–Jul', 'Qtr 4', 'Oct–Dec'],
 ];
 
 /**
- * Local 16 health and welfare: whether the work so far keeps you on the
- * plan. Earnings are the app's estimated gross from Local 16 shifts, so the
- * fund's own figures win where they differ.
+ * Local 16 health and welfare. Earnings in each three-month work period pay
+ * for a later quarter of coverage, so it lists your own recent periods with
+ * the quarter each one pays for, then the plan in brief. Earnings are the
+ * app's estimated gross from Local 16 shifts; the fund's records decide.
  */
 export default function HealthWelfareCard() {
   const { data } = useData();
   const { prefs } = useUserPrefs();
   const today = localToday();
-  const figures = useMemo(() => {
-    const now = workPeriodFor(today);
-    const last = previousPeriod(now);
-    const earned = (p: WorkPeriod) => local16Earnings(p.start, p.end, data.jobs, data.employers, prefs.payer);
-    const yearAgo = `${Number(today.slice(0, 4)) - 1}${today.slice(4)}`;
-    return {
-      now, last,
-      nowEarned: earned(now),
-      lastEarned: earned(last),
-      twelve: local16Earnings(yearAgo, today, data.jobs, data.employers, prefs.payer),
-    };
+  const periods = useMemo(() => {
+    const list: WorkPeriod[] = [workPeriodFor(today)];
+    while (list.length < 4) list.push(previousPeriod(list[list.length - 1]));
+    return list.map((p, i) => ({ p, running: i === 0, gross: local16Earnings(p.start, p.end, data.jobs, data.employers, prefs.payer).gross }));
   }, [today, data.jobs, data.employers, prefs.payer]);
-
-  const period = (label: string, p: WorkPeriod, gross: number, running: boolean) => {
-    const s = quarterStanding(gross);
-    const percent = Math.min(100, (gross / LOCAL16_HW.quarterEarnings) * 100);
-    return (
-      <div className="space-y-1">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-          <span className="text-[11px] font-medium">{label}: {p.workLabel} → coverage {p.coverageLabel}</span>
-          <span className="text-xs font-bold text-mono">{money(gross)} <span className="font-normal text-muted-foreground">of {money(LOCAL16_HW.quarterEarnings)}</span></span>
-        </div>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-secondary" aria-hidden>
-          <div className={cn('h-full', s.covered ? 'bg-dot-paid' : 'bg-primary')} style={{ width: `${percent}%` }} />
-        </div>
-        <p className={cn('text-[10px]', s.covered ? 'text-dot-paid' : running ? 'text-muted-foreground' : 'text-warning')}>
-          {money(s.contributions)} of {money(LOCAL16_HW.quarterContributions)} in employer contributions.
-          {s.covered ? ' Enough for the quarter.' : running
-            ? ` ${money(LOCAL16_HW.quarterEarnings - gross)} more to earn by ${new Date(p.end + 'T12:00:00').toLocaleString('en-US', { month: 'short', day: 'numeric' })}, or self-pay ${money(s.selfPay)} if it ends here.`
-            : ` Short: if you're on the plan, self-pay ${money(s.selfPay)} to stay on for ${p.coverageLabel}.`}
-        </p>
-      </div>
-    );
-  };
+  const twelve = useMemo(() => {
+    const yearAgo = `${Number(today.slice(0, 4)) - 1}${today.slice(4)}`;
+    return local16Earnings(yearAgo, today, data.jobs, data.employers, prefs.payer).gross;
+  }, [today, data.jobs, data.employers, prefs.payer]);
 
   return (
     <div className="mt-3 rounded-md border border-primary/40 bg-primary/5 p-3 space-y-3" data-testid="health-welfare-16">
       <div>
         <p className="text-sm font-bold">Local 16 · Health &amp; Welfare</p>
         <p className="text-[11px] text-muted-foreground">
-          Employers pay 15.5% of your Local 16 gross into the plan. Stay on with {money(LOCAL16_HW.quarterEarnings)} earned
-          ({money(LOCAL16_HW.quarterContributions)} in contributions) in each work period.
+          Employers pay 15.5% of your Local 16 gross into the plan. Each 3 months of work pays for a later quarter of
+          coverage: {money(LOCAL16_HW.quarterEarnings)} earned ({money(LOCAL16_HW.quarterContributions)} in contributions) keeps you on.
         </p>
       </div>
 
-      {period('Now', figures.now, figures.nowEarned.gross, true)}
-      {period('Last', figures.last, figures.lastEarned.gross, false)}
-
-      <div className="space-y-0.5">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-          <span className="text-[11px] font-medium">To qualify: last 12 months</span>
-          <span className="text-xs font-bold text-mono">{money(figures.twelve.gross)} <span className="font-normal text-muted-foreground">of {money(LOCAL16_HW.qualifyEarnings)}</span></span>
-        </div>
-        <p className="text-[10px] text-muted-foreground">{money(LOCAL16_HW.qualifyEarnings)} within 12 months ({money(LOCAL16_HW.qualifyContributions)} in contributions) qualifies you.</p>
-      </div>
-
-      <div className="rounded-md border border-warning/50 bg-warning/10 p-2" data-testid="hw-quarters">
-        <p className="text-[11px] font-bold">Which months pay for which quarter</p>
-        <div className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[11px]">
-          {QUARTERS.map(([work, cover]) => (
+      {/* The rule, up top: it decides everything below. */}
+      <div className="rounded-md border border-warning/60 bg-warning/10 p-2" data-testid="hw-quarters">
+        <p className="text-[11px] font-bold">Months worked → quarter they pay for</p>
+        <div className="mt-1 grid grid-cols-[auto_auto_1fr] gap-x-2 gap-y-0.5 text-[11px]">
+          {QUARTERS.map(([work, q, cover]) => (
             <div key={work} className="contents">
               <span className="font-mono font-bold">{work}</span>
+              <span className="font-bold">→ {q}</span>
               <span>{cover}</span>
             </div>
           ))}
         </div>
       </div>
 
-      <p className="text-[10px] text-muted-foreground">
-        Earnings here are the app's estimate from your Local 16 shifts. The fund's own records decide.
-      </p>
+      <div className="space-y-2.5" data-testid="hw-periods">
+        <p className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Your months and the quarters they pay for</p>
+        {periods.map(({ p, running, gross }) => {
+          const s = quarterStanding(gross);
+          const percent = Math.min(100, (gross / LOCAL16_HW.quarterEarnings) * 100);
+          return (
+            <div key={p.start} className="space-y-1">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                <span className="text-[11px]">
+                  <span className="font-bold">{p.workLabel}</span> → Qtr {p.quarter}, <span className="font-bold">{p.coverageLabel}</span>
+                  {running && <span className="text-muted-foreground"> · now</span>}
+                </span>
+                <span className="text-xs font-bold text-mono">{money(gross)}</span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary" aria-hidden>
+                <div className={cn('h-full', s.covered ? 'bg-dot-paid' : 'bg-primary')} style={{ width: `${percent}%` }} />
+              </div>
+              <p className={cn('text-[10px]', s.covered ? 'text-dot-paid' : running ? 'text-muted-foreground' : 'text-warning')}>
+                {money(s.contributions)} of {money(LOCAL16_HW.quarterContributions)} in contributions.
+                {s.covered ? ' Enough.' : running
+                  ? ` ${money(LOCAL16_HW.quarterEarnings - gross)} more to earn by ${shortDate(p.end)}, or self-pay ${money(s.selfPay)} if it ends here.`
+                  : ` Short: if you were on the plan, self-pay ${money(s.selfPay)} for ${p.coverageLabel}.`}
+              </p>
+            </div>
+          );
+        })}
+      </div>
 
-      <details className="text-[11px]">
-        <summary className="cursor-pointer font-medium">Self-pay, the plan, and who to call</summary>
-        <div className="mt-2 space-y-2">
-          <ul className="list-disc space-y-0.5 pl-4">
-            {LOCAL16_HW.selfPay.map(t => <li key={t}>{t}</li>)}
-          </ul>
-          <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
-            {LOCAL16_HW.plan.map(t => <li key={t}>{t}</li>)}
-          </ul>
-          <div className="space-y-1">
+      <div className="space-y-0.5">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+          <span className="text-[11px] font-medium">To qualify: last 12 months</span>
+          <span className="text-xs font-bold text-mono">{money(twelve)} <span className="font-normal text-muted-foreground">of {money(LOCAL16_HW.qualifyEarnings)}</span></span>
+        </div>
+        <p className="text-[10px] text-muted-foreground">
+          {money(LOCAL16_HW.qualifyEarnings)} within 12 months ({money(LOCAL16_HW.qualifyContributions)} in contributions) qualifies you.
+          These are the app's estimates from your Local 16 shifts; the fund's records decide.
+        </p>
+      </div>
+
+      <div className="space-y-1">
+        <p className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">The plan in brief</p>
+        {LOCAL16_HW.summary.map(section => (
+          <details key={section.title} className="text-[11px]">
+            <summary className="cursor-pointer font-medium">{section.title}</summary>
+            <ul className="mt-1 list-disc space-y-0.5 pl-4 text-muted-foreground">
+              {section.points.map(t => <li key={t}>{t}</li>)}
+            </ul>
+          </details>
+        ))}
+        <details className="text-[11px]">
+          <summary className="cursor-pointer font-medium">Who to call</summary>
+          <div className="mt-1 space-y-1">
             {LOCAL16_HW.contacts.map(c => (
               <p key={c.label}>
                 <span className="font-medium">{c.label}:</span>{' '}
@@ -116,12 +122,13 @@ export default function HealthWelfareCard() {
               </p>
             ))}
             <p className="text-muted-foreground">Mail: {LOCAL16_HW.mail.join(', ')}</p>
+            <p className="text-muted-foreground">{LOCAL16_HW.claims}</p>
             <a href={LOCAL16_HW.portal} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary underline underline-offset-2">
               Your benefits online (sign up for an account first) <ExternalLink size={11} aria-hidden />
             </a>
           </div>
-        </div>
-      </details>
+        </details>
+      </div>
     </div>
   );
 }
