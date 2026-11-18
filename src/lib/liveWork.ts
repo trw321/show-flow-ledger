@@ -78,3 +78,25 @@ export function liveCallsText(from: number, now: number, breaks: WorkBreak[] = [
   if (to > start) calls.push(`${shortTime(start)}-${shortTime(to)}`);
   return calls.join(', ');
 }
+
+/** Meal lengths offered, in minutes. */
+export const MEAL_LENGTHS = [30, 45, 60] as const;
+
+/**
+ * The breaks with a meal added: one that started at `start` and ran
+ * `minutes`, or is still going when minutes is null. Entered after the
+ * fact, so it can't be missed by not tapping on time. A meal it overlaps
+ * is replaced, not doubled.
+ */
+export function withMeal(breaks: WorkBreak[], start: number, minutes: number | null): WorkBreak[] {
+  const meal: WorkBreak = minutes == null ? { start } : { start, end: start + minutes * 60_000 };
+  const end = meal.end ?? Infinity;
+  const kept = breaks.filter(b => (b.end ?? Infinity) <= start || b.start >= end);
+  // A meal still going is the last break: openBreak looks there.
+  return [...kept, meal].sort((a, b) => (a.end === undefined ? 1 : b.end === undefined ? -1 : a.start - b.start));
+}
+
+/** A time snapped to the 5 minutes at or before it. */
+export function toFiveMinutes(timestamp: number): number {
+  return Math.floor(timestamp / 300_000) * 300_000;
+}

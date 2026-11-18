@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { liveCallsText, lunchMs, startsInLabel, workEnd, workedMs } from './liveWork';
+import { liveCallsText, lunchMs, startsInLabel, toFiveMinutes, withMeal, workEnd, workedMs } from './liveWork';
 import { jobPayBreakdown } from './payCalc';
 import { EMPTY_PROFILE } from './payerProfile';
 import { localToday } from './today';
@@ -62,5 +62,31 @@ describe('lunch on the live counter', () => {
     } as Job;
     const acme = { id: 'Acme', name: 'Acme', overtimeRule: 'daily', roundUpToWholeHours: true, createdAt: 'x' } as Employer;
     expect(jobPayBreakdown(live, [live], [acme], EMPTY_PROFILE).gross).toBe(2 * 50);
+  });
+});
+
+describe('a meal entered on the slider', () => {
+  it('comes off the hours whenever it is entered', () => {
+    const breaks = withMeal([], at(12, 30), 30);
+    expect(workedMs(at(8), at(17), breaks)).toBe(8.5 * 60 * MIN);
+    expect(liveCallsText(at(8), at(17), breaks)).toBe('8:00am-12:30pm, 1:00pm-5:00pm');
+  });
+
+  it('can still be going, and the counter pauses until you are back', () => {
+    const breaks = withMeal([], at(12, 30), null);
+    expect(workedMs(at(8), at(13), breaks)).toBe(4.5 * 60 * MIN);
+  });
+
+  it('replaces a meal it overlaps, and keeps others', () => {
+    const one = withMeal([], at(12), 60);
+    const fixed = withMeal(one, at(12, 15), 30);
+    expect(fixed).toEqual([{ start: at(12, 15), end: at(12, 45) }]);
+    const two = withMeal(fixed, at(18), 30);
+    expect(two).toHaveLength(2);
+    expect(lunchMs(at(8), at(20), two)).toBe(60 * MIN);
+  });
+
+  it('snaps to five minutes', () => {
+    expect(toFiveMinutes(at(12, 33))).toBe(at(12, 30));
   });
 });
