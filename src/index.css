@@ -300,7 +300,7 @@
     background-size: 220% 100%;
     color: #14061f;
     box-shadow: 0 0 0 1px var(--hl-a), 0 0 14px var(--hl-glow);
-    animation: premium-shine 3s linear infinite;
+    animation: premium-shine 7s linear infinite;
   }
   .premium-6 *,
   .premium-7 * { color: #14061f !important; }

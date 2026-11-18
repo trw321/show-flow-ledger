@@ -199,14 +199,12 @@ export default function LiveWorkPay() {
   const todayJobs = pricedLiveJob
     ? estimateJobs.filter(job => job.date === today && job.status !== 'cancelled')
     : [];
-  // The counter ticks on the working minutes so far. Rounded up to whole
-  // hours (Local 16 breaks the hour) or held at a minimum call, it only moved
-  // once an hour; that figure shows underneath as what the day pays so far.
+  // One figure: the gross for the working minutes so far, ticking as they
+  // go. Rounded up to whole hours (Local 16 breaks the hour) or held at a
+  // minimum call it only moved once an hour, and a second figure for that
+  // read as two different answers. The saved shift pays it all properly.
   const pay = pricedLiveJob
-    ? todayJobs.reduce((total, job) => total + jobPayBreakdown(job, estimateJobs, data.employers, prefs.payer, { asWorked: true }).net, 0)
-    : null;
-  const paysSoFar = pricedLiveJob
-    ? todayJobs.reduce((total, job) => total + jobPayBreakdown(job, estimateJobs, data.employers, prefs.payer).net, 0)
+    ? todayJobs.reduce((total, job) => total + jobPayBreakdown(job, estimateJobs, data.employers, prefs.payer, { asWorked: true }).gross, 0)
     : null;
   const hasRate = !!(pricedLiveJob?.hourlyRate || pricedLiveJob?.dayRate);
   // A 6th or 7th day in a row lights up like it does on the calendar.
@@ -298,7 +296,7 @@ export default function LiveWorkPay() {
                   ? lunch.onClock
                     ? `On a meal since ${clockTime(lunch.start)} · on the clock, still paid`
                     : `On a meal since ${clockTime(lunch.start)} · paused, off the clock`
-                  : `Started ${clockTime(startedAt)}${lunchMs(startedAt, liveEnd, breaks) > 0 ? ` · ${elapsedLabel(lunchMs(startedAt, liveEnd, breaks))} meal off the clock` : ''}${breaks.some(x => x.onClock) ? ' · meal on the clock, paid' : ''} · estimated net`}
+                  : `Started ${clockTime(startedAt)}${lunchMs(startedAt, liveEnd, breaks) > 0 ? ` · ${elapsedLabel(lunchMs(startedAt, liveEnd, breaks))} meal off the clock` : ''}${breaks.some(x => x.onClock) ? ' · meal on the clock, paid' : ''} · estimated gross`}
               </p>
             </div>
           </div>
@@ -307,11 +305,6 @@ export default function LiveWorkPay() {
               <p className="font-mono text-sm font-semibold tabular-nums" aria-live="off" data-testid="live-pay">
                 {lateRuleMissing ? 'Set late rule in Settings' : hasRate && pay !== null ? money(pay) : 'Rate needed'}
               </p>
-              {!lateRuleMissing && hasRate && pay !== null && paysSoFar !== null && paysSoFar - pay >= 0.005 && (
-                <p className="font-mono text-[10px] text-muted-foreground tabular-nums" data-testid="live-pays">
-                  pays {money(paysSoFar)} so far
-                </p>
-              )}
             </div>
             <Button type="button" size="sm" variant={lunch ? 'default' : 'outline'} className={cn("h-8 gap-1.5 px-2.5", premium && "border-[#14061f]/40 bg-white/75 hover:bg-white/90")} onClick={lunch ? endLunch : openMeal}>
               <Utensils size={14} /> {lunch ? 'Back from meal' : 'Meal'}
