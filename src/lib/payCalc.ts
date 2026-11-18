@@ -6,7 +6,7 @@ import { resolveEmployer } from './employerMatch';
 import { contractFor } from './contracts';
 import { localToday } from './today';
 import { breaksTheHour } from './local16';
-import { shiftPremiums, type StartPremium } from './premiums';
+import { shiftPremiums, splitSideMinimum, type StartPremium } from './premiums';
 import { clockSpanHours, endAfterStart } from './clock';
 
 export interface OvertimeOptions {
@@ -429,6 +429,12 @@ export function jobPayBreakdown(
   allJobs: Job[],
   employers: Employer[] = [],
   payer: PayerProfile = EMPTY_PROFILE,
+  /**
+   * asWorked: only the working hours so far, to the minute: no minimum call,
+   * no part hour paid whole. What the live counter ticks on while the day is
+   * still going, since a rounded or minimum figure only moves once an hour.
+   */
+  opts: { asWorked?: boolean } = {},
 ): { gross: number; net: number; dues: number; tax: number; vacation: number; retirementMatch: number } {
   const hours = effectiveHoursWorked(job);
   if (!hours) return { gross: 0, net: 0, dues: 0, tax: 0, vacation: 0, retirementMatch: 0 };
@@ -461,18 +467,19 @@ export function jobPayBreakdown(
       effectiveHoursWorked(other) > 0,
   );
   const isSplitDay = dayShifts.length > 1;
-  // Each side of a split carries its own minimum call — four or five hours a
-  // half — so a short morning bills its minimum rather than the hours stood
-  // there. The hours worked on both sides climb one ladder; what a short side
-  // is owed beyond its hours is minimum-call padding, paid flat at straight
-  // time like any other.
-  const billable = (j: Job) => Math.max(effectiveHoursWorked(j), j.minimumHours ?? 0);
+  const employer = resolveEmployer(job.client, employers);
+  // Each side of a split carries its own minimum call — usually four hours a
+  // side on union work, five under some contracts (see splitSideMinimum) — so
+  // a short morning bills its minimum rather than the hours stood there. The
+  // working hours on both sides climb one ladder; what a short side is owed
+  // beyond them is minimum padding, never worked, paid flat at straight time.
+  const sideMinimum = (j: Job) => (opts.asWorked ? 0 : splitSideMinimum(j, employer, payer));
+  const billable = (j: Job) => Math.max(effectiveHoursWorked(j), sideMinimum(j));
   const dayHours = isSplitDay
     ? dayShifts.reduce((sum, j) => sum + effectiveHoursWorked(j), 0)
     : hours;
   const billableDay = isSplitDay ? dayShifts.reduce((sum, j) => sum + billable(j), 0) : hours;
   const share = isSplitDay && billableDay > 0 ? billable(job) / billableDay : 1;
-  const employer = resolveEmployer(job.client, employers);
   // Dues follow the local, tax follows you, and only what is left is the
   // employer's to say. See payerProfile for why.
   const rates = ratesForShift(job, employer, payer);
@@ -490,14 +497,14 @@ export function jobPayBreakdown(
 
   // On a split each side's minimum is settled as padding; applying the
   // shift's own minimum again here would floor the whole day at it.
-  const dayMinimum = isSplitDay ? 0 : (job.minimumHours ?? 0);
+  const dayMinimum = isSplitDay || opts.asWorked ? 0 : (job.minimumHours ?? 0);
   const dayResult = calculateDayPay(dayHours, rate, dayMinimum, dayPenalties, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock, offClockMinutesTotal: dayMealMinutes }, {
     rule: employer?.overtimeRule ?? 'daily',
     otThresholdHours: employer?.dailyOvertimeThresholdHours,
     dtThresholdHours: employer?.dailyDoubletimeThresholdHours,
     otMultiplier: employer?.overtimeMultiplier,
-    roundUpToWholeHours: breaksTheHour(job, employer),
-    postMealPaddingHours: postMealPaddingHours(job, employer),
+    roundUpToWholeHours: !opts.asWorked && breaksTheHour(job, employer),
+    postMealPaddingHours: opts.asWorked ? 0 : postMealPaddingHours(job, employer),
     // The shift's own day rate, if it has one — the employer's is only where a
     // new shift starts from. On a split day the whole day is one day rate.
     dayRate: job.dayRate,
@@ -505,7 +512,7 @@ export function jobPayBreakdown(
     dtMultiplier: employer?.doubletimeMultiplier,
     nightHours: dayNightHours,
     nightLeftAtEnd: dayNightLeft,
-    minimumPaddingHours: isSplitDay ? splitMinimumPadding(dayShifts) : 0,
+    minimumPaddingHours: isSplitDay && !opts.asWorked ? splitMinimumPadding(dayShifts, sideMinimum) : 0,
     nightMultiplier: employer?.nightPremiumMultiplier,
     dayPremiumLabel: dayPremiumLabel(job, employer, allJobs),
     // The day's first call is where an early or forced call starts.
@@ -634,10 +641,10 @@ function lastCall(sides: Job[]): Job {
  * worked. Each side carries its own minimum, but the hours that fill it were
  * never worked, so they are paid flat rather than climbing the day's ladder.
  */
-function splitMinimumPadding(sides: Job[], fallbackMinimum = 0): number {
+function splitMinimumPadding(sides: Job[], minimumOf: (j: Job) => number): number {
   return sides.reduce((sum, j) => {
     const net = effectiveHoursWorked(j) - offClockMealMinutes(j) / 60;
-    return sum + Math.max(0, (j.minimumHours ?? fallbackMinimum) - net);
+    return sum + Math.max(0, minimumOf(j) - net);
   }, 0);
 }
 
@@ -868,7 +875,7 @@ export function calculateExpectedPay(
     const fallbackMinimum = referenceJob.minimumHours ?? 0;
     const dayMinimum = isSplit ? 0 : (sides[0].minimumHours ?? fallbackMinimum);
     const dayEntry = byDate.get(date);
-    const result = calculateDayPay(hours, rate, dayMinimum, mealPenalties, dayMultiplier, { duration: mealDuration, onClock: mealOnClock, offClockMinutesTotal: offClockMealMinutes }, { ...overtimeOptions, nightHours, nightLeftAtEnd: nightLeft, minimumPaddingHours: isSplit ? splitMinimumPadding(sides, fallbackMinimum) : 0, postMealPaddingHours: postMealPadding, dayRate: dayEntry?.dayRate, dayRateHours: dayEntry?.dayRateHours, premiums: shiftPremiums({ ...firstCall(sides), date }, allJobs, employer, payer) });
+    const result = calculateDayPay(hours, rate, dayMinimum, mealPenalties, dayMultiplier, { duration: mealDuration, onClock: mealOnClock, offClockMinutesTotal: offClockMealMinutes }, { ...overtimeOptions, nightHours, nightLeftAtEnd: nightLeft, minimumPaddingHours: isSplit ? splitMinimumPadding(sides, j => splitSideMinimum({ ...j, minimumHours: j.minimumHours ?? referenceJob.minimumHours }, employer, payer)) : 0, postMealPaddingHours: postMealPadding, dayRate: dayEntry?.dayRate, dayRateHours: dayEntry?.dayRateHours, premiums: shiftPremiums({ ...firstCall(sides), date }, allJobs, employer, payer) });
     total += result.totalPay;
     details.push({ date, hours, pay: result.totalPay, breakdown: result.breakdown });
   }

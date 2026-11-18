@@ -82,8 +82,38 @@ export function earlyCallHours(job: Pick<Job, 'startTime' | 'endTime'>, rule?: C
   return 0;
 }
 
-const sameEmployer = (a: Job, b: Job) =>
-  (!!a.jobNumber && a.jobNumber === b.jobNumber) || nameSimilarity(a.client ?? '', b.client ?? '') >= AUTO_MATCH_THRESHOLD;
+/** A split day's side with no minimum of its own gets this on union work. */
+export const SPLIT_SIDE_MINIMUM_HOURS = 4;
+
+/**
+ * The minimum call a side of a split day is owed: its own, else its
+ * contract's split minimum (Palace of Fine Arts is 5 a side), else the usual
+ * 4 on the front and 4 on the back for union work. Non-union work has none
+ * unless the shift says.
+ */
+export function splitSideMinimum(job: Job, employer?: Employer, payer?: PayerProfile): number {
+  if (job.minimumHours != null) return job.minimumHours;
+  const rule = contractRuleFor(job, employer, payer);
+  if (rule?.splitMinimumHours != null) return rule.splitMinimumHours;
+  return isUnionShift(job, employer) ? SPLIT_SIDE_MINIMUM_HOURS : 0;
+}
+
+/** Who booked the work: the local for union calls ("16"), else the employer. */
+function bookedBy(job: Job): string | null {
+  if (isLocal16Shift(job)) return '16';
+  const local = job.local?.match(/\d+/)?.[0] ?? job.local?.trim().toLowerCase();
+  return local || null;
+}
+
+/**
+ * The same booking agent offered both calls: the same local (every Local 16
+ * dispatch counts, whichever employer it's for), or the same employer.
+ */
+const sameBooker = (a: Job, b: Job) => {
+  const booker = bookedBy(a);
+  if (booker && booker === bookedBy(b)) return true;
+  return (!!a.jobNumber && a.jobNumber === b.jobNumber) || nameSimilarity(a.client ?? '', b.client ?? '') >= AUTO_MATCH_THRESHOLD;
+};
 
 export interface ForcedCall {
   /** Hours off between the last call and this one. */
@@ -93,7 +123,7 @@ export interface ForcedCall {
 }
 
 /**
- * Back for the same employer with less than the rest owed since the last call
+ * Back for the same booking agent (the same local, or the same employer) with less than the rest owed since the last call
  * ended is a forced call. It pays double time until you've had the rest off
  * work: the whole day, however long it runs, since you're still working. The
  * next day's rest is counted from when this one ends, so it starts over.
@@ -110,7 +140,7 @@ export function forcedCallFor(job: Job, allJobs: Job[], restHours = FORCED_CALL_
     if (other.id === job.id || other.date >= job.date) continue;
     const back = day - dayNumber(other.date);
     if (!(back >= 1 && back <= 2)) continue;
-    if (other.status === 'cancelled' || other.pto || other.hoursPlanned || !sameEmployer(other, job)) continue;
+    if (other.status === 'cancelled' || other.pto || other.hoursPlanned || !sameBooker(other, job)) continue;
     const o = callSpan(other);
     if (!o) continue;
     const otherEnd = dayNumber(other.date) * 1440 + o.end;

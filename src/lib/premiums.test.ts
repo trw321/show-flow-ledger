@@ -95,9 +95,16 @@ describe('a forced call', () => {
     expect(gross(job, [lastNight, job])).toBeCloseTo(400);
   });
 
-  it('is not owed by a different employer', () => {
+  it('spans employers booked by the same local', () => {
     const job = shift('a', { client: 'BLACKPOINT PRODUCTION INC.', jobNumber: '2026-3943', startTime: '6:00 AM', endTime: '2:00 PM', hoursWorked: 8 });
+    expect(forcedCallFor(job, [lastNight, job])).toMatchObject({ restHours: 6 });
+  });
+
+  it('is not owed by someone who didn\'t book the last call', () => {
+    const job = shift('a', { client: 'odeum', jobNumber: undefined, contract: undefined, startTime: '6:00 AM', endTime: '2:00 PM', hoursWorked: 8 });
+    const told = withContractRule(EMPTY_PROFILE, 'odeum', { forcedCall: true });
     expect(forcedCallFor(job, [lastNight, job])).toBeNull();
+    expect(shiftPremiums(job, [lastNight, job], undefined, told)).toEqual([]);
   });
 
   it('is union work only, unless a contract says otherwise', () => {
@@ -147,5 +154,45 @@ describe('times saved badly', () => {
     const day2 = shift('d2', { startTime: '6:00 AM', endTime: '2:00 PM', hoursWorked: 8 });
     expect(forcedCallFor(day2, [day1, day2])).toBeNull();
     expect(shiftPremiums(day1, [day1, day2])).toEqual([]);
+  });
+});
+
+describe('a split day\'s minimums', () => {
+  const pal = (id: string, over: Partial<Job>) => shift(id, { date: '2026-10-16', contract: 'PALACE OF FINE ARTS 2025-2027', hourlyRate: 54.09, ...over });
+  const front = pal('f', { startTime: '1:00 PM', endTime: '3:00 PM', hoursWorked: 2 });
+  const back = pal('b', { startTime: '10:00 PM', endTime: '11:00 PM', hoursWorked: 1 });
+  const day = (payer: PayerProfile = EMPTY_PROFILE, a = front, b = back) => gross(a, [a, b], payer) + gross(b, [a, b], payer);
+
+  it('are 4 hours on the front and 4 on the back on union work, by default', () => {
+    // 3 working hours, 5 of padding at straight time.
+    expect(day()).toBeCloseTo(8 * 54.09);
+  });
+
+  it('follow the contract when it says otherwise', () => {
+    const palace = withContractRule(EMPTY_PROFILE, 'PALACE OF FINE ARTS 2025-2027', { splitMinimumHours: 5 });
+    expect(day(palace)).toBeCloseTo(10 * 54.09);
+  });
+
+  it('give way to a minimum set on the shift', () => {
+    expect(day(EMPTY_PROFILE, { ...front, minimumHours: 5 }, { ...back, minimumHours: 5 })).toBeCloseTo(10 * 54.09);
+  });
+
+  it('pay padding past midnight at straight time, and working hours past midnight at double', () => {
+    // Cut at 11 PM: the back side's 3 hours of padding run past midnight but
+    // were never worked, so they're straight time.
+    expect(day()).toBeCloseTo(8 * 54.09);
+    // Working until 1 AM: the hour after midnight is double.
+    const late = pal('b', { startTime: '10:00 PM', endTime: '1:00 AM', hoursWorked: 3 });
+    // 5 working hours, 1 of them after midnight (+1 at straight), 3 padding.
+    expect(day(EMPTY_PROFILE, front, late)).toBeCloseTo((5 + 1 + 3) * 54.09);
+  });
+});
+
+describe('the live counter', () => {
+  it('pays the working minutes as they go: no part hour paid whole, no minimum yet', async () => {
+    const { jobPayBreakdown } = await import('./payCalc');
+    const live = shift('l', { date: '2026-10-02', startTime: '1:00 PM', endTime: '4:50 PM', hoursWorked: 3 + 50 / 60, minimumHours: 5 });
+    expect(jobPayBreakdown(live, [live], [], EMPTY_PROFILE, { asWorked: true }).gross).toBeCloseTo((3 + 50 / 60) * 50);
+    expect(jobPayBreakdown(live, [live], [], EMPTY_PROFILE).gross).toBeCloseTo(5 * 50);
   });
 });

@@ -3,7 +3,7 @@ import { shiftContract } from '@/lib/contracts';
 import type { ContractRule } from '@/lib/payerProfile';
 import {
   contractRuleFor, EARLY_CALL_BEFORE_HOUR, EARLY_CALL_UNTIL_HOUR, FORCED_CALL_REST_HOURS,
-  forcedCallFor, isEarlyCall, isUnionShift, withContractRule,
+  forcedCallFor, isEarlyCall, isUnionShift, splitSideMinimum, withContractRule,
 } from '@/lib/premiums';
 import type { Employer, Job } from '@/lib/store';
 import { showDay as day } from '@/lib/today';
@@ -34,10 +34,33 @@ export default function CallPremiums({ job, allJobs, employer }: { job: Job; all
   const forcedOn = rule?.forcedCall ?? isUnionShift(job, employer);
   const rest = rule?.restHours ?? FORCED_CALL_REST_HOURS;
   const forced = forcedCallFor(job, allJobs, rest);
-  if (!early && !forced) return null;
+  // A split: another call the same day for the same employer.
+  const split = allJobs.some(o => o.id !== job.id && o.date === job.date && o.client === job.client && !o.pto && o.status !== 'cancelled');
+  if (!early && !forced && !split) return null;
+  const sideMinimum = splitSideMinimum({ ...job, minimumHours: undefined }, employer, prefs.payer);
 
   return (
     <div className="space-y-1.5">
+      {split && (
+        <div className="rounded-md border border-primary/40 bg-primary/10 px-2.5 py-2 text-[11px] leading-tight" data-testid="split-minimum">
+          <span className="font-medium">Split call · minimum each side</span>
+          <span className="block text-[10px] text-muted-foreground mt-0.5">
+            {job.minimumHours != null
+              ? `This side is set to ${job.minimumHours}h on the shift. `
+              : ''}
+            Under {under}: {sideMinimum ? `${sideMinimum}h on the front and ${sideMinimum}h on the back` : 'none'}
+            {rule?.splitMinimumHours == null && sideMinimum ? ' (the usual)' : ''}. Hours past what you worked are minimum padding, paid straight time.
+          </span>
+          <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+            {[4, 5, 8].map(h => (
+              <button key={h} type="button" onClick={() => save({ splitMinimumHours: h })} aria-pressed={sideMinimum === h}
+                className={cn('pixel-button py-1 text-[11px] font-bold', sideMinimum === h ? 'pick-on' : 'pick-off')}>
+                {h}h a side
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {early && (
         <div className={cn('rounded-md border px-2.5 py-2 text-[11px] leading-tight', rule?.earlyCall ? 'border-primary/40 bg-primary/10' : 'border-warning/50 bg-warning/10')} data-testid="early-call">
           <span className="font-medium">Early call · starts before {EARLY_CALL_BEFORE_HOUR} AM</span>

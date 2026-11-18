@@ -45,6 +45,8 @@ export interface ContractRule {
   /** Forced call: back with less than restHours off pays double time until they've been had. Unset: on for union work. */
   forcedCall?: boolean;
   restHours?: number;
+  /** Minimum call on each side of a split day. Unset: 4 hours a side on union work. */
+  splitMinimumHours?: number;
 }
 
 /** Numbers that follow you rather than any employer or local. */
