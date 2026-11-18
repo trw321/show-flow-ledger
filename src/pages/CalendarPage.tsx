@@ -21,11 +21,11 @@ import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addM
 import type { Employer, Job, CalendarEvent, Income, Invoice } from '@/lib/store';
 import { matchPaymentToProject, betterProject, rankedProjectsFor, projectOf, type FoundPayment, type ProjectMatch } from '@/lib/paymentMatch';
 import { payDueDate, payTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
-import { paidShiftIds, periodNet, periodPayments, projectPeriods, type PayPeriod, type ProjectPeriod } from '@/lib/payPeriods';
+import { paidShiftIds, periodNet, periodPayments, projectPeriods, shiftsPaidBy, type PayPeriod, type ProjectPeriod } from '@/lib/payPeriods';
 import { explainPay } from '@/lib/payExplain';
 import PayEstimateCard from '@/components/PayEstimateCard';
 import PaymentProof, { ProofRow, SourceTag, WhoPaid } from '@/components/PaymentProof';
-import { proofFromMatch, proofKindOf, type ProofKind } from '@/lib/paymentProof';
+import { PROOF_LABELS, proofFromMatch, proofKindOf, type ProofKind } from '@/lib/paymentProof';
 import CalendarKey from '@/components/CalendarKey';
 import EmployerEditor from '@/components/EmployerEditor';
 import { ratesForShift } from '@/lib/payerProfile';
@@ -479,6 +479,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
 
   const [editingEmployer, setEditingEmployer] = useState(false);
   const [proofFor, setProofFor] = useState<Income | null>(null);
+  const [showProjectPays, setShowProjectPays] = useState(false);
   const [parsingStub, setParsingStub] = useState(false);
   const [viewingStub, setViewingStub] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -951,6 +952,30 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     ? explainPay({ ...worth, stub: payFound?.kind === 'stub' ? stubParsed : null, received: pendingPayment.amount, jobs: payCovers })
     : null;
   const stubExplanation = stubParsed && stubMatch ? explainPay({ ...worth, stub: stubParsed, jobs: stubMatch.jobs }) : null;
+  // What this day is worth and whether it's been paid, and the project in a line.
+  const payView: 'gross' | 'net' = prefs.calendarPay === 'gross' ? 'gross' : 'net';
+  const moneyText = (n: number) => '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const dayPay = useMemo(() => {
+    const worked = job.date <= localToday() && effectiveHoursWorked(job) > 0;
+    const amount = worked ? jobPayBreakdown(job, data.jobs, data.employers, prefs.payer)[payView] : 0;
+    const paidBy = projectPayments.find(i => i.status === 'paid'
+      && shiftsPaidBy(i, data.jobs, data.income, data.employers, prefs.payer).some(j => j.id === job.id));
+    return { worked, amount, paid: paidIds.has(job.id), paidBy };
+  }, [job, data.jobs, data.income, data.employers, prefs.payer, payView, projectPayments, paidIds]);
+  const projectEstimate = useMemo(
+    () => project.reduce((sum, j) => sum + (j.date <= localToday() ? jobPayBreakdown(j, data.jobs, data.employers, prefs.payer)[payView] : 0), 0),
+    [project, data.jobs, data.employers, prefs.payer, payView],
+  );
+  // Money that came in: a "Mark paid" tap is your word at the estimate, not money, so it's counted apart.
+  const projectMoneyIn = samePaymentGroups(projectPayments.filter(i => i.status === 'paid' && proofKindOf(i) !== 'marked')).reduce((sum, g) => sum + g.first.amount, 0);
+  const projectMarked = projectPayments.filter(i => proofKindOf(i) === 'marked').length;
+  const projectSpan = (() => {
+    const dates = project.map(j => j.date).sort();
+    const first = format(new Date(dates[0] + 'T12:00:00'), 'MMM d');
+    const last = format(new Date(dates[dates.length - 1] + 'T12:00:00'), 'MMM d');
+    const days = new Set(dates).size;
+    return `${first === last ? first : `${first} – ${last}`} · ${days} day${days === 1 ? '' : 's'}`;
+  })();
   const moneyIn = samePaymentGroups(projectPayments.filter(i => i.status === 'paid'));
   const receivedVsEstimate = moneyIn.length > 0
     ? explainPay({ ...worth, received: moneyIn.reduce((sum, g) => sum + g.first.amount, 0), jobs: project.filter(j => paidIds.has(j.id)) })
@@ -1151,9 +1176,13 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           <button onClick={onBack} aria-label="Back" className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-2 rounded-lg hover:bg-secondary">
             <ArrowLeft size={18} />
           </button>
+          {/* Never cut off: the date is the one thing here that has to read
+              whole. The year only shows when it isn't this year. */}
           <p className="min-w-0 flex-1 flex items-baseline gap-1.5" data-testid="shift-date">
-            <span className="text-xl font-bold leading-none text-foreground truncate">{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}</span>
-            <span className="text-xs text-mono text-muted-foreground shrink-0">{format(new Date(job.date + 'T12:00:00'), 'yyyy')}</span>
+            <span className="text-xl font-bold leading-none text-foreground whitespace-nowrap">{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}</span>
+            {job.date.slice(0, 4) !== localToday().slice(0, 4) && (
+              <span className="text-xs text-mono text-muted-foreground shrink-0">{job.date.slice(0, 4)}</span>
+            )}
             {isCallback(job, data.jobs, data.employers) && <Phone size={13} className="self-center text-destructive shrink-0" aria-label="Callback" />}
           </p>
           <button onClick={handleDelete} aria-label="Delete shift" className="shrink-0 text-muted-foreground hover:text-destructive transition-colors p-2 rounded-lg hover:bg-destructive/10">
@@ -1204,19 +1233,53 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
         <input ref={stubInputRef} id={`stub-input-${job.id}`} type="file" accept="image/*,.pdf" className="hidden" onChange={handleStubUpload} disabled={parsingStub} />
         {(job.date <= localToday() || projectPayments.length > 0 || removedPays.length > 0) && (
           <div className="pixel-panel p-3 space-y-2">
+            {/* This day first: it's the day that was tapped. */}
+            {dayPay.worked && (
+              <div className="space-y-0.5" data-testid="this-day-pay">
+                <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground">This day · {format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}</p>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-lg font-bold text-mono">{moneyText(dayPay.amount)}</span>
+                  <span className={cn('text-[11px] font-bold text-mono uppercase', dayPay.paid ? 'text-dot-paid' : 'text-dot-pending')}>
+                    {dayPay.paid ? 'Paid' : 'Waiting on pay'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Est. {prefs.calendarPay === 'gross' ? 'gross' : 'take-home'} for {Math.round(netHoursWorked(job) * 100) / 100}h working
+                  {dayPay.paidBy ? (proofKindOf(dayPay.paidBy) === 'marked'
+                    ? <> · marked paid by you, {showDay(dayPay.paidBy.date)}</>
+                    : <> · {PROOF_LABELS[proofKindOf(dayPay.paidBy)].toLowerCase()} {moneyText(dayPay.paidBy.amount)}, {showDay(dayPay.paidBy.date)}</>) : null}
+                </p>
+              </div>
+            )}
+
             {projectPayments.length > 0 && (
-              <div className="space-y-1">
-                <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground">Pay{project.length > 1 ? ' · this project' : ''}</p>
+              <div className="space-y-1.5 border-t border-border/50 pt-2">
+                {/* The project in one line; its payments fold away, so the day
+                    stays the thing you're looking at. */}
+                <button type="button" onClick={() => setShowProjectPays(v => !v)} className="flex w-full items-start gap-1.5 text-left" aria-expanded={showProjectPays}>
+                  {showProjectPays ? <ChevronDown size={14} className="mt-0.5 shrink-0 text-muted-foreground" /> : <ChevronRight size={14} className="mt-0.5 shrink-0 text-muted-foreground" />}
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[9px] text-mono uppercase tracking-widest text-muted-foreground">
+                      {project.length > 1 ? `Whole project · ${projectSpan}` : 'Payments'}
+                    </span>
+                    <span className="block text-xs">
+                      <span className="text-dot-paid font-semibold">{moneyText(projectMoneyIn)} in</span>
+                      {projectEstimate > 0 && <span className="text-muted-foreground"> of {moneyText(projectEstimate)} est.</span>}
+                      <span className="text-muted-foreground"> · {projectPayments.length} payment{projectPayments.length === 1 ? '' : 's'}</span>
+                      {projectMarked > 0 && <span className="text-muted-foreground"> · {projectMarked} marked paid by you</span>}
+                    </span>
+                  </span>
+                </button>
+                {showProjectPays && <WhoPaid employer={job.client} payer={[...new Set(projectPayments.map(i => i.client).filter(Boolean))].join(' / ')} />}
                 {/* The same payment recorded more than once — the same amount, day
                     and way in — is shown once, with how many times, and the extras
                     can go in a tap. Old money-bag taps left runs of these behind. */}
-                {samePaymentGroups(projectPayments).map(({ first: i, repeats }) => {
+                {showProjectPays && samePaymentGroups(projectPayments).map(({ first: i, repeats }) => {
                   return (
                     <div key={i.id} className="flex flex-wrap items-center gap-2 text-xs">
                       <SourceTag income={i} />
                       <span className={cn('font-bold text-mono', i.status === 'paid' ? 'text-dot-paid' : 'text-dot-pending')}>${i.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       <span className="text-muted-foreground text-mono">{showDay(i.date)}</span>
-                      <WhoPaid employer={data.jobs.find(j => j.id === i.jobId)?.client ?? job.client} payer={i.client} className="basis-full" />
                       {i.status === 'pending' && (
                         <>
                           <span className="text-[10px] text-mono text-dot-pending">{/stub/i.test(i.description) ? 'stub · not in yet' : 'not in yet'}</span>
@@ -1246,7 +1309,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                     </div>
                   );
                 })}
-                {receivedVsEstimate && receivedVsEstimate.verdict !== 'none' && (
+                {showProjectPays && receivedVsEstimate && receivedVsEstimate.verdict !== 'none' && (
                   <p className="text-[11px] text-mono text-muted-foreground" data-testid="received-vs-estimate">
                     Estimated ${receivedVsEstimate.lines[1].estimated.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {receivedVsEstimate.headline}
                   </p>
