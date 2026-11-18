@@ -292,7 +292,8 @@
      colours, the same on every gel, because this is money. Text on them is
      dark, whatever it was, or it disappears into the yellow. */
   .premium-6 { --hl-a: #fff01f; --hl-b: #39ff14; --hl-glow: rgb(255 240 31 / 0.7); }
-  .premium-7 { --hl-a: #ff2bd6; --hl-b: #ffe600; --hl-glow: rgb(255 43 214 / 0.8); }
+  /* Cyan to violet: nothing shared with the 6th day's yellow and green, so the two never read as one. */
+  .premium-7 { --hl-a: #00f0ff; --hl-b: #c77dff; --hl-glow: rgb(0 240 255 / 0.75); }
   .premium-6,
   .premium-7 {
     background-image: linear-gradient(110deg, var(--hl-a), var(--hl-b), var(--hl-a));
