@@ -238,3 +238,11 @@ describe('a split day breaks the hour', () => {
     expect(gross(a, [a, b]) + gross(b, [a, b])).toBeCloseTo(8 * 50 + 4 * 75);
   });
 });
+
+describe('an early call saved before its end', () => {
+  it('is still an early call', () => {
+    expect(isEarlyCall({ startTime: '6:30 AM' })).toBe(true);
+    expect(isEarlyCall({ startTime: '8:00 AM' })).toBe(false);
+    expect(earlyCallHours({ startTime: '6:30 AM' }, 'until8')).toBe(0);
+  });
+});

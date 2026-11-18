@@ -28,14 +28,14 @@ import PaymentProof, { ProofRow, SourceTag, WhoPaid } from '@/components/Payment
 import { PROOF_LABELS, proofFromMatch, proofKindOf, type ProofKind } from '@/lib/paymentProof';
 import CalendarKey from '@/components/CalendarKey';
 import EmployerEditor from '@/components/EmployerEditor';
-import { ratesForShift } from '@/lib/payerProfile';
+import { ratesForShift, type PayerProfile } from '@/lib/payerProfile';
 import { contractFor, contractsWorked, shiftContract } from '@/lib/contracts';
 import { alreadyRecorded } from '@/lib/paymentRepeats';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { calculateDayPay, dayInARow, dayMultiplierFor, dayPremiumLabel, compositeWeekendMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross, jobPayBreakdown, compareCalls } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { breakTheHourLabel, breaksTheHour, isLocal16Shift } from '@/lib/local16';
-import { callMinimum, shiftPremiums, splitSideMinimum } from '@/lib/premiums';
+import { callMinimum, contractRuleFor, earlyCallHours, isEarlyCall, shiftPremiums, splitSideMinimum } from '@/lib/premiums';
 import CallPremiums from '@/components/CallPremiums';
 import { useSwipe } from '@/lib/useSwipe';
 import { cn } from '@/lib/utils';
@@ -187,6 +187,10 @@ function normalizeTyped(t: string): string {
 function hoursTextOf(job: Job): string {
   if (job.callTimeline) return job.callTimeline;
   if (job.startTime && job.endTime) return callText(job.startTime, job.endTime);
+  // A start saved on its own (the end comes later) shows as typed so far,
+  // ready for the end after the dash, rather than an empty box that looks
+  // as if it never saved.
+  if (job.startTime) return callText(job.startTime, job.startTime).split('-')[0] + '-';
   return '';
 }
 
@@ -259,18 +263,57 @@ interface PremiumDay { day: number; pays: number; who: string }
 const premiumClass = (p: { day: number }) => (p.day >= 7 ? 'premium-7' : 'premium-6');
 
 /** The big one: the top of a 6th or 7th day. Only money that is really owed gets the money. */
-function PremiumDayBanner({ day, pays, who }: PremiumDay) {
+function PremiumDayBanner({ day, pays, who, onSetUp }: PremiumDay & { onSetUp?: () => void }) {
   const face = pays >= 2 ? '🤑' : pays > 1 ? '💰' : '🔥';
-  return (
-    <div className={cn('rounded-lg px-3 py-2.5 text-center', premiumClass({ day }))}>
+  const body = (
+    <>
       <p className="text-lg font-black leading-tight tracking-tight">{face} {ordinal(day).toUpperCase()} DAY IN A ROW {face}</p>
       <p className="mt-0.5 text-sm font-bold leading-snug">
         {pays >= 2 ? '🎉 DOUBLE TIME · 2× all day 💸'
           : pays > 1 ? '🎉 TIME AND A HALF · 1.5× all day 💵'
-          : `${who} isn't set to pay extra. If it should, pick a contract in Settings 👀`}
+          : `${who} isn't set to pay extra.${onSetUp ? ` Tap to set it on ${who} 👀` : ''}`}
       </p>
-    </div>
+    </>
   );
+  // Not paying: the banner is the way to the employer's settings.
+  return pays <= 1 && onSetUp ? (
+    <button type="button" onClick={onSetUp} className={cn('block w-full rounded-lg px-3 py-2.5 text-center', premiumClass({ day }))} data-testid="premium-day-setup">
+      {body}
+    </button>
+  ) : (
+    <div className={cn('rounded-lg px-3 py-2.5 text-center', premiumClass({ day }))}>{body}</div>
+  );
+}
+
+/**
+ * Premium hours on a call: an early call (starts between midnight and 7 AM)
+ * or work past midnight. Says so up top, like a 6th day, and when the
+ * contract hasn't said how its early premium runs, asks.
+ */
+function PremiumHoursBanner({ job, allJobs, employer, payer, onTap }: { job: Job; allJobs: Job[]; employer?: Employer; payer: PayerProfile; onTap?: () => void }) {
+  const early = isEarlyCall(job);
+  const night = !early && (employer?.nightPremiumEnabled ?? true) && job.startTime && job.endTime
+    ? resolveConfirmedNightHours(calculateNightHours(job.startTime, job.endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour), job.nightPremiumConfirmed, job.nightPremiumActualHours)
+    : 0;
+  if (!early && night <= 0) return null;
+  const rule = contractRuleFor(job, employer, payer)?.earlyCall;
+  const premium = early ? earlyCallHours(job, rule) : night;
+  const multiplier = employer?.nightPremiumMultiplier ?? 2;
+  const title = early ? `🌅 EARLY CALL · ${job.startTime}` : `🌙 NIGHT HOURS · past midnight`;
+  const line = early
+    ? rule === undefined ? 'Premium hours: tap to say how long they run under this contract'
+      : rule === 'none' ? 'No premium under this contract'
+      : !job.endTime ? `Premium at ${multiplier}× ${rule === 'allDay' ? 'all day' : 'until 8 AM'}`
+      : `${Math.round(premium * 100) / 100}h at ${multiplier}× · ${rule === 'allDay' ? 'all day' : 'until 8 AM'}`
+    : `${Math.round(premium * 100) / 100}h worked after midnight at ${multiplier}×`;
+  const cls = cn('block w-full rounded-lg border px-3 py-2 text-center', early && rule === undefined ? 'border-warning/60 bg-warning/15' : 'border-primary/50 bg-primary/15');
+  const body = (
+    <>
+      <p className="text-sm font-black tracking-tight">{title}</p>
+      <p className="text-xs font-semibold leading-snug">{line}</p>
+    </>
+  );
+  return onTap ? <button type="button" onClick={onTap} className={cls} data-testid="premium-hours">{body}</button> : <div className={cls} data-testid="premium-hours">{body}</div>;
 }
 
 /** The small one: on a card, or a day in a list. */
@@ -1228,8 +1271,10 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
       </AlertDialog>
       <div className="space-y-4">
         {dayInARow(job, employer, data.jobs) >= 6 && (
-          <PremiumDayBanner day={dayInARow(job, employer, data.jobs)} pays={dayMultiplierFor(job, employer, data.jobs)} who={job.client} />
+          <PremiumDayBanner day={dayInARow(job, employer, data.jobs)} pays={dayMultiplierFor(job, employer, data.jobs)} who={job.client} onSetUp={() => setEditingEmployer(true)} />
         )}
+        <PremiumHoursBanner job={{ ...job, startTime, endTime }} allJobs={data.jobs} employer={employer} payer={prefs.payer}
+          onTap={() => document.querySelector('[data-testid=early-call]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} />
 
         <MoneyRain active={payRain} />
         {proofFor && <PaymentProof income={proofFor} onClose={() => setProofFor(null)} />}
@@ -3179,7 +3224,12 @@ export default function CalendarPage() {
                 </DialogTitle>
               </DialogHeader>
               <div className="space-y-2">
-                {selectedDate && sixthSeventhDayDates[selectedDate] && <PremiumDayBanner {...sixthSeventhDayDates[selectedDate]} />}
+                {selectedDate && sixthSeventhDayDates[selectedDate] && (
+                  <PremiumDayBanner {...sixthSeventhDayDates[selectedDate]} onSetUp={() => setEmployerForCard({ client: sixthSeventhDayDates[selectedDate].who })} />
+                )}
+                {selectedJobs.map(job => (
+                  <PremiumHoursBanner key={'premium-' + job.id} job={job} allJobs={data.jobs} employer={resolveEmployer(job.client, data.employers)} payer={prefs.payer} onTap={() => setSelectedJobId(job.id)} />
+                ))}
                 {selectedJobs.map(job => {
                   const hours = netHoursWorked(job);
                   const earned = shownPay(job);

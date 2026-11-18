@@ -69,8 +69,9 @@ export function isUnionShift(job: Pick<Job, 'local' | 'jobNumber' | 'contract' |
 
 /** Whether a call starts between midnight and 7 AM. */
 export function isEarlyCall(job: Pick<Job, 'startTime' | 'endTime'>): boolean {
-  const span = callSpan(job);
-  return !!span && span.start < EARLY_CALL_BEFORE_HOUR * 60;
+  // Only the start matters, so a call saved before its end is known still counts.
+  const start = clockMinutes(job.startTime);
+  return !Number.isNaN(start) && start < EARLY_CALL_BEFORE_HOUR * 60;
 }
 
 /** Hours of an early call at the premium: until 8 AM, or the whole call. */
