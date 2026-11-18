@@ -7,6 +7,7 @@ import { contractFor } from './contracts';
 import { localToday } from './today';
 import { breaksTheHour } from './local16';
 import { shiftPremiums, type StartPremium } from './premiums';
+import { clockSpanHours, endAfterStart } from './clock';
 
 export interface OvertimeOptions {
   rule?: 'daily' | 'weekly' | 'none';
@@ -352,11 +353,7 @@ export function effectiveHoursWorked(job: Job): number {
   if (job.hoursWorked) return job.hoursWorked;
   // Clock times on their own are a schedule, never a record of work.
   if (!job.startTime || !job.endTime) return 0;
-  const s = parseTimeToMinutes(job.startTime);
-  let e = parseTimeToMinutes(job.endTime);
-  if (isNaN(s) || isNaN(e)) return 0;
-  if (e <= s) e += 24 * 60;
-  return Math.max(0, (e - s) / 60);
+  return Math.max(0, clockSpanHours(job.startTime, job.endTime));
 }
 
 /**
@@ -565,10 +562,9 @@ export function calculateNightHours(
   nightEndHour?: number
 ): number {
   const s = parseTimeToMinutes(startTime);
-  const eRaw = parseTimeToMinutes(endTime);
-  if (isNaN(s) || isNaN(eRaw)) return 0;
-  let e = eRaw;
-  if (e <= s) e += 24 * 60; // shift crosses midnight
+  // Past 1440 when the shift crosses midnight; a bare "5" after an "8" is 5 PM.
+  const e = endAfterStart(s, endTime);
+  if (isNaN(s) || isNaN(e)) return 0;
 
   let windowStart = nightStartHour * 60;
   while (windowStart <= s) windowStart += 24 * 60;
@@ -595,10 +591,8 @@ export function nightLeftAtEnd(
   nightEndHour?: number
 ): number {
   const s = parseTimeToMinutes(startTime);
-  const eRaw = parseTimeToMinutes(endTime);
-  if (isNaN(s) || isNaN(eRaw)) return 0;
-  let e = eRaw;
-  if (e <= s) e += 24 * 60;
+  const e = endAfterStart(s, endTime);
+  if (isNaN(s) || isNaN(e)) return 0;
   let windowStart = nightStartHour * 60;
   while (windowStart <= s) windowStart += 24 * 60;
   if (windowStart >= e) return 0;

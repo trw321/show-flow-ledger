@@ -67,8 +67,8 @@ export default function CallPremiums({ job, allJobs, employer }: { job: Job; all
           <span className="block text-[10px] text-muted-foreground mt-0.5">
             {hours(forced.restHours)} off since {forced.after.name} on {day(forced.after.date)} ended at {forced.after.endTime}.
             {forcedOn
-              ? ` Double time for the first ${hours(forced.hours)}, until you've had ${rest}h off.`
-              : ` Under ${rest}h off would pay double time until you'd had ${rest}h.`}
+              ? ` Under ${rest}h off: double time for the whole day, until you're done.`
+              : ` Under ${rest}h off would pay double time for the whole day.`}
           </span>
           <button
             type="button"

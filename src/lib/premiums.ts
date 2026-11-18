@@ -3,6 +3,7 @@ import type { ContractRule, PayerProfile } from './payerProfile';
 import { shiftContract } from './contracts';
 import { isLocal16Shift } from './local16';
 import { nameSimilarity, AUTO_MATCH_THRESHOLD } from './employerMatch';
+import { clockMinutes, endAfterStart } from './clock';
 
 /**
  * Premiums that start a call: the early-call premium and the forced call.
@@ -27,27 +28,12 @@ export interface StartPremium {
   label: string;
 }
 
-function minutesOf(t?: string): number {
-  const m = t?.match(/(\d{1,2}):?(\d{2})?\s*(am|pm|a|p)?/i);
-  if (!m) return NaN;
-  let h = parseInt(m[1]);
-  const min = parseInt(m[2] || '0');
-  const ap = (m[3] || '').toLowerCase();
-  if (ap.startsWith('p') && h < 12) h += 12;
-  if (ap.startsWith('a') && h === 12) h = 0;
-  return h * 60 + min;
-}
-
 /** A call's clock times, in minutes from its own date's midnight. The end can run past the next midnight. */
 export function callSpan(job: Pick<Job, 'startTime' | 'endTime'>): { start: number; end: number } | null {
-  const start = minutesOf(job.startTime);
-  let end = minutesOf(job.endTime);
+  const start = clockMinutes(job.startTime);
+  // A bare "8" to "5" is 8 AM to 5 PM: see clock.ts.
+  const end = endAfterStart(start, job.endTime);
   if (Number.isNaN(start) || Number.isNaN(end)) return null;
-  // An end saved bare, with no am or pm ("8" to "5"), is the next time that
-  // hour comes round: 5 PM the same day, not 5 AM the next. Read as 5 AM it
-  // made a 21-hour day, and a forced call out of the morning after.
-  if (end <= start && !/[ap]/i.test(job.endTime ?? '') && end + 12 * 60 > start) end += 12 * 60;
-  if (end <= start) end += 24 * 60;
   return { start, end };
 }
 
@@ -100,8 +86,6 @@ const sameEmployer = (a: Job, b: Job) =>
   (!!a.jobNumber && a.jobNumber === b.jobNumber) || nameSimilarity(a.client ?? '', b.client ?? '') >= AUTO_MATCH_THRESHOLD;
 
 export interface ForcedCall {
-  /** Hours of this call inside the rest it was owed, at double time. */
-  hours: number;
   /** Hours off between the last call and this one. */
   restHours: number;
   /** The call it came back from. */
@@ -110,7 +94,9 @@ export interface ForcedCall {
 
 /**
  * Back for the same employer with less than the rest owed since the last call
- * ended: the hours until that rest would have been had are a forced call.
+ * ended is a forced call. It pays double time until you've had the rest off
+ * work: the whole day, however long it runs, since you're still working. The
+ * next day's rest is counted from when this one ends, so it starts over.
  * Only calls on earlier days count; calls on the same day are one split day.
  */
 export function forcedCallFor(job: Job, allJobs: Job[], restHours = FORCED_CALL_REST_HOURS): ForcedCall | null {
@@ -118,7 +104,6 @@ export function forcedCallFor(job: Job, allJobs: Job[], restHours = FORCED_CALL_
   if (!span) return null;
   const day = dayNumber(job.date);
   const start = day * 1440 + span.start;
-  const end = day * 1440 + span.end;
   let after: Job | undefined;
   let lastEnd = -Infinity;
   for (const other of allJobs) {
@@ -136,8 +121,7 @@ export function forcedCallFor(job: Job, allJobs: Job[], restHours = FORCED_CALL_
   if (!after) return null;
   const rest = (start - lastEnd) / 60;
   if (rest >= restHours) return null;
-  const hours = Math.max(0, Math.min(lastEnd + restHours * 60, end) - start) / 60;
-  return hours > 0 ? { hours, restHours: Math.round(rest * 100) / 100, after } : null;
+  return { restHours: Math.round(rest * 100) / 100, after };
 }
 
 const hoursText = (h: number) => `${Math.round(h * 100) / 100}h`;
@@ -160,9 +144,10 @@ export function shiftPremiums(job: Job, allJobs: Job[], employer?: Employer, pay
     const forced = forcedCallFor(job, allJobs, rest);
     if (forced) {
       out.push({
-        hours: forced.hours,
+        // Every hour of the day, until you're done.
+        hours: Infinity,
         multiplier: employer?.doubletimeMultiplier ?? 2,
-        label: `forced call, ${hoursText(forced.restHours)} off of ${rest}h`,
+        label: `forced call (${hoursText(forced.restHours)} off, under ${rest}h)`,
       });
     }
   }

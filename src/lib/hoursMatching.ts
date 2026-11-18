@@ -1,4 +1,5 @@
 import type { Job } from '@/lib/store';
+import { clockSpanHours } from '@/lib/clock';
 
 // Ported from the retired CatScratchButton's parser/matcher — the scoring
 // and matching logic is unchanged, only the entry source changed (AI-parsed
@@ -15,12 +16,9 @@ export function parseTimeToMins(t: string): number {
   return h * 60 + min;
 }
 
+/** A bare "8" to "5" is 8 AM to 5 PM: see clock.ts. */
 export function calcHours(start: string, end: string): number {
-  let s = parseTimeToMins(start);
-  let e = parseTimeToMins(end);
-  if (isNaN(s) || isNaN(e)) return 0;
-  if (e <= s) e += 24 * 60;
-  return Math.max(0, (e - s) / 60);
+  return Math.max(0, clockSpanHours(start, end));
 }
 
 export interface HoursEntry {

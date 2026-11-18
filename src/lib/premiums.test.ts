@@ -61,20 +61,32 @@ describe('a forced call', () => {
   it('is back for the same employer with under 9 hours off', () => {
     const job = shift('a', { startTime: '6:00 AM', endTime: '2:00 PM', hoursWorked: 8 });
     const forced = forcedCallFor(job, [lastNight, job]);
-    expect(forced).toMatchObject({ hours: 3, restHours: 6 });
+    expect(forced).toMatchObject({ restHours: 6 });
     expect(forced?.after.id).toBe('night');
   });
 
-  it('pays double time until the 9 hours off are had', () => {
+  it('pays double time for the whole day, until you are done', () => {
     const job = shift('a', { startTime: '6:00 AM', endTime: '2:00 PM', hoursWorked: 8 });
-    // Off at midnight, back at 6: 6 to 9 AM is double time.
-    expect(gross(job, [lastNight, job])).toBeCloseTo(550);
+    // Off at midnight, back at 6: every hour of the day is double.
+    expect(gross(job, [lastNight, job])).toBeCloseTo(800);
+    const long = shift('a', { startTime: '6:00 AM', endTime: '6:00 PM', hoursWorked: 12 });
+    expect(gross(long, [lastNight, long])).toBeCloseTo(1200);
   });
 
-  it('is the day\'s first hours, so they still count towards overtime', () => {
-    const job = shift('a', { startTime: '6:00 AM', endTime: '6:00 PM', hoursWorked: 12 });
-    // 3h at 2× ($300), 5h straight ($250), 4h at 1.5× ($300).
-    expect(gross(job, [lastNight, job])).toBeCloseTo(850);
+  it('covers both sides of a split day', () => {
+    const morning = shift('m', { startTime: '6:00 AM', endTime: '10:00 AM', hoursWorked: 4 });
+    const evening = shift('e', { startTime: '2:00 PM', endTime: '6:00 PM', hoursWorked: 4 });
+    const all = [lastNight, morning, evening];
+    expect(gross(morning, all) + gross(evening, all)).toBeCloseTo(800);
+  });
+
+  it('starts over from when a forced day ends', () => {
+    const day2 = shift('d2', { startTime: '6:00 AM', endTime: '11:00 PM', hoursWorked: 17 });
+    const day3 = shift('d3', { date: '2026-10-03', startTime: '7:00 AM', endTime: '3:00 PM', hoursWorked: 8 });
+    // Off at 11 PM, back at 7 AM: 8 hours off, forced again.
+    const forced = forcedCallFor(day3, [lastNight, day2, day3]);
+    expect(forced).toMatchObject({ restHours: 8 });
+    expect(forced?.after.id).toBe('d2');
   });
 
   it('is not owed with 9 hours off', () => {
@@ -106,8 +118,8 @@ describe('a forced call', () => {
   it('isn\'t paid twice where it meets an early call', () => {
     const before = shift('n', { date: '2026-10-01', startTime: '3:00 PM', endTime: '11:00 PM', hoursWorked: 8 });
     const job = shift('a', { startTime: '5:00 AM', endTime: '1:00 PM', hoursWorked: 8 });
-    // Both run 5 to 8 AM at 2×: lifted once.
-    expect(gross(job, [before, job], withEarly('until8'))).toBeCloseTo(550);
+    // The forced call already makes the whole day 2×: nothing on top.
+    expect(gross(job, [before, job], withEarly('until8'))).toBeCloseTo(800);
   });
 
   it('isn\'t the second half of a split day', () => {
