@@ -14,7 +14,7 @@ import {
 import { useData } from '@/lib/DataContext';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { resolveEmployer } from '@/lib/employerMatch';
-import { jobPayBreakdown, parseTimeToMinutes } from '@/lib/payCalc';
+import { dayInARow, dayMultiplierFor, jobPayBreakdown, parseTimeToMinutes } from '@/lib/payCalc';
 import { localToday } from '@/lib/today';
 import { liveDay, lunchMs, MEAL_LENGTHS, openBreak, startsInLabel, toFiveMinutes, withMeal, workEnd, workedMs, type WorkBreak } from '@/lib/liveWork';
 import { cn } from '@/lib/utils';
@@ -209,6 +209,10 @@ export default function LiveWorkPay() {
     ? todayJobs.reduce((total, job) => total + jobPayBreakdown(job, estimateJobs, data.employers, prefs.payer).net, 0)
     : null;
   const hasRate = !!(pricedLiveJob?.hourlyRate || pricedLiveJob?.dayRate);
+  // A 6th or 7th day in a row lights up like it does on the calendar.
+  const streak = pricedLiveJob ? dayInARow(pricedLiveJob, activeEmployer, estimateJobs) : 0;
+  const streakPays = pricedLiveJob && streak >= 6 ? dayMultiplierFor(pricedLiveJob, activeEmployer, estimateJobs) : 1;
+  const premium = streak >= 7 ? 'premium-7' : streak >= 6 ? 'premium-6' : '';
 
   const confirmOnTime = () => setSession(current => current ? { ...current, lateCheckPending: false } : null);
   const markLate = () => setSession(current => current
@@ -279,10 +283,15 @@ export default function LiveWorkPay() {
   return (
     <>
       {session && activeJob && (
-        <section className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-md border border-border bg-card/70 px-3 py-2" aria-label="Live work pay estimate">
+        <section className={cn('mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-md border px-3 py-2', premium || 'border-border bg-card/70')} aria-label="Live work pay estimate" data-premium={premium || undefined}>
           <div className="flex min-w-0 items-center gap-2">
             <Clock3 size={15} className="shrink-0 text-muted-foreground" aria-hidden="true" />
             <div className="min-w-0">
+              {premium && (
+                <p className="text-xs font-black tracking-tight" data-testid="live-premium">
+                  {streakPays >= 2 ? '🤑' : streakPays > 1 ? '💰' : '🔥'} {streak >= 7 ? '7TH' : '6TH'} DAY IN A ROW{streakPays > 1 ? ` · ${streakPays}× ALL DAY` : ''}
+                </p>
+              )}
               <p className="truncate text-xs font-medium">{activeJob.name} · {lateRuleMissing ? 'Late rule not set' : elapsedLabel(elapsedMs)}</p>
               <p className="text-[10px] text-muted-foreground">
                 {lunch
@@ -304,10 +313,10 @@ export default function LiveWorkPay() {
                 </p>
               )}
             </div>
-            <Button type="button" size="sm" variant={lunch ? 'default' : 'outline'} className="h-8 gap-1.5 px-2.5" onClick={lunch ? endLunch : openMeal}>
+            <Button type="button" size="sm" variant={lunch ? 'default' : 'outline'} className={cn("h-8 gap-1.5 px-2.5", premium && "border-[#14061f]/40 bg-white/75 hover:bg-white/90")} onClick={lunch ? endLunch : openMeal}>
               <Utensils size={14} /> {lunch ? 'Back from meal' : 'Meal'}
             </Button>
-            <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5 px-2.5" onClick={beginEndDay}>
+            <Button type="button" size="sm" variant="outline" className={cn("h-8 gap-1.5 px-2.5", premium && "border-[#14061f]/40 bg-white/75 hover:bg-white/90")} onClick={beginEndDay}>
               <CircleStop size={14} /> End work day
             </Button>
           </div>

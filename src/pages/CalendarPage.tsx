@@ -2764,28 +2764,40 @@ export default function CalendarPage() {
   // Dates that are the 6th+ day in a row — marked whether or not the employer
   // pays extra for it, so one that should can be caught, with what it pays.
   const sixthSeventhDayDates = useMemo(() => {
+    // Today's call counts once it has started, before any hours are in: it's
+    // being worked, so a 6th or 7th day lights up while you're on it.
+    const today = localToday();
+    const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
+    const startedToday = (j: Job) => j.date === today && !j.pto && !j.hoursWorked && !!j.startTime
+      && j.status !== 'cancelled' && parseTimeToMins(j.startTime) <= nowMins;
+    const streakJobs = data.jobs.map(j => (startedToday(j) ? { ...j, hoursWorked: 0.01, hoursPlanned: false } : j));
     const map: Record<string, PremiumDay> = {};
     for (const [date, jobs] of Object.entries(jobsByDate)) {
-      for (const job of jobs) {
+      for (const shown of jobs) {
+        const job = startedToday(shown) ? { ...shown, hoursWorked: 0.01, hoursPlanned: false } : shown;
         if (effectiveHoursWorked(job) <= 0) continue;
         const employer = resolveEmployer(job.client, data.employers);
-        const day = dayInARow(job, employer, data.jobs);
+        const day = dayInARow(job, employer, streakJobs);
         if (day >= 6 && day > (map[date]?.day ?? 0)) {
-          map[date] = { day, pays: dayMultiplierFor(job, employer, data.jobs), who: job.client };
+          map[date] = { day, pays: dayMultiplierFor(job, employer, streakJobs), who: job.client };
         }
       }
     }
     return map;
   }, [jobsByDate, data.jobs, data.employers]);
 
-  // Opening a premium day is worth a party.
-  const [partyRain, setPartyRain] = useState(false);
+  // Opening a premium day, or a shift on one, is worth a party, every time:
+  // close it and open it again and it rains again. Saving a change doesn't.
+  const [partyBurst, setPartyBurst] = useState(0);
+  const premiumDatesRef = useRef(sixthSeventhDayDates);
+  premiumDatesRef.current = sixthSeventhDayDates;
+  const jobsRef = useRef(data.jobs);
+  jobsRef.current = data.jobs;
   useEffect(() => {
-    if (!selectedDate || !(sixthSeventhDayDates[selectedDate]?.pays > 1)) return;
-    setPartyRain(true);
-    const t = setTimeout(() => setPartyRain(false), 2100);
-    return () => clearTimeout(t);
-  }, [selectedDate, sixthSeventhDayDates]);
+    const date = selectedJobId ? jobsRef.current.find(j => j.id === selectedJobId)?.date : selectedDate;
+    if (!date || !(premiumDatesRef.current[date]?.pays > 1)) return;
+    setPartyBurst(b => b + 1);
+  }, [selectedDate, selectedJobId]);
 
   const monthDays = useMemo(() => {
     const start = startOfWeek(startOfMonth(currentDate), { weekStartsOn: 0 });
@@ -2924,7 +2936,7 @@ export default function CalendarPage() {
       )}
 
       <MoneyRain active={rainActive} />
-      <MoneyRain active={partyRain} party />
+      <MoneyRain burst={partyBurst} party />
       {payTier !== 'none' && oldestWaiting && (
         <button
           onClick={() => { setSelectedDate(oldestWaiting.jobs[0].date); setSelectedJobId(oldestWaiting.jobs[0].id); }}
