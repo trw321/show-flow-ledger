@@ -7,7 +7,7 @@ import { Plus } from 'lucide-react';
 import { useData } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
 import IncomeStatementUpload from '@/components/IncomeStatementUpload';
-import { SourceTag } from '@/components/PaymentProof';
+import { SourceTag, WhoPaid } from '@/components/PaymentProof';
 import EmployerCombobox from '@/components/EmployerCombobox';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -786,6 +786,7 @@ export default function MoneyPage() {
                   )}
                 </div>
                 {inc.description && <p className="text-xs text-muted-foreground mt-0.5">{inc.description}</p>}
+                <WhoPaid employer={data.jobs.find(j => j.id === inc.jobId)?.client} payer={inc.client} className="mt-0.5" />
                 <p className="text-[10px] text-mono text-muted-foreground mt-1">
                   {format(new Date(inc.date + 'T12:00:00'), 'MMM d, yyyy')}
                   {inc.invoiceNumber && <span className="ml-1.5 text-muted-foreground/50">· {inc.invoiceNumber}</span>}

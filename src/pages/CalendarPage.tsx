@@ -24,7 +24,7 @@ import { payDueDate, payTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from
 import { paidShiftIds, periodNet, periodPayments, projectPeriods, type PayPeriod, type ProjectPeriod } from '@/lib/payPeriods';
 import { explainPay } from '@/lib/payExplain';
 import PayEstimateCard from '@/components/PayEstimateCard';
-import PaymentProof, { ProofRow, SourceTag } from '@/components/PaymentProof';
+import PaymentProof, { ProofRow, SourceTag, WhoPaid } from '@/components/PaymentProof';
 import { proofFromMatch, proofKindOf, type ProofKind } from '@/lib/paymentProof';
 import CalendarKey from '@/components/CalendarKey';
 import EmployerEditor from '@/components/EmployerEditor';
@@ -1216,6 +1216,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                       <SourceTag income={i} />
                       <span className={cn('font-bold text-mono', i.status === 'paid' ? 'text-dot-paid' : 'text-dot-pending')}>${i.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       <span className="text-muted-foreground text-mono">{showDay(i.date)}</span>
+                      <WhoPaid employer={data.jobs.find(j => j.id === i.jobId)?.client ?? job.client} payer={i.client} className="basis-full" />
                       {i.status === 'pending' && (
                         <>
                           <span className="text-[10px] text-mono text-dot-pending">{/stub/i.test(i.description) ? 'stub · not in yet' : 'not in yet'}</span>

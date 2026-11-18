@@ -41,6 +41,8 @@ export interface ParsedIncome {
   /** The pay period a stub prints, when the reader found one. */
   payPeriodStart?: string;
   payPeriodEnd?: string;
+  /** What the reader saw: a pay stub, a check, a bank deposit, a statement or an invoice. */
+  kind?: 'stub' | 'check' | 'deposit' | 'statement' | 'invoice' | null;
 }
 
 /** The days a stub paid for: the reader's pay period, else one written into its description. */
@@ -121,12 +123,16 @@ export function matchOptions(txn: ParsedIncome, ctx: MatchContext): PaymentLink[
 const firstChoice = (options: PaymentLink[]) => (options[0]?.match && options[0].match.level !== 'low' ? 0 : -1);
 
 /** How a payment read off a photo came in. */
-function kindOfRead(txn: ParsedIncome, stubOnly: boolean): ProofKind {
+export function kindOfRead(txn: ParsedIncome, stubOnly: boolean): ProofKind {
   if (stubOnly) return 'stub';
+  // The reader says what it looked at: a stub shows earnings and deductions,
+  // a check is a check, a deposit is the net amount landing in the bank.
+  if (txn.kind && ['stub', 'check', 'deposit', 'statement', 'invoice'].includes(txn.kind)) return txn.kind;
   const what = (txn.description ?? '').toLowerCase();
   if (/\b(check|cheque)\b/.test(what)) return 'check';
-  if (/\b(deposit|ach|transfer)\b/.test(what)) return 'deposit';
-  if (/\b(stub|earnings|payroll)\b/.test(what)) return 'stub';
+  // "PAYROLL" is how a bank names a payroll company's deposit, not a stub.
+  if (/\b(deposit|ach|transfer|payroll)\b/.test(what)) return 'deposit';
+  if (/\b(stub|earnings|pay statement)\b/.test(what)) return 'stub';
   return 'statement';
 }
 

@@ -56,6 +56,15 @@ PAYMENT NOTE DATE/HOURS BREAKDOWN — payroll payment notes and stubs often item
 
 NEVER INVENT THE BREAKDOWN. Only include an entry when a specific calendar date is printed next to specific hours on the document. If the document shows only period totals (e.g. "Regular Pay 24.00 hours" for a week, with no per-day rows), you must omit the breakdown field entirely — do NOT split, distribute, spread or infer a total across dates, and do not assume standard 8-hour days. A fabricated date/hours split is far worse than no breakdown at all, because it silently mis-matches a payment to the wrong shifts. When in doubt, omit.
 
+WHAT KIND OF DOCUMENT. Set "kind" on each transaction to what the image actually is:
+- "stub": a pay stub / earnings statement. It shows earnings (hours, rate, gross) and deductions such as taxes and dues, with a net pay.
+- "check": a paper or printed check: payee, amount in words and figures, a check number, a signature line. A check photographed with its stub is still "stub" (one payment, the stub tells more).
+- "deposit": a bank app or bank statement screenshot showing a net amount deposited into an account, with no earnings or deductions breakdown. A payroll company's ACH deposit ("ODEUM LABOR SERV PAYROLL", "DIRECT DEP") is a deposit.
+- "statement": a bank statement page listing many transactions, when the line itself doesn't say more.
+- "invoice": an invoice or a payment notice for one.
+
+BANK DEPOSIT NAMES STAY WHOLE. On a deposit, the bank prints the payer as one line ("ODEUM LABOR SERV PAYROLL", "TALENT FUND LLC PAYROLL"). Put that whole line in client, exactly as printed; do not split part of it off into description. Use "Bank deposit" as the description unless the bank shows a memo of its own.
+
 PAY PERIOD. A pay stub usually prints the pay period it covers ("Pay period 10/26/2026 - 11/01/2026", "Period ending 11/01/2026"). Put its first and last days in payPeriodStart and payPeriodEnd. They are the days the work was done, not the check date. Use null for both when no period is printed; never work one out from the check date.
 
 If you can't determine the date, use today's date. Return ONLY valid JSON.`
@@ -159,6 +168,7 @@ If you can't determine the date, use today's date. Return ONLY valid JSON.`
                     invoiceNumber: { type: ["string", "null"] },
                     payPeriodStart: { type: ["string", "null"], description: "First day of the pay period the stub covers, YYYY-MM-DD. Null if none is printed." },
                     payPeriodEnd: { type: ["string", "null"], description: "Last day of the pay period the stub covers, YYYY-MM-DD. Null if none is printed." },
+                    kind: { type: "string", enum: ["stub", "check", "deposit", "statement", "invoice"], description: "What the image is: a pay stub (earnings and deductions), a check, a bank deposit (net amount landing in the bank), a bank statement, or an invoice." },
                     breakdown: {
                       type: ["array", "null"],
                       description: "Per-date hours breakdown from a payment note, e.g. '8/16 8 ST 1 OT' -> two entries for 2026-08-16. Null if the payment note doesn't itemize dates/hours.",
@@ -174,7 +184,7 @@ If you can't determine the date, use today's date. Return ONLY valid JSON.`
                       },
                     },
                   },
-                  required: ["client", "description", "amount", "date", "invoiceNumber", "payPeriodStart", "payPeriodEnd", "breakdown"],
+                  required: ["client", "description", "amount", "date", "invoiceNumber", "payPeriodStart", "payPeriodEnd", "kind", "breakdown"],
                   additionalProperties: false,
                 },
               },

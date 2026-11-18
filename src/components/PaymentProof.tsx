@@ -36,6 +36,22 @@ const LEVEL_BAR = { high: 'bg-dot-paid', medium: 'bg-dot-pending', low: 'bg-warn
  * in, marked paid, or not recorded. Documents someone else made are solid;
  * your own word for it is outlined, so the difference reads at a glance.
  */
+/**
+ * Who the work was for and who paid, side by side. They're the same for
+ * Odeum (it says Odeum twice) but on most union work a payroll company pays
+ * for the employer, and the two need keeping straight.
+ */
+export function WhoPaid({ employer, payer, className }: { employer?: string; payer?: string; className?: string }) {
+  if (!employer && !payer) return null;
+  return (
+    <p className={cn('text-[10px] text-mono text-muted-foreground', className)} data-testid="who-paid">
+      <span className="text-foreground/50">Employer</span> {employer || '—'}
+      <span className="mx-1.5">·</span>
+      <span className="text-foreground/50">Paid by</span> {payer || '—'}
+    </p>
+  );
+}
+
 export function SourceTag({ income, className }: { income: Income; className?: string }) {
   const kind = proofKindOf(income);
   const Icon = KIND_ICON[kind];
@@ -123,7 +139,7 @@ export default function PaymentProof({ income, onClose }: { income: Income; onCl
 
   // Adding the stub or check to a payment that has none.
   const fileRef = useRef<HTMLInputElement>(null);
-  const [adding, setAdding] = useState<'stub' | 'check' | null>(null);
+  const [adding, setAdding] = useState<'stub' | 'check' | 'deposit' | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const attach = async (edited: string) => {
@@ -171,8 +187,9 @@ export default function PaymentProof({ income, onClose }: { income: Income; onCl
               <span className="flex shrink-0 items-center gap-1 text-[11px] text-mono text-muted-foreground"><Icon size={12} aria-hidden /> {PROOF_LABELS[kind]}</span>
             </div>
             <p className="text-[11px] text-mono text-muted-foreground">
-              {day(live.date)}{live.client ? ` · paid by ${live.client}` : ''} · {live.status === 'paid' ? 'money in' : 'coming'}
+              {day(live.date)} · {live.status === 'paid' ? 'money in' : 'coming'}
             </p>
+            <WhoPaid employer={shift?.client} payer={live.client} className="mt-0.5" />
           </div>
 
           {/* The document itself. */}
@@ -201,14 +218,17 @@ export default function PaymentProof({ income, onClose }: { income: Income; onCl
               {busy ? (
                 <p className="flex items-center gap-2 text-[11px] text-muted-foreground"><Loader2 size={13} className="animate-spin" /> Reading the photo…</p>
               ) : (
-                <div className="grid grid-cols-2 gap-2">
-                  {(['stub', 'check'] as const).map(k => (
+                <>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['stub', 'check', 'deposit'] as const).map(k => (
                     <button key={k} type="button" onClick={() => { setAdding(k); fileRef.current?.click(); }}
                       className="pixel-button pick-off flex items-center justify-center gap-1 py-1.5 text-[11px] font-bold">
-                      <Camera size={12} /> Add {k === 'stub' ? 'stub' : 'check'}
+                      <Camera size={12} /> {k === 'stub' ? 'Pay stub' : k === 'check' ? 'Check' : 'Deposit'}
                     </button>
                   ))}
                 </div>
+                <p className="text-[10px] text-muted-foreground">Pay stub: earnings and deductions. Check: the check. Deposit: the bank showing what landed.</p>
+                </>
               )}
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={async e => {
                 const file = e.target.files?.[0];

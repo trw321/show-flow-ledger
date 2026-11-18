@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findLinkedJob, looksLikeStubOnly, type ParsedIncome } from './IncomeStatementUpload';
+import { findLinkedJob, kindOfRead, looksLikeStubOnly, type ParsedIncome } from './IncomeStatementUpload';
 import type { MatchContext } from '@/lib/paymentMatch';
 import type { Job } from '@/lib/store';
 
@@ -81,5 +81,19 @@ describe('a pay period read with the payment', () => {
     const work = { id: 'w', name: 'roar', client: 'odeum', date: '2026-10-26', status: 'completed', hoursWorked: 11, hourlyRate: 37, has6th7thDayRule: false, notes: '', createdAt: 'x' } as Job;
     const read = withSettledYear({ client: 'Odeum', description: 'Pay stub', amount: 822.25, date: '2023-11-06', payPeriodStart: '2023-10-26', payPeriodEnd: '2023-11-01' }, [work], '2026-11-16');
     expect(read).toMatchObject({ date: '2026-11-06', readAs: '2023-11-06', payPeriodStart: '2026-10-26', payPeriodEnd: '2026-11-01' });
+  });
+});
+
+describe('what a photo was', () => {
+  const read = (over: Partial<ParsedIncome>): ParsedIncome => ({ client: 'ODEUM LABOR SERV PAYROLL', description: 'Bank deposit', amount: 822.25, date: '2026-11-05', ...over });
+
+  it('goes by what the reader saw', () => {
+    expect(kindOfRead(read({ kind: 'deposit' }), false)).toBe('deposit');
+    expect(kindOfRead(read({ kind: 'stub', description: 'Pay stub' }), false)).toBe('stub');
+    expect(kindOfRead(read({ kind: 'check', description: 'Payroll Check' }), false)).toBe('check');
+  });
+
+  it('reads a payroll company\'s bank line as a deposit when the reader didn\'t say', () => {
+    expect(kindOfRead(read({ client: 'ODEUM LABOR', description: 'SERV PAYROLL' }), false)).toBe('deposit');
   });
 });
