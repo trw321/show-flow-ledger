@@ -22,6 +22,8 @@ import type { Job } from '@/lib/store';
 
 const SESSION_KEY = 'show-flow-live-work-session-v1';
 const ONE_HOUR_MS = 60 * 60 * 1000;
+/** The longest a call runs: a counter going longer was never ended. */
+const MAX_CALL_MS = 24 * ONE_HOUR_MS;
 
 interface WorkSession {
   jobId: string;
@@ -128,17 +130,17 @@ export default function LiveWorkPay() {
   const startDue = scheduledJobs.find(entry => entry.startAt <= now);
   const reminder = scheduledJobs.find(entry => entry.startAt > now && entry.startAt <= now + ONE_HOUR_MS);
 
-  // A counter left running from an earlier day (End work day never tapped)
-  // goes, so it can't sit there for a day and block today's from starting.
-  // An overnight call keeps running past midnight: only a run of 16 hours or
-  // more, or another call of today's coming due, ends it.
+  // No call runs past 24 hours, so a counter that has (End work day never
+  // tapped) goes. One from an earlier day also goes as soon as another of
+  // today's calls comes due, so it can't block today's from starting. An
+  // overnight call still runs on past midnight.
   useEffect(() => {
     if (!session || data.jobs.length === 0) return;
     const job = data.jobs.find(j => j.id === session.jobId);
-    const fromEarlierDay = !!job && job.date < today
-      && (now - session.scheduledAt > 16 * ONE_HOUR_MS || (!!startDue && startDue.job.id !== job.id));
+    const tooLong = now - session.scheduledAt > MAX_CALL_MS;
+    const replaced = !!job && job.date < today && !!startDue && startDue.job.id !== job.id;
     const gone = !job || job.status === 'cancelled' || (job.status === 'completed' && !!job.endTime);
-    if (fromEarlierDay || gone) setSession(null);
+    if (tooLong || replaced || gone) setSession(null);
   }, [session, data.jobs, today, now, startDue]);
 
   useEffect(() => {
