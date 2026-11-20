@@ -2,7 +2,7 @@ import { addDays, differenceInCalendarDays, endOfMonth, format, isValid, parseIS
 import type { Employer, Income, Job } from './store';
 import { resolveEmployer } from './employerMatch';
 import { effectiveHoursWorked, jobPayBreakdown } from './payCalc';
-import { EMPTY_PROFILE, type PayerProfile } from './payerProfile';
+import { EMPTY_PROFILE, withholdsNothing, type PayerProfile } from './payerProfile';
 import { firstCheckDate, payDueDate, payLagDays } from './payTiming';
 import { projectKeysFor } from './projectGrouping';
 
@@ -174,6 +174,52 @@ export function periodPayments<P extends Pick<Income, 'amount' | 'date' | 'jobId
   return paid;
 }
 
+/**
+ * Take-home is at least this share of the gross it pays for, once taxes and
+ * dues are out, for an employer that withholds them.
+ */
+const MIN_TAKE_HOME = 0.65;
+
+/**
+ * Without pay periods, the days each payment paid, worked out from the money:
+ * oldest days first, each payment taking as many days as its amount can
+ * account for, and never a day after it came. A deposit is take-home, so it
+ * can stand for more gross than its own amount, but only so much more. This
+ * replaced "every day up to the payment's date", which turned a weekly check
+ * that came the day after a run into pay for the whole run.
+ */
+export function allocateByAmount(
+  worked: Job[],
+  payments: Pick<Income, 'id' | 'amount' | 'date'>[],
+  grossOf: (j: Job) => number,
+  takeHome: number,
+): Map<string, Job[]> {
+  const days = [...worked].sort((a, b) => a.date.localeCompare(b.date));
+  const out = new Map<string, Job[]>();
+  // The same payment entered twice is one payment.
+  const seen = new Set<string>();
+  let next = 0;
+  for (const p of [...payments].sort((a, b) => a.date.localeCompare(b.date))) {
+    const key = `${p.amount}|${p.date}`;
+    if (seen.has(key)) { out.set(p.id, []); continue; }
+    seen.add(key);
+    const mine: Job[] = [];
+    let gross = 0;
+    while (next < days.length && days[next].date <= p.date) {
+      const g = grossOf(days[next]);
+      if ((gross + g) * takeHome > p.amount + 0.5) break;
+      gross += g;
+      mine.push(days[next]);
+      next++;
+    }
+    out.set(p.id, mine);
+  }
+  return out;
+}
+
+/** A payment's own picked days, if you picked them. */
+const pickedDays = (i: Pick<Income, 'matchProof'>) => (i.matchProof?.covers?.length ? i.matchProof.covers : undefined);
+
 /** Which periods of a split project its payments have paid. */
 export function coveredPeriods(
   periods: ProjectPeriod[],
@@ -201,15 +247,29 @@ export function shiftsPaidBy(
   if (!key) return [];
   const project = allJobs.filter(j => (keys.get(j.id) ?? j.id) === key);
   const worked = project.filter(j => effectiveHoursWorked(j) > 0).sort((a, b) => a.date.localeCompare(b.date));
-  const { periods } = projectPeriods(project, resolveEmployer(project[0].client, employers), allJobs);
+  const picked = pickedDays(payment);
+  if (picked) return worked.filter(j => picked.includes(j.id));
+  const employer = resolveEmployer(project[0].client, employers);
+  const { periods, known } = projectPeriods(project, employer, allJobs);
+  const payments = income.filter(i => i.jobId && keys.get(i.jobId) === key && (i.status === 'paid' || i.id === payment.id) && !pickedDays(i));
+  // One known period: its check pays the whole period, up to the day it came.
+  if (known && periods.length === 1) {
+    const upTo = worked.filter(j => j.date <= payment.date);
+    return upTo.length > 0 ? upTo : worked;
+  }
   if (periods.length > 1) {
-    const payments = income.filter(i => i.jobId && keys.get(i.jobId) === key && (i.status === 'paid' || i.id === payment.id));
     const by = periodPayments(periods, payments, p => periodNet(p, allJobs, employers, payer));
     const ids = new Set([...by].filter(([, list]) => list.some(x => x.id === payment.id)).flatMap(([i]) => periods[i].jobs.map(j => j.id)));
     return worked.filter(j => ids.has(j.id));
   }
-  const upTo = worked.filter(j => j.date <= payment.date);
-  return upTo.length > 0 ? upTo : worked;
+  const pickedElsewhere = new Set(income.filter(i => i.jobId && keys.get(i.jobId) === key && i.status === 'paid').flatMap(i => pickedDays(i) ?? []));
+  const mine = allocateByAmount(
+    worked.filter(j => !pickedElsewhere.has(j.id)), payments,
+    j => jobPayBreakdown(j, allJobs, employers, payer).gross,
+    withholdsNothing(employer, payer) ? 0.97 : MIN_TAKE_HOME,
+  ).get(payment.id) ?? [];
+  // Too little to cover a whole day: it still shows against the day it's on.
+  return mine.length > 0 ? mine : worked.filter(j => j.id === payment.jobId);
 }
 
 /**
@@ -236,11 +296,15 @@ export function paidShiftIds(
     paymentsOf.set(key, [...(paymentsOf.get(key) ?? []), i]);
   }
 
-  for (const [key, payments] of paymentsOf) {
+  for (const [key, all] of paymentsOf) {
     const project = allJobs.filter(j => (keys.get(j.id) ?? j.id) === key);
     const worked = project.filter(j => effectiveHoursWorked(j) > 0);
+    // Days you picked for a payment are paid, whatever else is worked out.
+    for (const i of all) for (const id of pickedDays(i) ?? []) paid.add(id);
+    const payments = all.filter(i => !pickedDays(i));
+    if (payments.length === 0) continue;
     const employer = resolveEmployer(project[0].client, employers);
-    const { periods } = projectPeriods(project, employer, allJobs);
+    const { periods, known } = projectPeriods(project, employer, allJobs);
     if (periods.length > 1) {
       const covered = coveredPeriods(periods, payments, p => periodNet(p, allJobs, employers, payer));
       periods.forEach((p, i) => {
@@ -248,9 +312,19 @@ export function paidShiftIds(
       });
       continue;
     }
-    const through = payments.map(i => i.date).sort().pop()!;
-    for (const i of payments) paid.add(i.jobId!);
-    for (const j of worked) if (j.date <= through) paid.add(j.id);
+    // One known period: its check pays the whole period, up to the day it came.
+    if (known) {
+      const through = payments.map(i => i.date).sort().pop()!;
+      for (const j of worked) if (j.date <= through) paid.add(j.id);
+      continue;
+    }
+    // Pay periods unknown: the oldest days first, as far as the money goes.
+    const byPayment = allocateByAmount(
+      worked.filter(j => !paid.has(j.id)), payments,
+      j => jobPayBreakdown(j, allJobs, employers, payer).gross,
+      withholdsNothing(employer, payer) ? 0.97 : MIN_TAKE_HOME,
+    );
+    for (const days of byPayment.values()) for (const j of days) paid.add(j.id);
   }
   return paid;
 }

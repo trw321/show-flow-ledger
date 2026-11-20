@@ -10,6 +10,7 @@ import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { readFileAsDataUrl, resizeImageForStorage } from '@/lib/imageResize';
 import { explainPay } from '@/lib/payExplain';
 import { matchPaymentToProject } from '@/lib/paymentMatch';
+import { effectiveHoursWorked } from '@/lib/payCalc';
 import { paidShiftIds, shiftsPaidBy } from '@/lib/payPeriods';
 import { isDocumented, photoAgrees, photoForOlderPayment, PROOF_LABELS, proofFromMatch, proofKindOf, type ProofKind } from '@/lib/paymentProof';
 import { projectOf } from '@/lib/projectGrouping';
@@ -110,6 +111,19 @@ export default function PaymentProof({ income, onClose }: { income: Income; onCl
   const project = useMemo(() => (shift ? projectOf(shift, data.jobs, data.employers) : []), [shift, data.jobs, data.employers]);
   const covers = useMemo(() => shiftsPaidBy(live, data.jobs, data.income, data.employers, prefs.payer), [live, data.jobs, data.income, data.employers, prefs.payer]);
   const paidIds = useMemo(() => paidShiftIds(data.jobs, data.income, data.employers, prefs.payer), [data.jobs, data.income, data.employers, prefs.payer]);
+  // Picking the days it paid: every worked day of its project, oldest first.
+  const projectWorked = useMemo(() => project.filter(j => effectiveHoursWorked(j) > 0).sort((a, b) => a.date.localeCompare(b.date)), [project]);
+  const coverIds = useMemo(() => new Set(covers.map(j => j.id)), [covers]);
+  const [pickingDays, setPickingDays] = useState(false);
+  const saveCovers = async (ids: string[] | undefined) => {
+    const base = live.matchProof ?? { kind: proofKindOf(live), at: new Date().toISOString() };
+    await updateIncome(live.id, { matchProof: { ...base, covers: ids && ids.length ? ids : undefined } });
+  };
+  const toggleDay = (id: string) => {
+    const next = new Set(coverIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    void saveCovers(projectWorked.map(j => j.id).filter(x => next.has(x)));
+  };
 
   // The photo: its own, or for an older payment one on the project that says the same amount.
   const older = photoForOlderPayment(live, project);
@@ -280,10 +294,35 @@ export default function PaymentProof({ income, onClose }: { income: Income; onCl
             </div>
           )}
 
-          {covers.length > 0 && (
-            <div className="space-y-1">
-              <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground">The days it paid</p>
-              <p className="text-[11px] text-mono">{covers.map(j => day(j.date)).join(' · ')}</p>
+          {/* Which days it paid: worked out from the amount, or picked here. */}
+          {projectWorked.length > 0 && live.status === 'paid' && (
+            <div className="space-y-1" data-testid="days-it-paid">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground">The days it paid</p>
+                <button type="button" onClick={() => setPickingDays(v => !v)} className="text-[10px] text-primary underline underline-offset-2">
+                  {pickingDays ? 'Done' : 'Change'}
+                </button>
+              </div>
+              {pickingDays ? (
+                <div className="space-y-1">
+                  {projectWorked.map(j => (
+                    <label key={j.id} className="flex cursor-pointer items-center gap-2 text-[11px] text-mono">
+                      <input type="checkbox" checked={coverIds.has(j.id)} onChange={() => toggleDay(j.id)} className="rounded border-border" />
+                      {day(j.date, 'EEE MMM d')} · {j.name}
+                    </label>
+                  ))}
+                  {live.matchProof?.covers?.length ? (
+                    <button type="button" onClick={() => void saveCovers(undefined)} className="text-[10px] text-muted-foreground underline underline-offset-2">
+                      Go back to working it out from the amount
+                    </button>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="text-[11px] text-mono">{covers.length > 0 ? covers.map(j => day(j.date)).join(' · ') : 'None yet'}</p>
+              )}
+              <p className="text-[10px] text-muted-foreground">
+                {live.matchProof?.covers?.length ? 'Picked by you.' : 'Worked out from the amount: the oldest days first. Change it if it paid others.'}
+              </p>
             </div>
           )}
         </div>

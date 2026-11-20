@@ -20,6 +20,8 @@ export interface MatchProof {
   reasons?: { text: string; good: boolean }[];
   /** What the photo said, to check against the payment. */
   read?: { amount?: number; payer?: string; date?: string };
+  /** The days it paid, when you picked them: they win over anything worked out. */
+  covers?: string[];
   /** When it was matched. */
   at: string;
 }

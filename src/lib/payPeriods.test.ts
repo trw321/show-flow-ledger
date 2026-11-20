@@ -188,10 +188,29 @@ describe('what a payment pays', () => {
     expect(shiftsPaidBy(all, run, [all], [e]).map(j => j.id)).toEqual(['a', 'b', 'c', 'd']);
   });
 
-  it('keeps the old rule inside one period: the whole project, up to the day it came', () => {
+  it('without pay periods, pays the oldest days its amount covers, not every day up to its date', () => {
     const quiet = employer();
-    const ids = paidShiftIds(run, [paid('a', 500, '2026-11-08')], [quiet]);
-    expect([...ids].sort()).toEqual(['a', 'b', 'c']);
+    // $400 a day gross; take-home is at least 65% of it, so $500 is one day.
+    expect([...paidShiftIds(run, [paid('a', 500, '2026-11-08')], [quiet])].sort()).toEqual(['a']);
+    // $1,000 take-home is up to $1,538 gross: three days.
+    expect([...paidShiftIds(run, [paid('a', 1000, '2026-11-08')], [quiet])].sort()).toEqual(['a', 'b', 'c']);
+    // Never a day after the money came.
+    expect([...paidShiftIds(run, [paid('a', 5000, '2026-11-07')], [quiet])].sort()).toEqual(['a', 'b']);
+  });
+
+  it('pays the days you picked, whatever the amount says', () => {
+    const quiet = employer();
+    const picked = { ...paid('a', 500, '2026-11-20'), matchProof: { kind: 'deposit' as const, at: 'x', covers: ['b', 'c'] } };
+    expect([...paidShiftIds(run, [picked], [quiet])].sort()).toEqual(['b', 'c']);
+    expect(shiftsPaidBy(picked, run, [picked], [quiet]).map(j => j.id)).toEqual(['b', 'c']);
+  });
+
+  it('gives each of several payments the next oldest days', () => {
+    const quiet = employer();
+    const one = { ...paid('a', 520, '2026-11-12'), id: 'one' };
+    const two = { ...paid('a', 520, '2026-11-19'), id: 'two' };
+    expect(shiftsPaidBy(one, run, [one, two], [quiet]).map(j => j.id)).toEqual(['a', 'b']);
+    expect(shiftsPaidBy(two, run, [one, two], [quiet]).map(j => j.id)).toEqual(['c', 'd']);
   });
 
   it('ignores money that has not arrived', () => {
