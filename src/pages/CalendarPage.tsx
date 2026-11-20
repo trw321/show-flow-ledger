@@ -217,17 +217,20 @@ function planColor(title: string): string {
 /**
  * A job's outline colour on the month grid. Hashed so a job keeps its colour
  * from month to month, but stepped on to a free one when another job in view
- * already has it, so two runs side by side never share a colour. No reds:
- * red is the callback phone.
+ * already has it, so two jobs side by side never share a colour. The outline
+ * is striped with the shift's status colour, so these keep clear of every
+ * status hue (sky 205, lilac 272, green 152, amber 40) and of red (344, the
+ * callback phone and cancelled). White stands in for blue, which sat too
+ * close to upcoming's sky blue to tell the stripes apart.
  */
-const PROJECT_HUES = [199, 45, 280, 140, 320, 90, 230];
+const PROJECT_COLOURS = ['hsl(178 85% 55%)', 'hsl(308 85% 62%)', 'hsl(75 85% 55%)', 'hsl(0 0% 94%)', 'hsl(112 80% 55%)', 'hsl(18 90% 60%)'];
 function projectColor(key: string, taken: Set<number>): string {
   let hash = 0;
   for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
-  let i = hash % PROJECT_HUES.length;
-  for (let n = 0; n < PROJECT_HUES.length && taken.has(i); n++) i = (i + 1) % PROJECT_HUES.length;
+  let i = hash % PROJECT_COLOURS.length;
+  for (let n = 0; n < PROJECT_COLOURS.length && taken.has(i); n++) i = (i + 1) % PROJECT_COLOURS.length;
   taken.add(i);
-  return `hsl(${PROJECT_HUES[i]} 85% 62%)`;
+  return PROJECT_COLOURS[i];
 }
 
 /**
@@ -2514,6 +2517,13 @@ export default function CalendarPage() {
   const projectKeyOf = useMemo(() => projectKeysFor(data.jobs, data.employers), [data.jobs, data.employers]);
   const projectGroupKey = (j: Job) => projectKeyOf.get(j.id) ?? j.id;
 
+  // Paid shifts: see paidShiftIds. It says how a payment reaches past the day
+  // it was put on, and how a project split across pay periods is paid by piece.
+  const paidJobIds = useMemo(
+    () => paidShiftIds(data.jobs, data.income, data.employers, prefs.payer),
+    [data.jobs, data.income, data.employers, prefs.payer],
+  );
+
   // For the month grid: which shifts are callbacks (they show a red phone in
   // place of their dot), and the colour each job of two or more days is
   // outlined in, so a run reads as one thing across the weeks.
@@ -2529,27 +2539,35 @@ export default function CalendarPage() {
     const colourOf = new Map<string, string>();
     const taken = new Set<number>();
     [...daysOf.entries()]
-      .filter(([, days]) => days.size > 1 && [...days].some(inView))
+      .filter(([, days]) => [...days].some(inView))
       .map(([k, days]) => [k, [...days].sort()[0]] as const)
       .sort((a, b) => a[1].localeCompare(b[1]) || a[0].localeCompare(b[0]))
       .forEach(([k]) => colourOf.set(k, projectColor(k, taken)));
     const callbacks = new Set<string>();
-    const outlines: Record<string, string[]> = {};
+    // Each day's jobs, grouped by job: its colour and that day's shifts on it.
+    const byDay: Record<string, Map<string, { colour: string; jobs: Job[] }>> = {};
     for (const j of data.jobs) {
       if (j.status === 'cancelled' || !inView(j.date)) continue;
       if (isCallback(j, data.jobs, data.employers)) callbacks.add(j.id);
-      const colour = colourOf.get(projectKeyOf.get(j.id) ?? j.id);
-      if (colour && !(outlines[j.date] ??= []).includes(colour)) outlines[j.date].push(colour);
+      const key = projectKeyOf.get(j.id) ?? j.id;
+      const colour = colourOf.get(key);
+      if (!colour) continue;
+      const day = (byDay[j.date] ??= new Map());
+      const entry = day.get(key) ?? { colour, jobs: [] };
+      entry.jobs.push(j);
+      day.set(key, entry);
+    }
+    // The stripe is the status the money figure shows for those shifts:
+    // paid, needs hours, pending or upcoming.
+    const outlines: Record<string, { colour: string; status: string }[]> = {};
+    for (const [date, day] of Object.entries(byDay)) {
+      outlines[date] = [...day.values()].map(({ colour, jobs }) => ({
+        colour,
+        status: `hsl(var(--${moneyTone(jobs, paidJobIds).replace('text-', '')}))`,
+      }));
     }
     return { callbacks, outlines };
-  }, [data.jobs, data.employers, projectKeyOf, currentDate]);
-
-  // Paid shifts: see paidShiftIds. It says how a payment reaches past the day
-  // it was put on, and how a project split across pay periods is paid by piece.
-  const paidJobIds = useMemo(
-    () => paidShiftIds(data.jobs, data.income, data.employers, prefs.payer),
-    [data.jobs, data.income, data.employers, prefs.payer],
-  );
+  }, [data.jobs, data.employers, projectKeyOf, currentDate, paidJobIds]);
 
   // ── Pay, by project ───────────────────────────────────────────────────────
   // The calendar is where jobs and their pay live together now: each project
@@ -3111,11 +3129,13 @@ export default function CalendarPage() {
                         sixthSeventhStreak && premiumClass(sixthSeventhStreak)
                       )}
                     >
-                      {/* Each job of two or more days outlines its days in its own
-                          colour; a second job on the same day sits just inside. */}
-                      {(monthMarks.outlines[dateKey] ?? []).slice(0, 2).map((colour, k) => (
-                        <span key={colour} className={cn('pointer-events-none absolute rounded-lg border-[1.5px]', k === 0 ? 'inset-0' : 'inset-[3px] rounded-md')}
-                          style={{ borderColor: colour }} data-testid="project-outline" aria-hidden="true" />
+                      {/* Each job outlines its days in its own colour, striped with
+                          where its shifts stand (the dot colours); a second job
+                          on the same day sits just inside. */}
+                      {(monthMarks.outlines[dateKey] ?? []).slice(0, 2).map(({ colour, status }, k) => (
+                        <span key={colour} className={cn('project-ring', k === 0 ? 'inset-0 rounded-lg' : 'inset-[4px] rounded-md')}
+                          style={{ '--ring-job': colour, '--ring-status': status } as React.CSSProperties}
+                          data-testid="project-outline" aria-hidden="true" />
                       ))}
                       {sixthSeventhStreak && (
                         <span className="absolute -right-0.5 -top-1.5 z-10 text-[13px] leading-none" aria-hidden="true">
