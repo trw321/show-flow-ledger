@@ -70,6 +70,12 @@ export default function BenefitsPage() {
           </div>
         </div>
 
+        {/* A pause between the headline and the details: a few hearts down the
+            middle, one to a line, so the boxes below sit a scroll away. */}
+        <div className="flex flex-col items-center gap-12 py-6 text-primary" data-testid="benefits-hearts" aria-hidden>
+          {[1, 0.7, 0.45, 0.25].map(opacity => <HeartPulse key={opacity} size={26} style={{ opacity }} />)}
+        </div>
+
         <HealthWelfareCard collapsible />
         <YearOfServiceCard rule={LOCAL8_2026} collapsible />
       </div>
