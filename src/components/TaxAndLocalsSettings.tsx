@@ -6,9 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { estimateYearFromEarnings, FILING_STATUS_LABELS, SOCIAL_SECURITY_WAGE_BASE, type FilingStatus } from '@/lib/taxEstimate';
 import type { LocalRates } from '@/lib/payerProfile';
-import YearOfServiceCard from '@/components/YearOfServiceCard';
-import HealthWelfareCard from '@/components/HealthWelfareCard';
-import { LOCAL8_2026 } from '@/lib/yearOfService';
+import { Link } from 'react-router-dom';
 
 /**
  * The numbers that are yours rather than any employer's, and the ones that
@@ -298,8 +296,10 @@ export default function TaxAndLocalsSettings() {
           </div>
         )}
 
-        <HealthWelfareCard />
-        <YearOfServiceCard rule={LOCAL8_2026} />
+        <Link to="/benefits" className="mt-3 flex items-center justify-between rounded-md border border-primary/40 bg-primary/5 px-3 py-2.5 text-xs font-medium hover:bg-primary/10">
+          <span>Local 16 health &amp; welfare and Local 8 Year of Service are on the Benefits tab</span>
+          <span aria-hidden>→</span>
+        </Link>
       </section>
     </div>
   );

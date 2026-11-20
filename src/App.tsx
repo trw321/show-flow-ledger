@@ -12,6 +12,7 @@ import PayOutsPage from '@/pages/PayOutsPage';
 import CrewPage from '@/pages/CrewPage';
 import InvoicesPage from '@/pages/InvoicesPage';
 import NetworkPage from '@/pages/NetworkPage';
+import BenefitsPage from '@/pages/BenefitsPage';
 import InvoicePrintPage from '@/pages/InvoicePrintPage';
 import SettingsPage from '@/pages/SettingsPage';
 import AuthPage from '@/pages/AuthPage';
@@ -49,6 +50,7 @@ export default function App() {
             <Route path="/crew" element={<CrewPage />} />
             <Route path="/invoices" element={<InvoicesPage />} />
             <Route path="/network" element={<NetworkPage />} />
+            <Route path="/benefits" element={<BenefitsPage />} />
             <Route path="/pay" element={<Navigate to="/money" replace />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<NotFound />} />

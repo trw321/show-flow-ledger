@@ -11,7 +11,7 @@ import { stampNow } from '@/lib/ledgerDiff';
 // expenses/income are checked anywhere) and their pages are gone — Log &
 // Calendar and Pay are core to the app now, not something to hide. Down to
 // just the genuinely optional secondary features.
-export type TabKey = 'expenses' | 'income' | 'payouts' | 'crew' | 'invoices' | 'network';
+export type TabKey = 'expenses' | 'income' | 'payouts' | 'crew' | 'invoices' | 'network' | 'benefits';
 
 export type WorkerType = 'w2' | '1099' | 'boss' | 'custom';
 
@@ -46,12 +46,13 @@ export const TAB_LABELS: Record<TabKey, { label: string; description: string }> 
   crew:     { label: 'Crew',     description: 'Your people and their schedules (boss)' },
   invoices: { label: 'Invoices', description: 'Bill clients for your shifts and your crew (1099, boss)' },
   network:  { label: 'Network',  description: 'The people you know in the business, on a map' },
+  benefits: { label: 'Benefits', description: 'Union health & welfare coverage, and Year of Service' },
 };
 
 export const WORKER_PRESETS: Record<'w2' | '1099' | 'boss', Record<TabKey, boolean>> = {
-  w2:     { expenses: false, income: true, payouts: false, crew: false, invoices: false, network: true },
-  '1099': { expenses: true,  income: true, payouts: false, crew: false, invoices: true, network: true },
-  boss:   { expenses: true,  income: true, payouts: true,  crew: true,  invoices: true, network: true },
+  w2:     { expenses: false, income: true, payouts: false, crew: false, invoices: false, network: true, benefits: true },
+  '1099': { expenses: true,  income: true, payouts: false, crew: false, invoices: true, network: true, benefits: true },
+  boss:   { expenses: true,  income: true, payouts: true,  crew: true,  invoices: true, network: true, benefits: true },
 };
 
 const DEFAULT_PREFS: UserPrefs = { workerType: '1099', tabs: WORKER_PRESETS['1099'], payer: EMPTY_PROFILE, aiFreeMode: false, contacts: [] };
