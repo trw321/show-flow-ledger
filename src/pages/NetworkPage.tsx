@@ -1,17 +1,21 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Mail, Pencil, Phone, Plus, Share2, Trash2 } from 'lucide-react';
+import { Loader2, Mail, MapPin, Pencil, Phone, Plus, Share2, Trash2 } from 'lucide-react';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
-import { CONTACT_EMOJIS, layoutNetwork, NO_COMPANY, telHref, type NetworkContact } from '@/lib/network';
+import { byMarket, CONTACT_EMOJIS, layoutNetwork, marketOf, NO_COMPANY, NO_MARKET, placeQuery, telHref, type NetworkContact } from '@/lib/network';
+import { findPlace } from '@/lib/geocode';
+
+// The real map is a big library, so it loads when the Network tab does.
+const NetworkGeoMap = lazy(() => import('@/components/NetworkGeoMap'));
 import { cn } from '@/lib/utils';
 
 type Draft = Omit<NetworkContact, 'id' | 'createdAt'>;
-const EMPTY: Draft = { name: '', emoji: '🙂', company: '', role: '', phone: '', email: '', notes: '' };
+const EMPTY: Draft = { name: '', emoji: '🙂', company: '', role: '', phone: '', email: '', notes: '', city: '', region: '', country: '' };
 
 /**
  * Your network as a map: you in the middle, each company around you, and
@@ -23,9 +27,13 @@ export default function NetworkPage() {
   const layout = useMemo(() => layoutNetwork(contacts), [contacts]);
   const [showing, setShowing] = useState<NetworkContact | null>(null);
   const [editing, setEditing] = useState<{ id?: string; draft: Draft } | null>(null);
+  const [view, setView] = useState<'map' | 'network'>('map');
+  const [saving, setSaving] = useState(false);
+  const markets = useMemo(() => byMarket(contacts), [contacts]);
+  const unpinned = contacts.filter(c => !Number.isFinite(c.lat) || !Number.isFinite(c.lng)).length;
   const companies = useMemo(() => [...new Set(contacts.map(c => c.company?.trim()).filter(Boolean) as string[])].sort(), [contacts]);
 
-  const save = () => {
+  const save = async () => {
     if (!editing) return;
     const name = editing.draft.name.trim();
     if (!name) { toast.error('Add a name'); return; }
@@ -37,7 +45,24 @@ export default function NetworkPage() {
       phone: editing.draft.phone?.trim() || undefined,
       email: editing.draft.email?.trim() || undefined,
       notes: editing.draft.notes?.trim() || undefined,
+      city: editing.draft.city?.trim() || undefined,
+      region: editing.draft.region?.trim() || undefined,
+      country: editing.draft.country?.trim() || undefined,
     };
+    // Look the place up when it's new or changed; keep the pin otherwise.
+    const before = editing.id ? contacts.find(c => c.id === editing.id) : undefined;
+    const query = placeQuery(clean);
+    if (!query) {
+      clean.lat = undefined;
+      clean.lng = undefined;
+    } else if (!before || placeQuery(before) !== query || !Number.isFinite(before.lat)) {
+      setSaving(true);
+      const place = await findPlace(query);
+      setSaving(false);
+      clean.lat = place?.lat;
+      clean.lng = place?.lng;
+      if (!place) toast.error('Couldn’t find "' + query + '" on the map. Saved without a pin.');
+    }
     if (editing.id) {
       const next = contacts.map(c => (c.id === editing.id ? { ...c, ...clean } : c));
       setContacts(next);
@@ -64,7 +89,7 @@ export default function NetworkPage() {
     if (!el) return;
     el.scrollLeft = (-box.x) * SCALE - el.clientWidth / 2;
     el.scrollTop = (-box.y) * SCALE - el.clientHeight / 2;
-  }, [box.x, box.y]);
+  }, [box.x, box.y, view]);
   return (
     <SpacePageWrapper
       title={
@@ -84,6 +109,28 @@ export default function NetworkPage() {
             <Button size="sm" onClick={() => setEditing({ draft: { ...EMPTY } })}><Plus size={14} /> Add a person</Button>
           </div>
         ) : (
+          <div className="grid grid-cols-2 gap-2" role="tablist">
+            {(['map', 'network'] as const).map(v => (
+              <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => setView(v)}
+                className={cn('pixel-button py-2 text-xs font-bold', view === v ? 'pick-on' : 'pick-off')}>
+                {v === 'map' ? 'Map · by market' : 'Network · by company'}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {contacts.length > 0 && view === 'map' && (
+          <div className="pixel-panel p-1 space-y-1">
+            <Suspense fallback={<div className="flex h-[60vh] items-center justify-center text-xs text-muted-foreground"><Loader2 size={16} className="mr-2 animate-spin" /> Loading the map…</div>}>
+              <NetworkGeoMap contacts={contacts} onSelect={setShowing} />
+            </Suspense>
+            {unpinned > 0 && (
+              <p className="px-2 pb-1 text-[10px] text-muted-foreground">{unpinned === 1 ? '1 person isn’t' : unpinned + ' people aren’t'} on the map yet: add a city to place them.</p>
+            )}
+          </div>
+        )}
+
+        {contacts.length > 0 && view === 'network' && (
           <div ref={mapRef} className="pixel-panel overflow-auto p-1" style={{ maxHeight: '62vh' }} data-testid="network-map">
             <svg viewBox={`${box.x} ${box.y} ${box.width} ${box.height}`} width={box.width * SCALE} height={box.height * SCALE} className="block mx-auto max-w-none" role="img" aria-label="Your network map">
               {layout.companies.map(co => (
@@ -121,15 +168,21 @@ export default function NetworkPage() {
 
         {contacts.length > 0 && (
           <div className="space-y-1">
-            <p className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Everyone</p>
-            {[...contacts].sort((a, b) => a.name.localeCompare(b.name)).map(c => (
-              <button key={c.id} type="button" onClick={() => setShowing(c)} className="flex w-full items-center gap-3 rounded-md border border-border px-3 py-2 text-left hover:bg-secondary/40">
-                <span className="text-2xl leading-none">{c.emoji || '🙂'}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">{c.name}</span>
-                  <span className="block truncate text-[11px] text-muted-foreground">{[c.role, c.company].filter(Boolean).join(' · ') || 'Independent'}</span>
-                </span>
-              </button>
+            {markets.map(({ market, people }) => (
+              <div key={market} className="space-y-1 pt-1">
+                <p className="flex items-center gap-1 text-[10px] text-mono uppercase tracking-wider text-muted-foreground">
+                  <MapPin size={11} aria-hidden /> {market} · {people.length}
+                </p>
+                {people.map(c => (
+                  <button key={c.id} type="button" onClick={() => setShowing(c)} className="flex w-full items-center gap-3 rounded-md border border-border px-3 py-2 text-left hover:bg-secondary/40">
+                    <span className="text-2xl leading-none">{c.emoji || '🙂'}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{c.name}</span>
+                      <span className="block truncate text-[11px] text-muted-foreground">{[c.role, c.company].filter(Boolean).join(' · ') || 'Independent'}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
         )}
@@ -160,6 +213,10 @@ export default function NetworkPage() {
                 </a>
               )}
               {!showing.phone && !showing.email && <p className="text-xs text-muted-foreground">No number or email yet.</p>}
+              <p className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
+                <MapPin size={14} aria-hidden /> {marketOf(showing) === NO_MARKET ? 'No market yet' : marketOf(showing)}
+                {marketOf(showing) !== NO_MARKET && !Number.isFinite(showing.lat) && ' · not on the map'}
+              </p>
               {showing.notes && <p className="whitespace-pre-wrap rounded-md bg-secondary/30 px-3 py-2 text-xs">{showing.notes}</p>}
               <div className="flex gap-2 pt-1">
                 <Button size="sm" variant="outline" className="flex-1" onClick={() => { setEditing({ id: showing.id, draft: { ...EMPTY, ...showing } }); }}>
@@ -201,6 +258,9 @@ export default function NetworkPage() {
                 ['role', 'What they do', 'Production manager', 'text'],
                 ['phone', 'Phone', '(415) 555-0100', 'tel'],
                 ['email', 'Email', 'sam@company.com', 'email'],
+                ['city', 'City', 'San Francisco', 'text'],
+                ['region', 'State or region', 'CA', 'text'],
+                ['country', 'Country', 'USA', 'text'],
               ] as const).map(([key, label, placeholder, type]) => (
                 <label key={key} className="block space-y-1">
                   <span className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">{label}</span>
@@ -216,7 +276,9 @@ export default function NetworkPage() {
               </label>
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={() => setEditing(null)}>Cancel</Button>
-                <Button className="flex-1" onClick={save}>Save</Button>
+                <Button className="flex-1" onClick={() => void save()} disabled={saving}>
+                  {saving ? <><Loader2 size={14} className="animate-spin" /> Finding it on the map…</> : 'Save'}
+                </Button>
               </div>
             </div>
           </DialogContent>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { layoutNetwork, NO_COMPANY, telHref, type NetworkContact } from './network';
+import { byMarket, layoutNetwork, marketOf, NO_COMPANY, NO_MARKET, placeQuery, telHref, type NetworkContact } from './network';
 
 const person = (id: string, company?: string): NetworkContact => ({ id, name: 'P' + id, company, createdAt: 'x' });
 const dist = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -41,5 +41,21 @@ describe('the network map', () => {
   it('dials a number as typed', () => {
     expect(telHref('(415) 555-0101')).toBe('tel:4155550101');
     expect(telHref('+1 415 555 0101')).toBe('tel:+14155550101');
+  });
+});
+
+describe('markets', () => {
+  it('names a market by city and state, or what there is', () => {
+    expect(marketOf({ city: 'San Francisco', region: 'CA', country: 'USA' })).toBe('San Francisco, CA');
+    expect(marketOf({ city: 'London', country: 'UK' })).toBe('London, UK');
+    expect(marketOf({ region: 'PA' })).toBe('PA');
+    expect(marketOf({})).toBe(NO_MARKET);
+    expect(placeQuery({ city: ' Philadelphia ', region: 'PA', country: '' })).toBe('Philadelphia, PA');
+  });
+
+  it('groups everyone by market, biggest first, unknown last', () => {
+    const c = (id: string, city?: string, region?: string): NetworkContact => ({ id, name: id, city, region, createdAt: 'x' });
+    const groups = byMarket([c('a'), c('b', 'Philadelphia', 'PA'), c('c', 'San Francisco', 'CA'), c('d', 'San Francisco', 'CA')]);
+    expect(groups.map(g => [g.market, g.people.length])).toEqual([['San Francisco, CA', 2], ['Philadelphia, PA', 1], [NO_MARKET, 1]]);
   });
 });

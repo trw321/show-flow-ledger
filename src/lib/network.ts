@@ -14,7 +14,41 @@ export interface NetworkContact {
   phone?: string;
   email?: string;
   notes?: string;
+  /** Their market: where they're based. */
+  city?: string;
+  region?: string;
+  country?: string;
+  /** Where that place is on the map, looked up once from city, region and country. */
+  lat?: number;
+  lng?: number;
   createdAt: string;
+}
+
+/** What a place is looked up by. */
+export const placeQuery = (c: Pick<NetworkContact, 'city' | 'region' | 'country'>) =>
+  [c.city, c.region, c.country].map(v => v?.trim()).filter(Boolean).join(', ');
+
+export const NO_MARKET = 'No market yet';
+
+/** Their market as a label: "San Francisco, CA", or the state or country alone. */
+export function marketOf(c: Pick<NetworkContact, 'city' | 'region' | 'country'>): string {
+  const city = c.city?.trim();
+  const region = c.region?.trim();
+  const country = c.country?.trim();
+  if (city) return region ? `${city}, ${region}` : country ? `${city}, ${country}` : city;
+  return region || country || NO_MARKET;
+}
+
+/** Everyone by market, the biggest markets first, and "No market yet" last. */
+export function byMarket(contacts: NetworkContact[]): { market: string; people: NetworkContact[] }[] {
+  const groups = new Map<string, NetworkContact[]>();
+  for (const c of contacts) {
+    const key = marketOf(c);
+    groups.set(key, [...(groups.get(key) ?? []), c]);
+  }
+  return [...groups.entries()]
+    .map(([market, people]) => ({ market, people: people.sort((a, b) => a.name.localeCompare(b.name)) }))
+    .sort((a, b) => (a.market === NO_MARKET ? 1 : b.market === NO_MARKET ? -1 : b.people.length - a.people.length || a.market.localeCompare(b.market)));
 }
 
 /** Emojis to pick from for a person. */

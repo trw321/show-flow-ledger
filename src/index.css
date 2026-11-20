@@ -460,3 +460,26 @@
   0%, 100% { opacity: 0.7; transform: translate3d(0, 0, 0) scale(1); }
   50% { opacity: 1; transform: translate3d(1%, -1%, 0) scale(1.04); }
 }
+
+/* The Network map's pins and bubbles (Leaflet draws them as plain HTML). */
+.net-cluster-wrap, .net-pin-wrap { background: transparent; border: 0; }
+.net-cluster {
+  width: 46px; height: 46px; border-radius: 9999px;
+  display: flex; align-items: center; justify-content: center;
+  background: hsl(var(--primary)); color: hsl(var(--primary-foreground));
+  font: 700 16px/1 ui-monospace, monospace;
+  box-shadow: 0 0 0 4px hsl(var(--primary) / 0.35);
+}
+.net-pin {
+  width: 44px; height: 44px; border-radius: 9999px;
+  display: flex; align-items: center; justify-content: center;
+  background: hsl(var(--card)); border: 2px solid hsl(var(--primary));
+  font-size: 24px; line-height: 1;
+}
+.net-pin-name {
+  position: absolute; top: 46px; left: 50%; transform: translateX(-50%);
+  white-space: nowrap; font-size: 11px; font-weight: 600;
+  color: #fff; text-shadow: 0 1px 2px #000, 0 0 4px #000;
+}
+.net-map-tiles { filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9) saturate(0.6); }
+[data-testid="network-geo-map"].leaflet-container { background: #1a1d24; }
