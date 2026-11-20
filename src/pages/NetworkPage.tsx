@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
+import { usePanZoom } from '@/lib/usePanZoom';
 import { toast } from 'sonner';
 import { Loader2, Mail, MapPin, Pencil, Phone, Plus, Share2, Trash2 } from 'lucide-react';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
@@ -7,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
-import { byMarket, CONTACT_EMOJIS, layoutNetwork, marketOf, NO_COMPANY, NO_MARKET, placeQuery, telHref, type NetworkContact } from '@/lib/network';
+import { byMarket, CONTACT_EMOJIS, layoutNetwork, marketOf, NO_COMPANY, NO_MARKET, placeQuery, sameName, telHref, type NetworkContact } from '@/lib/network';
 import { findPlace } from '@/lib/geocode';
 
 // The real map is a big library, so it loads when the Network tab does.
@@ -80,16 +81,9 @@ export default function NetworkPage() {
     toast(`Removed ${c.name}`, { action: { label: 'Undo', onClick: () => setContacts(before) } });
   };
 
-  const { box } = layout;
-  // Drawn big enough to read on a phone and scrolled around, starting on you.
-  const SCALE = 0.72;
-  const mapRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = mapRef.current;
-    if (!el) return;
-    el.scrollLeft = (-box.x) * SCALE - el.clientWidth / 2;
-    el.scrollTop = (-box.y) * SCALE - el.clientHeight / 2;
-  }, [box.x, box.y, view]);
+  // The company map fills the screen's width, everyone in view, and moves
+  // with a finger: drag to move, pinch or + and − to zoom, Fit to see all.
+  const pan = usePanZoom(layout.box);
   return (
     <SpacePageWrapper
       title={
@@ -131,23 +125,30 @@ export default function NetworkPage() {
         )}
 
         {contacts.length > 0 && view === 'network' && (
-          <div ref={mapRef} className="pixel-panel overflow-auto p-1" style={{ maxHeight: '62vh' }} data-testid="network-map">
-            <svg viewBox={`${box.x} ${box.y} ${box.width} ${box.height}`} width={box.width * SCALE} height={box.height * SCALE} className="block mx-auto max-w-none" role="img" aria-label="Your network map">
+          <div className="pixel-panel relative overflow-hidden p-1" data-testid="network-map">
+            <div className="absolute right-2 top-2 z-10 flex flex-col gap-1">
+              <button type="button" onClick={pan.zoomIn} aria-label="Zoom in" className="pixel-button pick-off h-9 w-9 text-lg font-bold leading-none">+</button>
+              <button type="button" onClick={pan.zoomOut} aria-label="Zoom out" className="pixel-button pick-off h-9 w-9 text-lg font-bold leading-none">−</button>
+              <button type="button" onClick={pan.fit} aria-label="Fit everyone" className="pixel-button pick-off h-9 w-9 text-[10px] font-bold">Fit</button>
+            </div>
+            <svg ref={pan.svgRef} viewBox={pan.viewBox} {...pan.handlers}
+              className="block h-[60vh] w-full select-none" style={{ touchAction: 'none' }} role="img" aria-label="Your network map">
               {layout.companies.map(co => (
                 <line key={'l-' + co.name} x1={0} y1={0} x2={co.x} y2={co.y} className="stroke-border" strokeWidth={2} />
               ))}
               {layout.people.map(p => {
-                const co = layout.companies.find(c => c.name === (p.contact.company?.trim() || NO_COMPANY))!;
+                const co = layout.companies.find(c => sameName(c.name) === sameName(p.contact.company?.trim() || NO_COMPANY));
+                if (!co) return null;
                 return <line key={'pl-' + p.contact.id} x1={co.x} y1={co.y} x2={p.x} y2={p.y} className="stroke-border" strokeWidth={1.5} strokeDasharray="4 4" />;
               })}
               <g>
-                <circle cx={0} cy={0} r={42} className="fill-primary" />
-                <text x={0} y={7} textAnchor="middle" className="fill-primary-foreground" style={{ fontSize: 22, fontWeight: 700 }}>You</text>
+                <circle cx={0} cy={0} r={50} className="fill-primary" />
+                <text x={0} y={9} textAnchor="middle" className="fill-primary-foreground" style={{ fontSize: 28, fontWeight: 800 }}>You</text>
               </g>
               {layout.companies.map(co => (
                 <g key={'c-' + co.name}>
-                  <rect x={co.x - 80} y={co.y - 21} width={160} height={42} rx={21} className="fill-secondary stroke-primary/60" strokeWidth={2} />
-                  <text x={co.x} y={co.y + 6} textAnchor="middle" className="fill-foreground" style={{ fontSize: 16, fontWeight: 700 }}>
+                  <rect x={co.x - 90} y={co.y - 25} width={180} height={50} rx={25} className="fill-secondary stroke-primary/60" strokeWidth={2.5} />
+                  <text x={co.x} y={co.y + 8} textAnchor="middle" className="fill-foreground" style={{ fontSize: 22, fontWeight: 800 }}>
                     {co.name.length > 17 ? co.name.slice(0, 16) + '…' : co.name}
                   </text>
                 </g>
@@ -155,9 +156,9 @@ export default function NetworkPage() {
               {layout.people.map(p => (
                 <g key={'p-' + p.contact.id} role="button" tabIndex={0} aria-label={p.contact.name} className="cursor-pointer"
                   onClick={() => setShowing(p.contact)} onKeyDown={e => { if (e.key === 'Enter') setShowing(p.contact); }}>
-                  <circle cx={p.x} cy={p.y} r={32} className="fill-card stroke-primary" strokeWidth={2.5} />
-                  <text x={p.x} y={p.y + 11} textAnchor="middle" style={{ fontSize: 32 }}>{p.contact.emoji || '🙂'}</text>
-                  <text x={p.x} y={p.y + 54} textAnchor="middle" className="fill-foreground" style={{ fontSize: 16, fontWeight: 600 }}>
+                  <circle cx={p.x} cy={p.y} r={38} className="fill-card stroke-primary" strokeWidth={3} />
+                  <text x={p.x} y={p.y + 14} textAnchor="middle" style={{ fontSize: 40 }}>{p.contact.emoji || '🙂'}</text>
+                  <text x={p.x} y={p.y + 64} textAnchor="middle" className="fill-foreground" style={{ fontSize: 20, fontWeight: 700 }}>
                     {p.contact.name.length > 16 ? p.contact.name.slice(0, 15) + '…' : p.contact.name}
                   </text>
                 </g>

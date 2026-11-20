@@ -41,11 +41,7 @@ export function marketOf(c: Pick<NetworkContact, 'city' | 'region' | 'country'>)
 
 /** Everyone by market, the biggest markets first, and "No market yet" last. */
 export function byMarket(contacts: NetworkContact[]): { market: string; people: NetworkContact[] }[] {
-  const groups = new Map<string, NetworkContact[]>();
-  for (const c of contacts) {
-    const key = marketOf(c);
-    groups.set(key, [...(groups.get(key) ?? []), c]);
-  }
+  const groups = groupBy(contacts, marketOf);
   return [...groups.entries()]
     .map(([market, people]) => ({ market, people: people.sort((a, b) => a.name.localeCompare(b.name)) }))
     .sort((a, b) => (a.market === NO_MARKET ? 1 : b.market === NO_MARKET ? -1 : b.people.length - a.people.length || a.market.localeCompare(b.market)));
@@ -68,10 +64,33 @@ export interface NetworkLayout {
 
 const companyOf = (c: NetworkContact) => c.company?.trim() || NO_COMPANY;
 
+/** What two spellings of one name share: "seattle" and "Seattle " are one market. */
+export const sameName = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+
+/** The spelling to show for a group: one with capitals if anyone typed it so, else each word capitalised. */
+function bestSpelling(spellings: string[]): string {
+  const typed = spellings.map(x => x.replace(/\s+/g, ' ').trim());
+  return typed.find(x => x !== x.toLowerCase()) ?? typed[0].replace(/\b\w/g, ch => ch.toUpperCase());
+}
+
+/** Contacts grouped by a name, ignoring capitals and spacing, each group shown by its best spelling. */
+function groupBy(contacts: NetworkContact[], nameOf: (c: NetworkContact) => string): Map<string, NetworkContact[]> {
+  const byKey = new Map<string, { spellings: string[]; people: NetworkContact[] }>();
+  for (const c of contacts) {
+    const name = nameOf(c);
+    const key = sameName(name);
+    const g = byKey.get(key) ?? { spellings: [], people: [] };
+    g.spellings.push(name);
+    g.people.push(c);
+    byKey.set(key, g);
+  }
+  return new Map([...byKey.values()].map(g => [bestSpelling(g.spellings), g.people]));
+}
+
 /** Angle between neighbours on a company's fan. */
 const fanStep = (n: number) => (n <= 1 ? 0 : Math.min(0.9, (1.4 * Math.PI) / (n - 1)));
 /** How far a company's people sit from it: clear of its label, and far enough apart. */
-const fanRadius = (n: number) => (n <= 1 ? 110 : Math.max(110, 80 / fanStep(n)));
+const fanRadius = (n: number) => (n <= 1 ? 120 : Math.max(120, 95 / fanStep(n)));
 
 /**
  * Places everyone: companies on a ring around you, and each company's people
@@ -79,13 +98,7 @@ const fanRadius = (n: number) => (n <= 1 ? 110 : Math.max(110, 80 / fanStep(n)))
  * or a label.
  */
 export function layoutNetwork(contacts: NetworkContact[]): NetworkLayout {
-  const groups = new Map<string, NetworkContact[]>();
-  for (const c of [...contacts].sort((a, b) => a.name.localeCompare(b.name))) {
-    const key = companyOf(c);
-    const list = groups.get(key) ?? [];
-    list.push(c);
-    groups.set(key, list);
-  }
+  const groups = groupBy([...contacts].sort((a, b) => a.name.localeCompare(b.name)), companyOf);
   const names = [...groups.keys()].sort((a, b) => (a === NO_COMPANY ? 1 : b === NO_COMPANY ? -1 : a.localeCompare(b)));
   // Each company needs room for its fan; the ring is as big as they all need.
   const room = names.map(n => 2 * (fanRadius(groups.get(n)!.length) + 70));

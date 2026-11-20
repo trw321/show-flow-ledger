@@ -59,3 +59,22 @@ describe('markets', () => {
     expect(groups.map(g => [g.market, g.people.length])).toEqual([['San Francisco, CA', 2], ['Philadelphia, PA', 1], [NO_MARKET, 1]]);
   });
 });
+
+describe('one place or company however it is typed', () => {
+  const c = (id: string, over: Partial<NetworkContact>): NetworkContact => ({ id, name: id, createdAt: 'x', ...over });
+
+  it('puts "Seattle" and "seattle" in one market, shown with capitals', () => {
+    const groups = byMarket([c('Taylor', { city: 'Seattle' }), c('Kimmy', { city: 'seattle' }), c('Jason', { city: 'Las Vegas' })]);
+    expect(groups.map(g => [g.market, g.people.length])).toEqual([['Seattle', 2], ['Las Vegas', 1]]);
+  });
+
+  it('capitalises a market nobody typed with capitals', () => {
+    expect(byMarket([c('a', { city: 'new york' })])[0].market).toBe('New York');
+  });
+
+  it('puts "Odeum" and "odeum " in one company on the map', () => {
+    const l = layoutNetwork([c('a', { company: 'odeum ' }), c('b', { company: 'Odeum' })]);
+    expect(l.companies).toHaveLength(1);
+    expect(l.companies[0]).toMatchObject({ name: 'Odeum', people: 2 });
+  });
+});
