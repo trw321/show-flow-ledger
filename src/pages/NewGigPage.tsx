@@ -235,10 +235,12 @@ const EMPTY_MANUAL: ManualEntry = {
  * dialog. onComplete is how the dialog host learns a save actually landed, so
  * it can close itself — the route has no host and simply leaves it undefined.
  */
-export default function NewGigPage({ onComplete, startAs }: {
+export default function NewGigPage({ onComplete, startAs, forDate }: {
   onComplete?: () => void;
   /** Opened from "add hours", so Parse means hours and says so. */
   startAs?: 'hours';
+  /** Opened from a day on the calendar: the shift form opens on that date. */
+  forDate?: string;
 } = {}) {
   const { data, addJob, updateJob: updateExistingJob, addIncome, addEvent } = useData();
   const { prefs } = useUserPrefs();
@@ -257,8 +259,8 @@ export default function NewGigPage({ onComplete, startAs }: {
   const [isImporting, setIsImporting] = useState(false);
   const [step, setStep] = useState<Step>('input');
   const [vortexPhase, setVortexPhase] = useState<VortexPhase>('idle');
-  const [manualOpen, setManualOpen] = useState(false);
-  const [manual, setManual] = useState<ManualEntry>(EMPTY_MANUAL);
+  const [manualOpen, setManualOpen] = useState(!!forDate);
+  const [manual, setManual] = useState<ManualEntry>(() => (forDate ? { ...EMPTY_MANUAL, date: forDate } : EMPTY_MANUAL));
   const [extraDates, setExtraDates] = useState<string[]>([]);
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
   const [hoursResults, setHoursResults] = useState<HoursMatchResult[]>([]);

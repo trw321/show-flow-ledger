@@ -2452,6 +2452,7 @@ export default function CalendarPage() {
   const [addingEventDate, setAddingEventDate] = useState<string | null>(null);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickAddShiftOpen, setQuickAddShiftOpen] = useState(false);
+  const [addShiftDate, setAddShiftDate] = useState<string | null>(null);
   const [quickAddHoursOpen, setQuickAddHoursOpen] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
 
@@ -3445,6 +3446,14 @@ export default function CalendarPage() {
                     )}
                   </div>
                 )}
+                {/* A shift on this very day, without leaving it. */}
+                <button
+                  onClick={() => setAddShiftDate(selectedDate)}
+                  className="w-full flex items-center justify-center gap-1.5 rounded-md border border-primary/50 bg-primary/10 py-2 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors"
+                  data-testid="add-shift-on-day"
+                >
+                  <Plus size={13} /> add a shift on {selectedDate && format(new Date(selectedDate + 'T12:00:00'), 'EEE, MMM d')}
+                </button>
                 {addingEventDate !== selectedDate && (
                   <button
                     onClick={() => setAddingEventDate(selectedDate)}
@@ -3504,6 +3513,20 @@ export default function CalendarPage() {
             <DialogTitle className="text-mono text-sm">Add hours worked</DialogTitle>
           </DialogHeader>
           <NewGigPage startAs="hours" onComplete={() => setQuickAddHoursOpen(false)} />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!addShiftDate} onOpenChange={open => { if (!open) setAddShiftDate(null); }}>
+        <DialogContent
+          className="max-w-md max-h-[85vh] overflow-y-auto rounded-lg"
+          onOpenAutoFocus={e => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle className="text-mono text-sm">
+              Add a shift · {addShiftDate && format(new Date(addShiftDate + 'T12:00:00'), 'EEE, MMM d')}
+            </DialogTitle>
+          </DialogHeader>
+          {addShiftDate && <NewGigPage key={addShiftDate} forDate={addShiftDate} onComplete={() => setAddShiftDate(null)} />}
         </DialogContent>
       </Dialog>
 
