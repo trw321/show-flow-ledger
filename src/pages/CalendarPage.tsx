@@ -215,6 +215,22 @@ function planColor(title: string): string {
 }
 
 /**
+ * A job's outline colour on the month grid. Hashed so a job keeps its colour
+ * from month to month, but stepped on to a free one when another job in view
+ * already has it, so two runs side by side never share a colour. No reds:
+ * red is the callback phone.
+ */
+const PROJECT_HUES = [199, 45, 280, 140, 320, 90, 230];
+function projectColor(key: string, taken: Set<number>): string {
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  let i = hash % PROJECT_HUES.length;
+  for (let n = 0; n < PROJECT_HUES.length && taken.has(i); n++) i = (i + 1) % PROJECT_HUES.length;
+  taken.add(i);
+  return `hsl(${PROJECT_HUES[i]} 85% 62%)`;
+}
+
+/**
  * A callback: any day of a job after its first. Worth seeing at a glance: it
  * starts at its own time and it is the one the hours note is most likely to
  * disagree with.
@@ -2488,17 +2504,6 @@ export default function CalendarPage() {
     return map;
   }, [data.jobs]);
 
-  // Days with a callback on them (a day of a job after its first), for the
-  // month on screen and the edge days of the months either side.
-  const callbackDates = useMemo(() => {
-    const shown = new Set([subMonths(currentDate, 1), currentDate, addMonths(currentDate, 1)].map(d => format(d, 'yyyy-MM')));
-    const dates = new Set<string>();
-    for (const job of data.jobs) {
-      if (shown.has(job.date.slice(0, 7)) && !dates.has(job.date) && isCallback(job, data.jobs, data.employers)) dates.add(job.date);
-    }
-    return dates;
-  }, [data.jobs, data.employers, currentDate]);
-
   const eventsByDate = useMemo(() => {
     const map: Record<string, CalendarEvent[]> = {};
     data.events.forEach(ev => { if (!map[ev.date]) map[ev.date] = []; map[ev.date].push(ev); });
@@ -2508,6 +2513,36 @@ export default function CalendarPage() {
   // Which project each shift is on — one answer, shared with the pay matcher.
   const projectKeyOf = useMemo(() => projectKeysFor(data.jobs, data.employers), [data.jobs, data.employers]);
   const projectGroupKey = (j: Job) => projectKeyOf.get(j.id) ?? j.id;
+
+  // For the month grid: which shifts are callbacks (they show a red phone in
+  // place of their dot), and the colour each job of two or more days is
+  // outlined in, so a run reads as one thing across the weeks.
+  const monthMarks = useMemo(() => {
+    const shown = new Set([subMonths(currentDate, 1), currentDate, addMonths(currentDate, 1)].map(d => format(d, 'yyyy-MM')));
+    const inView = (date: string) => shown.has(date.slice(0, 7));
+    const daysOf = new Map<string, Set<string>>();
+    for (const j of data.jobs) {
+      if (j.status === 'cancelled') continue;
+      const k = projectKeyOf.get(j.id) ?? j.id;
+      daysOf.set(k, (daysOf.get(k) ?? new Set()).add(j.date));
+    }
+    const colourOf = new Map<string, string>();
+    const taken = new Set<number>();
+    [...daysOf.entries()]
+      .filter(([, days]) => days.size > 1 && [...days].some(inView))
+      .map(([k, days]) => [k, [...days].sort()[0]] as const)
+      .sort((a, b) => a[1].localeCompare(b[1]) || a[0].localeCompare(b[0]))
+      .forEach(([k]) => colourOf.set(k, projectColor(k, taken)));
+    const callbacks = new Set<string>();
+    const outlines: Record<string, string[]> = {};
+    for (const j of data.jobs) {
+      if (j.status === 'cancelled' || !inView(j.date)) continue;
+      if (isCallback(j, data.jobs, data.employers)) callbacks.add(j.id);
+      const colour = colourOf.get(projectKeyOf.get(j.id) ?? j.id);
+      if (colour && !(outlines[j.date] ??= []).includes(colour)) outlines[j.date].push(colour);
+    }
+    return { callbacks, outlines };
+  }, [data.jobs, data.employers, projectKeyOf, currentDate]);
 
   // Paid shifts: see paidShiftIds. It says how a payment reaches past the day
   // it was put on, and how a project split across pay periods is paid by piece.
@@ -3076,12 +3111,12 @@ export default function CalendarPage() {
                         sixthSeventhStreak && premiumClass(sixthSeventhStreak)
                       )}
                     >
-                      {/* A callback outlines the whole day in red, the colour of
-                          the phone mark on the shift. The dots stay as they are,
-                          since their colour says paid, pending and so on. */}
-                      {callbackDates.has(dateKey) && (
-                        <span className="pointer-events-none absolute inset-0 rounded-lg border-[1.5px] border-destructive" data-testid="callback-day" aria-hidden="true" />
-                      )}
+                      {/* Each job of two or more days outlines its days in its own
+                          colour; a second job on the same day sits just inside. */}
+                      {(monthMarks.outlines[dateKey] ?? []).slice(0, 2).map((colour, k) => (
+                        <span key={colour} className={cn('pointer-events-none absolute rounded-lg border-[1.5px]', k === 0 ? 'inset-0' : 'inset-[3px] rounded-md')}
+                          style={{ borderColor: colour }} data-testid="project-outline" aria-hidden="true" />
+                      ))}
                       {sixthSeventhStreak && (
                         <span className="absolute -right-0.5 -top-1.5 z-10 text-[13px] leading-none" aria-hidden="true">
                           {sixthSeventhStreak.pays >= 2 ? '🤑' : sixthSeventhStreak.pays > 1 ? '💰' : '🔥'}
@@ -3100,7 +3135,9 @@ export default function CalendarPage() {
                       )}
                       {dayJobs.length > 0 && <span className="text-[7px] text-muted-foreground leading-tight text-center truncate max-w-[3rem] mt-0.5">{dayJobs[0].venue || dayJobs[0].client}</span>}
                       <div className="flex gap-0.5 mt-0.5 h-2 items-center">
-                        {dayJobs.slice(0, 3).map((job, j) => <span key={j} className={cn("w-1.5 h-1.5 rounded-full", jobDotClass(job, paidJobIds))} />)}
+                        {dayJobs.slice(0, 3).map((job, j) => monthMarks.callbacks.has(job.id)
+                          ? <Phone key={j} size={10} className="text-destructive fill-destructive shrink-0" data-testid="callback-phone" aria-label="Callback" />
+                          : <span key={j} className={cn("w-1.5 h-1.5 rounded-full", jobDotClass(job, paidJobIds))} />)}
                         {dayJobs.length > 3 && <span className="text-[7px] text-muted-foreground text-mono">+{dayJobs.length - 3}</span>}
                       </div>
                       {hasPay && <span className={cn("text-[8px] text-mono font-semibold leading-none mt-0.5", moneyTone(dayJobs, paidJobIds))}>${payByDate[dateKey] >= 1000 ? `${(payByDate[dateKey] / 1000).toFixed(1)}k` : payByDate[dateKey].toFixed(0)}</span>}

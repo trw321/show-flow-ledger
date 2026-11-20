@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Phone } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface KeyPlan {
@@ -56,10 +57,14 @@ export default function CalendarKey({ month, plans, states }: {
         <p className="font-8bit mt-3 text-[7px] uppercase text-white/60">Marks</p>
         <ul className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-mono text-white">
           <li className="col-span-2 flex items-center gap-2">
-            <span className="inline-block h-3.5 w-5 rounded border-[1.5px] border-destructive" aria-hidden />
-            callback day
+            <span className="flex gap-0.5" aria-hidden>
+              {[199, 45, 280].map(h => <span key={h} className="inline-block h-3.5 w-3.5 rounded border-[1.5px]" style={{ borderColor: `hsl(${h} 85% 62%)` }} />)}
+            </span>
+            one colour per job's days
           </li>
-          <li>📞 callback</li>
+          <li className="flex items-center gap-1">
+            <Phone size={11} className="text-destructive fill-destructive" aria-hidden /> callback
+          </li>
           <li>🤸 split</li>
         </ul>
 
