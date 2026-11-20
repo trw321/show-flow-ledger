@@ -2488,6 +2488,17 @@ export default function CalendarPage() {
     return map;
   }, [data.jobs]);
 
+  // Days with a callback on them (a day of a job after its first), for the
+  // month on screen and the edge days of the months either side.
+  const callbackDates = useMemo(() => {
+    const shown = new Set([subMonths(currentDate, 1), currentDate, addMonths(currentDate, 1)].map(d => format(d, 'yyyy-MM')));
+    const dates = new Set<string>();
+    for (const job of data.jobs) {
+      if (shown.has(job.date.slice(0, 7)) && !dates.has(job.date) && isCallback(job, data.jobs, data.employers)) dates.add(job.date);
+    }
+    return dates;
+  }, [data.jobs, data.employers, currentDate]);
+
   const eventsByDate = useMemo(() => {
     const map: Record<string, CalendarEvent[]> = {};
     data.events.forEach(ev => { if (!map[ev.date]) map[ev.date] = []; map[ev.date].push(ev); });
@@ -3065,6 +3076,12 @@ export default function CalendarPage() {
                         sixthSeventhStreak && premiumClass(sixthSeventhStreak)
                       )}
                     >
+                      {/* A callback outlines the whole day in red, the colour of
+                          the phone mark on the shift. The dots stay as they are,
+                          since their colour says paid, pending and so on. */}
+                      {callbackDates.has(dateKey) && (
+                        <span className="pointer-events-none absolute inset-0 rounded-lg border-[1.5px] border-destructive" data-testid="callback-day" aria-hidden="true" />
+                      )}
                       {sixthSeventhStreak && (
                         <span className="absolute -right-0.5 -top-1.5 z-10 text-[13px] leading-none" aria-hidden="true">
                           {sixthSeventhStreak.pays >= 2 ? '🤑' : sixthSeventhStreak.pays > 1 ? '💰' : '🔥'}
