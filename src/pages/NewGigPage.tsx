@@ -239,7 +239,7 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
   onComplete?: () => void;
   /** Opened from "add hours", so Parse means hours and says so. */
   startAs?: 'hours';
-  /** Opened from a day on the calendar: the shift form opens on that date. */
+  /** Opened from a day on the calendar: the paste box opens, and Manual is set to that date. */
   forDate?: string;
 } = {}) {
   const { data, addJob, updateJob: updateExistingJob, addIncome, addEvent } = useData();
@@ -259,10 +259,13 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
   const [isImporting, setIsImporting] = useState(false);
   const [step, setStep] = useState<Step>('input');
   const [vortexPhase, setVortexPhase] = useState<VortexPhase>('idle');
-  const [manualOpen, setManualOpen] = useState(!!forDate);
+  // From a calendar day it opens on the Job Log paste box, like everywhere
+  // else; Manual is one tap away and already set to that day. With AI off
+  // there's nothing to paste into, so it goes straight to the form.
+  const [manualOpen, setManualOpen] = useState(!!forDate && !!prefs.aiFreeMode);
   const [manual, setManual] = useState<ManualEntry>(() => (forDate ? { ...EMPTY_MANUAL, date: forDate } : EMPTY_MANUAL));
   const [extraDates, setExtraDates] = useState<string[]>([]);
-  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
+  const [calendarMonth, setCalendarMonth] = useState<Date>(() => (forDate ? new Date(forDate + 'T12:00:00') : new Date()));
   const [hoursResults, setHoursResults] = useState<HoursMatchResult[]>([]);
   const [hoursAccepted, setHoursAccepted] = useState<Set<number>>(new Set());
   // How long each unstated walk away actually was, answered per row. The parser
