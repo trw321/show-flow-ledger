@@ -111,7 +111,7 @@ FIELD MAPPINGS (both layouts):
   Job Site / SITE card→venue (append REPORT TO LOCATION if present) | Show→name (use venue if no show name)
   Rate / RATE card→hourlyRate (strip $) | Steward / STEWARD card→steward
   Contract→contract, copied exactly as written; null if not named, never worked out from the employer or venue
-  Skill+Job Notes+Dress Code→notes | 2-digit year "3/17/26"=2026-03-17
+  Skill→role, as written (e.g. P MULTI-SOURCE), and also at the start of notes | Skill+Job Notes+Dress Code→notes | 2-digit year "3/17/26"=2026-03-17
 
   payrollCompany is a company name (PAYROLL, AGENCY, STAFFING, INC, LLC) — NEVER a short
   dress-code abbreviation. Dress Code codes like NWB, YWA, NWA, WC, BOB, ALL BLACK always go
@@ -272,9 +272,10 @@ EXAMPLE — recurring gym schedule (month calendar, MUST expand every occurrence
                 parkingCost: { type: ["number", "null"] },
                 status: { type: "string", enum: ["upcoming", "in-progress", "completed", "cancelled"] },
                 notes: { type: ["string", "null"] },
-                contract: { type: ["string", "null"] }
+                contract: { type: ["string", "null"] },
+                role: { type: ["string", "null"] }
               },
-              required: ["contract", "jobNumber", "date", "startTime", "endTime", "name", "client", "payrollCompany", "local", "venue", "hourlyRate", "steward", "parkingCost", "status", "notes"],
+              required: ["role", "contract", "jobNumber", "date", "startTime", "endTime", "name", "client", "payrollCompany", "local", "venue", "hourlyRate", "steward", "parkingCost", "status", "notes"],
               additionalProperties: false
             }
           },
