@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { EMPTY_PROFILE, type PayerProfile } from '@/lib/payerProfile';
+import type { NetworkContact } from '@/lib/network';
 import { supabase } from '@/integrations/supabase/client';
 import { prefsKeyFor } from '@/lib/store';
 import { PREFS_CHANGED_EVENT, PREFS_SYNCED_EVENT } from '@/lib/sync';
@@ -10,7 +11,7 @@ import { stampNow } from '@/lib/ledgerDiff';
 // expenses/income are checked anywhere) and their pages are gone — Log &
 // Calendar and Pay are core to the app now, not something to hide. Down to
 // just the genuinely optional secondary features.
-export type TabKey = 'expenses' | 'income' | 'payouts' | 'crew' | 'invoices';
+export type TabKey = 'expenses' | 'income' | 'payouts' | 'crew' | 'invoices' | 'network';
 
 export type WorkerType = 'w2' | '1099' | 'boss' | 'custom';
 
@@ -34,6 +35,8 @@ export interface UserPrefs {
   calendarPay?: 'net' | 'gross';
   /** Turns off every AI-powered reader; manual entry remains available. */
   aiFreeMode: boolean;
+  /** The people on your Network map. */
+  contacts: NetworkContact[];
 }
 
 export const TAB_LABELS: Record<TabKey, { label: string; description: string }> = {
@@ -42,15 +45,16 @@ export const TAB_LABELS: Record<TabKey, { label: string; description: string }> 
   payouts:  { label: 'Pay Outs', description: 'Record and track payments made to crew' },
   crew:     { label: 'Crew',     description: 'Your people and their schedules (boss)' },
   invoices: { label: 'Invoices', description: 'Bill clients for your shifts and your crew (1099, boss)' },
+  network:  { label: 'Network',  description: 'The people you know in the business, on a map' },
 };
 
 export const WORKER_PRESETS: Record<'w2' | '1099' | 'boss', Record<TabKey, boolean>> = {
-  w2:     { expenses: false, income: true, payouts: false, crew: false, invoices: false },
-  '1099': { expenses: true,  income: true, payouts: false, crew: false, invoices: true },
-  boss:   { expenses: true,  income: true, payouts: true,  crew: true,  invoices: true },
+  w2:     { expenses: false, income: true, payouts: false, crew: false, invoices: false, network: true },
+  '1099': { expenses: true,  income: true, payouts: false, crew: false, invoices: true, network: true },
+  boss:   { expenses: true,  income: true, payouts: true,  crew: true,  invoices: true, network: true },
 };
 
-const DEFAULT_PREFS: UserPrefs = { workerType: '1099', tabs: WORKER_PRESETS['1099'], payer: EMPTY_PROFILE, aiFreeMode: false };
+const DEFAULT_PREFS: UserPrefs = { workerType: '1099', tabs: WORKER_PRESETS['1099'], payer: EMPTY_PROFILE, aiFreeMode: false, contacts: [] };
 
 function loadPrefs(uid?: string | null): UserPrefs {
   try {
@@ -69,6 +73,7 @@ function loadPrefs(uid?: string | null): UserPrefs {
       invoiceFrom: parsed.invoiceFrom,
       calendarPay: parsed.calendarPay,
       aiFreeMode: parsed.aiFreeMode ?? false,
+      contacts: Array.isArray(parsed.contacts) ? parsed.contacts.filter((c: unknown) => !!c && typeof (c as NetworkContact).id === 'string' && typeof (c as NetworkContact).name === 'string') : [],
     };
   } catch {
     return DEFAULT_PREFS;
@@ -94,6 +99,7 @@ interface UserPrefsContextValue {
   setInvoiceFrom: (from: InvoiceFrom) => void;
   setCalendarPay: (view: 'net' | 'gross') => void;
   setAIFreeMode: (enabled: boolean) => void;
+  setContacts: (contacts: NetworkContact[]) => void;
 }
 
 const UserPrefsContext = createContext<UserPrefsContextValue | null>(null);
@@ -139,6 +145,7 @@ export function UserPrefsProvider({ children }: { children: React.ReactNode }) {
   const setInvoiceFrom = (invoiceFrom: InvoiceFrom) => update({ ...prefs, invoiceFrom });
   const setCalendarPay = (calendarPay: 'net' | 'gross') => update({ ...prefs, calendarPay });
   const setAIFreeMode = (enabled: boolean) => update({ ...prefs, aiFreeMode: enabled });
+  const setContacts = (contacts: NetworkContact[]) => update({ ...prefs, contacts });
 
   const setTabEnabled = (tab: TabKey, enabled: boolean) => {
     const next = { ...prefs.tabs, [tab]: enabled };
@@ -148,7 +155,7 @@ export function UserPrefsProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <UserPrefsContext.Provider value={{ prefs, setWorkerType, setTabEnabled, setPayer, setInvoiceFrom, setCalendarPay, setAIFreeMode }}>
+    <UserPrefsContext.Provider value={{ prefs, setWorkerType, setTabEnabled, setPayer, setInvoiceFrom, setCalendarPay, setAIFreeMode, setContacts }}>
       {children}
     </UserPrefsContext.Provider>
   );

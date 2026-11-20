@@ -10,6 +10,7 @@ import {
   Wallet,
   Users,
   FileText,
+  Share2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -36,6 +37,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { label: 'Money', to: '/money', icon: <TrendingUp size={18} />, tab: 'income' },
   { label: 'Expenses', to: '/expenses', icon: <Receipt size={18} />, tab: 'expenses' },
   { label: 'Invoices', to: '/invoices', icon: <FileText size={18} />, tab: 'invoices' },
+  { label: 'Network', to: '/network', icon: <Share2 size={18} />, tab: 'network' },
   { label: 'Crew', to: '/crew', icon: <Users size={18} />, tab: 'crew' },
   { label: 'Pay Outs', to: '/payouts', icon: <Wallet size={18} />, tab: 'payouts' },
   { label: 'Settings', to: '/settings', icon: <Settings size={18} /> },
