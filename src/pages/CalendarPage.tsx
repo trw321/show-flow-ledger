@@ -2761,6 +2761,31 @@ export default function CalendarPage() {
     };
   }, [data.jobs, data.income, data.employers, currentDate, prefs.payer]);
 
+  // The month in view a week at a time (Sunday to Saturday, as the grid
+  // runs): shifts, hours, the estimate and what's come in for each week's
+  // work. Whole weeks, so one that starts in last month counts all its days.
+  const weekRows = useMemo(() => {
+    const today = localToday();
+    const workDateFor = (i: { jobId?: string; date: string }) => (i.jobId ? data.jobs.find(j => j.id === i.jobId)?.date : undefined) ?? i.date;
+    const rows: { from: string; to: string; shifts: number; hours: number; estimate: number; paid: number; isNow: boolean }[] = [];
+    const last = endOfWeek(endOfMonth(currentDate), { weekStartsOn: 0 });
+    for (let w = startOfWeek(startOfMonth(currentDate), { weekStartsOn: 0 }); w <= last; w = addDays(w, 7)) {
+      const from = format(w, 'yyyy-MM-dd');
+      const to = format(addDays(w, 6), 'yyyy-MM-dd');
+      const jobs = data.jobs.filter(j => j.date >= from && j.date <= to && j.status !== 'cancelled');
+      const worked = jobs.filter(j => netHoursWorked(j) > 0);
+      rows.push({
+        from, to,
+        shifts: worked.length,
+        hours: worked.reduce((s, j) => s + netHoursWorked(j), 0),
+        estimate: worked.reduce((s, j) => s + jobPayBreakdown(j, data.jobs, data.employers, prefs.payer)[payView], 0),
+        paid: data.income.filter(i => i.status === 'paid' && workDateFor(i) >= from && workDateFor(i) <= to).reduce((s, i) => s + i.amount, 0),
+        isNow: today >= from && today <= to,
+      });
+    }
+    return rows;
+  }, [data.jobs, data.income, data.employers, prefs.payer, payView, currentDate]);
+
   // Dates that are the 6th+ day in a row — marked whether or not the employer
   // pays extra for it, so one that should can be caught, with what it pays.
   const sixthSeventhDayDates = useMemo(() => {
@@ -3168,6 +3193,41 @@ export default function CalendarPage() {
             ))}
           </div>
         </>
+      )}
+
+      {/* ── Week by week ──────────────────────────────────────────────────── */}
+      {weekRows.some(w => w.shifts > 0) && (
+        <div className="mt-4 rounded-md border border-border/40 bg-secondary/10 p-3" data-testid="week-by-week">
+          <p className="text-[9px] font-body uppercase tracking-widest text-muted-foreground/50 mb-2">
+            Week by week · {format(currentDate, 'MMMM')} · est. {payView === 'gross' ? 'gross' : 'net'}
+          </p>
+          <div className="divide-y divide-border/30">
+            {weekRows.map(w => {
+              const owed = Math.max(0, w.estimate - w.paid);
+              return (
+                <div key={w.from} className={cn('grid grid-cols-[1fr_auto] items-baseline gap-x-3 py-1.5', w.isNow && '-mx-1.5 rounded px-1.5 bg-primary/10')}>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold">
+                      {format(parseISO(w.from), 'MMM d')} – {format(parseISO(w.to), isSameMonth(parseISO(w.from), parseISO(w.to)) ? 'd' : 'MMM d')}
+                      {w.isNow && <span className="ml-1.5 text-[10px] font-normal text-primary">this week</span>}
+                    </p>
+                    <p className="text-[10px] text-mono text-muted-foreground">
+                      {w.shifts === 0 ? 'no shifts' : `${w.shifts} shift${w.shifts === 1 ? '' : 's'} · ${w.hours.toFixed(1)}h`}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs font-bold text-mono">{w.estimate > 0 ? '$' + w.estimate.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}</p>
+                    {w.estimate > 0 && (
+                      <p className={cn('text-[10px] text-mono', owed > 0.5 ? 'text-dot-pending' : 'text-dot-paid')}>
+                        {owed > 0.5 ? (w.paid > 0 ? `$${Math.round(w.paid).toLocaleString()} paid · $${Math.round(owed).toLocaleString()} to come` : 'not paid yet') : 'paid'}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* ── This Month / YTD (small) + Export ────────────────────────────── */}
