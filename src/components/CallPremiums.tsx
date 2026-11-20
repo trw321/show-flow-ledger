@@ -10,6 +10,7 @@ import { showDay as day } from '@/lib/today';
 import { cn } from '@/lib/utils';
 
 const EARLY_CHOICES: { value: NonNullable<ContractRule['earlyCall']>; label: string }[] = [
+  { value: 'until7', label: 'Until 7 AM' },
   { value: 'until8', label: `Until ${EARLY_CALL_UNTIL_HOUR} AM` },
   { value: 'allDay', label: 'All day' },
   { value: 'none', label: 'No premium' },
@@ -79,7 +80,7 @@ export default function CallPremiums({ job, allJobs, employer }: { job: Job; all
               ? `Saved for every shift under ${under}.`
               : `How long does the premium run under ${under}? Pick one and every shift under it follows. Nothing is counted until you do.`}
           </span>
-          <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+          <div className="mt-1.5 grid grid-cols-2 gap-1.5">
             {EARLY_CHOICES.map(c => (
               <button
                 key={c.value}

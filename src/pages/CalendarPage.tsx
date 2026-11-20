@@ -35,7 +35,7 @@ import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { calculateDayPay, dayInARow, dayMultiplierFor, dayPremiumLabel, compositeWeekendMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross, jobPayBreakdown, compareCalls } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { breakTheHourLabel, breaksTheHour, isLocal16Shift } from '@/lib/local16';
-import { callMinimum, contractRuleFor, earlyCallHours, isEarlyCall, shiftPremiums, splitSideMinimum } from '@/lib/premiums';
+import { callMinimum, contractRuleFor, earlyCallHours, earlyCallWords, isEarlyCall, shiftPremiums, splitSideMinimum } from '@/lib/premiums';
 import CallPremiums from '@/components/CallPremiums';
 import { useSwipe } from '@/lib/useSwipe';
 import { cn } from '@/lib/utils';
@@ -297,14 +297,14 @@ function PremiumHoursBanner({ job, allJobs, employer, payer, onTap }: { job: Job
     : 0;
   if (!early && night <= 0) return null;
   const rule = contractRuleFor(job, employer, payer)?.earlyCall;
-  const premium = early ? earlyCallHours(job, rule) : night;
+  const premium = early ? earlyCallHours(job, rule, breaksTheHour(job, employer)) : night;
   const multiplier = employer?.nightPremiumMultiplier ?? 2;
   const title = early ? `🌅 EARLY CALL · ${job.startTime}` : `🌙 NIGHT HOURS · past midnight`;
   const line = early
     ? rule === undefined ? 'Premium hours: tap to say how long they run under this contract'
       : rule === 'none' ? 'No premium under this contract'
-      : !job.endTime ? `Premium at ${multiplier}× ${rule === 'allDay' ? 'all day' : 'until 8 AM'}`
-      : `${Math.round(premium * 100) / 100}h at ${multiplier}× · ${rule === 'allDay' ? 'all day' : 'until 8 AM'}`
+      : !job.endTime ? `Premium at ${multiplier}× ${earlyCallWords(rule)}`
+      : `${Math.round(premium * 100) / 100}h at ${multiplier}× · ${earlyCallWords(rule)}`
     : `${Math.round(premium * 100) / 100}h worked after midnight at ${multiplier}×`;
   const cls = cn('block w-full rounded-lg border px-3 py-2 text-center', early && rule === undefined ? 'border-warning/60 bg-warning/15' : 'border-primary/50 bg-primary/15');
   const body = (

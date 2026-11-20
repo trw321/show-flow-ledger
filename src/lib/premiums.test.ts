@@ -246,3 +246,31 @@ describe('an early call saved before its end', () => {
     expect(earlyCallHours({ startTime: '6:30 AM' }, 'until8')).toBe(0);
   });
 });
+
+describe('early-call premium hours break the hour', () => {
+  const call = (over: Partial<Job> = {}) => shift('e', { startTime: '6:30 AM', endTime: '2:30 PM', hoursWorked: 8, ...over });
+  const under = (rule: 'until7' | 'until8') => withContractRule(EMPTY_PROFILE, '2023-2028 BASIC ENTERTAINMENT', { earlyCall: rule });
+
+  it('a 6:30 start with premium until 8 is two hours of it, 6:30 to 8:30', () => {
+    expect(earlyCallHours(call(), 'until8', true)).toBe(2);
+    // 8h straight ($400), and 2h of it lifted to double (+$100).
+    expect(gross(call(), [call()], under('until8'))).toBeCloseTo(500);
+  });
+
+  it('until 7 is one hour, 6:30 to 7:30', () => {
+    expect(earlyCallHours(call(), 'until7', true)).toBe(1);
+    expect(gross(call(), [call()], under('until7'))).toBeCloseTo(450);
+  });
+
+  it('stays as worked where the call doesn\'t break the hour', () => {
+    expect(earlyCallHours(call(), 'until8', false)).toBe(1.5);
+    const odeum = call({ jobNumber: undefined, contract: undefined, client: 'odeum' });
+    const told = withContractRule(EMPTY_PROFILE, 'odeum', { earlyCall: 'until8' });
+    expect(gross(odeum, [odeum], told)).toBeCloseTo(475);
+  });
+
+  it('never runs past the end of a short call', () => {
+    const short = call({ startTime: '6:30 AM', endTime: '7:00 AM', hoursWorked: 0.5 });
+    expect(earlyCallHours(short, 'until8', true)).toBe(1);
+  });
+});

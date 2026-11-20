@@ -43,7 +43,7 @@ export interface ContractRule {
    * 8 AM, all day, or there is none. Unset means not asked yet, and no
    * premium is counted until it's answered.
    */
-  earlyCall?: 'until8' | 'allDay' | 'none';
+  earlyCall?: 'until7' | 'until8' | 'allDay' | 'none';
   /** Forced call: back with less than restHours off pays double time until they've been had. Unset: on for union work. */
   forcedCall?: boolean;
   restHours?: number;

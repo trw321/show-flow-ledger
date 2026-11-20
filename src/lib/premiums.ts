@@ -1,7 +1,7 @@
 import type { Employer, Job } from './store';
 import type { ContractRule, PayerProfile } from './payerProfile';
 import { shiftContract } from './contracts';
-import { isLocal16Shift } from './local16';
+import { breaksTheHour, isLocal16Shift } from './local16';
 import { nameSimilarity, AUTO_MATCH_THRESHOLD } from './employerMatch';
 import { clockMinutes, endAfterStart } from './clock';
 
@@ -74,13 +74,27 @@ export function isEarlyCall(job: Pick<Job, 'startTime' | 'endTime'>): boolean {
   return !Number.isNaN(start) && start < EARLY_CALL_BEFORE_HOUR * 60;
 }
 
-/** Hours of an early call at the premium: until 8 AM, or the whole call. */
-export function earlyCallHours(job: Pick<Job, 'startTime' | 'endTime'>, rule?: ContractRule['earlyCall']): number {
+/** When an "until" early-call premium stops, by the contract's choice. */
+export const earlyCallUntilHour = (rule?: ContractRule['earlyCall']) => (rule === 'until7' ? 7 : EARLY_CALL_UNTIL_HOUR);
+
+/** "until 8 AM", "all day": the premium in words. */
+export const earlyCallWords = (rule?: ContractRule['earlyCall']) =>
+  rule === 'allDay' ? 'all day' : rule === 'until7' || rule === 'until8' ? `until ${earlyCallUntilHour(rule)} AM` : 'none';
+
+/**
+ * Hours of an early call at the premium: until 7 or 8 AM, or the whole call.
+ * Where the call breaks the hour, so do its premium hours: there's no such
+ * thing as an hour and a half of premium, so a 6:30 start with premium until
+ * 8 is two hours of it, 6:30 to 8:30.
+ */
+export function earlyCallHours(job: Pick<Job, 'startTime' | 'endTime'>, rule?: ContractRule['earlyCall'], breaksHour = false): number {
   const span = callSpan(job);
   if (!span || span.start >= EARLY_CALL_BEFORE_HOUR * 60) return 0;
-  if (rule === 'allDay') return (span.end - span.start) / 60;
-  if (rule === 'until8') return Math.max(0, Math.min(span.end, EARLY_CALL_UNTIL_HOUR * 60) - span.start) / 60;
-  return 0;
+  const length = (span.end - span.start) / 60;
+  if (rule === 'allDay') return length;
+  if (rule !== 'until7' && rule !== 'until8') return 0;
+  const raw = Math.max(0, Math.min(span.end, earlyCallUntilHour(rule) * 60) - span.start) / 60;
+  return breaksHour ? Math.min(Math.ceil(raw - 1e-9), Math.ceil(length - 1e-9)) : raw;
 }
 
 /** A split day's side with no minimum of its own gets this on union work. */
@@ -186,12 +200,12 @@ export function shiftPremiums(job: Job, allJobs: Job[], employer?: Employer, pay
   if (job.pto) return [];
   const rule = contractRuleFor(job, employer, payer);
   const out: StartPremium[] = [];
-  const early = earlyCallHours(job, rule?.earlyCall);
+  const early = earlyCallHours(job, rule?.earlyCall, breaksTheHour(job, employer));
   if (early > 0) {
     out.push({
       hours: early,
       multiplier: employer?.nightPremiumMultiplier ?? 2,
-      label: rule?.earlyCall === 'allDay' ? 'early call, premium all day' : 'early call, premium until 8 AM',
+      label: `early call, premium ${earlyCallWords(rule?.earlyCall)}`,
     });
   }
   if (rule?.forcedCall ?? isUnionShift(job, employer)) {
