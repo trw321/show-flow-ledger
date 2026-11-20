@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { ExternalLink } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ChevronDown, ExternalLink } from 'lucide-react';
 import { useData } from '@/lib/DataContext';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { LOCAL16_HW, local16Earnings, previousPeriod, quarterStanding, workPeriodFor, type WorkPeriod } from '@/lib/healthWelfare';
@@ -23,7 +23,9 @@ const QUARTERS = [
  * the quarter each one pays for, then the plan in brief. Earnings are the
  * app's estimated gross from Local 16 shifts; the fund's records decide.
  */
-export default function HealthWelfareCard() {
+export default function HealthWelfareCard({ collapsible = false }: { collapsible?: boolean } = {}) {
+  // Folded shut where the page already headlines it; tap the title to open.
+  const [open, setOpen] = useState(!collapsible);
   const { data } = useData();
   const { prefs } = useUserPrefs();
   const today = localToday();
@@ -40,13 +42,18 @@ export default function HealthWelfareCard() {
   return (
     <div className="mt-3 rounded-md border border-primary/40 bg-primary/5 p-3 space-y-3" data-testid="health-welfare-16">
       <div>
-        <p className="text-sm font-bold">Local 16 · Health &amp; Welfare</p>
-        <p className="text-[11px] text-muted-foreground">
+        <button type="button" disabled={!collapsible} onClick={() => setOpen(o => !o)} aria-expanded={open}
+          className="flex w-full items-center justify-between gap-2 text-left disabled:cursor-default">
+          <span className="text-sm font-bold">Local 16 · Health &amp; Welfare</span>
+          {collapsible && <ChevronDown size={18} className={cn('shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} aria-hidden />}
+        </button>
+        <p className={cn('text-[11px] text-muted-foreground', !open && 'hidden')}>
           Employers pay 15.5% of your Local 16 gross into the plan. Each 3 months of work pays for a later quarter of
           coverage: {money(LOCAL16_HW.quarterEarnings)} earned ({money(LOCAL16_HW.quarterContributions)} in contributions) keeps you on.
         </p>
       </div>
 
+      <div className={open ? 'space-y-3' : 'hidden'} data-testid="hw-body">
       {/* The rule, up top: it decides everything below. */}
       <div className="rounded-md border border-warning/60 bg-warning/10 p-2" data-testid="hw-quarters">
         <p className="text-[11px] font-bold">Months worked → quarter they pay for</p>
@@ -128,6 +135,7 @@ export default function HealthWelfareCard() {
             </a>
           </div>
         </details>
+      </div>
       </div>
     </div>
   );

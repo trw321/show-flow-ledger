@@ -70,8 +70,8 @@ export default function BenefitsPage() {
           </div>
         </div>
 
-        <HealthWelfareCard />
-        <YearOfServiceCard rule={LOCAL8_2026} />
+        <HealthWelfareCard collapsible />
+        <YearOfServiceCard rule={LOCAL8_2026} collapsible />
       </div>
     </SpacePageWrapper>
   );

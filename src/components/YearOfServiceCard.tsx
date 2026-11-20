@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { ExternalLink } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ChevronDown, ExternalLink } from 'lucide-react';
 import { useData } from '@/lib/DataContext';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { normaliseLocal } from '@/lib/payerProfile';
@@ -13,7 +13,9 @@ const money = (n: number) => '$' + Math.round(n).toLocaleString();
  * against what's needed, and the training to finish, ticked off here and
  * kept with the local in your synced settings.
  */
-export default function YearOfServiceCard({ rule }: { rule: YearOfServiceRule }) {
+export default function YearOfServiceCard({ rule, collapsible = false }: { rule: YearOfServiceRule; collapsible?: boolean }) {
+  // Folded shut on the Benefits page, with where it stands in the title.
+  const [open, setOpen] = useState(!collapsible);
   const { data } = useData();
   const { prefs, setPayer } = useUserPrefs();
   const payer = prefs.payer;
@@ -36,13 +38,23 @@ export default function YearOfServiceCard({ rule }: { rule: YearOfServiceRule })
   return (
     <div className="mt-3 rounded-md border border-primary/40 bg-primary/5 p-3 space-y-3" data-testid={`year-of-service-${rule.local}`}>
       <div>
-        <p className="text-sm font-bold">Local {rule.local} · {rule.year} Year of Service</p>
-        <p className="text-[11px] text-muted-foreground">
+        <button type="button" disabled={!collapsible} onClick={() => setOpen(o => !o)} aria-expanded={open}
+          className="flex w-full items-center justify-between gap-2 text-left disabled:cursor-default">
+          <span className="text-sm font-bold">Local {rule.local} · {rule.year} Year of Service</span>
+          {collapsible && <ChevronDown size={18} className={cn('shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} aria-hidden />}
+        </button>
+        {collapsible && !open && (
+          <p className="text-[11px] text-mono text-muted-foreground">
+            {money(earned.gross)} of {money(rule.earnings)} · {finished} of {items.length} trainings done
+          </p>
+        )}
+        <p className={cn('text-[11px] text-muted-foreground', !open && 'hidden')}>
           {rule.forWhat.join(' · ')}. Work done in {rule.year}, counted in {rule.year + 1}.
         </p>
-        <p className="mt-0.5 text-[10px] text-muted-foreground">{rule.note}</p>
+        <p className={cn('mt-0.5 text-[10px] text-muted-foreground', !open && 'hidden')}>{rule.note}</p>
       </div>
 
+      <div className={open ? 'space-y-3' : 'hidden'} data-testid="yos-body">
       <div className="space-y-1">
         <div className="flex items-baseline justify-between">
           <span className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Earnings</span>
@@ -88,6 +100,7 @@ export default function YearOfServiceCard({ rule }: { rule: YearOfServiceRule })
             </a>
           ))}
         </div>
+      </div>
       </div>
     </div>
   );
