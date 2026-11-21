@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import BreathingLamp from '@/components/BreathingLamp';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   CalendarDays,
@@ -128,9 +129,13 @@ export default function AppLayout() {
       </aside>
 
       {/* Mobile header — pt- includes the safe-area inset so it clears the notch/status bar */}
-      <div className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+      <div className="fixed top-0 left-0 right-0 z-40 grid grid-cols-[1fr_auto_1fr] items-center px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
         <span className="text-xl font-display">Show Flow</span>
-        <div className="flex items-center gap-1">
+        {/* The filament, the app's mark, centred on the header line. On a
+            phone it lives here, not in each page's header, so pages start
+            with their own controls. */}
+        <div className="-my-2 flex justify-center" data-testid="header-lamp"><BreathingLamp size={36} /></div>
+        <div className="flex items-center justify-end gap-1">
           <ReportProblem />
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>

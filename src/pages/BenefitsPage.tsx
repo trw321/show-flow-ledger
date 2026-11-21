@@ -67,6 +67,13 @@ export default function BenefitsPage() {
               {now.workLabel}: <span className="font-bold text-mono">{money(nowGross)}</span> of {money(LOCAL16_HW.quarterEarnings)} earned
               {nowStanding.covered ? '.' : `, by ${shortDate(now.end)}.`}
             </p>
+            {/* What coverage costs out of pocket if the work stops where it is. */}
+            {!nowStanding.covered && (
+              <p className="mt-1.5 flex items-baseline justify-between gap-2 border-t border-primary/30 pt-1.5 text-xs" data-testid="next-self-pay">
+                <span>Self-pay for {now.coverageLabel} if it ends here</span>
+                <span className="text-base font-black text-mono text-warning">{money(nowStanding.selfPay)}</span>
+              </p>
+            )}
           </div>
         </div>
 

@@ -142,23 +142,23 @@ export default function NetworkPage() {
                 return <line key={'pl-' + p.contact.id} x1={co.x} y1={co.y} x2={p.x} y2={p.y} className="stroke-border" strokeWidth={1.5} strokeDasharray="4 4" />;
               })}
               <g>
-                <circle cx={0} cy={0} r={50} className="fill-primary" />
-                <text x={0} y={9} textAnchor="middle" className="fill-primary-foreground" style={{ fontSize: 28, fontWeight: 800 }}>You</text>
+                <circle cx={0} cy={0} r={38} className="fill-primary" />
+                <text x={0} y={8} textAnchor="middle" className="fill-primary-foreground" style={{ fontSize: 22, fontWeight: 800 }}>You</text>
               </g>
               {layout.companies.map(co => (
                 <g key={'c-' + co.name}>
-                  <rect x={co.x - 90} y={co.y - 25} width={180} height={50} rx={25} className="fill-secondary stroke-primary/60" strokeWidth={2.5} />
-                  <text x={co.x} y={co.y + 8} textAnchor="middle" className="fill-foreground" style={{ fontSize: 22, fontWeight: 800 }}>
-                    {co.name.length > 17 ? co.name.slice(0, 16) + '…' : co.name}
+                  <rect x={co.x - 70} y={co.y - 18} width={140} height={36} rx={18} className="fill-secondary stroke-primary/60" strokeWidth={2} />
+                  <text x={co.x} y={co.y + 6} textAnchor="middle" className="fill-foreground" style={{ fontSize: 16, fontWeight: 800 }}>
+                    {co.name.length > 15 ? co.name.slice(0, 14) + '…' : co.name}
                   </text>
                 </g>
               ))}
               {layout.people.map(p => (
                 <g key={'p-' + p.contact.id} role="button" tabIndex={0} aria-label={p.contact.name} className="cursor-pointer"
                   onClick={() => setShowing(p.contact)} onKeyDown={e => { if (e.key === 'Enter') setShowing(p.contact); }}>
-                  <circle cx={p.x} cy={p.y} r={38} className="fill-card stroke-primary" strokeWidth={3} />
-                  <text x={p.x} y={p.y + 14} textAnchor="middle" style={{ fontSize: 40 }}>{p.contact.emoji || '🙂'}</text>
-                  <text x={p.x} y={p.y + 64} textAnchor="middle" className="fill-foreground" style={{ fontSize: 20, fontWeight: 700 }}>
+                  <circle cx={p.x} cy={p.y} r={28} className="fill-card stroke-primary" strokeWidth={2.5} />
+                  <text x={p.x} y={p.y + 10} textAnchor="middle" style={{ fontSize: 28 }}>{p.contact.emoji || '🙂'}</text>
+                  <text x={p.x} y={p.y + 48} textAnchor="middle" className="fill-foreground" style={{ fontSize: 16, fontWeight: 700 }}>
                     {p.contact.name.length > 16 ? p.contact.name.slice(0, 15) + '…' : p.contact.name}
                   </text>
                 </g>

@@ -30,7 +30,8 @@ export default function SpacePageWrapper({ title, description, action, children,
             {description && <p className="text-[11px] text-muted-foreground font-body mt-0.5">{description}</p>}
             {action && <div className="mt-2 flex flex-wrap gap-2">{action}</div>}
           </div>
-          <BreathingLamp />
+          {/* On a phone the lamp is in the top header instead. */}
+          <div className="hidden md:block"><BreathingLamp /></div>
         </div>
         {children}
       </div>

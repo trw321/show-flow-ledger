@@ -15,6 +15,7 @@ import { useData } from '@/lib/DataContext';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { dayInARow, dayMultiplierFor, jobPayBreakdown, parseTimeToMinutes } from '@/lib/payCalc';
+import { callMinimum } from '@/lib/premiums';
 import { localToday } from '@/lib/today';
 import { liveDay, lunchMs, MEAL_LENGTHS, mealNow, openBreak, startsInLabel, toFiveMinutes, withMeal, workEnd, workedMs, type WorkBreak } from '@/lib/liveWork';
 import { cn } from '@/lib/utils';
@@ -102,6 +103,8 @@ export default function LiveWorkPay() {
   // day was tapped).
   const [endingAt, setEndingAt] = useState<number | null>(null);
   const [endingLatest, setEndingLatest] = useState(0);
+  // Signing out under the call's minimum asks whether the minimum is paid.
+  const [payMinimum, setPayMinimum] = useState(true);
   // The meal being entered: when it started and how long.
   const [mealStart, setMealStart] = useState<number | null>(null);
   const [mealLength, setMealLength] = useState<number>(30);
@@ -239,10 +242,14 @@ export default function LiveWorkPay() {
 
   // A meal is entered on a slider, after the fact or as it starts, so it
   // doesn't depend on tapping a button at the right moment.
+  // On a meal already, it opens on that meal, to set or change it.
   const openMeal = () => {
-    setMealStart(Math.max(toFiveMinutes(startedAt), toFiveMinutes(Date.now() - 30 * 60_000)));
-    setMealLength(30);
-    setMealOnClock(false);
+    const at = Date.now();
+    const current = breaks.find(b => b.start <= at && (b.end === undefined || at < b.end));
+    const length = current?.end ? Math.round((current.end - current.start) / 60_000) : null;
+    setMealStart(current ? Math.max(toFiveMinutes(startedAt), toFiveMinutes(current.start)) : Math.max(toFiveMinutes(startedAt), toFiveMinutes(at - 30 * 60_000)));
+    setMealLength(length && (MEAL_LENGTHS as readonly number[]).includes(length) ? length : 30);
+    setMealOnClock(!!current?.onClock);
   };
   const saveMeal = () => {
     if (mealStart === null) return;
@@ -264,11 +271,16 @@ export default function LiveWorkPay() {
     const endedAt = Date.now();
     setEndingLatest(endedAt);
     setEndingAt(endedAt);
+    setPayMinimum(true);
   };
 
   const endedAtWork = endingAt !== null ? workEnd(breaks, endingAt) : null;
   const lunchTakenMs = endedAtWork !== null ? lunchMs(actualClockInAt, endedAtWork, breaks) : 0;
   const endingWorkedMs = endingAt !== null ? workedMs(actualClockInAt, endingAt, breaks) : 0;
+  // The call's minimum: the shift's own (an employer's minimum call is copied
+  // onto its new shifts), else 8 hours for a union head call.
+  const minimumHours = activeJob ? callMinimum(activeJob, activeEmployer) : 0;
+  const underMinimum = minimumHours > 0 && endingAt !== null && endingWorkedMs / 3_600_000 < minimumHours;
 
   const confirmEndDay = async () => {
     if (!activeJob || endingAt === null || endedAtWork === null) return;
@@ -284,6 +296,8 @@ export default function LiveWorkPay() {
       ...(calls ? { callTimeline: calls, callGapsOnClock: day.gapsOnClock } : {}),
       hoursPlanned: undefined,
       status: 'completed',
+      // "Just the hours": no minimum on this shift, so the pay isn't padded.
+      ...(underMinimum && !payMinimum ? { minimumHours: 0 } : {}),
     });
     setSession(null);
     setEndingAt(null);
@@ -324,8 +338,15 @@ export default function LiveWorkPay() {
                 {lateRuleMissing ? 'Set late rule in Settings' : hasRate && pay !== null ? money(pay) : 'Rate needed'}
               </p>
             </div>
-            <Button type="button" size="sm" variant={lunch ? 'default' : 'outline'} className={cn("h-8 gap-1.5 px-2.5", premium && "border-[#14061f]/40 bg-white/75 hover:bg-white/90")} onClick={lunch ? endLunch : openMeal}>
-              <Utensils size={14} /> {lunch ? 'Back from meal' : 'Meal'}
+            {/* A meal left open (from before meals had a length) can still be
+                ended here, and the meal can be entered or changed either way. */}
+            {lunch && (
+              <Button type="button" size="sm" className={cn("h-8 px-2.5", premium && "border-[#14061f]/40 bg-white/75 hover:bg-white/90")} onClick={endLunch}>
+                Back
+              </Button>
+            )}
+            <Button type="button" size="sm" variant="outline" className={cn("h-8 gap-1.5 px-2.5", premium && "border-[#14061f]/40 bg-white/75 hover:bg-white/90")} onClick={openMeal}>
+              <Utensils size={14} /> Meal
             </Button>
             <Button type="button" size="sm" variant="outline" className={cn("h-8 gap-1.5 px-2.5", premium && "border-[#14061f]/40 bg-white/75 hover:bg-white/90")} onClick={beginEndDay}>
               <CircleStop size={14} /> End work day
@@ -488,6 +509,21 @@ export default function LiveWorkPay() {
                 {lunchTakenMs > 0 ? ` · ${elapsedLabel(lunchTakenMs)} of meals off the clock` : ''}
                 {lunch && !lunch.onClock ? ` · ends ${clockTime(lunch.start)}, when your meal started` : ''}
               </p>
+              {underMinimum && (
+                <div className="space-y-2 border border-warning/60 bg-warning/10 p-2.5" data-testid="minimum-ask">
+                  <p className="text-center text-xs font-semibold text-warning">
+                    Under the {minimumHours}h minimum. Paid the minimum?
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([true, false] as const).map(pay => (
+                      <button key={String(pay)} type="button" onClick={() => setPayMinimum(pay)} aria-pressed={payMinimum === pay}
+                        className={cn('pixel-button py-2 text-xs font-bold', payMinimum === pay ? 'pick-on' : 'pick-off')}>
+                        {pay ? `Yes, ${minimumHours}h minimum` : 'No, hours worked'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEndingAt(null)}>Keep working</Button>

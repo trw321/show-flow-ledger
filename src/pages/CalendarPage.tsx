@@ -52,6 +52,7 @@ import EventIntake from '@/components/EventIntake';
 import NewGigPage from '@/pages/NewGigPage';
 import { localToday, showDay } from '@/lib/today';
 import { ptoBalance } from '@/lib/pto';
+import { aiFetch } from '@/lib/aiSwitch';
 
 const statusDot: Record<Job['status'], string> = {
   upcoming: 'bg-dot-upcoming',
@@ -216,21 +217,14 @@ function planColor(title: string): string {
 }
 
 /**
- * A job's fill colour on the month grid, as an HSL triplet. Hashed so a job
- * keeps its colour from month to month, but stepped on to a free one when
+ * A job's outline colour on the month grid, as an HSL triplet. Hashed so a
+ * job keeps its colour from month to month, but stepped on to a free one when
  * another job in view already has it, so two jobs side by side never share a
- * colour. The day's edge is its status colour, so these keep clear of every
- * status hue (sky 205, lilac 272, green 152, amber 40) and of red (344, the
- * callback phone and cancelled), and white stands in for blue.
+ * colour. The dots inside carry the status colours, so these keep clear of
+ * every status hue (sky 205, lilac 272, green 152, amber 40) and of red (344,
+ * the callback phone and cancelled), and white stands in for blue.
  */
 const PROJECT_COLOURS = ['178 85% 55%', '308 85% 62%', '75 85% 55%', '0 0% 94%', '112 80% 55%', '18 90% 60%'];
-/** A day's wash: one job's colour, or side-by-side bands when it has more. */
-function projectFill(colours: string[]): string {
-  const tints = colours.map(c => `hsl(${c} / 0.3)`);
-  if (tints.length === 1) return tints[0];
-  const band = 100 / tints.length;
-  return `linear-gradient(90deg, ${tints.map((t, i) => `${t} ${i * band}% ${(i + 1) * band}%`).join(', ')})`;
-}
 function projectColor(key: string, taken: Set<number>): string {
   let hash = 0;
   for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
@@ -658,7 +652,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
       // days it lists hours for — which is what gets matched and recorded, and
       // for a stub the full breakdown it is checked against. A check has no
       // breakdown to read.
-      const read = (type: 'paystub' | 'income') => fetch(`${supabaseUrl}/functions/v1/parse-statement`, {
+      const read = (type: 'paystub' | 'income') => aiFetch(`${supabaseUrl}/functions/v1/parse-statement`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${supabaseKey}` },
         body: JSON.stringify({ imageBase64: dataUrl.split(',')[1], mimeType: 'image/jpeg', type }),
@@ -2531,10 +2525,8 @@ export default function CalendarPage() {
     [data.jobs, data.income, data.employers, prefs.payer],
   );
 
-  // For the month grid: which shifts are callbacks (they show a red phone in
-  // place of their dot), and for each day with work, its jobs' fill colours
-  // (one colour per job, so a run reads as one thing across the weeks) and
-  // its status colour for the edge.
+  // For the month grid: which shifts are callbacks (a red phone beside their
+  // dot), and each job's outline colour.
   const monthMarks = useMemo(() => {
     const shown = new Set([subMonths(currentDate, 1), currentDate, addMonths(currentDate, 1)].map(d => format(d, 'yyyy-MM')));
     const inView = (date: string) => shown.has(date.slice(0, 7));
@@ -2552,26 +2544,45 @@ export default function CalendarPage() {
       .sort((a, b) => a[1].localeCompare(b[1]) || a[0].localeCompare(b[0]))
       .forEach(([k]) => colourOf.set(k, projectColor(k, taken)));
     const callbacks = new Set<string>();
-    const byDay: Record<string, { fills: string[]; jobs: Job[] }> = {};
     for (const j of data.jobs) {
-      if (j.status === 'cancelled' || !inView(j.date)) continue;
-      if (isCallback(j, data.jobs, data.employers)) callbacks.add(j.id);
-      const colour = colourOf.get(projectKeyOf.get(j.id) ?? j.id);
-      const day = (byDay[j.date] ??= { fills: [], jobs: [] });
-      day.jobs.push(j);
-      if (colour && !day.fills.includes(colour)) day.fills.push(colour);
+      if (j.status !== 'cancelled' && inView(j.date) && isCallback(j, data.jobs, data.employers)) callbacks.add(j.id);
     }
-    // The edge is the status the day's money figure shows: paid, needs
-    // hours, pending or upcoming.
-    const days: Record<string, { fill: string; status: string }> = {};
-    for (const [date, day] of Object.entries(byDay)) {
-      days[date] = {
-        fill: projectFill(day.fills),
-        status: `hsl(var(--${moneyTone(day.jobs, paidJobIds).replace('text-', '')}))`,
-      };
+    return { callbacks, colourOf, daysOf };
+  }, [data.jobs, data.employers, projectKeyOf, currentDate]);
+
+  /**
+   * One outline per run of a job's days in a week row: the days drawn round
+   * together, not a box each. A run that carries on from the week before, or
+   * into the next, leaves that side open. Two jobs on the same days nest, the
+   * later one just inside.
+   */
+  const weekRuns = (week: Date[]) => {
+    const keys = week.map(day => new Set(
+      (jobsByDate[format(day, 'yyyy-MM-dd')] ?? []).filter(j => j.status !== 'cancelled').map(j => projectKeyOf.get(j.id) ?? j.id),
+    ));
+    const runs: { key: string; colour: string; from: number; to: number; openLeft: boolean; openRight: boolean; level: number }[] = [];
+    for (const key of new Set(keys.flatMap(k => [...k]))) {
+      const colour = monthMarks.colourOf.get(key);
+      const days = monthMarks.daysOf.get(key);
+      if (!colour || !days) continue;
+      for (let i = 0; i < 7; i++) {
+        if (!keys[i].has(key) || (i > 0 && keys[i - 1].has(key))) continue;
+        let to = i;
+        while (to < 6 && keys[to + 1].has(key)) to++;
+        runs.push({
+          key, colour, from: i, to, level: 0,
+          openLeft: i === 0 && days.has(format(addDays(week[0], -1), 'yyyy-MM-dd')),
+          openRight: to === 6 && days.has(format(addDays(week[6], 1), 'yyyy-MM-dd')),
+        });
+      }
     }
-    return { callbacks, days };
-  }, [data.jobs, data.employers, projectKeyOf, currentDate, paidJobIds]);
+    runs.sort((a, b) => a.from - b.from || b.to - a.to || a.key.localeCompare(b.key));
+    runs.forEach((run, n) => {
+      const under = runs.slice(0, n).filter(o => o.from <= run.to && run.from <= o.to);
+      run.level = under.length ? Math.max(...under.map(o => o.level)) + 1 : 0;
+    });
+    return runs;
+  };
 
   // ── Pay, by project ───────────────────────────────────────────────────────
   // The calendar is where jobs and their pay live together now: each project
@@ -3120,7 +3131,23 @@ export default function CalendarPage() {
             </div>
           </div>
           {weeks.map((week, wi) => (
-            <div key={wi} className="grid grid-cols-7">
+            <div key={wi} className="relative grid grid-cols-7">
+                {weekRuns(week).map(run => {
+                  const inset = run.level * 3;
+                  return (
+                    <span key={run.key + run.from} aria-hidden="true" data-testid="job-run"
+                      className="pointer-events-none absolute z-[5] rounded-lg border-2"
+                      style={{
+                        left: `calc(${(run.from / 7) * 100}% + ${run.openLeft ? 0 : 2 + inset}px)`,
+                        width: `calc(${((run.to - run.from + 1) / 7) * 100}% - ${(run.openLeft ? 0 : 2 + inset) + (run.openRight ? 0 : 2 + inset)}px)`,
+                        top: inset,
+                        bottom: 2 + inset,
+                        borderColor: `hsl(${run.colour})`,
+                        borderLeftWidth: run.openLeft ? 0 : undefined,
+                        borderRightWidth: run.openRight ? 0 : undefined,
+                      }} />
+                  );
+                })}
                 {week.map((day, i) => {
                   const dateKey = format(day, 'yyyy-MM-dd');
                   const dayJobs = jobsByDate[dateKey] || [];
@@ -3137,23 +3164,12 @@ export default function CalendarPage() {
                       onClick={() => setSelectedDate(dateKey)}
                       title={sixthSeventhStreak ? `${ordinal(sixthSeventhStreak.day)} day in a row` : "Tap to add a plan or view this day"}
                       className={cn(
-                        "relative isolate flex flex-col items-center py-1.5 transition-colors rounded-lg mx-0.5 mb-0.5 cursor-pointer active:bg-secondary/60 hover:bg-secondary/30",
+                        "relative flex flex-col items-center py-1.5 transition-colors rounded-lg mx-0.5 mb-0.5 cursor-pointer active:bg-secondary/60 hover:bg-secondary/30",
                         !isCurrentMonth && 'opacity-30',
                         todayFlag && 'bg-primary/10',
                         sixthSeventhStreak && premiumClass(sixthSeventhStreak)
                       )}
                     >
-                      {/* A day with work: a wash in its job's colour (bands when it
-                          has more than one job), behind everything else, and an
-                          edge in where it stands, the colour of its money. */}
-                      {monthMarks.days[dateKey] && (
-                        <>
-                          <span className="pointer-events-none absolute inset-0 -z-10 rounded-lg" style={{ background: monthMarks.days[dateKey].fill }}
-                            data-testid="project-fill" aria-hidden="true" />
-                          <span className="pointer-events-none absolute inset-0 rounded-lg border-2" style={{ borderColor: monthMarks.days[dateKey].status }}
-                            data-testid="status-edge" aria-hidden="true" />
-                        </>
-                      )}
                       {sixthSeventhStreak && (
                         <span className="absolute -right-0.5 -top-1.5 z-10 text-[13px] leading-none" aria-hidden="true">
                           {sixthSeventhStreak.pays >= 2 ? '🤑' : sixthSeventhStreak.pays > 1 ? '💰' : '🔥'}
@@ -3172,9 +3188,12 @@ export default function CalendarPage() {
                       )}
                       {dayJobs.length > 0 && <span className="text-[7px] text-muted-foreground leading-tight text-center truncate max-w-[3rem] mt-0.5">{dayJobs[0].venue || dayJobs[0].client}</span>}
                       <div className="flex gap-0.5 mt-0.5 h-2 items-center">
-                        {dayJobs.slice(0, 3).map((job, j) => monthMarks.callbacks.has(job.id)
-                          ? <Phone key={j} size={10} className="text-destructive fill-destructive shrink-0" data-testid="callback-phone" aria-label="Callback" />
-                          : <span key={j} className={cn("w-1.5 h-1.5 rounded-full", jobDotClass(job, paidJobIds))} />)}
+                        {dayJobs.slice(0, 3).map((job, j) => (
+                          <Fragment key={j}>
+                            {monthMarks.callbacks.has(job.id) && <Phone size={9} className="text-destructive fill-destructive shrink-0" data-testid="callback-phone" aria-label="Callback" />}
+                            <span className={cn("w-1.5 h-1.5 rounded-full", jobDotClass(job, paidJobIds))} />
+                          </Fragment>
+                        ))}
                         {dayJobs.length > 3 && <span className="text-[7px] text-muted-foreground text-mono">+{dayJobs.length - 3}</span>}
                       </div>
                       {hasPay && <span className={cn("text-[8px] text-mono font-semibold leading-none mt-0.5", moneyTone(dayJobs, paidJobIds))}>${payByDate[dateKey] >= 1000 ? `${(payByDate[dateKey] / 1000).toFixed(1)}k` : payByDate[dateKey].toFixed(0)}</span>}
