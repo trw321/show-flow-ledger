@@ -4,6 +4,7 @@ import { projectSiblingsToRelabel } from '@/lib/projectGrouping';
 import StubEditor from '@/components/StubEditor';
 import MoneyRain from '@/components/MoneyRain';
 import LiveWorkPay from '@/components/LiveWorkPay';
+import PreflightButton from '@/components/PreflightButton';
 import { useNeedsHours } from '@/lib/useNeedsHours';
 import { useSearchParams } from 'react-router-dom';
 import { useData } from '@/lib/DataContext';
@@ -16,7 +17,7 @@ import {
   AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
 import { callText, explicitCalls, parseDayTimeline, withGapOnClock, COMPOSITE_LUNCH_AFTER_HOURS, MEAL_PENALTY_AFTER_HOURS, type DayTimeline } from '@/lib/dayTimeline';
-import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle, Flame, PenLine, Banknote, Wallet, Flag, Undo2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle, Flame, PenLine, Banknote, Wallet, Flag, Undo2, Rocket, Timer, Orbit } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO, differenceInCalendarDays } from 'date-fns';
 import type { Employer, Job, CalendarEvent, Income, Invoice } from '@/lib/store';
 import { matchPaymentToProject, betterProject, rankedProjectsFor, projectOf, type FoundPayment, type ProjectMatch } from '@/lib/paymentMatch';
@@ -2963,34 +2964,42 @@ export default function CalendarPage() {
   return (
     <SpacePageWrapper
       title="Calendar"
-      description={viewMode === 'year' ? 'Your year at a glance' : 'Your month at a glance'}
+      description={<span className="hidden sm:inline">{viewMode === 'year' ? 'Your year at a glance' : 'Your month at a glance'}</span>}
       action={
-        <div className="flex flex-wrap gap-2">
+        // Short, in the trade's words, on one row beside the lamp: Load-in
+        // brings in work (an offer or a job), Timecode logs hours worked, Cue
+        // sets a plan. Each says what it does in full to a screen reader.
+        <div className="flex flex-wrap gap-1.5" data-testid="calendar-adds">
           <button
             onClick={() => setQuickAddShiftOpen(true)}
-            className="flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary px-3 py-1.5 text-xs font-medium transition-colors"
+            aria-label="Load-in: add a job or an offer" title="Add a job or an offer"
+            className="flex shrink-0 items-center gap-1 whitespace-nowrap border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary px-2 py-1.5 text-[11px] font-semibold transition-colors"
           >
-            <Plus size={13} /> if you want work (add an offer)
+            <Rocket size={13} aria-hidden /> Load-in
           </button>
           {/* Hours are a separate way in now, not something the intake box is
               asked to recognise. */}
           <button
             onClick={() => setQuickAddHoursOpen(true)}
-            className="flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 hover:bg-accent/20 text-accent px-3 py-1.5 text-xs font-medium transition-colors"
+            aria-label="Timecode: add hours worked" title="Add hours worked"
+            className="flex shrink-0 items-center gap-1 whitespace-nowrap border border-accent/40 bg-accent/10 hover:bg-accent/20 text-accent px-2 py-1.5 text-[11px] font-semibold transition-colors"
           >
-            <Plus size={13} /> add hours
+            <Timer size={13} aria-hidden /> Timecode
           </button>
           <button
             onClick={() => setQuickAddOpen(true)}
-            className="flex items-center gap-1.5 rounded-md border border-info/40 bg-info/10 hover:bg-info/20 text-info px-3 py-1.5 text-xs font-medium transition-colors"
+            aria-label="Cue: make a plan" title="Make a plan"
+            className="flex shrink-0 items-center gap-1 whitespace-nowrap border border-info/40 bg-info/10 hover:bg-info/20 text-info px-2 py-1.5 text-[11px] font-semibold transition-colors"
           >
-            <Plus size={13} /> make a plan
+            <Orbit size={13} aria-hidden /> Cue
           </button>
         </div>
       }
     >
         <LiveWorkPay />
 
+      {/* To-dos float in a corner button instead of stacking above the month. */}
+      <PreflightButton count={(jobsNeedingHours.length > 0 ? 1 : 0) + (flaggedJobs.length > 0 ? 1 : 0) + (payTier !== 'none' && oldestWaiting ? 1 : 0)}>
       {jobsNeedingHours.length > 0 && (
         <button
           onClick={() => { setSelectedDate(jobsNeedingHours[0].date); setSelectedJobId(jobsNeedingHours[0].id); }}
@@ -3028,8 +3037,6 @@ export default function CalendarPage() {
         </button>
       )}
 
-      <MoneyRain active={rainActive} />
-      <MoneyRain burst={partyBurst} party />
       {payTier !== 'none' && oldestWaiting && (
         <button
           onClick={() => { setSelectedDate(oldestWaiting.jobs[0].date); setSelectedJobId(oldestWaiting.jobs[0].id); }}
@@ -3053,6 +3060,10 @@ export default function CalendarPage() {
           </div>
         </button>
       )}
+      </PreflightButton>
+
+      <MoneyRain active={rainActive} />
+      <MoneyRain burst={partyBurst} party />
 
       <div className="flex items-center gap-2 mb-3">
         <div className="flex flex-1 bg-secondary/30 rounded-lg p-0.5">
