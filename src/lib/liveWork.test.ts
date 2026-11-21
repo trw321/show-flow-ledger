@@ -91,6 +91,45 @@ describe('a meal entered on the slider', () => {
   });
 });
 
+describe('in the middle of a meal entered with its length', () => {
+  // 10:30 to 11:15, off the clock, and it's 11:00: halfway through.
+  const breaks = withMeal([], at(10, 30), 45);
+  const now = at(11);
+  const base = {
+    id: 'live', name: 'Show', client: 'Acme', venue: 'Hall', date: localToday(), status: 'in-progress',
+    hourlyRate: 50, has6th7thDayRule: false, notes: '', createdAt: 'x',
+  } as Job;
+  // The live counter prices the day this way: the clocked span to the end of
+  // work, with any finished meals as gaps in the calls.
+  const priced = (to: number) => {
+    const end = workEnd(breaks, to);
+    const live = { ...base, hoursWorked: (end - at(8)) / 3_600_000, callTimeline: liveDay(at(8), to, breaks).text || undefined } as Job;
+    return jobPayBreakdown(live, [live], [], EMPTY_PROFILE).gross;
+  };
+
+  it('stops the work where the meal began', () => {
+    expect(workEnd(breaks, now)).toBe(at(10, 30));
+    expect(workedMs(at(8), now, breaks)).toBe(2.5 * 60 * MIN);
+  });
+
+  it('pays only the work so far, not the meal', () => {
+    // It paid the half hour of meal too: 3h at $50 instead of 2.5h.
+    expect(priced(now)).toBeCloseTo(2.5 * 50, 2);
+  });
+
+  it('counts again once the meal is over', () => {
+    expect(workEnd(breaks, at(12))).toBe(at(12));
+    expect(workedMs(at(8), at(12), breaks)).toBe(3.25 * 60 * MIN);
+    expect(priced(at(12))).toBeCloseTo(3.25 * 50, 2);
+  });
+
+  it('keeps counting through it when it is on the clock', () => {
+    const paid = withMeal([], at(10, 30), 45, true);
+    expect(workEnd(paid, now)).toBe(now);
+    expect(workedMs(at(8), now, paid)).toBe(3 * 60 * MIN);
+  });
+});
+
 describe('a meal on the clock', () => {
   it('is paid: nothing comes off the hours, and the counter keeps going', () => {
     const breaks = withMeal([], at(12, 30), 30, true);

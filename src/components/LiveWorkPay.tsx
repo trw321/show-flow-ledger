@@ -16,7 +16,7 @@ import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { dayInARow, dayMultiplierFor, jobPayBreakdown, parseTimeToMinutes } from '@/lib/payCalc';
 import { localToday } from '@/lib/today';
-import { liveDay, lunchMs, MEAL_LENGTHS, openBreak, startsInLabel, toFiveMinutes, withMeal, workEnd, workedMs, type WorkBreak } from '@/lib/liveWork';
+import { liveDay, lunchMs, MEAL_LENGTHS, mealNow, openBreak, startsInLabel, toFiveMinutes, withMeal, workEnd, workedMs, type WorkBreak } from '@/lib/liveWork';
 import { cn } from '@/lib/utils';
 import MoneyRain from '@/components/MoneyRain';
 import type { Job } from '@/lib/store';
@@ -98,11 +98,13 @@ export default function LiveWorkPay() {
   const [now, setNow] = useState(Date.now());
   const [session, setSession] = useState<WorkSession | null>(() => readSession());
   const [reminderDismissedFor, setReminderDismissedFor] = useState<string | null>(null);
+  // The end of the day being picked, and the latest it can be (when End work
+  // day was tapped).
   const [endingAt, setEndingAt] = useState<number | null>(null);
-  const [confirmedHours, setConfirmedHours] = useState('');
-  // The meal being entered: when it started and how long (null: still going).
+  const [endingLatest, setEndingLatest] = useState(0);
+  // The meal being entered: when it started and how long.
   const [mealStart, setMealStart] = useState<number | null>(null);
-  const [mealLength, setMealLength] = useState<number | null>(30);
+  const [mealLength, setMealLength] = useState<number>(30);
   const [mealOnClock, setMealOnClock] = useState(false);
   // Tapping the counter (anywhere but its buttons) makes it rain.
   const [rain, setRain] = useState(0);
@@ -164,6 +166,9 @@ export default function LiveWorkPay() {
   const counterNow = endingAt ?? now;
   const breaks = session?.breaks ?? [];
   const lunch = openBreak(breaks);
+  // A meal off the clock you're on now, entered with its length: the counter
+  // holds until it's over.
+  const onMeal = !lunch ? mealNow(breaks, counterNow) : undefined;
   const elapsedMs = session ? workedMs(startedAt, counterNow, breaks) : 0;
   const liveEnd = workEnd(breaks, counterNow);
   // Priced on what has actually happened: the clocked span with the lunches
@@ -253,19 +258,22 @@ export default function LiveWorkPay() {
     return { ...current, breaks: done };
   });
 
+  // Ending the day is picking when it ended, on a slider like the meal's:
+  // nothing to type, so no keyboard comes up over it. The hours follow.
   const beginEndDay = () => {
     const endedAt = Date.now();
+    setEndingLatest(endedAt);
     setEndingAt(endedAt);
-    setConfirmedHours((workedMs(actualClockInAt, endedAt, breaks) / 3_600_000).toFixed(2));
   };
 
   const endedAtWork = endingAt !== null ? workEnd(breaks, endingAt) : null;
   const lunchTakenMs = endedAtWork !== null ? lunchMs(actualClockInAt, endedAtWork, breaks) : 0;
+  const endingWorkedMs = endingAt !== null ? workedMs(actualClockInAt, endingAt, breaks) : 0;
 
   const confirmEndDay = async () => {
     if (!activeJob || endingAt === null || endedAtWork === null) return;
-    const hours = Number(confirmedHours);
-    if (!Number.isFinite(hours) || hours <= 0) return;
+    const hours = endingWorkedMs / 3_600_000;
+    if (!(hours > 0)) return;
     const day = liveDay(actualClockInAt, endingAt, breaks);
     const calls = day.text;
     await updateJob(activeJob.id, {
@@ -304,7 +312,9 @@ export default function LiveWorkPay() {
                   ? lunch.onClock
                     ? `On a meal since ${clockTime(lunch.start)} · on the clock, still paid`
                     : `On a meal since ${clockTime(lunch.start)} · paused, off the clock`
-                  : `Started ${clockTime(startedAt)}${lunchMs(startedAt, liveEnd, breaks) > 0 ? ` · ${elapsedLabel(lunchMs(startedAt, liveEnd, breaks))} meal off the clock` : ''}${breaks.some(x => x.onClock) ? ' · meal on the clock, paid' : ''} · estimated gross`}
+                  : onMeal?.end
+                    ? `On a meal ${clockTime(onMeal.start)} to ${clockTime(onMeal.end)} · paused, off the clock`
+                    : `Started ${clockTime(startedAt)}${lunchMs(startedAt, liveEnd, breaks) > 0 ? ` · ${elapsedLabel(lunchMs(startedAt, liveEnd, breaks))} meal off the clock` : ''}${breaks.some(x => x.onClock) ? ' · meal on the clock, paid' : ''} · estimated gross`}
               </p>
             </div>
           </div>
@@ -387,7 +397,7 @@ export default function LiveWorkPay() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Meal</DialogTitle>
-              <DialogDescription>Slide to when it started, then pick how long, and whether it was paid.</DialogDescription>
+              <DialogDescription>Slide to when it started, pick how long and whether it was paid, then save it.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
@@ -406,11 +416,11 @@ export default function LiveWorkPay() {
                   <span>now</span>
                 </div>
               </div>
-              <div className="grid grid-cols-4 gap-2">
-                {[...MEAL_LENGTHS, null].map(m => (
-                  <button key={m ?? 'going'} type="button" onClick={() => setMealLength(m)} aria-pressed={mealLength === m}
+              <div className="grid grid-cols-3 gap-2">
+                {MEAL_LENGTHS.map(m => (
+                  <button key={m} type="button" onClick={() => setMealLength(m)} aria-pressed={mealLength === m}
                     className={cn('pixel-button py-2 text-xs font-bold', mealLength === m ? 'pick-on' : 'pick-off')}>
-                    {m === null ? 'Still on it' : m === 60 ? '1 hr' : `${m} min`}
+                    {m === 60 ? '1 hr' : `${m} min`}
                   </button>
                 ))}
               </div>
@@ -427,12 +437,8 @@ export default function LiveWorkPay() {
                   {mealOnClock ? 'Paid: counts as worked, nothing comes off.' : 'Not paid: it comes off your hours.'}
                 </p>
               </div>
-              <p className="text-center text-xs text-muted-foreground">
-                {mealLength === null
-                  ? mealOnClock
-                    ? `From ${clockTime(mealStart)}, on the clock: the counter keeps going.`
-                    : `From ${clockTime(mealStart)}: the counter pauses until you tap Back from meal.`
-                  : `${clockTime(mealStart)} to ${clockTime(mealStart + mealLength * 60_000)}`}
+              <p className="text-center text-xs text-muted-foreground" data-testid="meal-span">
+                {clockTime(mealStart)} to {clockTime(mealStart + mealLength * 60_000)}
               </p>
               {breaks.length > 0 && (
                 <div className="space-y-1 border-t border-border pt-2">
@@ -455,31 +461,38 @@ export default function LiveWorkPay() {
       </Dialog>
 
       <Dialog open={endingAt !== null} onOpenChange={open => { if (!open) setEndingAt(null); }}>
-        {activeJob && (
-          <DialogContent>
+        {activeJob && endingAt !== null && (
+          // Nothing takes focus on opening, so the phone doesn't pop a keyboard.
+          <DialogContent onOpenAutoFocus={e => e.preventDefault()}>
             <DialogHeader>
-              <DialogTitle>End work day?</DialogTitle>
-              <DialogDescription>
-                Clocked in {clockTime(actualClockInAt)}; ending {endedAtWork !== null ? clockTime(endedAtWork) : ''}
-                {lunch && endedAtWork !== null ? ', when your meal started' : ''}.
-                {lunchTakenMs > 0 ? ` ${elapsedLabel(lunchTakenMs)} of meals is off the clock and not counted.` : ''} Confirm or adjust the hours before saving them to {activeJob.name}.
-              </DialogDescription>
+              <DialogTitle>End work day</DialogTitle>
+              <DialogDescription>Slide to when you finished, then save it to {activeJob.name}.</DialogDescription>
             </DialogHeader>
-            <label className="grid gap-1.5 text-sm" htmlFor="confirmed-work-hours">
-              Hours worked
-              <Input
-                id="confirmed-work-hours"
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={confirmedHours}
-                onChange={event => setConfirmedHours(event.target.value)}
+            <div className="space-y-2">
+              <p className="text-center font-mono text-3xl font-bold tabular-nums" data-testid="end-time">{clockTime(endingAt)}</p>
+              <Slider
+                aria-label="When you finished"
+                className="py-3"
+                min={actualClockInAt}
+                max={Math.max(actualClockInAt, endingLatest)}
+                step={5 * 60_000}
+                value={[endingAt]}
+                onValueChange={([v]) => setEndingAt(v)}
               />
-            </label>
+              <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
+                <span>{clockTime(actualClockInAt)} start</span>
+                <span>now</span>
+              </div>
+              <p className="text-center text-xs text-muted-foreground" data-testid="end-summary">
+                {elapsedLabel(endingWorkedMs)} worked
+                {lunchTakenMs > 0 ? ` · ${elapsedLabel(lunchTakenMs)} of meals off the clock` : ''}
+                {lunch && !lunch.onClock ? ` · ends ${clockTime(lunch.start)}, when your meal started` : ''}
+              </p>
+            </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEndingAt(null)}>Keep working</Button>
-              <Button type="button" onClick={() => void confirmEndDay()} disabled={!Number.isFinite(Number(confirmedHours)) || Number(confirmedHours) <= 0}>
-                Confirm hours
+              <Button type="button" onClick={() => void confirmEndDay()} disabled={!(endingWorkedMs > 0)}>
+                Save end time
               </Button>
             </DialogFooter>
           </DialogContent>

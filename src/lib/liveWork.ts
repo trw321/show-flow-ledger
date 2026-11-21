@@ -28,13 +28,22 @@ export function openBreak(breaks: WorkBreak[] = []): WorkBreak | undefined {
 }
 
 /**
- * When the work itself stopped: now, or when the current lunch began. Ending
- * the day mid-lunch ends it where the lunch started.
+ * The meal off the clock you're on right now, if any: one still going, or one
+ * entered with its length that hasn't run out yet.
+ */
+export function mealNow(breaks: WorkBreak[] = [], now: number): WorkBreak | undefined {
+  return breaks.find(b => b.start <= now && (b.end === undefined || now < b.end) && !b.onClock);
+}
+
+/**
+ * When the work itself stopped: now, or when the meal you're on began. Ending
+ * the day mid-meal ends it where the meal started. Without this, a meal entered
+ * with its length was paid while it was going (the span ran on to now with no
+ * gap in it yet) and only came off once it was over.
  */
 export function workEnd(breaks: WorkBreak[] = [], now: number): number {
   // A meal on the clock is paid, so the clock keeps running through it.
-  const open = openBreak(breaks);
-  return open && !open.onClock ? open.start : now;
+  return mealNow(breaks, now)?.start ?? now;
 }
 
 /** Finished lunches, each a minute or more, inside the working span. */
