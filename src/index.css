@@ -310,19 +310,6 @@
     .premium-7 { animation: none; }
   }
 
-  /* A job's outline on a calendar day: candy stripes of the job's colour and
-     its status colour. Stripes painted on a background and cut down to a
-     ring with a mask, since a border can't be striped and follow the corners. */
-  .project-ring {
-    position: absolute;
-    pointer-events: none;
-    padding: 2px;
-    background: repeating-linear-gradient(135deg, var(--ring-job) 0 4px, var(--ring-status) 4px 8px);
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
-  }
-
   /* A chosen option. Not the gel's primary: surfaces are tinted with the
      gel's own hue, so a primary highlight on a primary-tinted card barely
      showed. The warm white of the text stands off every gel. */

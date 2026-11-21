@@ -58,13 +58,19 @@ export default function CalendarKey({ month, plans, states }: {
         <ul className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-mono text-white">
           <li className="col-span-2 flex items-center gap-2">
             <span className="flex gap-1" aria-hidden>
-              {[['hsl(178 85% 55%)', 'paid'], ['hsl(308 85% 62%)', 'pending'], ['hsl(0 0% 94%)', 'upcoming']].map(([colour, status]) => (
-                <span key={status} className="relative inline-block h-4 w-4">
-                  <span className="project-ring inset-0 rounded" style={{ '--ring-job': colour, '--ring-status': `hsl(var(--dot-${status}))` } as React.CSSProperties} />
-                </span>
+              {['paid', 'pending', 'upcoming'].map(status => (
+                <span key={status} className="inline-block h-4 w-4 rounded border-2" style={{ borderColor: `hsl(var(--dot-${status}))` }} />
               ))}
             </span>
-            a job's colour, striped with its status
+            edge: where it stands
+          </li>
+          <li className="col-span-2 flex items-center gap-2">
+            <span className="flex gap-1" aria-hidden>
+              {['178 85% 55%', '308 85% 62%', '75 85% 55%'].map(colour => (
+                <span key={colour} className="inline-block h-4 w-4 rounded" style={{ background: `hsl(${colour} / 0.3)` }} />
+              ))}
+            </span>
+            fill: one colour per job
           </li>
           <li className="flex items-center gap-1">
             <Phone size={11} className="text-destructive fill-destructive" aria-hidden /> callback

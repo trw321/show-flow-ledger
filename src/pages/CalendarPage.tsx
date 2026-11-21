@@ -215,15 +215,21 @@ function planColor(title: string): string {
 }
 
 /**
- * A job's outline colour on the month grid. Hashed so a job keeps its colour
- * from month to month, but stepped on to a free one when another job in view
- * already has it, so two jobs side by side never share a colour. The outline
- * is striped with the shift's status colour, so these keep clear of every
+ * A job's fill colour on the month grid, as an HSL triplet. Hashed so a job
+ * keeps its colour from month to month, but stepped on to a free one when
+ * another job in view already has it, so two jobs side by side never share a
+ * colour. The day's edge is its status colour, so these keep clear of every
  * status hue (sky 205, lilac 272, green 152, amber 40) and of red (344, the
- * callback phone and cancelled). White stands in for blue, which sat too
- * close to upcoming's sky blue to tell the stripes apart.
+ * callback phone and cancelled), and white stands in for blue.
  */
-const PROJECT_COLOURS = ['hsl(178 85% 55%)', 'hsl(308 85% 62%)', 'hsl(75 85% 55%)', 'hsl(0 0% 94%)', 'hsl(112 80% 55%)', 'hsl(18 90% 60%)'];
+const PROJECT_COLOURS = ['178 85% 55%', '308 85% 62%', '75 85% 55%', '0 0% 94%', '112 80% 55%', '18 90% 60%'];
+/** A day's wash: one job's colour, or side-by-side bands when it has more. */
+function projectFill(colours: string[]): string {
+  const tints = colours.map(c => `hsl(${c} / 0.3)`);
+  if (tints.length === 1) return tints[0];
+  const band = 100 / tints.length;
+  return `linear-gradient(90deg, ${tints.map((t, i) => `${t} ${i * band}% ${(i + 1) * band}%`).join(', ')})`;
+}
 function projectColor(key: string, taken: Set<number>): string {
   let hash = 0;
   for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
@@ -2525,8 +2531,9 @@ export default function CalendarPage() {
   );
 
   // For the month grid: which shifts are callbacks (they show a red phone in
-  // place of their dot), and the colour each job of two or more days is
-  // outlined in, so a run reads as one thing across the weeks.
+  // place of their dot), and for each day with work, its jobs' fill colours
+  // (one colour per job, so a run reads as one thing across the weeks) and
+  // its status colour for the edge.
   const monthMarks = useMemo(() => {
     const shown = new Set([subMonths(currentDate, 1), currentDate, addMonths(currentDate, 1)].map(d => format(d, 'yyyy-MM')));
     const inView = (date: string) => shown.has(date.slice(0, 7));
@@ -2544,29 +2551,25 @@ export default function CalendarPage() {
       .sort((a, b) => a[1].localeCompare(b[1]) || a[0].localeCompare(b[0]))
       .forEach(([k]) => colourOf.set(k, projectColor(k, taken)));
     const callbacks = new Set<string>();
-    // Each day's jobs, grouped by job: its colour and that day's shifts on it.
-    const byDay: Record<string, Map<string, { colour: string; jobs: Job[] }>> = {};
+    const byDay: Record<string, { fills: string[]; jobs: Job[] }> = {};
     for (const j of data.jobs) {
       if (j.status === 'cancelled' || !inView(j.date)) continue;
       if (isCallback(j, data.jobs, data.employers)) callbacks.add(j.id);
-      const key = projectKeyOf.get(j.id) ?? j.id;
-      const colour = colourOf.get(key);
-      if (!colour) continue;
-      const day = (byDay[j.date] ??= new Map());
-      const entry = day.get(key) ?? { colour, jobs: [] };
-      entry.jobs.push(j);
-      day.set(key, entry);
+      const colour = colourOf.get(projectKeyOf.get(j.id) ?? j.id);
+      const day = (byDay[j.date] ??= { fills: [], jobs: [] });
+      day.jobs.push(j);
+      if (colour && !day.fills.includes(colour)) day.fills.push(colour);
     }
-    // The stripe is the status the money figure shows for those shifts:
-    // paid, needs hours, pending or upcoming.
-    const outlines: Record<string, { colour: string; status: string }[]> = {};
+    // The edge is the status the day's money figure shows: paid, needs
+    // hours, pending or upcoming.
+    const days: Record<string, { fill: string; status: string }> = {};
     for (const [date, day] of Object.entries(byDay)) {
-      outlines[date] = [...day.values()].map(({ colour, jobs }) => ({
-        colour,
-        status: `hsl(var(--${moneyTone(jobs, paidJobIds).replace('text-', '')}))`,
-      }));
+      days[date] = {
+        fill: projectFill(day.fills),
+        status: `hsl(var(--${moneyTone(day.jobs, paidJobIds).replace('text-', '')}))`,
+      };
     }
-    return { callbacks, outlines };
+    return { callbacks, days };
   }, [data.jobs, data.employers, projectKeyOf, currentDate, paidJobIds]);
 
   // ── Pay, by project ───────────────────────────────────────────────────────
@@ -3123,20 +3126,23 @@ export default function CalendarPage() {
                       onClick={() => setSelectedDate(dateKey)}
                       title={sixthSeventhStreak ? `${ordinal(sixthSeventhStreak.day)} day in a row` : "Tap to add a plan or view this day"}
                       className={cn(
-                        "relative flex flex-col items-center py-1.5 transition-colors rounded-lg mx-0.5 mb-0.5 cursor-pointer active:bg-secondary/60 hover:bg-secondary/30",
+                        "relative isolate flex flex-col items-center py-1.5 transition-colors rounded-lg mx-0.5 mb-0.5 cursor-pointer active:bg-secondary/60 hover:bg-secondary/30",
                         !isCurrentMonth && 'opacity-30',
                         todayFlag && 'bg-primary/10',
                         sixthSeventhStreak && premiumClass(sixthSeventhStreak)
                       )}
                     >
-                      {/* Each job outlines its days in its own colour, striped with
-                          where its shifts stand (the dot colours); a second job
-                          on the same day sits just inside. */}
-                      {(monthMarks.outlines[dateKey] ?? []).slice(0, 2).map(({ colour, status }, k) => (
-                        <span key={colour} className={cn('project-ring', k === 0 ? 'inset-0 rounded-lg' : 'inset-[4px] rounded-md')}
-                          style={{ '--ring-job': colour, '--ring-status': status } as React.CSSProperties}
-                          data-testid="project-outline" aria-hidden="true" />
-                      ))}
+                      {/* A day with work: a wash in its job's colour (bands when it
+                          has more than one job), behind everything else, and an
+                          edge in where it stands, the colour of its money. */}
+                      {monthMarks.days[dateKey] && (
+                        <>
+                          <span className="pointer-events-none absolute inset-0 -z-10 rounded-lg" style={{ background: monthMarks.days[dateKey].fill }}
+                            data-testid="project-fill" aria-hidden="true" />
+                          <span className="pointer-events-none absolute inset-0 rounded-lg border-2" style={{ borderColor: monthMarks.days[dateKey].status }}
+                            data-testid="status-edge" aria-hidden="true" />
+                        </>
+                      )}
                       {sixthSeventhStreak && (
                         <span className="absolute -right-0.5 -top-1.5 z-10 text-[13px] leading-none" aria-hidden="true">
                           {sixthSeventhStreak.pays >= 2 ? '🤑' : sixthSeventhStreak.pays > 1 ? '💰' : '🔥'}
