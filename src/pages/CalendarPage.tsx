@@ -4,7 +4,7 @@ import { projectSiblingsToRelabel } from '@/lib/projectGrouping';
 import StubEditor from '@/components/StubEditor';
 import MoneyRain from '@/components/MoneyRain';
 import LiveWorkPay from '@/components/LiveWorkPay';
-import PreflightButton from '@/components/PreflightButton';
+import PreampSheet from '@/components/PreampSheet';
 import { useNeedsHours } from '@/lib/useNeedsHours';
 import { useSearchParams } from 'react-router-dom';
 import { useData } from '@/lib/DataContext';
@@ -3009,8 +3009,9 @@ export default function CalendarPage() {
     >
         <LiveWorkPay />
 
-      {/* To-dos float in a corner button instead of stacking above the month. */}
-      <PreflightButton count={(jobsNeedingHours.length > 0 ? 1 : 0) + (flaggedJobs.length > 0 ? 1 : 0) + (payTier !== 'none' && oldestWaiting ? 1 : 0)}>
+      {/* To-dos live in Preamp, opened from the filament lamp, which runs red
+          hot while there are any, instead of stacking above the month. */}
+      <PreampSheet count={(jobsNeedingHours.length > 0 ? 1 : 0) + (flaggedJobs.length > 0 ? 1 : 0) + (payTier !== 'none' && oldestWaiting ? 1 : 0)}>
       {jobsNeedingHours.length > 0 && (
         <button
           onClick={() => { setSelectedDate(jobsNeedingHours[0].date); setSelectedJobId(jobsNeedingHours[0].id); }}
@@ -3071,7 +3072,7 @@ export default function CalendarPage() {
           </div>
         </button>
       )}
-      </PreflightButton>
+      </PreampSheet>
 
       <MoneyRain active={rainActive} />
       <MoneyRain burst={partyBurst} party />

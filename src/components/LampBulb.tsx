@@ -10,14 +10,16 @@ interface Props {
    *  to breathe (full-screen boot), but gets clipped and looks broken when
    *  the bulb sits in a small bounded space like a corner accent. Default true. */
   ambient?: boolean;
+  /** Something needs you: the glass and filament run red hot. */
+  hot?: boolean;
 }
 
 // The bulb + glow + filament visual shared by the one-time boot LoadingScreen
 // and the looping LampBulb ambient background — same look, different callers
 // drive `progress` differently (a one-shot ramp to 100 vs. a breathing loop).
-export default function LampBulb({ progress, size = 140, ambient = true }: Props) {
-  const color = getLampColor(progress);
-  const filColor = getLampFilamentColor(progress);
+export default function LampBulb({ progress, size = 140, ambient = true, hot = false }: Props) {
+  const color = hot ? '#ff2a12' : getLampColor(progress);
+  const filColor = hot ? (progress > 70 ? '#ff7a33' : '#e8260f') : getLampFilamentColor(progress);
   const glowSize = size * (60 + progress * 3) / 140;
   const glowOpacity = 0.05 + progress * 0.007;
   const scale = size / 140;

@@ -1,5 +1,5 @@
 import VortexCanvas from '@/components/VortexCanvas';
-import BreathingLamp from '@/components/BreathingLamp';
+import PreampLamp from '@/components/PreampLamp';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -31,7 +31,7 @@ export default function SpacePageWrapper({ title, description, action, children,
             {action && <div className="mt-2 flex flex-wrap gap-2">{action}</div>}
           </div>
           {/* On a phone the lamp is in the top header instead. */}
-          <div className="hidden md:block"><BreathingLamp /></div>
+          <div className="hidden md:block"><PreampLamp /></div>
         </div>
         {children}
       </div>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import BreathingLamp from '@/components/BreathingLamp';
+import PreampLamp from '@/components/PreampLamp';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   CalendarDays,
@@ -134,7 +134,7 @@ export default function AppLayout() {
         {/* The filament, the app's mark, centred on the header line. On a
             phone it lives here, not in each page's header, so pages start
             with their own controls. */}
-        <div className="-my-2 flex justify-center" data-testid="header-lamp"><BreathingLamp size={36} /></div>
+        <div className="-my-2 flex justify-center" data-testid="header-lamp"><PreampLamp size={36} /></div>
         <div className="flex items-center justify-end gap-1">
           <ReportProblem />
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
