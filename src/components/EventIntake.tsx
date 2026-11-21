@@ -6,6 +6,7 @@ import { Upload, Camera, PenLine, Check, X, Loader2, ArrowLeft } from 'lucide-re
 import { toast } from 'sonner';
 import type { CalendarEvent } from '@/lib/store';
 import { cn } from '@/lib/utils';
+import { aiFetch } from '@/lib/aiSwitch';
 
 type ParsedEvent = Omit<CalendarEvent, 'id' | 'createdAt'>;
 
@@ -20,7 +21,7 @@ const DAYS: { label: string; value: number }[] = [
 ];
 
 async function callAPI(url: string, key: string, body: object): Promise<Response> {
-  return fetch(url, {
+  return aiFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify(body),

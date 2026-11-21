@@ -8,6 +8,7 @@ import { Camera, Loader2, Check, ImagePlus } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Job } from '@/lib/store';
 import { getJobDedupKey } from '@/lib/jobDedup';
+import { aiFetch } from '@/lib/aiSwitch';
 
 interface ParsedJob {
   jobNumber?: string;
@@ -86,7 +87,7 @@ export default function JobPhotoImport({
       for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
       const base64 = btoa(binary);
 
-      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-job-image`, {
+      const resp = await aiFetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-job-image`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

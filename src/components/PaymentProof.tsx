@@ -18,6 +18,7 @@ import type { Income } from '@/lib/store';
 import { stubViewUrl, uploadStub } from '@/lib/stubStorage';
 import { showDay as day } from '@/lib/today';
 import { cn } from '@/lib/utils';
+import { aiFetch } from '@/lib/aiSwitch';
 
 const money = (n: number) => '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -166,7 +167,7 @@ export default function PaymentProof({ income, onClose }: { income: Income; onCl
       const ref = await uploadStub(small, user.id, `proof-${live.id}`);
       if (!ref) { toast.error("Couldn't save the photo. Try again."); return; }
       // Read it, so its amount can be checked against the payment's.
-      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-statement`, {
+      const resp = await aiFetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-statement`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
         body: JSON.stringify({ imageBase64: small.split(',')[1], mimeType: 'image/jpeg', type: 'income' }),

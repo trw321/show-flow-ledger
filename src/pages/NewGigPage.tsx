@@ -27,6 +27,7 @@ import {
 } from '@/lib/hoursMatching';
 import { useSwipe } from '@/lib/useSwipe';
 import { localToday } from '@/lib/today';
+import { aiFetch } from '@/lib/aiSwitch';
 import { parseCopyRequest } from '@/lib/copyRequest';
 import {
   type ParsedJob, splitJobRecords, expandCBRecord, expandThruNotesForBatch, isDispatchText, missingOffers,
@@ -51,7 +52,7 @@ type Step = 'input' | 'review-jobs' | 'review-hours' | 'review-events';
 type ParsedEvent = Omit<CalendarEvent, 'id' | 'createdAt'>;
 
 async function callAPI(url: string, key: string, body: object): Promise<Response> {
-  return fetch(url, {
+  return aiFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify(body),
@@ -259,10 +260,10 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
   const [isImporting, setIsImporting] = useState(false);
   const [step, setStep] = useState<Step>('input');
   const [vortexPhase, setVortexPhase] = useState<VortexPhase>('idle');
-  // From a calendar day it opens on the Job Log paste box, like everywhere
-  // else; Manual is one tap away and already set to that day. With AI off
-  // there's nothing to paste into, so it goes straight to the form.
-  const [manualOpen, setManualOpen] = useState(!!forDate && !!prefs.aiFreeMode);
+  // It opens on the Job Log paste box, from a calendar day too; Manual is one
+  // tap away and already set to that day. With AI off there's nothing to
+  // read a paste, so it opens straight on the form, from anywhere.
+  const [manualOpen, setManualOpen] = useState(!!prefs.aiFreeMode);
   const [manual, setManual] = useState<ManualEntry>(() => (forDate ? { ...EMPTY_MANUAL, date: forDate } : EMPTY_MANUAL));
   const [extraDates, setExtraDates] = useState<string[]>([]);
   const [calendarMonth, setCalendarMonth] = useState<Date>(() => (forDate ? new Date(forDate + 'T12:00:00') : new Date()));
@@ -741,7 +742,7 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
 
   const handleClear = () => {
     setText(''); setJobs([]); setSelected(new Set()); setStep('input');
-    setVortexPhase('idle'); setManualOpen(false); setManual(EMPTY_MANUAL); setExtraDates([]);
+    setVortexPhase('idle'); setManualOpen(!!prefs.aiFreeMode); setManual(EMPTY_MANUAL); setExtraDates([]);
     setHoursResults([]); setHoursAccepted(new Set()); setMealAnswers({});
     setEvents([]); setSelectedEvents(new Set());
   };
@@ -930,13 +931,16 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
           {/* Manual entry — collapsed fallback, not the primary path */}
           {manualOpen && step === 'input' && (
             <div className="flex flex-col gap-3 py-2">
-              <button
-                type="button"
-                onClick={() => setManualOpen(false)}
-                className="self-start text-[11px] text-muted-foreground hover:text-foreground/70 transition-colors"
-              >
-                ← Back to paste
-              </button>
+              {/* With AI off the paste box can't read anything, so no way back to it. */}
+              {!prefs.aiFreeMode && (
+                <button
+                  type="button"
+                  onClick={() => setManualOpen(false)}
+                  className="self-start text-[11px] text-muted-foreground hover:text-foreground/70 transition-colors"
+                >
+                  ← Back to paste
+                </button>
+              )}
 
               {/* Employer — full width, up top */}
               <div className="flex flex-col gap-1">

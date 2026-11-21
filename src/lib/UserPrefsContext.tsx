@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { prefsKeyFor } from '@/lib/store';
 import { PREFS_CHANGED_EVENT, PREFS_SYNCED_EVENT } from '@/lib/sync';
 import { stampNow } from '@/lib/ledgerDiff';
+import { setAIOff } from '@/lib/aiSwitch';
 
 // Calendar/log/reconciliation/equipment/taxes/discover/scheduling used to be
 // keys here too, but nothing in the app ever actually read those tabs (only
@@ -129,6 +130,9 @@ export function UserPrefsProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener(PREFS_SYNCED_EVENT, reload);
     return () => window.removeEventListener(PREFS_SYNCED_EVENT, reload);
   }, [userId]);
+
+  // Every AI read checks this before anything is sent (see aiSwitch).
+  useEffect(() => { setAIOff(!!prefs.aiFreeMode); }, [prefs.aiFreeMode]);
 
   const update = (next: UserPrefs) => {
     setPrefsState(next);

@@ -19,6 +19,7 @@ import { resizeImageToBase64 } from '@/lib/imageResize';
 import { alreadyRecorded, repeatsInUpload } from '@/lib/paymentRepeats';
 import StubEditor from '@/components/StubEditor';
 import { cn } from '@/lib/utils';
+import { aiFetch } from '@/lib/aiSwitch';
 
 /** Why a payment read off the image starts out left out. */
 interface LeftOut {
@@ -329,7 +330,7 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
       const blob = await (await fetch(edited)).blob();
       const { base64, mimeType } = await resizeImageToBase64(new File([blob], 'statement.jpg', { type: blob.type || 'image/jpeg' }));
 
-      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-statement`, {
+      const resp = await aiFetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-statement`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

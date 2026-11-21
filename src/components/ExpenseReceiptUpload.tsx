@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Upload, Loader2, Check, X, FileImage } from 'lucide-react';
 import { toast } from 'sonner';
+import { aiFetch } from '@/lib/aiSwitch';
 
 const categories = [
   'Travel', 'Gear Rental', 'Consumables', 'Fuel', 'Meals', 'Lodging',
@@ -54,7 +55,7 @@ export default function ExpenseReceiptUpload({ externalOpen, onExternalOpenChang
     const base64 = btoa(binary);
 
     try {
-      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-statement`, {
+      const resp = await aiFetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-statement`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

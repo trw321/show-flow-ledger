@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Upload, Loader2, Check, X, FileImage } from 'lucide-react';
 import { toast } from 'sonner';
+import { aiFetch } from '@/lib/aiSwitch';
 
 interface ParsedTransaction {
   description: string;
@@ -55,7 +56,7 @@ export default function StatementUpload({ externalOpen, onExternalOpenChange }: 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-      const resp = await fetch(`${supabaseUrl}/functions/v1/parse-statement`, {
+      const resp = await aiFetch(`${supabaseUrl}/functions/v1/parse-statement`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

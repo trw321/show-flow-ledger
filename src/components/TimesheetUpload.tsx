@@ -6,6 +6,7 @@ import { Upload, Loader2, Check, X, FileImage, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { getJobDedupKey } from '@/lib/jobDedup';
 import type { Job } from '@/lib/store';
+import { aiFetch } from '@/lib/aiSwitch';
 
 interface ParsedTimeEntry {
   date: string;
@@ -50,7 +51,7 @@ export default function TimesheetUpload() {
     const base64 = btoa(binary);
 
     try {
-      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-statement`, {
+      const resp = await aiFetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-statement`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
