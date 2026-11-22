@@ -55,6 +55,7 @@ import NewGigPage from '@/pages/NewGigPage';
 import { localToday, showDay } from '@/lib/today';
 import { shortCall } from '@/lib/shortCall';
 import { weekSpans, type DayProject } from '@/lib/projectSpans';
+import { EMPLOYER_COLOURS, employerColours, employerId } from '@/lib/employerColours';
 import { ptoBalance } from '@/lib/pto';
 import { aiFetch } from '@/lib/aiSwitch';
 import { roundHours } from '@/lib/hoursFormat';
@@ -75,7 +76,7 @@ const SPAN_ROW = 13;
 
 /** The line either side of a name across a project's days, with a tick at a closed end. */
 function SpanRule({ cap, side }: { cap: boolean; side: 'left' | 'right' }) {
-  // In the name's own colour: the key's, for where the project stands.
+  // In the name's own colour: the employer's.
   return (
     <span className="relative h-2 min-w-[6px] flex-1">
       <span className="absolute inset-x-0 top-1/2 h-px bg-current opacity-70" />
@@ -2916,6 +2917,34 @@ export default function CalendarPage() {
     return result;
   }, [monthDays]);
 
+  // Each employer's own colour on the grid (see employerColours): handed out
+  // in the order you first worked for them, so a regular keeps theirs.
+  const employerColourOf = useMemo(() => {
+    const workedFor = (j: Job) => (j.status === 'cancelled' ? undefined : projectNameOf.get(projectKeyOf.get(j.id) ?? j.id));
+    const order = [...data.jobs].sort((a, b) => a.date.localeCompare(b.date)).map(workedFor).filter((n): n is string => !!n);
+    const shown = weeks.flat().flatMap(d => (jobsByDate[format(d, 'yyyy-MM-dd')] ?? []).map(workedFor)).filter((n): n is string => !!n);
+    return employerColours(order, shown);
+  }, [data.jobs, weeks, jobsByDate, projectNameOf, projectKeyOf]);
+  const employerColour = (name: string) => `hsl(${employerColourOf.get(employerId(name)) ?? EMPLOYER_COLOURS[0]})`;
+
+  // The month's employers, for the key: each one, its colour, and its days.
+  const monthEmployers = useMemo(() => {
+    const prefix = format(currentDate, 'yyyy-MM');
+    const days = new Map<string, { title: string; days: Set<number> }>();
+    for (const j of data.jobs) {
+      if (j.status === 'cancelled' || !j.date?.startsWith(prefix)) continue;
+      const name = projectNameOf.get(projectKeyOf.get(j.id) ?? j.id);
+      if (!name) continue;
+      const id = employerId(name);
+      const entry = days.get(id) ?? { title: name, days: new Set<number>() };
+      entry.days.add(Number(j.date.slice(8)));
+      days.set(id, entry);
+    }
+    return [...days.entries()]
+      .map(([id, { title, days: on }]) => ({ title, color: `hsl(${employerColourOf.get(id) ?? EMPLOYER_COLOURS[0]})`, days: [...on].sort((a, b) => a - b) }))
+      .sort((a, b) => a.days[0] - b.days[0] || a.title.localeCompare(b.title));
+  }, [data.jobs, currentDate, projectNameOf, projectKeyOf, employerColourOf]);
+
   const yearStats = useMemo(() => {
     const prefix = `${currentYear}-`;
     let totalJobs = 0, totalHours = 0, totalPay = 0;
@@ -3091,7 +3120,7 @@ export default function CalendarPage() {
             </button>
           ))}
         </div>
-        {viewMode === 'month' && <CalendarKey month={format(currentDate, 'MMMM')} plans={monthPlans} states={SHIFT_STATES} />}
+        {viewMode === 'month' && <CalendarKey month={format(currentDate, 'MMMM')} employers={monthEmployers} plans={monthPlans} states={SHIFT_STATES} />}
       </div>
 
       <div className="flex items-stretch justify-between mb-3 gap-2">
@@ -3138,13 +3167,12 @@ export default function CalendarPage() {
                   const multi = span.to > span.from;
                   // A one-day name gets the whole column: on a small phone it's ~40px.
                   const inset = (open: boolean) => (open || !multi ? 0 : 3);
-                  // The key's colour for these days of it, the same as their money.
-                  const runJobs = week.slice(span.from, span.to + 1).flatMap(d =>
-                    (jobsByDate[format(d, 'yyyy-MM-dd')] ?? []).filter(j => j.status !== 'cancelled' && projectGroupKey(j) === span.key));
                   return (
                     <span key={span.key + span.from} data-testid="project-span" aria-hidden="true"
-                      className={cn("pointer-events-none absolute z-[5] flex items-center justify-center gap-1", moneyTone(runJobs, paidJobIds))}
+                      className="pointer-events-none absolute z-[5] flex items-center justify-center gap-1"
                       style={{
+                        // The employer's own colour, listed in the key.
+                        color: employerColour(span.name),
                         left: `calc(${(span.from / 7) * 100}% + ${inset(span.openLeft)}px)`,
                         width: `calc(${((span.to - span.from + 1) / 7) * 100}% - ${inset(span.openLeft) + inset(span.openRight)}px)`,
                         // Under the date: 6px of padding and the 24px number, row 0 on top.
