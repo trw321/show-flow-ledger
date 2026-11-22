@@ -45,7 +45,7 @@ export default function CalendarKey({ month, plans, states }: {
           </ul>
         )}
 
-        <p className="font-8bit mt-3 text-[7px] uppercase text-white/60">Shifts · the colour of the money</p>
+        <p className="font-8bit mt-3 text-[7px] uppercase text-white/60">Shifts · the colour of the money and employer</p>
         <ul className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-1">
           {states.map(s => (
             <li key={s.label} className="flex items-center gap-2 text-[11px] text-mono text-white">
@@ -58,6 +58,10 @@ export default function CalendarKey({ month, plans, states }: {
 
         <p className="font-8bit mt-3 text-[7px] uppercase text-white/60">Marks</p>
         <ul className="mt-1.5 space-y-1 text-[11px] text-mono text-white">
+          <li className="flex items-center gap-2">
+            <span className="shrink-0 font-bold text-dot-pending" aria-hidden>├ Odeum ┤</span>
+            employer, across its days
+          </li>
           <li className="flex items-center gap-2">
             <span className="w-9 shrink-0 text-right font-bold" style={{ color: `hsl(${CONFERENCE_COLOUR})` }} aria-hidden>19</span>
             gold date: a conference
