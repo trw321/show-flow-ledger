@@ -54,6 +54,7 @@ import EventIntake from '@/components/EventIntake';
 import NewGigPage from '@/pages/NewGigPage';
 import { localToday, showDay } from '@/lib/today';
 import { shortCall } from '@/lib/shortCall';
+import { weekSpans, type DayProject } from '@/lib/projectSpans';
 import { ptoBalance } from '@/lib/pto';
 import { aiFetch } from '@/lib/aiSwitch';
 import { roundHours } from '@/lib/hoursFormat';
@@ -68,6 +69,19 @@ export const SHIFT_STATES = [
 
 /** A day's pay, short enough for a calendar square: "$475", "$1.4k". */
 const shortDollars = (n: number) => (n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n.toFixed(0)}`);
+
+/** One row of employer names under a week's days, in px. */
+const SPAN_ROW = 13;
+
+/** The line either side of a name across a project's days, with a tick at a closed end. */
+function SpanRule({ cap, side }: { cap: boolean; side: 'left' | 'right' }) {
+  return (
+    <span className="relative h-2 min-w-[6px] flex-1">
+      <span className="absolute inset-x-0 top-1/2 h-px bg-muted-foreground/50" />
+      {cap && <span className={cn('absolute inset-y-0 w-px bg-muted-foreground/50', side === 'left' ? 'left-0' : 'right-0')} />}
+    </span>
+  );
+}
 
 /** Money that came in: "$450", or "$300.50" when there are cents. Never "$300.5". */
 const dollars = (n: number) =>
@@ -2508,6 +2522,38 @@ export default function CalendarPage() {
   const projectKeyOf = useMemo(() => projectKeysFor(data.jobs, data.employers), [data.jobs, data.employers]);
   const projectGroupKey = (j: Job) => projectKeyOf.get(j.id) ?? j.id;
 
+  // Who each project is for, by the employer's own name where the client
+  // matches one: the label across its days on the month grid.
+  const projectNameOf = useMemo(() => {
+    const names = new Map<string, string>();
+    const byDate = [...data.jobs].sort((a, b) => a.date.localeCompare(b.date));
+    for (const j of byDate) {
+      const key = projectKeyOf.get(j.id) ?? j.id;
+      const client = j.client?.trim();
+      if (names.has(key) || !client) continue;
+      names.set(key, resolveEmployer(client, data.employers)?.name ?? client);
+    }
+    // No client anywhere on it: its own name.
+    for (const j of byDate) {
+      const key = projectKeyOf.get(j.id) ?? j.id;
+      if (!names.has(key) && j.name?.trim()) names.set(key, j.name.trim());
+    }
+    return names;
+  }, [data.jobs, data.employers, projectKeyOf]);
+
+  /** The projects worked on a day, for the labels across the week. */
+  const projectsOn = (day: Date): DayProject[] => {
+    const seen = new Map<string, DayProject>();
+    for (const j of jobsByDate[format(day, 'yyyy-MM-dd')] ?? []) {
+      if (j.status === 'cancelled') continue;
+      const key = projectGroupKey(j);
+      const name = projectNameOf.get(key);
+      if (name && !seen.has(key)) seen.set(key, { key, name });
+    }
+    return [...seen.values()];
+  };
+  const spansFor = (week: Date[]) => weekSpans([addDays(week[0], -1), ...week, addDays(week[6], 1)].map(projectsOn));
+
   // Paid shifts: see paidShiftIds. It says how a payment reaches past the day
   // it was put on, and how a project split across pay periods is paid by piece.
   const paidJobIds = useMemo(
@@ -3080,8 +3126,31 @@ export default function CalendarPage() {
               ))}
             </div>
           </div>
-          {weeks.map((week, wi) => (
+          {weeks.map((week, wi) => {
+            // Each project's employer, once across its days in this row.
+            const { spans, levels } = spansFor(week);
+            return (
             <div key={wi} className="relative grid grid-cols-7">
+                {spans.map(span => {
+                  const multi = span.to > span.from;
+                  // A one-day name gets the whole column: on a small phone it's ~40px.
+                  const inset = (open: boolean) => (open || !multi ? 0 : 3);
+                  return (
+                    <span key={span.key + span.from} data-testid="project-span" aria-hidden="true"
+                      className="pointer-events-none absolute z-[5] flex items-center justify-center gap-1"
+                      style={{
+                        left: `calc(${(span.from / 7) * 100}% + ${inset(span.openLeft)}px)`,
+                        width: `calc(${((span.to - span.from + 1) / 7) * 100}% - ${inset(span.openLeft) + inset(span.openRight)}px)`,
+                        // Row 0 on top; cells keep 8px of margin and padding below.
+                        bottom: 8 + (levels - 1 - span.level) * SPAN_ROW,
+                        height: SPAN_ROW,
+                      }}>
+                      {multi && <SpanRule cap={!span.openLeft} side="left" />}
+                      <span className="min-w-0 truncate text-[10px] leading-none text-foreground/70">{span.name}</span>
+                      {multi && <SpanRule cap={!span.openRight} side="right" />}
+                    </span>
+                  );
+                })}
                 {week.map((day, i) => {
                   const dateKey = format(day, 'yyyy-MM-dd');
                   const dayJobs = jobsByDate[dateKey] || [];
@@ -3135,6 +3204,8 @@ export default function CalendarPage() {
                           {hasPay ? shortDollars(payByDate[dateKey]) : shortCall(liveJobs[0].startTime) || 'call'}
                         </span>
                       )}
+                      {/* Room for the employer names drawn across the row. */}
+                      {levels > 0 && <span aria-hidden="true" className="block shrink-0" style={{ height: levels * SPAN_ROW + 2 }} />}
                       {/* Plans underline the cell instead of taking a dot in the
                           job row — a recurring one then reads as a stripe down
                           the month, which a dot never did. */}
@@ -3149,7 +3220,8 @@ export default function CalendarPage() {
                   );
                 })}
             </div>
-          ))}
+            );
+          })}
           <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1" data-testid="money-key">
             {SHIFT_STATES.map(({ text, label }) => (
               <span key={label} className={cn('text-[10px] text-mono font-semibold uppercase tracking-wider', text)}>{label}</span>
