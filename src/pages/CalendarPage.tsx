@@ -11,7 +11,7 @@ import { useData } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
   AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
@@ -71,21 +71,10 @@ export const SHIFT_STATES = [
 /** A day's pay, short enough for a calendar square: "$475", "$1.4k". */
 const shortDollars = (n: number) => (n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n.toFixed(0)}`);
 
-/** One row of employer names across the top of a week's days, in px. */
-const SPAN_ROW = 13;
+/** One row of project bars across the top of a week's days, in px: also how tall a bar is to tap. */
+const SPAN_ROW = 12;
 /** The 6th/7th-day banner at the very top of a square, in px. */
 const BANNER_ROW = 12;
-
-/** The line either side of a name across a project's days, with a tick at a closed end. */
-function SpanRule({ cap, side }: { cap: boolean; side: 'left' | 'right' }) {
-  // In the name's own colour: the employer's.
-  return (
-    <span className="relative h-2 min-w-[6px] flex-1">
-      <span className="absolute inset-x-0 top-1/2 h-px bg-current opacity-80 shadow-[0_0_4px_currentColor]" />
-      {cap && <span className={cn('absolute inset-y-0 w-px bg-current opacity-80 shadow-[0_0_4px_currentColor]', side === 'left' ? 'left-0' : 'right-0')} />}
-    </span>
-  );
-}
 
 /** Money that came in: "$450", or "$300.50" when there are cents. Never "$300.5". */
 const dollars = (n: number) =>
@@ -2677,6 +2666,8 @@ export default function CalendarPage() {
     .map(c => ({ c, next: nextShow(c, localToday()) }))
     .filter(x => x.next)
     .sort((a, b) => startOf(a.next!).localeCompare(startOf(b.next!)))[0]?.c, [conferences]);
+  /** The project whose days are listed, from a tap on its bar on the month. */
+  const [projectShown, setProjectShown] = useState<string | null>(null);
   const [conferencesOpen, setConferencesOpen] = useState(false);
   const [conferenceId, setConferenceId] = useState<string | null>(null);
   const openConferences = (id: string | null = null) => { setConferenceId(id); setConferencesOpen(true); };
@@ -3172,26 +3163,29 @@ export default function CalendarPage() {
             return (
             // A faint line between weeks, and between days, so each square reads as one.
             <div key={wi} className="neon-week relative grid grid-cols-7">
+                {/* Each project: a bar in its employer's colour across its
+                    days, no words. Tapped, it lists the project's days. */}
                 {spans.map(span => {
                   const multi = span.to > span.from;
-                  // A one-day name gets the whole column: on a small phone it's ~40px.
-                  const inset = (open: boolean) => (open || !multi ? 0 : 3);
+                  // A closed end stops short of the line between days; a
+                  // one-day bar is a dash in the middle of its square.
+                  const inset = (open: boolean) => (open ? 0 : multi ? 4 : 10);
+                  const colour = employerColour(span.name);
                   return (
-                    <span key={span.key + span.from} data-testid="project-span" aria-hidden="true"
-                      className="pointer-events-none absolute z-[5] flex items-center justify-center gap-1"
+                    <button key={span.key + span.from} type="button" data-testid="project-span"
+                      aria-label={`${span.name}: show this project's days`}
+                      onClick={() => setProjectShown(span.key)}
+                      className="absolute z-[5] flex items-center"
                       style={{
-                        // The employer's own colour, listed in the key.
-                        color: employerColour(span.name),
                         left: `calc(${(span.from / 7) * 100}% + ${inset(span.openLeft)}px)`,
                         width: `calc(${((span.to - span.from + 1) / 7) * 100}% - ${inset(span.openLeft) + inset(span.openRight)}px)`,
                         // At the top: under 6px of padding and any banner, row 0 first.
                         top: 6 + banner + span.level * SPAN_ROW,
                         height: SPAN_ROW,
                       }}>
-                      {multi && <SpanRule cap={!span.openLeft} side="left" />}
-                      <span className="neon-soft min-w-0 truncate text-[10px] font-bold leading-none">{span.name}</span>
-                      {multi && <SpanRule cap={!span.openRight} side="right" />}
-                    </span>
+                      <span className={cn('h-1 w-full', !span.openLeft && 'rounded-l-full', !span.openRight && 'rounded-r-full')}
+                        style={{ background: colour, boxShadow: `0 0 6px ${colour}` }} />
+                    </button>
                   );
                 })}
                 {week.map((day, i) => {
@@ -3233,7 +3227,7 @@ export default function CalendarPage() {
                           )}
                         </span>
                       )}
-                      {/* Room for the employer names drawn across the top. */}
+                      {/* Room for the project bars drawn across the top. */}
                       <span aria-hidden="true" className="block shrink-0" style={{ height: nameRows * SPAN_ROW + 1 }} />
                       {todayFlag ? (
                         <span className="relative w-6 h-6 flex items-center justify-center">
@@ -3684,6 +3678,67 @@ export default function CalendarPage() {
       </Dialog>
 
       <ConferenceList open={conferencesOpen} onOpenChange={setConferencesOpen} editId={conferenceId} />
+
+      {/* A project's bar tapped on the month: its days, each a tap from its shift. */}
+      <Dialog open={!!projectShown} onOpenChange={open => { if (!open) setProjectShown(null); }}>
+        <DialogContent className="max-w-sm max-h-[85vh] overflow-y-auto rounded-lg" data-testid="project-days">
+          {projectShown && (() => {
+            const days = data.jobs
+              .filter(j => j.status !== 'cancelled' && projectGroupKey(j) === projectShown)
+              .sort((a, b) => (a.date === b.date ? compareCalls(a, b) : a.date.localeCompare(b.date)));
+            if (days.length === 0) return null;
+            const name = projectNameOf.get(projectShown) ?? days[0].client;
+            const colour = employerColour(name);
+            const first = days[0].date;
+            const last = days[days.length - 1].date;
+            const dayCount = new Set(days.map(j => j.date)).size;
+            const span = first === last ? showDay(first)
+              : first.slice(0, 7) === last.slice(0, 7) ? `${showDay(first)}–${showDay(last, 'd')}`
+              : `${showDay(first)} – ${showDay(last)}`;
+            const total = days.reduce((sum, j) => sum + shownPay(j), 0);
+            return (
+              <>
+                <DialogHeader className="text-left">
+                  <DialogTitle className="flex items-center gap-2">
+                    <span className="h-1 w-6 shrink-0 rounded-full" style={{ background: colour, boxShadow: `0 0 6px ${colour}` }} aria-hidden="true" />
+                    <span className="truncate" style={{ color: colour }}>{name}</span>
+                  </DialogTitle>
+                  <DialogDescription>
+                    {days[0].name ? `${days[0].name} · ` : ''}{span} · {dayCount} day{dayCount === 1 ? '' : 's'}
+                    {total > 0 && <> · <span className={cn('font-semibold', moneyTone(days, paidJobIds))}>${Math.round(total).toLocaleString()}</span> est. {payView}</>}
+                  </DialogDescription>
+                </DialogHeader>
+                <ul className="divide-y divide-border/60 border border-border">
+                  {days.map(job => {
+                    const pay = shownPay(job);
+                    return (
+                      <li key={job.id}>
+                        <button type="button" data-testid="project-day" onClick={() => { setProjectShown(null); openShift(job); }}
+                          className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-secondary/40 active:bg-secondary/60">
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center gap-1.5 text-sm font-medium">
+                              <CallbackMark job={job} allJobs={data.jobs} employers={data.employers} />
+                              {showDay(job.date, 'EEE, MMM d')}
+                              <SplitMark job={job} allJobs={data.jobs} />
+                            </span>
+                            <span className="block truncate text-[11px] text-muted-foreground">
+                              {job.startTime ? `${job.startTime}${job.endTime ? ` – ${job.endTime}` : ''}` : 'No call time'}{job.role ? ` · ${job.role}` : ''}
+                            </span>
+                          </span>
+                          <span className={cn('shrink-0 text-sm text-mono font-semibold', moneyTone([job], paidJobIds))}>
+                            {pay > 0 ? `$${Math.round(pay).toLocaleString()}` : isOverdueUpcoming(job) ? 'needs hours' : statusLabel[job.status]}
+                          </span>
+                          <ChevronRight size={16} className="shrink-0 text-muted-foreground" aria-hidden="true" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
 
       {/* Standalone quick-add — no swipe handlers, no existing-jobs list,
           just the intake box, so a stray touch can't get read as a day-swipe

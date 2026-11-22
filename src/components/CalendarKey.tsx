@@ -39,12 +39,15 @@ export default function CalendarKey({ month, employers, plans, states }: {
           <ul className="mt-1.5 space-y-1.5" data-testid="key-employers">
             {employers.map(e => (
               <li key={e.title} className="flex items-center gap-2 text-[11px] text-mono">
-                <span className="min-w-0 flex-1 truncate font-bold" style={{ color: e.color }}>├ {e.title} ┤</span>
+                <span className="h-1 w-6 shrink-0 rounded-full" style={{ background: e.color, boxShadow: `0 0 5px ${e.color}` }} aria-hidden />
+                <span className="min-w-0 flex-1 truncate font-bold" style={{ color: e.color }}>{e.title}</span>
                 <span className="shrink-0 text-white/60">{e.days.length > 5 ? `${e.days.length} days` : e.days.join(' ')}</span>
               </li>
             ))}
           </ul>
         )}
+
+        {employers.length > 0 && <p className="mt-1.5 text-[10px] text-mono text-white/60">Tap a bar on the month for that project's days.</p>}
 
         <p className="font-8bit mt-3 text-[7px] uppercase text-white/60">Plans · {month}</p>
         {plans.length === 0 ? (
