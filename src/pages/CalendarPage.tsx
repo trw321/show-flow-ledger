@@ -4,7 +4,7 @@ import { projectSiblingsToRelabel } from '@/lib/projectGrouping';
 import StubEditor from '@/components/StubEditor';
 import MoneyRain from '@/components/MoneyRain';
 import LiveWorkPay from '@/components/LiveWorkPay';
-import PreampSheet from '@/components/PreampSheet';
+import PreampSheet, { PreampGroup } from '@/components/PreampSheet';
 import { useNeedsHours } from '@/lib/useNeedsHours';
 import { useSearchParams } from 'react-router-dom';
 import { useData } from '@/lib/DataContext';
@@ -2676,7 +2676,10 @@ export default function CalendarPage() {
   const oldestWaiting = waitingOnPay[0];
   const daysPastDue = oldestWaiting ? differenceInCalendarDays(new Date(), parseISO(oldestWaiting.due)) : 0;
   const payTier: PayTimingTier = oldestWaiting ? payTimingTier(daysPastDue) : 'none';
-  const overdueCount = waitingOnPay.filter(w => w.due <= localToday()).length;
+  const overdueWaiting = waitingOnPay.filter(w => w.due <= localToday());
+  const overdueCount = overdueWaiting.length;
+  /** Opens one shift from a to-do. */
+  const openShift = (job: Job) => { setSelectedDate(job.date); setSelectedJobId(job.id); };
   const totalWaiting = waitingOnPay.reduce((sum, w) => sum + w.expected, 0);
 
   // The month's plans, for the key: each one, its colour, and its days.
@@ -3012,64 +3015,67 @@ export default function CalendarPage() {
           hot while there are any, instead of stacking above the month. */}
       <PreampSheet count={(jobsNeedingHours.length > 0 ? 1 : 0) + (flaggedJobs.length > 0 ? 1 : 0) + (payTier !== 'none' && oldestWaiting ? 1 : 0)}>
       {jobsNeedingHours.length > 0 && (
-        <button
-          onClick={() => { setSelectedDate(jobsNeedingHours[0].date); setSelectedJobId(jobsNeedingHours[0].id); }}
-          className="pixel-button w-full mb-3 flex items-center gap-3 border-accent/60 bg-accent/10 px-3 py-2.5 text-left"
-        >
-          <Zap size={18} className="text-accent shrink-0" />
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-accent">
-              Log hours{jobsNeedingHours.length > 1 ? ` — ${jobsNeedingHours.length} shifts` : ''}
-            </p>
-            <p className="text-xs font-body mt-0.5 text-muted-foreground truncate">
-              {jobsNeedingHours[0].name} · {oldestDays === 0 ? 'today' : `${oldestDays}d ago`}
-            </p>
-          </div>
-        </button>
+        <PreampGroup
+          testId="preamp-hours"
+          icon={<Zap size={18} className="text-accent shrink-0" />}
+          title={`Log hours${jobsNeedingHours.length > 1 ? ` — ${jobsNeedingHours.length} shifts` : ''}`}
+          summary={`${jobsNeedingHours[0].name} · ${oldestDays === 0 ? 'today' : `${oldestDays}d ago`}`}
+          tone="border-accent/60 bg-accent/10" titleTone="text-accent"
+          items={jobsNeedingHours.map(job => {
+            const ago = differenceInCalendarDays(new Date(), parseISO(job.date));
+            return {
+              key: job.id,
+              title: job.name,
+              detail: `${format(parseISO(job.date), 'EEE, MMM d')}${job.client ? ` · ${job.client}` : ''}`,
+              aside: ago <= 0 ? 'today' : `${ago}d ago`,
+              open: () => openShift(job),
+            };
+          })}
+        />
       )}
 
       {/* "Check this one later" used to set a flag nothing else ever showed.
-          This is where it comes back: the oldest flagged shift, one tap away,
-          until the box is unticked. */}
+          This is where it comes back, every flagged shift a tap away, until
+          the box is unticked. */}
       {flaggedJobs.length > 0 && (
-        <button
-          onClick={() => { setSelectedDate(flaggedJobs[0].date); setSelectedJobId(flaggedJobs[0].id); }}
-          className="pixel-button w-full mb-3 flex items-center gap-3 border-warning/60 bg-warning/10 px-3 py-2.5 text-left"
-        >
-          <Flag size={18} className="text-warning shrink-0" aria-hidden />
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-warning">
-              Check later{flaggedJobs.length > 1 ? ` — ${flaggedJobs.length} shifts` : ''}
-            </p>
-            <p className="text-xs font-body mt-0.5 text-muted-foreground truncate">
-              {flaggedJobs[0].name} · {format(new Date(flaggedJobs[0].date + 'T12:00:00'), 'MMM d')} — {reviewReason(flaggedJobs[0]).text}
-            </p>
-          </div>
-        </button>
+        <PreampGroup
+          testId="preamp-flagged"
+          icon={<Flag size={18} className="text-warning shrink-0" aria-hidden />}
+          title={`Check later${flaggedJobs.length > 1 ? ` — ${flaggedJobs.length} shifts` : ''}`}
+          summary={`${flaggedJobs[0].name} · ${format(new Date(flaggedJobs[0].date + 'T12:00:00'), 'MMM d')} — ${reviewReason(flaggedJobs[0]).text}`}
+          tone="border-warning/60 bg-warning/10" titleTone="text-warning"
+          items={flaggedJobs.map(job => ({
+            key: job.id,
+            title: job.name,
+            detail: `${format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')} — ${reviewReason(job).text}`,
+            open: () => openShift(job),
+          }))}
+        />
       )}
 
       {payTier !== 'none' && oldestWaiting && (
-        <button
-          onClick={() => { setSelectedDate(oldestWaiting.jobs[0].date); setSelectedJobId(oldestWaiting.jobs[0].id); }}
-          className={cn(
-            'pixel-button w-full mb-3 flex items-center gap-3 px-3 py-2.5 text-left',
-            payTier === 'watching' ? 'border-primary/60 bg-primary/10'
-              : payTier === 'warm' ? 'border-warning/60 bg-warning/10'
-              : 'border-destructive/60 bg-destructive/10',
-          )}
-        >
-          {payTier === 'watching' && <Eye size={18} className="text-primary shrink-0" />}
-          {payTier === 'warm' && <Flame size={18} className="flame-flicker text-warning shrink-0" />}
-          {payTier === 'blazing' && <span className="flame-flicker text-xl shrink-0">🔥</span>}
-          <div className="min-w-0">
-            <p className={cn('text-sm font-semibold', payTier === 'watching' ? 'text-primary' : payTier === 'warm' ? 'text-warning' : 'text-destructive')}>
-              {PAY_TIMING_LABELS[payTier]} — pay is late{overdueCount > 1 ? ` · ${overdueCount} projects` : ''}
-            </p>
-            <p className="text-xs font-body mt-0.5 text-muted-foreground truncate">
-              ${Math.round(totalWaiting).toLocaleString()} out · {oldestWaiting.jobs[0].name} was due {format(parseISO(oldestWaiting.due), 'MMM d')}{daysPastDue > 0 ? ` · ${daysPastDue}d late` : ''}
-            </p>
-          </div>
-        </button>
+        <PreampGroup
+          testId="preamp-pay"
+          icon={payTier === 'watching' ? <Eye size={18} className="text-primary shrink-0" />
+            : payTier === 'warm' ? <Flame size={18} className="flame-flicker text-warning shrink-0" />
+            : <span className="flame-flicker text-xl shrink-0">🔥</span>}
+          title={`${PAY_TIMING_LABELS[payTier]} — pay is late${overdueCount > 1 ? ` · ${overdueCount} projects` : ''}`}
+          summary={`$${Math.round(totalWaiting).toLocaleString()} out · ${oldestWaiting.jobs[0].name} was due ${format(parseISO(oldestWaiting.due), 'MMM d')}${daysPastDue > 0 ? ` · ${daysPastDue}d late` : ''}`}
+          tone={payTier === 'watching' ? 'border-primary/60 bg-primary/10' : payTier === 'warm' ? 'border-warning/60 bg-warning/10' : 'border-destructive/60 bg-destructive/10'}
+          titleTone={payTier === 'watching' ? 'text-primary' : payTier === 'warm' ? 'text-warning' : 'text-destructive'}
+          items={(overdueWaiting.length > 0 ? overdueWaiting : [oldestWaiting]).map(w => {
+            const late = differenceInCalendarDays(new Date(), parseISO(w.due));
+            const first = w.jobs[0];
+            const days = w.jobs.length;
+            return {
+              key: w.key,
+              title: first.name,
+              detail: `${first.client ? `${first.client} · ` : ''}${days === 1 ? format(parseISO(first.date), 'MMM d') : `${format(parseISO(first.date), 'MMM d')}–${format(parseISO(w.lastDay), 'MMM d')}, ${days} days`} · due ${format(parseISO(w.due), 'MMM d')}${late > 0 ? `, ${late}d late` : ''}`,
+              aside: `$${Math.round(w.expected).toLocaleString()}`,
+              open: () => openShift(first),
+            };
+          })}
+        />
       )}
       </PreampSheet>
 
