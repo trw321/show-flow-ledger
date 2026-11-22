@@ -17,7 +17,7 @@ import {
   AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
 import { callText, explicitCalls, parseDayTimeline, withGapOnClock, COMPOSITE_LUNCH_AFTER_HOURS, MEAL_PENALTY_AFTER_HOURS, type DayTimeline } from '@/lib/dayTimeline';
-import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle, Flame, PenLine, Banknote, Wallet, Flag, Undo2, Rocket, Timer, Orbit } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle, Flame, PenLine, Banknote, Wallet, Flag, Undo2, Rocket, Timer, Orbit, Presentation } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO, differenceInCalendarDays } from 'date-fns';
 import type { Employer, Job, CalendarEvent, Income, Invoice } from '@/lib/store';
 import { matchPaymentToProject, betterProject, rankedProjectsFor, projectOf, type FoundPayment, type ProjectMatch } from '@/lib/paymentMatch';
@@ -28,6 +28,8 @@ import PayEstimateCard from '@/components/PayEstimateCard';
 import PaymentProof, { ProofRow, SourceTag, WhoPaid } from '@/components/PaymentProof';
 import { PROOF_LABELS, proofFromMatch, proofKindOf, type ProofKind } from '@/lib/paymentProof';
 import CalendarKey from '@/components/CalendarKey';
+import ConferenceList from '@/components/ConferenceList';
+import { CONFERENCE_COLOUR, conferenceAlerts, conferenceDays, howFar, monthConferences, monthName, nextShow, spanText, startOf, whenText, type ConferenceAlert } from '@/lib/conferences';
 import EmployerEditor from '@/components/EmployerEditor';
 import { ratesForShift, type PayerProfile } from '@/lib/payerProfile';
 import { contractFor, contractsWorked, shiftContract } from '@/lib/contracts';
@@ -226,6 +228,18 @@ function planColor(title: string): string {
  * the callback phone and cancelled), and white stands in for blue.
  */
 const PROJECT_COLOURS = ['178 85% 55%', '308 85% 62%', '75 85% 55%', '0 0% 94%', '112 80% 55%', '18 90% 60%'];
+/** A conference to-do in Preamp: one starting soon, or one whose dates need looking up. */
+function conferenceItem(a: ConferenceAlert) {
+  const c = a.conference;
+  if (a.next.kind === 'dated') {
+    return { title: c.name, detail: `${spanText(a.next, true)}${c.where ? ` · ${c.where}` : ''}`, aside: howFar(a.days), line: `${c.name} starts ${howFar(a.days)} · ${spanText(a.next)}` };
+  }
+  const due = `usually ${monthName(a.next.month)}`;
+  return { title: c.name, detail: `Look up the ${a.next.year} dates · ${due}`, aside: 'dates?', line: `${c.name}: look up the ${a.next.year} dates · ${due}` };
+}
+
+const conferenceColour = (alpha = 1) => (alpha === 1 ? `hsl(${CONFERENCE_COLOUR})` : `hsl(${CONFERENCE_COLOUR} / ${alpha})`);
+
 function projectColor(key: string, taken: Set<number>): string {
   let hash = 0;
   for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
@@ -2682,6 +2696,23 @@ export default function CalendarPage() {
   const openShift = (job: Job) => { setSelectedDate(job.date); setSelectedJobId(job.id); };
   const totalWaiting = waitingOnPay.reduce((sum, w) => sum + w.expected, 0);
 
+  // Conferences: the days each is on, what Preamp says about them, the
+  // month's, and the list they're kept in.
+  const conferences = prefs.conferences;
+  const conferenceOn = useMemo(() => conferenceDays(conferences), [conferences]);
+  const conferenceAlertsNow = useMemo(() => conferenceAlerts(conferences, localToday()), [conferences]);
+  const monthConfs = useMemo(
+    () => monthConferences(conferences, currentDate.getFullYear(), currentDate.getMonth() + 1, localToday()),
+    [conferences, currentDate],
+  );
+  const nextConference = useMemo(() => conferences
+    .map(c => ({ c, next: nextShow(c, localToday()) }))
+    .filter(x => x.next)
+    .sort((a, b) => startOf(a.next!).localeCompare(startOf(b.next!)))[0]?.c, [conferences]);
+  const [conferencesOpen, setConferencesOpen] = useState(false);
+  const [conferenceId, setConferenceId] = useState<string | null>(null);
+  const openConferences = (id: string | null = null) => { setConferenceId(id); setConferencesOpen(true); };
+
   // The month's plans, for the key: each one, its colour, and its days.
   const monthPlans = useMemo(() => {
     const prefix = format(currentDate, 'yyyy-MM');
@@ -2960,6 +2991,7 @@ export default function CalendarPage() {
   const selectedJobs = selectedDate ? (jobsByDate[selectedDate] || []) : [];
   const selectedJob = selectedJobId ? data.jobs.find(j => j.id === selectedJobId) ?? null : null;
   const selectedEvents = selectedDate ? (eventsByDate[selectedDate] || []) : [];
+  const selectedConferences = selectedDate ? (conferenceOn.get(selectedDate) ?? []) : [];
   const closeDialog = () => { setSelectedDate(null); setSelectedJobId(null); setAddingEventDate(null); setEditingEventId(null); };
 
   // Swipe left = tomorrow, right = yesterday — jumps straight into that day's
@@ -3013,7 +3045,7 @@ export default function CalendarPage() {
 
       {/* To-dos live in Preamp, opened from the filament lamp, which runs red
           hot while there are any, instead of stacking above the month. */}
-      <PreampSheet count={(jobsNeedingHours.length > 0 ? 1 : 0) + (flaggedJobs.length > 0 ? 1 : 0) + (payTier !== 'none' && oldestWaiting ? 1 : 0)}>
+      <PreampSheet count={(jobsNeedingHours.length > 0 ? 1 : 0) + (flaggedJobs.length > 0 ? 1 : 0) + (payTier !== 'none' && oldestWaiting ? 1 : 0) + (conferenceAlertsNow.length > 0 ? 1 : 0)}>
       {jobsNeedingHours.length > 0 && (
         <PreampGroup
           testId="preamp-hours"
@@ -3075,6 +3107,18 @@ export default function CalendarPage() {
               open: () => openShift(first),
             };
           })}
+        />
+      )}
+
+      {/* Conferences coming up, and ones whose new dates need looking up. */}
+      {conferenceAlertsNow.length > 0 && (
+        <PreampGroup
+          testId="preamp-conferences"
+          icon={<Presentation size={18} className="shrink-0" style={{ color: conferenceColour() }} aria-hidden />}
+          title={`Conferences${conferenceAlertsNow.length > 1 ? ` — ${conferenceAlertsNow.length}` : ''}`}
+          summary={conferenceItem(conferenceAlertsNow[0]).line}
+          tone="border-[hsl(46_100%_58%/0.6)] bg-[hsl(46_100%_58%/0.1)]" titleTone="text-[hsl(46_100%_58%)]"
+          items={conferenceAlertsNow.map(a => ({ key: a.conference.id, ...conferenceItem(a), open: () => openConferences(a.conference.id) }))}
         />
       )}
       </PreampSheet>
@@ -3158,6 +3202,7 @@ export default function CalendarPage() {
                   const dateKey = format(day, 'yyyy-MM-dd');
                   const dayJobs = jobsByDate[dateKey] || [];
                   const dayEvents = eventsByDate[dateKey] || [];
+                  const dayConfs = conferenceOn.get(dateKey) ?? [];
                   const todayFlag = isSameDay(day, today);
                   const isCurrentMonth = isSameMonth(day, currentDate);
                   const hasJobs = dayJobs.length > 0;
@@ -3193,7 +3238,9 @@ export default function CalendarPage() {
                         <span className="text-[11px] text-mono leading-none w-6 h-6 flex items-center justify-center text-foreground">{format(day, 'd')}</span>
                       )}
                       {dayJobs.length > 0 && <span className="text-[7px] text-muted-foreground leading-tight text-center truncate max-w-[3rem] mt-0.5">{dayJobs[0].venue || dayJobs[0].client}</span>}
+                      {dayJobs.length === 0 && dayConfs.length > 0 && <span className="text-[7px] leading-tight text-center truncate max-w-[3rem] mt-0.5" style={{ color: conferenceColour() }}>{dayConfs[0].name}</span>}
                       <div className="flex gap-0.5 mt-0.5 h-2 items-center">
+                        {dayConfs.length > 0 && <Presentation size={9} className="shrink-0" style={{ color: conferenceColour() }} data-testid="conference-mark" aria-label={`Conference: ${dayConfs.map(c => c.name).join(', ')}`} />}
                         {dayJobs.slice(0, 3).map((job, j) => (
                           <Fragment key={j}>
                             {monthMarks.callbacks.has(job.id) && <Phone size={9} className="text-destructive fill-destructive shrink-0" data-testid="callback-phone" aria-label="Callback" />}
@@ -3234,6 +3281,31 @@ export default function CalendarPage() {
                 {monthStats.totalPay > 0 && <span className={cn("text-[11px] text-mono font-bold", moneyTone(monthJobsInView, paidJobIds))}>${monthStats.totalPay >= 1000 ? `${(monthStats.totalPay / 1000).toFixed(1)}k` : monthStats.totalPay.toFixed(0)}</span>}
               </div>
             </div>
+          </div>
+
+          <div className="mt-3" data-testid="month-conferences">
+            <div className="flex items-center justify-between px-1 pb-1 border-b border-border/30">
+              <span className="flex items-center gap-1 text-[9px] text-mono uppercase tracking-widest text-muted-foreground/50">
+                <Presentation size={10} aria-hidden /> Conferences
+              </span>
+              <button type="button" onClick={() => openConferences()} className="text-[10px] text-mono font-semibold" style={{ color: conferenceColour() }} data-testid="open-conferences">
+                {conferences.length > 0 ? `All ${conferences.length} →` : '+ Watch one'}
+              </button>
+            </div>
+            {monthConfs.map(({ conference: c, dates }) => (
+              <button key={c.id} type="button" onClick={() => openConferences(c.id)} className="flex w-full items-center justify-between gap-2 px-1 py-1 text-left">
+                <span className="truncate text-[11px]">{c.name}{c.where && <span className="text-muted-foreground"> · {c.where}</span>}</span>
+                <span className={cn('shrink-0 text-[10px] text-mono', !dates && 'text-warning')} style={dates ? { color: conferenceColour() } : undefined}>
+                  {dates ? spanText(dates) : 'dates not in'}
+                </span>
+              </button>
+            ))}
+            {monthConfs.length === 0 && nextConference && (
+              <button type="button" onClick={() => openConferences(nextConference.id)} className="flex w-full items-center justify-between gap-2 px-1 py-1 text-left text-muted-foreground">
+                <span className="truncate text-[11px]">Next: {nextConference.name}</span>
+                <span className="shrink-0 truncate text-[10px] text-mono">{whenText(nextConference, localToday())}</span>
+              </button>
+            )}
           </div>
         </>
       )}
@@ -3514,6 +3586,25 @@ export default function CalendarPage() {
                   </div>
                 )}
 
+                {selectedConferences.length > 0 && (
+                  <div className="pt-2 border-t border-border space-y-2" data-testid="day-conferences">
+                    <p className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Conferences</p>
+                    {selectedConferences.map(c => {
+                      const d = c.dates.find(x => x.start <= selectedDate! && x.end >= selectedDate!);
+                      return (
+                        <button key={c.id} type="button" onClick={() => openConferences(c.id)}
+                          className="w-full rounded-md border p-3 text-left space-y-0.5"
+                          style={{ borderColor: conferenceColour(0.4), background: conferenceColour(0.06) }}>
+                          <p className="flex items-center gap-1.5 text-sm font-medium">
+                            <Presentation size={13} className="shrink-0" style={{ color: conferenceColour() }} aria-hidden />{c.name}
+                          </p>
+                          <p className="text-xs text-mono text-muted-foreground">{d && spanText(d)}{c.where ? ` · ${c.where}` : ''}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {/* ── Personal events ─────────────────────────────────────── */}
                 {(selectedEvents.length > 0 || addingEventDate === selectedDate) && (
                   <div className="pt-2 border-t border-border space-y-2">
@@ -3593,6 +3684,8 @@ export default function CalendarPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <ConferenceList open={conferencesOpen} onOpenChange={setConferencesOpen} editId={conferenceId} />
 
       {/* Standalone quick-add — no swipe handlers, no existing-jobs list,
           just the intake box, so a stray touch can't get read as a day-swipe

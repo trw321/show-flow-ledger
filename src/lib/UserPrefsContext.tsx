@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { EMPTY_PROFILE, type PayerProfile } from '@/lib/payerProfile';
 import type { NetworkContact } from '@/lib/network';
+import { cleanConferences, type Conference } from '@/lib/conferences';
 import { supabase } from '@/integrations/supabase/client';
 import { prefsKeyFor } from '@/lib/store';
 import { PREFS_CHANGED_EVENT, PREFS_SYNCED_EVENT } from '@/lib/sync';
@@ -38,6 +39,8 @@ export interface UserPrefs {
   aiFreeMode: boolean;
   /** The people on your Network map. */
   contacts: NetworkContact[];
+  /** Conferences to look out for, year after year. */
+  conferences: Conference[];
 }
 
 export const TAB_LABELS: Record<TabKey, { label: string; description: string }> = {
@@ -56,7 +59,7 @@ export const WORKER_PRESETS: Record<'w2' | '1099' | 'boss', Record<TabKey, boole
   boss:   { expenses: true,  income: true, payouts: true,  crew: true,  invoices: true, network: true, benefits: true },
 };
 
-const DEFAULT_PREFS: UserPrefs = { workerType: '1099', tabs: WORKER_PRESETS['1099'], payer: EMPTY_PROFILE, aiFreeMode: false, contacts: [] };
+const DEFAULT_PREFS: UserPrefs = { workerType: '1099', tabs: WORKER_PRESETS['1099'], payer: EMPTY_PROFILE, aiFreeMode: false, contacts: [], conferences: [] };
 
 function loadPrefs(uid?: string | null): UserPrefs {
   try {
@@ -75,6 +78,7 @@ function loadPrefs(uid?: string | null): UserPrefs {
       invoiceFrom: parsed.invoiceFrom,
       calendarPay: parsed.calendarPay,
       aiFreeMode: parsed.aiFreeMode ?? false,
+      conferences: cleanConferences(parsed.conferences),
       contacts: Array.isArray(parsed.contacts) ? parsed.contacts.filter((c: unknown) => !!c && typeof (c as NetworkContact).id === 'string' && typeof (c as NetworkContact).name === 'string') : [],
     };
   } catch {
@@ -102,6 +106,7 @@ interface UserPrefsContextValue {
   setCalendarPay: (view: 'net' | 'gross') => void;
   setAIFreeMode: (enabled: boolean) => void;
   setContacts: (contacts: NetworkContact[]) => void;
+  setConferences: (conferences: Conference[]) => void;
 }
 
 const UserPrefsContext = createContext<UserPrefsContextValue | null>(null);
@@ -151,6 +156,7 @@ export function UserPrefsProvider({ children }: { children: React.ReactNode }) {
   const setCalendarPay = (calendarPay: 'net' | 'gross') => update({ ...prefs, calendarPay });
   const setAIFreeMode = (enabled: boolean) => update({ ...prefs, aiFreeMode: enabled });
   const setContacts = (contacts: NetworkContact[]) => update({ ...prefs, contacts });
+  const setConferences = (conferences: Conference[]) => update({ ...prefs, conferences });
 
   const setTabEnabled = (tab: TabKey, enabled: boolean) => {
     const next = { ...prefs.tabs, [tab]: enabled };
@@ -160,7 +166,7 @@ export function UserPrefsProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <UserPrefsContext.Provider value={{ prefs, setWorkerType, setTabEnabled, setPayer, setInvoiceFrom, setCalendarPay, setAIFreeMode, setContacts }}>
+    <UserPrefsContext.Provider value={{ prefs, setWorkerType, setTabEnabled, setPayer, setInvoiceFrom, setCalendarPay, setAIFreeMode, setContacts, setConferences }}>
       {children}
     </UserPrefsContext.Provider>
   );

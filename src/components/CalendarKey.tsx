@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Phone } from 'lucide-react';
+import { Phone, Presentation } from 'lucide-react';
+import { CONFERENCE_COLOUR } from '@/lib/conferences';
 import { cn } from '@/lib/utils';
 
 export interface KeyPlan {
@@ -64,6 +65,9 @@ export default function CalendarKey({ month, plans, states }: {
             <Phone size={11} className="text-destructive fill-destructive" aria-hidden /> callback
           </li>
           <li>🤸 split</li>
+          <li className="col-span-2 flex items-center gap-1">
+            <Presentation size={11} style={{ color: `hsl(${CONFERENCE_COLOUR})` }} aria-hidden /> conference day
+          </li>
         </ul>
 
         <p className="font-8bit mt-3 text-[7px] uppercase text-white/60">Days in a row</p>
