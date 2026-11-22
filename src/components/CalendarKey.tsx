@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Phone, Presentation } from 'lucide-react';
 import { CONFERENCE_COLOUR } from '@/lib/conferences';
 import { cn } from '@/lib/utils';
 
@@ -19,7 +18,8 @@ export interface KeyPlan {
 export default function CalendarKey({ month, plans, states }: {
   month: string;
   plans: KeyPlan[];
-  states: readonly { dot: string; label: string }[];
+  /** Each state's colour on the money, and what a day shows in it. */
+  states: readonly { text: string; sample: string; label: string }[];
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -45,29 +45,24 @@ export default function CalendarKey({ month, plans, states }: {
           </ul>
         )}
 
-        <p className="font-8bit mt-3 text-[7px] uppercase text-white/60">Shifts</p>
+        <p className="font-8bit mt-3 text-[7px] uppercase text-white/60">Shifts · the colour of the money</p>
         <ul className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-1">
           {states.map(s => (
             <li key={s.label} className="flex items-center gap-2 text-[11px] text-mono text-white">
-              <span className={cn('key-swatch', s.dot)} aria-hidden />
+              <span className={cn('w-9 shrink-0 text-right font-bold', s.text)} aria-hidden>{s.sample}</span>
               {s.label}
             </li>
           ))}
         </ul>
+        <p className="mt-1.5 text-[10px] text-mono text-white/60">No pay to show yet: the call time.</p>
 
         <p className="font-8bit mt-3 text-[7px] uppercase text-white/60">Marks</p>
-        <ul className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-mono text-white">
-          <li className="col-span-2 flex items-center gap-2">
-            <span className="inline-block h-4 w-9 rounded border-2" style={{ borderColor: 'hsl(308 85% 62%)' }} aria-hidden />
-            one job's days, outlined together
+        <ul className="mt-1.5 space-y-1 text-[11px] text-mono text-white">
+          <li className="flex items-center gap-2">
+            <span className="w-9 shrink-0 text-right font-bold" style={{ color: `hsl(${CONFERENCE_COLOUR})` }} aria-hidden>19</span>
+            gold date: a conference
           </li>
-          <li className="flex items-center gap-1">
-            <Phone size={11} className="text-destructive fill-destructive" aria-hidden /> callback
-          </li>
-          <li>🤸 split</li>
-          <li className="col-span-2 flex items-center gap-1">
-            <Presentation size={11} style={{ color: `hsl(${CONFERENCE_COLOUR})` }} aria-hidden /> conference day
-          </li>
+          <li>📞 callback · 🤸 split, on the day's shifts</li>
         </ul>
 
         <p className="font-8bit mt-3 text-[7px] uppercase text-white/60">Days in a row</p>

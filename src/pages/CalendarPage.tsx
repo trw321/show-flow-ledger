@@ -53,6 +53,7 @@ import { exportWeeklyToExcel } from '@/lib/exportWeekly';
 import EventIntake from '@/components/EventIntake';
 import NewGigPage from '@/pages/NewGigPage';
 import { localToday, showDay } from '@/lib/today';
+import { shortCall } from '@/lib/shortCall';
 import { ptoBalance } from '@/lib/pto';
 import { aiFetch } from '@/lib/aiSwitch';
 import { roundHours } from '@/lib/hoursFormat';
@@ -66,11 +67,15 @@ const statusDot: Record<Job['status'], string> = {
 
 /** The dot rule, in the order it is applied — also what the legend prints. */
 export const SHIFT_STATES = [
-  { dot: 'bg-dot-overdue', label: 'needs hours' },
-  { dot: 'bg-dot-upcoming', label: 'upcoming' },
-  { dot: 'bg-dot-pending', label: 'pending' },
-  { dot: 'bg-dot-paid', label: 'paid' },
+  { dot: 'bg-dot-overdue', text: 'text-dot-overdue', sample: '8a', label: 'needs hours' },
+  { dot: 'bg-dot-upcoming', text: 'text-dot-upcoming', sample: '8a', label: 'upcoming' },
+  { dot: 'bg-dot-pending', text: 'text-dot-pending', sample: '$475', label: 'pending' },
+  { dot: 'bg-dot-paid', text: 'text-dot-paid', sample: '$475', label: 'paid' },
 ] as const;
+
+/** A day's pay, short enough for a calendar square: "$475", "$1.4k". */
+const shortDollars = (n: number) => (n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n.toFixed(0)}`);
+
 
 const statusColors: Record<Job['status'], string> = {
   upcoming: 'bg-accent/20 text-accent border-accent/30',
@@ -219,15 +224,6 @@ function planColor(title: string): string {
   return `hsl(${PLAN_HUES[hash % PLAN_HUES.length]} 75% 58%)`;
 }
 
-/**
- * A job's outline colour on the month grid, as an HSL triplet. Hashed so a
- * job keeps its colour from month to month, but stepped on to a free one when
- * another job in view already has it, so two jobs side by side never share a
- * colour. The dots inside carry the status colours, so these keep clear of
- * every status hue (sky 205, lilac 272, green 152, amber 40) and of red (344,
- * the callback phone and cancelled), and white stands in for blue.
- */
-const PROJECT_COLOURS = ['178 85% 55%', '308 85% 62%', '75 85% 55%', '0 0% 94%', '112 80% 55%', '18 90% 60%'];
 /** A conference to-do in Preamp: one starting soon, or one whose dates need looking up. */
 function conferenceItem(a: ConferenceAlert) {
   const c = a.conference;
@@ -239,15 +235,6 @@ function conferenceItem(a: ConferenceAlert) {
 }
 
 const conferenceColour = (alpha = 1) => (alpha === 1 ? `hsl(${CONFERENCE_COLOUR})` : `hsl(${CONFERENCE_COLOUR} / ${alpha})`);
-
-function projectColor(key: string, taken: Set<number>): string {
-  let hash = 0;
-  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
-  let i = hash % PROJECT_COLOURS.length;
-  for (let n = 0; n < PROJECT_COLOURS.length && taken.has(i); n++) i = (i + 1) % PROJECT_COLOURS.length;
-  taken.add(i);
-  return PROJECT_COLOURS[i];
-}
 
 /**
  * A callback: any day of a job after its first. Worth seeing at a glance: it
@@ -2538,65 +2525,6 @@ export default function CalendarPage() {
     [data.jobs, data.income, data.employers, prefs.payer],
   );
 
-  // For the month grid: which shifts are callbacks (a red phone beside their
-  // dot), and each job's outline colour.
-  const monthMarks = useMemo(() => {
-    const shown = new Set([subMonths(currentDate, 1), currentDate, addMonths(currentDate, 1)].map(d => format(d, 'yyyy-MM')));
-    const inView = (date: string) => shown.has(date.slice(0, 7));
-    const daysOf = new Map<string, Set<string>>();
-    for (const j of data.jobs) {
-      if (j.status === 'cancelled') continue;
-      const k = projectKeyOf.get(j.id) ?? j.id;
-      daysOf.set(k, (daysOf.get(k) ?? new Set()).add(j.date));
-    }
-    const colourOf = new Map<string, string>();
-    const taken = new Set<number>();
-    [...daysOf.entries()]
-      .filter(([, days]) => [...days].some(inView))
-      .map(([k, days]) => [k, [...days].sort()[0]] as const)
-      .sort((a, b) => a[1].localeCompare(b[1]) || a[0].localeCompare(b[0]))
-      .forEach(([k]) => colourOf.set(k, projectColor(k, taken)));
-    const callbacks = new Set<string>();
-    for (const j of data.jobs) {
-      if (j.status !== 'cancelled' && inView(j.date) && isCallback(j, data.jobs, data.employers)) callbacks.add(j.id);
-    }
-    return { callbacks, colourOf, daysOf };
-  }, [data.jobs, data.employers, projectKeyOf, currentDate]);
-
-  /**
-   * One outline per run of a job's days in a week row: the days drawn round
-   * together, not a box each. A run that carries on from the week before, or
-   * into the next, leaves that side open. Two jobs on the same days nest, the
-   * later one just inside.
-   */
-  const weekRuns = (week: Date[]) => {
-    const keys = week.map(day => new Set(
-      (jobsByDate[format(day, 'yyyy-MM-dd')] ?? []).filter(j => j.status !== 'cancelled').map(j => projectKeyOf.get(j.id) ?? j.id),
-    ));
-    const runs: { key: string; colour: string; from: number; to: number; openLeft: boolean; openRight: boolean; level: number }[] = [];
-    for (const key of new Set(keys.flatMap(k => [...k]))) {
-      const colour = monthMarks.colourOf.get(key);
-      const days = monthMarks.daysOf.get(key);
-      if (!colour || !days) continue;
-      for (let i = 0; i < 7; i++) {
-        if (!keys[i].has(key) || (i > 0 && keys[i - 1].has(key))) continue;
-        let to = i;
-        while (to < 6 && keys[to + 1].has(key)) to++;
-        runs.push({
-          key, colour, from: i, to, level: 0,
-          openLeft: i === 0 && days.has(format(addDays(week[0], -1), 'yyyy-MM-dd')),
-          openRight: to === 6 && days.has(format(addDays(week[6], 1), 'yyyy-MM-dd')),
-        });
-      }
-    }
-    runs.sort((a, b) => a.from - b.from || b.to - a.to || a.key.localeCompare(b.key));
-    runs.forEach((run, n) => {
-      const under = runs.slice(0, n).filter(o => o.from <= run.to && run.from <= o.to);
-      run.level = under.length ? Math.max(...under.map(o => o.level)) + 1 : 0;
-    });
-    return runs;
-  };
-
   // ── Pay, by project ───────────────────────────────────────────────────────
   // The calendar is where jobs and their pay live together now: each project
   // of the month says what it has been paid or that it is still waiting, the
@@ -2952,18 +2880,6 @@ export default function CalendarPage() {
     return result;
   }, [monthDays]);
 
-  const monthStats = useMemo(() => {
-    const prefix = format(currentDate, 'yyyy-MM');
-    let totalHours = 0, totalPay = 0, totalJobs = 0;
-    for (const [date, jobs] of Object.entries(jobsByDate)) {
-      if (!date.startsWith(prefix)) continue;
-      totalJobs += jobs.length;
-      totalHours += jobs.reduce((s, j) => s + netHoursWorked(j), 0);
-      totalPay += payByDate[date] || 0;
-    }
-    return { totalHours, totalPay, totalJobs };
-  }, [jobsByDate, payByDate, currentDate]);
-
   const yearStats = useMemo(() => {
     const prefix = `${currentYear}-`;
     let totalJobs = 0, totalHours = 0, totalPay = 0;
@@ -2976,12 +2892,7 @@ export default function CalendarPage() {
     return { totalJobs, totalHours, totalPay };
   }, [jobsByDate, payByDate, currentYear]);
 
-  // The shifts behind the month and year totals, so those totals take the
-  // colour their shifts' dots would.
-  const monthJobsInView = useMemo(
-    () => data.jobs.filter(j => j.date.startsWith(format(currentDate, 'yyyy-MM'))),
-    [data.jobs, currentDate],
-  );
+  // The shifts behind the year total, so it takes the colour its days would.
   const yearJobsInView = useMemo(
     () => data.jobs.filter(j => j.date.startsWith(`${currentYear}-`)),
     [data.jobs, currentYear],
@@ -3182,22 +3093,6 @@ export default function CalendarPage() {
           </div>
           {weeks.map((week, wi) => (
             <div key={wi} className="relative grid grid-cols-7">
-                {weekRuns(week).map(run => {
-                  const inset = run.level * 3;
-                  return (
-                    <span key={run.key + run.from} aria-hidden="true" data-testid="job-run"
-                      className="pointer-events-none absolute z-[5] rounded-lg border-2"
-                      style={{
-                        left: `calc(${(run.from / 7) * 100}% + ${run.openLeft ? 0 : 2 + inset}px)`,
-                        width: `calc(${((run.to - run.from + 1) / 7) * 100}% - ${(run.openLeft ? 0 : 2 + inset) + (run.openRight ? 0 : 2 + inset)}px)`,
-                        top: inset,
-                        bottom: 2 + inset,
-                        borderColor: `hsl(${run.colour})`,
-                        borderLeftWidth: run.openLeft ? 0 : undefined,
-                        borderRightWidth: run.openRight ? 0 : undefined,
-                      }} />
-                  );
-                })}
                 {week.map((day, i) => {
                   const dateKey = format(day, 'yyyy-MM-dd');
                   const dayJobs = jobsByDate[dateKey] || [];
@@ -3205,7 +3100,7 @@ export default function CalendarPage() {
                   const dayConfs = conferenceOn.get(dateKey) ?? [];
                   const todayFlag = isSameDay(day, today);
                   const isCurrentMonth = isSameMonth(day, currentDate);
-                  const hasJobs = dayJobs.length > 0;
+                  const liveJobs = dayJobs.filter(j => j.status !== 'cancelled');
                   const hasEvents = dayEvents.length > 0;
                   const hasPay = !!payByDate[dateKey];
                   const sixthSeventhStreak = sixthSeventhDayDates[dateKey];
@@ -3232,24 +3127,25 @@ export default function CalendarPage() {
                       {todayFlag ? (
                         <span className="relative w-6 h-6 flex items-center justify-center">
                           <Star size={24} className="absolute text-primary fill-primary" />
-                          <span className="relative text-[11px] text-mono leading-none text-primary-foreground font-bold">{format(day, 'd')}</span>
+                          <span className="relative text-xs text-mono leading-none text-primary-foreground font-bold">{format(day, 'd')}</span>
+                        </span>
+                      ) : dayConfs.length > 0 ? (
+                        // A conference day's date is gold: the mark sits on the day itself.
+                        <span data-testid="conference-mark" aria-label={`${format(day, 'd')}, conference: ${dayConfs.map(c => c.name).join(', ')}`}
+                          className="text-xs text-mono font-bold leading-none w-6 h-6 flex items-center justify-center" style={{ color: conferenceColour() }}>
+                          {format(day, 'd')}
                         </span>
                       ) : (
-                        <span className="text-[11px] text-mono leading-none w-6 h-6 flex items-center justify-center text-foreground">{format(day, 'd')}</span>
+                        <span className="text-xs text-mono leading-none w-6 h-6 flex items-center justify-center text-foreground">{format(day, 'd')}</span>
                       )}
-                      {dayJobs.length > 0 && <span className="text-[7px] text-muted-foreground leading-tight text-center truncate max-w-[3rem] mt-0.5">{dayJobs[0].venue || dayJobs[0].client}</span>}
-                      {dayJobs.length === 0 && dayConfs.length > 0 && <span className="text-[7px] leading-tight text-center truncate max-w-[3rem] mt-0.5" style={{ color: conferenceColour() }}>{dayConfs[0].name}</span>}
-                      <div className="flex gap-0.5 mt-0.5 h-2 items-center">
-                        {dayConfs.length > 0 && <Presentation size={9} className="shrink-0" style={{ color: conferenceColour() }} data-testid="conference-mark" aria-label={`Conference: ${dayConfs.map(c => c.name).join(', ')}`} />}
-                        {dayJobs.slice(0, 3).map((job, j) => (
-                          <Fragment key={j}>
-                            {monthMarks.callbacks.has(job.id) && <Phone size={9} className="text-destructive fill-destructive shrink-0" data-testid="callback-phone" aria-label="Callback" />}
-                            <span className={cn("w-1.5 h-1.5 rounded-full", jobDotClass(job, paidJobIds))} />
-                          </Fragment>
-                        ))}
-                        {dayJobs.length > 3 && <span className="text-[7px] text-muted-foreground text-mono">+{dayJobs.length - 3}</span>}
-                      </div>
-                      {hasPay && <span className={cn("text-[8px] text-mono font-semibold leading-none mt-0.5", moneyTone(dayJobs, paidJobIds))}>${payByDate[dateKey] >= 1000 ? `${(payByDate[dateKey] / 1000).toFixed(1)}k` : payByDate[dateKey].toFixed(0)}</span>}
+                      {/* One thing under the number: the day's money, in the
+                          colour that says where it stands. Before there's pay
+                          to show, the call time, in the same colours. */}
+                      {liveJobs.length > 0 && (
+                        <span data-testid="day-money" className={cn("mt-1 text-[10px] text-mono font-semibold leading-none", moneyTone(liveJobs, paidJobIds))}>
+                          {hasPay ? shortDollars(payByDate[dateKey]) : shortCall(liveJobs[0].startTime) || 'call'}
+                        </span>
+                      )}
                       {/* Plans underline the cell instead of taking a dot in the
                           job row — a recurring one then reads as a stripe down
                           the month, which a dot never did. */}
@@ -3265,25 +3161,13 @@ export default function CalendarPage() {
                 })}
             </div>
           ))}
-          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
-            {SHIFT_STATES.map(({ dot, label }) => (
-              <span key={label} className="flex items-center gap-1 text-[9px] text-mono uppercase tracking-wider text-muted-foreground">
-                <span className={cn('w-1.5 h-1.5 rounded-full', dot)} /> {label}
-              </span>
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1" data-testid="money-key">
+            {SHIFT_STATES.map(({ text, label }) => (
+              <span key={label} className={cn('text-[10px] text-mono font-semibold uppercase tracking-wider', text)}>{label}</span>
             ))}
           </div>
 
-          <div className="mt-4 space-y-1">
-            <div className="flex items-center justify-between px-1 pb-1 border-b border-border/30">
-              <span className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground/50">{format(currentDate, 'MMMM')}</span>
-              <div className="flex items-center gap-3">
-                {monthStats.totalHours > 0 ? <span className="text-[11px] text-mono font-semibold text-primary">{roundHours(monthStats.totalHours)}h</span> : <span className="text-[11px] text-mono text-muted-foreground/25">—</span>}
-                {monthStats.totalPay > 0 && <span className={cn("text-[11px] text-mono font-bold", moneyTone(monthJobsInView, paidJobIds))}>${monthStats.totalPay >= 1000 ? `${(monthStats.totalPay / 1000).toFixed(1)}k` : monthStats.totalPay.toFixed(0)}</span>}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-3" data-testid="month-conferences">
+          <div className="mt-4" data-testid="month-conferences">
             <div className="flex items-center justify-between px-1 pb-1 border-b border-border/30">
               <span className="flex items-center gap-1 text-[9px] text-mono uppercase tracking-widest text-muted-foreground/50">
                 <Presentation size={10} aria-hidden /> Conferences
