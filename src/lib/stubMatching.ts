@@ -1,6 +1,7 @@
 import type { Job } from './store';
 import { nameSimilarity, AUTO_MATCH_THRESHOLD, SUGGEST_MATCH_THRESHOLD } from './employerMatch';
 import { netHoursWorked } from './payCalc';
+import { roundHours } from './hoursFormat';
 
 export type StubParsed = NonNullable<Job['stubParsed']>;
 
@@ -100,11 +101,11 @@ export function matchStubToShifts(stub: StubParsed, jobs: Job[]): StubMatch | nu
   const hoursExact = hoursDelta != null && Math.abs(hoursDelta) <= HOURS_EXACT;
   const hoursClose = hoursDelta != null && Math.abs(hoursDelta) <= HOURS_CLOSE;
   if (hoursDelta == null) {
-    reasons.push(`Stub doesn't state total hours — ${shiftHours}h logged`);
+    reasons.push(`Stub doesn't state total hours — ${roundHours(shiftHours)}h logged`);
   } else if (hoursExact) {
-    reasons.push(`Hours agree (${shiftHours}h)`);
+    reasons.push(`Hours agree (${roundHours(shiftHours)}h)`);
   } else {
-    reasons.push(`Stub paid ${stubHours}h, ${shiftHours}h logged (${hoursDelta > 0 ? '+' : ''}${hoursDelta}h)`);
+    reasons.push(`Stub paid ${roundHours(stubHours)}h, ${roundHours(shiftHours)}h logged (${hoursDelta > 0 ? '+' : ''}${roundHours(hoursDelta)}h)`);
   }
 
   let confidence: MatchConfidence = 'low';

@@ -222,7 +222,7 @@ export default function EventIntake({ date, onCancel, onSaveMany }: Props) {
           <ArrowLeft size={11} /> Back
         </button>
 
-        <Input placeholder="What's the plan?" value={title} onChange={e => setTitle(e.target.value)} className="h-8 text-sm" autoFocus />
+        <Input placeholder="What's the plan?" value={title} onChange={e => setTitle(e.target.value)} className="h-8 text-sm" />
 
         <div className="flex flex-col gap-1.5">
           <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Repeats on <span className="opacity-60">— leave blank for a one-off</span></label>

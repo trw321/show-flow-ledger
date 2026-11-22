@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { getJobDedupKey } from '@/lib/jobDedup';
 import type { Job } from '@/lib/store';
 import { aiFetch } from '@/lib/aiSwitch';
+import { roundHours } from '@/lib/hoursFormat';
 
 interface ParsedTimeEntry {
   date: string;
@@ -257,7 +258,7 @@ export default function TimesheetUpload() {
             {preview && <img src={preview} alt="Timesheet" className="max-h-32 rounded-md border border-border" />}
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
-                {selected.size} of {entries.length} selected • <span className="text-mono font-medium">{totalHours.toFixed(1)}h</span>
+                {selected.size} of {entries.length} selected • <span className="text-mono font-medium">{roundHours(totalHours)}h</span>
               </p>
               <Button size="sm" variant="ghost" onClick={() => setSelected(selected.size === entries.length ? new Set() : new Set(entries.map((_, i) => i)))}>
                 {selected.size === entries.length ? 'Deselect all' : 'Select all'}
@@ -293,7 +294,7 @@ export default function TimesheetUpload() {
                         <input value={entry.description} onChange={e => updateEntry(i, 'description', e.target.value)} className="bg-transparent border-b border-border/50 text-sm text-muted-foreground w-full focus:outline-none focus:border-primary" />
                       </td>
                       <td className="px-3 py-2">
-                        <input type="number" step="0.25" min="0" value={entry.hours} onChange={e => updateEntry(i, 'hours', parseFloat(e.target.value) || 0)} className="bg-transparent border-b border-border/50 text-sm text-mono font-bold text-right w-16 focus:outline-none focus:border-primary" />
+                        <input type="number" step="any" min="0" value={entry.hours} onChange={e => updateEntry(i, 'hours', parseFloat(e.target.value) || 0)} className="bg-transparent border-b border-border/50 text-sm text-mono font-bold text-right w-16 focus:outline-none focus:border-primary" />
                       </td>
                       <td className="px-3 py-2">
                         <input type="number" step="0.01" min="0" value={entry.rate || ''} onChange={e => updateEntry(i, 'rate', parseFloat(e.target.value) || 0)} placeholder="—" className="bg-transparent border-b border-border/50 text-sm text-mono text-right w-16 focus:outline-none focus:border-primary" />

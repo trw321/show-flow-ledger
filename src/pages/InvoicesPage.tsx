@@ -18,6 +18,7 @@ import { crewShiftWorked } from '@/lib/crew';
 import { alreadyInvoiced, invoiceOverdue, invoiceTotal, lineForCrewShift, lineForShift, nextInvoiceNumber, paymentsForInvoice } from '@/lib/invoices';
 import { localToday } from '@/lib/today';
 import { cn } from '@/lib/utils';
+import { roundHours } from '@/lib/hoursFormat';
 
 /**
  * Invoices, for 1099 work and for billing as a boss: pick the client, tick
@@ -95,7 +96,7 @@ function InvoiceForm({ initial, onSave, onCancel }: {
   return (
     <div className="space-y-3">
       <label className="flex flex-col gap-1"><span className={LABEL}>Bill to *</span>
-        <Input list="invoice-clients" autoFocus={!initial.client} value={d.client} onChange={e => set({ client: e.target.value })} placeholder="Client or company" className={FIELD} />
+        <Input list="invoice-clients" value={d.client} onChange={e => set({ client: e.target.value })} placeholder="Client or company" className={FIELD} />
         <datalist id="invoice-clients">{clients.map(c => <option key={c} value={c} />)}</datalist>
       </label>
       <div className="grid grid-cols-2 gap-2">
@@ -133,7 +134,7 @@ function InvoiceForm({ initial, onSave, onCancel }: {
                 <label key={j.id} className="flex cursor-pointer items-center gap-2 text-xs">
                   <input type="checkbox" checked={picked.has(j.id)} onChange={() => togglePick(j.id)} />
                   <span className="min-w-0 flex-1 truncate">{format(parseISO(j.date), 'EEE MMM d')} · {j.name}</span>
-                  <span className="text-mono text-muted-foreground">{effectiveHoursWorked(j)}h</span>
+                  <span className="text-mono text-muted-foreground">{roundHours(effectiveHoursWorked(j))}h</span>
                 </label>
               ))}
               {crewOn.filter(s => !onThis.has(s.id)).map(s => (

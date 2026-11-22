@@ -53,6 +53,7 @@ import NewGigPage from '@/pages/NewGigPage';
 import { localToday, showDay } from '@/lib/today';
 import { ptoBalance } from '@/lib/pto';
 import { aiFetch } from '@/lib/aiSwitch';
+import { roundHours } from '@/lib/hoursFormat';
 
 const statusDot: Record<Job['status'], string> = {
   upcoming: 'bg-dot-upcoming',
@@ -573,7 +574,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     // computed (only happened when someone retyped End Time by hand) — derive
     // it here too so reopening one shows the right hours instead of 0.
     const derivedHours = (!job.hoursWorked && job.startTime && job.endTime) ? calcHours(job.startTime, job.endTime) : 0;
-    setHoursWorked(job.hoursWorked?.toString() ?? (derivedHours > 0 ? parseFloat(derivedHours.toFixed(2)).toString() : ''));
+    setHoursWorked(job.hoursWorked?.toString() ?? (derivedHours > 0 ? String(roundHours(derivedHours)) : ''));
     setHourlyRate(job.hourlyRate?.toString() ?? '');
     setMinimumHours(job.minimumHours?.toString() ?? '');
     setPayrollCompany(job.payrollCompany ?? '');
@@ -884,7 +885,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     setEndTime(last.end);
     if (read.calls.length === 1) {
       setCallTimeline(''); setCallsOpen(false);
-      setHoursWorked(parseFloat(first.hours.toFixed(2)).toString());
+      setHoursWorked(String(roundHours(first.hours)));
     } else {
       setCallTimeline(explicitCalls(read)); setCallsOpen(true);
     }
@@ -1538,7 +1539,6 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             <label className="text-xs text-muted-foreground" htmlFor="shift-hours">Hours</label>
             <Input
               id="shift-hours"
-              autoFocus={actualHours === 0}
               value={hoursText}
               onChange={e => handleHoursText(e.target.value)}
               placeholder="8a-6p, or calls: 8-12, 1-6, 7-9p"
@@ -1549,7 +1549,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             {hoursText.trim() && !hoursTextReads ? (
               <p className="text-[10px] text-warning">Can't read that yet. Try 8a-6p, or 8-12, 1-6 for calls.</p>
             ) : !timeline && startTime && endTime && calcHours(startTime, endTime) > 0 ? (
-              <p className="text-[10px] text-mono text-muted-foreground">{startTime} → {endTime} = <span className="text-accent font-semibold">{calcHours(startTime, endTime).toFixed(1)}h</span></p>
+              <p className="text-[10px] text-mono text-muted-foreground">{startTime} → {endTime} = <span className="text-accent font-semibold">{roundHours(calcHours(startTime, endTime))}h</span></p>
             ) : !timeline && startTime && !endTime ? (
               <p className="text-[10px] text-mono text-muted-foreground">Starts {startTime}. Add the end after a dash.</p>
             ) : (
@@ -1570,7 +1570,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                           <div className="flex items-center gap-2 px-2 py-1.5 bg-secondary/20">
                             <span className="text-[9px] text-mono uppercase tracking-wider text-muted-foreground w-11 shrink-0">Call {i + 1}</span>
                             <span className="text-xs text-mono flex-1 min-w-0">{call.start} – {call.end}</span>
-                            <span className="text-[11px] text-mono text-muted-foreground">{call.hours}h</span>
+                            <span className="text-[11px] text-mono text-muted-foreground">{roundHours(call.hours)}h</span>
                           </div>
                           {gap && timelineGaps > 1 && (
                             <div className="flex items-center gap-2 px-2 py-1.5 border-y border-border bg-background/40">
@@ -1624,9 +1624,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                     </p>
                   )}
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-mono">
-                    <span className="text-muted-foreground line-through">{timeline.spreadHours}h clocked</span>
+                    <span className="text-muted-foreground line-through">{roundHours(timeline.spreadHours)}h clocked</span>
                     {timeline.offClockMinutes > 0 && <span className="text-muted-foreground">−{timeline.offClockMinutes}min</span>}
-                    <span className="text-accent font-semibold">{timeline.workedHours}h worked</span>
+                    <span className="text-accent font-semibold">{roundHours(timeline.workedHours)}h worked</span>
                     {timeline.isSplit && <span className="text-warning">split shift</span>}
                   </div>
                   {timeline.suggestedMealPenalties > 0 && (
@@ -1770,7 +1770,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
               >
                 <AlertTriangle size={10} className="shrink-0 mt-0.5" />
                 <span>
-                  {actualHours}h with no lunch on a composite call — {unfedComposite} meal {unfedComposite === 1 ? 'penalty' : 'penalties'} owed past 4 hours. Tap to set.
+                  {roundHours(actualHours)}h with no lunch on a composite call — {unfedComposite} meal {unfedComposite === 1 ? 'penalty' : 'penalties'} owed past 4 hours. Tap to set.
                 </span>
               </button>
             )}
@@ -1830,24 +1830,24 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
               <label className="h-5 text-xs text-muted-foreground flex items-center gap-1.5">
                 <CallbackMark job={job} allJobs={data.jobs} employers={data.employers} />Clocked hours<SplitMark job={job} allJobs={data.jobs} />
               </label>
-              <Input type="number" min="0" step="0.5" value={hoursWorked} onChange={e => handleHoursWorkedChange(e.target.value)} placeholder="e.g. 8" className="h-9 text-sm text-mono" />
+              <Input type="number" min="0" step="any" value={hoursWorked} onChange={e => handleHoursWorkedChange(e.target.value)} placeholder="e.g. 8" className="h-9 text-sm text-mono" />
               {/* The box holds the clocked span, because that is what gets saved and
                   what calculateDayPay expects. The number that matters when you are
                   looking at it is the hours actually worked, so it sits right here —
                   the meal toggle just above is what changes it. */}
               {hoursDifferFromClockSpan && (
                 <p className="text-[10px] leading-tight text-warning">
-                  Pay uses the {enteredHours}h entered here, not the {clockSpanHours}h time span. Use Calls for multiple calls, or correct the hours if this is wrong.
+                  Pay uses the {roundHours(enteredHours)}h entered here, not the {roundHours(clockSpanHours)}h time span. Use Calls for multiple calls, or correct the hours if this is wrong.
                 </p>
               )}
               {actualHours > 0 && (offClockMealMins > 0 || (mealDuration !== undefined && mealDuration > 0)) && (
                 <p className="text-[11px] text-mono leading-tight">
                   {mealDeductionHours > 0 ? (
-                    <><span className="text-muted-foreground line-through">{actualHours}h</span>{' '}
-                      <span className="text-accent font-semibold">{paidHours}h worked</span>{' '}
+                    <><span className="text-muted-foreground line-through">{roundHours(actualHours)}h</span>{' '}
+                      <span className="text-accent font-semibold">{roundHours(paidHours)}h worked</span>{' '}
                       <span className="text-muted-foreground">({offClockMealMins}min off the clock)</span></>
                   ) : (
-                    <><span className="text-accent font-semibold">{actualHours}h worked</span>{' '}
+                    <><span className="text-accent font-semibold">{roundHours(actualHours)}h worked</span>{' '}
                       <span className="text-muted-foreground">(meal stays on the clock)</span></>
                   )}
                 </p>
@@ -1869,7 +1869,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             >
               <Check size={16} className="text-accent shrink-0" />
               <span className="min-w-0">
-                <span className="block text-sm font-semibold text-accent">Confirm {paidHours}h worked</span>
+                <span className="block text-sm font-semibold text-accent">Confirm {roundHours(paidHours)}h worked</span>
                 <span className="block text-[11px] text-muted-foreground mt-0.5">
                   Planned ahead of the day — nothing counts it until you say it happened.
                 </span>
@@ -1990,8 +1990,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           {job.venue && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Venue</span><span className="font-medium text-xs">{job.venue}</span></div>}
           {job.jobNumber && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Job #</span><span className="font-medium text-xs text-mono">{job.jobNumber}</span></div>}
           {(startTime || job.startTime) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Start</span><span className="font-medium text-xs text-mono">{startTime || job.startTime}{endTime ? ` – ${endTime}` : ''}</span></div>}
-          {actualHours > 0 && mealDeductionHours > 0 && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Clocked</span><span className="font-medium text-xs text-mono text-muted-foreground">{actualHours}h</span></div>}
-          {actualHours > 0 && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Hours Worked</span><span className="font-medium text-xs text-mono">{paidHours}h</span></div>}
+          {actualHours > 0 && mealDeductionHours > 0 && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Clocked</span><span className="font-medium text-xs text-mono text-muted-foreground">{roundHours(actualHours)}h</span></div>}
+          {actualHours > 0 && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Hours Worked</span><span className="font-medium text-xs text-mono">{roundHours(paidHours)}h</span></div>}
           {job.dayRate
             ? <div className="flex justify-between"><span className="text-muted-foreground text-xs">Day rate</span><span className="font-medium text-xs text-mono">${job.dayRate} · covers {job.dayRateHours ?? 10}h</span></div>
             : rate > 0 && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Rate</span><span className="font-medium text-xs text-mono">${rate}/hr</span></div>}
@@ -1999,7 +1999,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
         {payPreview && (
           <div className={cn("rounded-md border p-3 space-y-1.5", minimumApplied ? "border-accent/40 bg-accent/5" : "border-success/30 bg-success/5")}>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">{minimumApplied ? `Worked ${actualHours}h — paid for ${billableHours}h minimum` : mealDeductionHours > 0 ? `Worked ${actualHours}h — ${offClockMealMins}min meal = ${paidHours}h paid` : `Worked ${actualHours}h`}</span>
+              <span className="text-xs text-muted-foreground">{minimumApplied ? `Worked ${roundHours(actualHours)}h — paid for ${roundHours(billableHours)}h minimum` : mealDeductionHours > 0 ? `Worked ${roundHours(actualHours)}h — ${offClockMealMins}min meal = ${roundHours(paidHours)}h paid` : `Worked ${roundHours(actualHours)}h`}</span>
               <span className="font-bold text-sm text-mono text-success">${payPreviewTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
             </div>
             {minimumApplied && <p className="text-[10px] text-accent font-medium">{minHours}h minimum call — contract guarantees payment for {minHours}h</p>}
@@ -2126,7 +2126,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                     {format(new Date(j.date + 'T12:00:00'), 'EEE, MMM d')}
                     {j.id === job.id && <span className="text-accent"> · this shift</span>}
                   </span>
-                  <span className="shrink-0 text-muted-foreground">{netHoursWorked(j)}h</span>
+                  <span className="shrink-0 text-muted-foreground">{roundHours(netHoursWorked(j))}h</span>
                 </div>
               ))}
             </div>
@@ -2332,7 +2332,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                 const active = minimumHours === hours.toString();
                 return (
                   <button key={hours} type="button" onClick={() => handleMinimumClick(hours)} className={cn("rounded-md border py-2 text-center text-sm font-bold text-mono transition-colors", active ? "bg-primary/15 border-primary/50 text-primary" : "border-border bg-secondary/20 text-muted-foreground hover:border-primary/30")}>
-                    {hours}h
+                    {roundHours(hours)}h
                   </button>
                 );
               })}
@@ -2350,7 +2350,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                 className="mt-0.5 rounded border-border"
               />
               <span className="text-xs">
-                <span className="font-medium">{rawNightHours}h after midnight were actually worked</span>
+                <span className="font-medium">{roundHours(rawNightHours)}h after midnight were actually worked</span>
                 <span className="block text-[11px] text-muted-foreground mt-0.5">
                   Paid at {employer?.nightPremiumMultiplier ?? 2}× straight rate. Uncheck if some or all of that time was minimum-call padding you didn't really work.
                 </span>
@@ -2372,7 +2372,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                     placeholder="0"
                     className="h-8 text-sm text-mono w-24"
                   />
-                  <span className="text-[11px] text-muted-foreground">of {rawNightHours}h — the rest bills straight time</span>
+                  <span className="text-[11px] text-muted-foreground">of {roundHours(rawNightHours)}h — the rest bills straight time</span>
                 </div>
               </div>
             )}
@@ -2414,7 +2414,6 @@ function EventForm({ initial, onSave, onCancel }: {
         value={title}
         onChange={e => setTitle(e.target.value)}
         className="h-8 text-sm"
-        autoFocus
       />
       <div className="grid grid-cols-3 gap-2">
         <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="h-8 text-xs col-span-1" />
@@ -3225,7 +3224,7 @@ export default function CalendarPage() {
             <div className="flex items-center justify-between px-1 pb-1 border-b border-border/30">
               <span className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground/50">{format(currentDate, 'MMMM')}</span>
               <div className="flex items-center gap-3">
-                {monthStats.totalHours > 0 ? <span className="text-[11px] text-mono font-semibold text-primary">{monthStats.totalHours.toFixed(1)}h</span> : <span className="text-[11px] text-mono text-muted-foreground/25">—</span>}
+                {monthStats.totalHours > 0 ? <span className="text-[11px] text-mono font-semibold text-primary">{roundHours(monthStats.totalHours)}h</span> : <span className="text-[11px] text-mono text-muted-foreground/25">—</span>}
                 {monthStats.totalPay > 0 && <span className={cn("text-[11px] text-mono font-bold", moneyTone(monthJobsInView, paidJobIds))}>${monthStats.totalPay >= 1000 ? `${(monthStats.totalPay / 1000).toFixed(1)}k` : monthStats.totalPay.toFixed(0)}</span>}
               </div>
             </div>
@@ -3290,7 +3289,7 @@ export default function CalendarPage() {
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">{yearStats.totalJobs > 0 ? `${yearStats.totalJobs} job${yearStats.totalJobs !== 1 ? 's' : ''}` : 'No jobs yet'}</span>
               <div className="flex items-center gap-3">
-                {yearStats.totalHours > 0 && <span className="text-xs text-mono font-semibold text-primary">{yearStats.totalHours.toFixed(1)}h</span>}
+                {yearStats.totalHours > 0 && <span className="text-xs text-mono font-semibold text-primary">{roundHours(yearStats.totalHours)}h</span>}
                 {yearStats.totalPay > 0 && <span className={cn("text-xs text-mono font-bold", moneyTone(yearJobsInView, paidJobIds))}>${yearStats.totalPay >= 1000 ? `${(yearStats.totalPay / 1000).toFixed(1)}k` : yearStats.totalPay.toFixed(0)}</span>}
               </div>
             </div>
@@ -3324,7 +3323,7 @@ export default function CalendarPage() {
                       {w.isNow && <span className="ml-1.5 text-[10px] font-normal text-primary">this week</span>}
                     </p>
                     <p className="text-[10px] text-mono text-muted-foreground">
-                      {w.shifts === 0 ? 'no shifts' : `${w.shifts} shift${w.shifts === 1 ? '' : 's'} · ${w.hours.toFixed(1)}h`}
+                      {w.shifts === 0 ? 'no shifts' : `${w.shifts} shift${w.shifts === 1 ? '' : 's'} · ${roundHours(w.hours)}h`}
                     </p>
                   </div>
                   <div className="text-right">
@@ -3350,7 +3349,7 @@ export default function CalendarPage() {
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Hours</span>
-                <span className="text-mono font-semibold">{period.hours.toFixed(1)}h</span>
+                <span className="text-mono font-semibold">{roundHours(period.hours)}h</span>
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Est. gross</span>
@@ -3432,7 +3431,7 @@ export default function CalendarPage() {
                       })()}
                       <div className="flex items-center gap-3 text-xs text-mono">
                         {job.startTime && <span>{job.startTime}{job.endTime ? ` – ${job.endTime}` : ''}</span>}
-                        {hours > 0 && <span>{hours}h</span>}
+                        {hours > 0 && <span>{roundHours(hours)}h</span>}
                         {earned > 0 && <span className="font-semibold">{paid && <span className="font-normal opacity-70">exp. </span>}${earned.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
                         {job.hoursPlanned && <span className="text-[10px] text-mono uppercase tracking-wider text-accent">planned</span>}
                         <button
@@ -3748,7 +3747,7 @@ export default function CalendarPage() {
                           ) : (
                             <p className="text-[11px] text-mono text-muted-foreground leading-none">{statusLabel[first.status]}</p>
                           )}
-                          {totalHours > 0 && <p className="text-[10px] text-mono text-muted-foreground mt-1.5">{totalHours}h</p>}
+                          {totalHours > 0 && <p className="text-[10px] text-mono text-muted-foreground mt-1.5">{roundHours(totalHours)}h</p>}
                         </div>
                       </div>
                       <div className="mt-2.5 flex items-center gap-1.5">
@@ -3792,7 +3791,7 @@ export default function CalendarPage() {
                                   <div className="flex items-baseline justify-between gap-2 text-[11px] text-mono">
                                     <span className="font-bold text-foreground">{p.firstCheck && 'First check · '}{periodDates(p)}</span>
                                     <span className="shrink-0 text-muted-foreground">
-                                      {days} day{days === 1 ? '' : 's'}{hours > 0 ? ` · ${hours}h` : ''}{amount > 0 ? ` · $${Math.round(amount).toLocaleString()}` : ''}
+                                      {days} day{days === 1 ? '' : 's'}{hours > 0 ? ` · ${roundHours(hours)}h` : ''}{amount > 0 ? ` · $${Math.round(amount).toLocaleString()}` : ''}
                                     </span>
                                   </div>
                                   {payments.length > 0 && (
@@ -3950,7 +3949,7 @@ export default function CalendarPage() {
                           >
                             <span className="text-xs text-mono flex items-center gap-1.5"><CallbackMark job={job} allJobs={data.jobs} employers={data.employers} />{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}<SplitMark job={job} allJobs={data.jobs} />{sixthSeventhDayDates[job.date] && <PremiumTag day={sixthSeventhDayDates[job.date].day} pays={sixthSeventhDayDates[job.date].pays} />}</span>
                             <span className="flex items-center gap-1.5 text-[11px] text-mono text-muted-foreground">
-                              {netHoursWorked(job) > 0 ? `${netHoursWorked(job)}h` : isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
+                              {netHoursWorked(job) > 0 ? `${roundHours(netHoursWorked(job))}h` : isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
                               {job.startTime && !job.endTime && <span className="text-warning"> · no end time</span>}
                               {effectiveHoursWorked(job) > 0 && (
                                 <StubMark job={job} paidByHand={paidByHandJobIds.has(job.id)} />

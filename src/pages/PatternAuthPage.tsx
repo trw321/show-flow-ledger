@@ -180,7 +180,7 @@ export default function PatternAuthPage({ onUnlocked }: { onUnlocked?: () => voi
           {screen === 'setup-name' && (
             <motion.div key="setup-name" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-4 w-full">
               <p className="text-sm text-center text-muted-foreground">What should we call you?</p>
-              <Input placeholder="Name or handle (e.g. T-Dubs)" value={username} onChange={e => setUsername(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleNameSubmit()} autoFocus />
+              <Input placeholder="Name or handle (e.g. T-Dubs)" value={username} onChange={e => setUsername(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleNameSubmit()} />
               {error && <p className="text-xs text-destructive">{error}</p>}
               <Button onClick={handleNameSubmit} className="w-full">Next →</Button>
               {isSetup && (

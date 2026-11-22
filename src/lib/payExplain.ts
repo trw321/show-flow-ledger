@@ -5,6 +5,7 @@ import { jobPayBreakdown, netHoursWorked } from './payCalc';
 import { EMPTY_PROFILE, type PayerProfile } from './payerProfile';
 import type { RowStatus } from './stubComparison';
 import type { StubParsed } from './stubMatching';
+import { roundHours } from './hoursFormat';
 
 /**
  * The estimate beside what actually came in, and why they differ.
@@ -113,7 +114,7 @@ export function explainPay({ stub, received, jobs, allJobs, employers, payer = E
     if (Math.abs(hoursDelta) >= 0.25) {
       const effect = hoursDelta * (stub.hourlyRate ?? estRate ?? 0);
       grossExplained += effect;
-      add('hours', `The stub paid ${stub.totalHours}h and your shifts come to ${estHours}h, ${Math.abs(hoursDelta)}h ${hoursDelta > 0 ? 'more' : 'fewer'}.`, effect);
+      add('hours', `The stub paid ${roundHours(stub.totalHours ?? 0)}h and your shifts come to ${roundHours(estHours)}h, ${roundHours(Math.abs(hoursDelta))}h ${hoursDelta > 0 ? 'more' : 'fewer'}.`, effect);
     }
     if (stub.hourlyRate != null && estRate != null && Math.abs(stub.hourlyRate - estRate) >= 0.005) {
       const effect = (stub.hourlyRate - estRate) * (stub.totalHours ?? estHours);

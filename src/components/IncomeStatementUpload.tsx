@@ -20,6 +20,7 @@ import { alreadyRecorded, repeatsInUpload } from '@/lib/paymentRepeats';
 import StubEditor from '@/components/StubEditor';
 import { cn } from '@/lib/utils';
 import { aiFetch } from '@/lib/aiSwitch';
+import { roundHours } from '@/lib/hoursFormat';
 
 /** Why a payment read off the image starts out left out. */
 interface LeftOut {
@@ -233,7 +234,7 @@ function ProjectOption({ link, amount, chosen, onChoose }: { link: PaymentLink; 
             <li key={s.job.id} className={cn('py-1 text-[10px]', s.counted ? '' : 'opacity-60')}>
               <div className="flex items-baseline gap-3">
                 <span className="text-mono font-semibold">{shortDay(s.job.date)}</span>
-                <span className="text-mono">{s.job.hoursWorked ? `${s.job.hoursWorked}h` : s.expected > 0 ? 'from clock times' : 'no hours'}</span>
+                <span className="text-mono">{s.job.hoursWorked ? `${roundHours(s.job.hoursWorked)}h` : s.expected > 0 ? 'from clock times' : 'no hours'}</span>
                 <span className="ml-auto text-mono">{s.expected > 0 ? dollars(s.expected) : ''}</span>
               </div>
               <div className="mt-0.5 flex flex-wrap gap-1">

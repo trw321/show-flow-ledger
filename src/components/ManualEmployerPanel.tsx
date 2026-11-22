@@ -80,7 +80,7 @@ export default function ManualEmployerPanel({ name, role, prefill, onPickRole }:
           </div>
           {addingRole && (
             <div className="flex items-center gap-1.5">
-              <Input autoFocus placeholder="Role (e.g. A1)" aria-label="New role" value={newName} onChange={e => setNewName(e.target.value)} className="h-8 min-w-0 flex-1 text-xs" />
+              <Input placeholder="Role (e.g. A1)" aria-label="New role" value={newName} onChange={e => setNewName(e.target.value)} className="h-8 min-w-0 flex-1 text-xs" />
               <Input type="number" step="0.01" placeholder="$" aria-label="New role's pay" value={newRate} onChange={e => setNewRate(e.target.value)} className="h-8 w-20 text-xs" />
               <button type="button" onClick={() => setByDay(d => !d)} aria-label={`Paid by the ${byDay ? 'day' : 'hour'}. Tap to change.`} className="pixel-button pick-off h-8 w-12 shrink-0 text-[11px] font-bold">
                 {byDay ? '/day' : '/hr'}

@@ -5,6 +5,7 @@ import { netHoursWorked, jobPayBreakdown } from '@/lib/payCalc';
 import type { Job, Employer } from '@/lib/store';
 import ScrollWheel from '@/components/ScrollWheel';
 import { cn } from '@/lib/utils';
+import { roundHours } from '@/lib/hoursFormat';
 
 /**
  * The parts of the old Dashboard worth keeping: the period table, the
@@ -71,7 +72,7 @@ export function PaySummaryTable({ rows, jobs, employers }: { rows: PeriodStat[];
               <td className="py-2 px-1.5 text-foreground/80 font-medium whitespace-nowrap">{row.label}</td>
               <td className="py-2 px-1.5 text-right text-foreground/70 whitespace-nowrap">{money(row.gross)}</td>
               <td className="py-2 px-1.5 text-right text-success font-semibold whitespace-nowrap">{money(row.net)}</td>
-              <td className="py-2 px-1.5 text-right text-foreground/70 whitespace-nowrap">{row.hours > 0 ? row.hours.toFixed(1) : '—'}</td>
+              <td className="py-2 px-1.5 text-right text-foreground/70 whitespace-nowrap">{row.hours > 0 ? roundHours(row.hours) : '—'}</td>
               <td className="py-2 px-1.5 text-right text-foreground/70 whitespace-nowrap">{row.shifts || '—'}</td>
             </tr>
           ))}
@@ -84,7 +85,7 @@ export function PaySummaryTable({ rows, jobs, employers }: { rows: PeriodStat[];
             </td>
             <td className="py-2 px-1.5 text-right text-foreground/70 whitespace-nowrap">{money(browseStat.gross)}</td>
             <td className="py-2 px-1.5 text-right text-success font-semibold whitespace-nowrap">{money(browseStat.net)}</td>
-            <td className="py-2 px-1.5 text-right text-foreground/70 whitespace-nowrap">{browseStat.hours > 0 ? browseStat.hours.toFixed(1) : '—'}</td>
+            <td className="py-2 px-1.5 text-right text-foreground/70 whitespace-nowrap">{browseStat.hours > 0 ? roundHours(browseStat.hours) : '—'}</td>
             <td className="py-2 px-1.5 text-right text-foreground/70 whitespace-nowrap">{browseStat.shifts || '—'}</td>
           </tr>
         </tbody>

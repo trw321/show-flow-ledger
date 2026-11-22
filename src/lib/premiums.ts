@@ -4,6 +4,7 @@ import { shiftContract } from './contracts';
 import { breaksTheHour, isLocal16Shift } from './local16';
 import { nameSimilarity, AUTO_MATCH_THRESHOLD } from './employerMatch';
 import { clockMinutes, endAfterStart } from './clock';
+import { roundHours } from './hoursFormat';
 
 /**
  * Premiums that start a call: the early-call premium and the forced call.
@@ -190,10 +191,10 @@ export function forcedCallFor(job: Job, allJobs: Job[], restHours = FORCED_CALL_
   if (!after) return null;
   const rest = (start - lastEnd) / 60;
   if (rest >= restHours) return null;
-  return { restHours: Math.round(rest * 100) / 100, after };
+  return { restHours: roundHours(rest), after };
 }
 
-const hoursText = (h: number) => `${Math.round(h * 100) / 100}h`;
+const hoursText = (h: number) => `${roundHours(h)}h`;
 
 /** The premiums a call starts with, for calculateDayPay. */
 export function shiftPremiums(job: Job, allJobs: Job[], employer?: Employer, payer?: PayerProfile): StartPremium[] {

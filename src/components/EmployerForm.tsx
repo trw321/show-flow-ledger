@@ -10,6 +10,7 @@ import { payLagDays, payScheduleLabel } from '@/lib/payTiming';
 import type { Employer, EmployerTaxProfile } from '@/lib/store';
 import { FILING_STATUS_LABELS, type FilingStatus } from '@/lib/taxEstimate';
 import { cn } from '@/lib/utils';
+import { roundHours } from '@/lib/hoursFormat';
 
 /**
  * An employer's terms: one form, wherever you reach it from. Settings, Manual
@@ -200,7 +201,6 @@ export function EmployerForm({ initial, onSave, onCancel }: {
         value={form.name}
         onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
         className="h-8 text-sm"
-        autoFocus
       />
       {/* A company's own terms fill in everything below at once. Union contracts go by the shift, so they are not here. */}
       <div className="space-y-1">
@@ -652,14 +652,14 @@ export function EmployerForm({ initial, onSave, onCancel }: {
         <p className="text-xs">Paid time off (PTO)</p>
         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <span>Earn</span>
-          <Input type="number" step="0.1" min="0" placeholder="1" value={form.ptoEarnHours}
+          <Input type="number" step="any" min="0" placeholder="1" value={form.ptoEarnHours}
             onChange={e => setForm(f => ({ ...f, ptoEarnHours: e.target.value }))} className="h-8 text-xs w-16" />
           <span>h per</span>
           <Input type="number" step="1" min="1" placeholder="30" value={form.ptoPerHoursWorked}
             onChange={e => setForm(f => ({ ...f, ptoPerHoursWorked: e.target.value }))} className="h-8 text-xs w-16" />
           <span>h worked</span>
         </div>
-        <Input type="number" step="0.1" min="0" placeholder="Already banked (hours)" value={form.ptoStartingHours}
+        <Input type="number" step="any" min="0" placeholder="Already banked (hours)" value={form.ptoStartingHours}
           onChange={e => setForm(f => ({ ...f, ptoStartingHours: e.target.value }))} className="h-8 text-xs" />
       </div>
       <div className="flex gap-2 justify-end pt-1">

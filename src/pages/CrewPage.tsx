@@ -15,6 +15,7 @@ import { crewShiftHours, crewShiftOwed, crewShiftPay, crewShiftWorked } from '@/
 import { parseCrewSpeech, planCrewSpeech, type CrewPlan, type CrewSpeech } from '@/lib/crewVoice';
 import { localToday } from '@/lib/today';
 import { cn } from '@/lib/utils';
+import { roundHours } from '@/lib/hoursFormat';
 
 /**
  * Boss mode: the people who work for you and when — laid out like Expenses,
@@ -62,7 +63,7 @@ function PersonForm({ initial, onSave, onDelete, onCancel }: {
       }}
     >
       <label className="flex flex-col gap-1"><span className={LABEL}>Name *</span>
-        <Input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="Jamie Torres" className={FIELD} /></label>
+        <Input value={name} onChange={e => setName(e.target.value)} placeholder="Jamie Torres" className={FIELD} /></label>
       <label className="flex flex-col gap-1"><span className={LABEL}>Role</span>
         <Input value={role} onChange={e => setRole(e.target.value)} placeholder="A2, stagehand, LD" className={FIELD} /></label>
       <div className="grid grid-cols-2 gap-2">
@@ -219,7 +220,7 @@ function ShiftForm({ shift, member, jobs, onSave, onDelete, onPay, onUnpay, onCa
         <label className="flex flex-col gap-1"><span className={LABEL}>Day</span>
           <Input type="date" value={date} onChange={e => setDate(e.target.value)} className={FIELD} /></label>
         <label className="flex flex-col gap-1"><span className={LABEL}>Hours worked</span>
-          <Input type="number" step="0.25" value={hours} onChange={e => setHours(e.target.value)} placeholder={crewShiftHours({ ...draft, hoursWorked: undefined }) ? String(crewShiftHours({ ...draft, hoursWorked: undefined })) : ''} className={FIELD} /></label>
+          <Input type="number" step="any" value={hours} onChange={e => setHours(e.target.value)} placeholder={crewShiftHours({ ...draft, hoursWorked: undefined }) ? String(crewShiftHours({ ...draft, hoursWorked: undefined })) : ''} className={FIELD} /></label>
       </div>
       <div className="grid grid-cols-3 gap-2">
         <label className="flex flex-col gap-1"><span className={LABEL}>Call</span>
@@ -246,7 +247,7 @@ function ShiftForm({ shift, member, jobs, onSave, onDelete, onPay, onUnpay, onCa
       <div className="pixel-panel flex items-center gap-2 p-2.5">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-bold text-mono">{money(pay)}</p>
-          <p className="text-[10px] text-muted-foreground">{crewShiftHours(draft)}h × ${draft.rate ?? member?.payRate ?? 0}/hr</p>
+          <p className="text-[10px] text-muted-foreground">{roundHours(crewShiftHours(draft))}h × ${draft.rate ?? member?.payRate ?? 0}/hr</p>
         </div>
         {shift.payoutId ? (
           <Button type="button" variant="ghost" size="sm" onClick={onUnpay} className="gap-1"><Undo2 size={13} /> Paid · undo</Button>
@@ -513,7 +514,7 @@ export default function CrewPage() {
                               <span className="block truncate text-[10px] text-muted-foreground">{job?.name ?? s.place ?? '—'}{s.notes ? ` · ${s.notes}` : ''}</span>
                             </span>
                             <span className="shrink-0 text-right text-[11px] text-mono">
-                              {crewShiftHours(s) > 0 && <span className="block">{crewShiftHours(s)}h</span>}
+                              {crewShiftHours(s) > 0 && <span className="block">{roundHours(crewShiftHours(s))}h</span>}
                               <span className="block text-[10px]">{s.payoutId ? 'paid' : crewShiftWorked(s) ? money(crewShiftPay(s, member)) : 'booked'}</span>
                             </span>
                           </button>

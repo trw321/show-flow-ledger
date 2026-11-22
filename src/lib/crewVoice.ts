@@ -2,6 +2,7 @@ import { addDays, format, parseISO } from 'date-fns';
 import type { CrewMember, CrewShift, PayOutMethod } from './store';
 import { crewShiftHours, crewShiftOwed, crewShiftPay } from './crew';
 import { calcHours, parseTimeToMins } from './hoursMatching';
+import { roundHours } from './hoursFormat';
 
 /**
  * Crew work, said out loud: "book Jamie Friday 8 to 6 at the Fillmore",
@@ -484,7 +485,7 @@ function planClock(said: CrewSpeech, shifts: CrewShift[], today: string, now: st
     const time = said.clock ? clockText(firstAfter(said.clock, parseTimeToMins(open.startTime))) : now;
     const hours = hoursBetween(open.startTime, time);
     plan.update.push({ id: open.id, updates: { endTime: time, hoursWorked: hours } });
-    plan.lines.push(`${member.name} out at ${time} · ${hours}h`);
+    plan.lines.push(`${member.name} out at ${time} · ${roundHours(hours)}h`);
   }
 }
 

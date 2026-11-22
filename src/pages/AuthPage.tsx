@@ -98,7 +98,6 @@ export default function AuthPage() {
                   onChange={e => setPassword(e.target.value)}
                   required
                   minLength={6}
-                  autoFocus
                   autoComplete="new-password"
                 />
                 {error && <p className="text-xs text-destructive bg-destructive/10 rounded-md px-3 py-2">{error}</p>}
@@ -137,7 +136,6 @@ export default function AuthPage() {
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   required
-                  autoFocus
                   autoComplete="email"
                 />
                 {error && <p className="text-xs text-destructive bg-destructive/10 rounded-md px-3 py-2">{error}</p>}

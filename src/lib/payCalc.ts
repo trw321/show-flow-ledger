@@ -8,6 +8,7 @@ import { localToday } from './today';
 import { breaksTheHour, isLocal16Shift } from './local16';
 import { callMinimum, shiftPremiums, splitSideMinimum, type StartPremium } from './premiums';
 import { clockSpanHours, endAfterStart } from './clock';
+import { roundHours } from './hoursFormat';
 
 export interface OvertimeOptions {
   rule?: 'daily' | 'weekly' | 'none';
@@ -145,11 +146,11 @@ export function calculateDayPay(
   const breakdown: string[] = [];
 
   if (billableHours !== laddered) {
-    breakdown.push(`${laddered}h rounds up to ${billableHours}h (union hours)`);
+    breakdown.push(`${roundHours(laddered)}h rounds up to ${roundHours(billableHours)}h (union hours)`);
   }
 
   if (offClockMinutes > 0) {
-    breakdown.push(`${offClockMinutes}min meal off clock: ${actualHours}h − ${mealDeduction}h = ${adjustedHours}h`);
+    breakdown.push(`${offClockMinutes}min meal off clock: ${roundHours(actualHours)}h − ${roundHours(mealDeduction)}h = ${roundHours(adjustedHours)}h`);
   } else if (mealMinutes > 0 && meal?.onClock) {
     breakdown.push(`${mealMinutes}min meal on clock (no deduction)`);
   }
@@ -187,24 +188,24 @@ export function calculateDayPay(
     const over = Math.max(0, workedHours - covers);
     const otPay = over * hourlyEquivalent * otMultiplier * Math.max(1, dayMultiplier);
     pay = dayRate * Math.max(1, dayMultiplier) + otPay;
-    breakdown.push(`Day rate (covers ${covers}h) = $${(dayRate * Math.max(1, dayMultiplier)).toFixed(2)}`);
+    breakdown.push(`Day rate (covers ${roundHours(covers)}h) = $${(dayRate * Math.max(1, dayMultiplier)).toFixed(2)}`);
     if (over > 0) {
-      breakdown.push(`${over}h past the day rate × $${(hourlyEquivalent * otMultiplier).toFixed(2)} = $${otPay.toFixed(2)}`);
+      breakdown.push(`${roundHours(over)}h past the day rate × $${(hourlyEquivalent * otMultiplier).toFixed(2)} = $${otPay.toFixed(2)}`);
     }
   } else if (otRule !== 'daily') {
     pay = ladderHours * effectiveRate;
-    if (ladderHours > 0) breakdown.push(`${ladderHours}h × $${effectiveRate.toFixed(2)} = $${pay.toFixed(2)}`);
+    if (ladderHours > 0) breakdown.push(`${roundHours(ladderHours)}h × $${effectiveRate.toFixed(2)} = $${pay.toFixed(2)}`);
   } else if (ladderHours <= otThreshold) {
     pay = ladderHours * effectiveRate;
-    if (ladderHours > 0) breakdown.push(`${ladderHours}h × $${effectiveRate.toFixed(2)} = $${pay.toFixed(2)}`);
+    if (ladderHours > 0) breakdown.push(`${roundHours(ladderHours)}h × $${effectiveRate.toFixed(2)} = $${pay.toFixed(2)}`);
   } else if (ladderHours <= dtThreshold) {
     const straightPay = otThreshold * effectiveRate;
     const otHours = ladderHours - otThreshold;
     const otRate = tierRate(otMultiplier);
     const otPay = otHours * otRate;
     pay = straightPay + otPay;
-    breakdown.push(`${otThreshold}h straight × ${effectiveRate.toFixed(2)} = ${straightPay.toFixed(2)}`);
-    breakdown.push(`${otHours}h OT × ${otRate.toFixed(2)} = ${otPay.toFixed(2)}`);
+    breakdown.push(`${roundHours(otThreshold)}h straight × ${effectiveRate.toFixed(2)} = ${straightPay.toFixed(2)}`);
+    breakdown.push(`${roundHours(otHours)}h OT × ${otRate.toFixed(2)} = ${otPay.toFixed(2)}`);
   } else {
     const straightPay = otThreshold * effectiveRate;
     const otHours = dtThreshold - otThreshold;
@@ -214,9 +215,9 @@ export function calculateDayPay(
     const dtRate = tierRate(dtMultiplier);
     const dtPay = dtHours * dtRate;
     pay = straightPay + otPay + dtPay;
-    breakdown.push(`${otThreshold}h straight × ${effectiveRate.toFixed(2)} = ${straightPay.toFixed(2)}`);
-    breakdown.push(`${otHours}h OT × ${otRate.toFixed(2)} = ${otPay.toFixed(2)}`);
-    breakdown.push(`${dtHours}h DT × ${dtRate.toFixed(2)} = ${dtPay.toFixed(2)}`);
+    breakdown.push(`${roundHours(otThreshold)}h straight × ${effectiveRate.toFixed(2)} = ${straightPay.toFixed(2)}`);
+    breakdown.push(`${roundHours(otHours)}h OT × ${otRate.toFixed(2)} = ${otPay.toFixed(2)}`);
+    breakdown.push(`${roundHours(dtHours)}h DT × ${dtRate.toFixed(2)} = ${dtPay.toFixed(2)}`);
   }
 
   // Premiums from the start of the call. Those hours were already paid above
@@ -248,14 +249,14 @@ export function calculateDayPay(
     }
     for (const [label, entry] of added) {
       pay += entry.pay;
-      breakdown.push(`${Math.round(entry.hours * 100) / 100}h ${label}: paid at ${entry.multiplier}×, +$${entry.pay.toFixed(2)}`);
+      breakdown.push(`${roundHours(entry.hours)}h ${label}: paid at ${entry.multiplier}×, +$${entry.pay.toFixed(2)}`);
     }
   }
 
   if (paddingHours > 0 && !(overtimeOptions?.dayRate && overtimeOptions.dayRate > 0)) {
     const padPay = paddingHours * effectiveRate;
     pay += padPay;
-    breakdown.push(`${paddingHours}h minimum-call padding × $${effectiveRate.toFixed(2)} = $${padPay.toFixed(2)}`);
+    breakdown.push(`${roundHours(paddingHours)}h minimum-call padding × $${effectiveRate.toFixed(2)} = $${padPay.toFixed(2)}`);
   }
 
   // A day rate already pays for every hour it covers, night ones included, so
@@ -265,14 +266,14 @@ export function calculateDayPay(
     const nightRate = tierRate(nightMultiplier);
     const nightPay = nightHours * nightRate;
     pay += nightPay;
-    breakdown.push(`${nightHours}h after midnight × ${nightRate.toFixed(2)} = ${nightPay.toFixed(2)}`);
+    breakdown.push(`${roundHours(nightHours)}h after midnight × ${nightRate.toFixed(2)} = ${nightPay.toFixed(2)}`);
   }
 
   const postMealPadding = overtimeOptions?.postMealPaddingHours ?? 0;
   if (postMealPadding > 0) {
     const padPay = postMealPadding * rate;
     pay += padPay;
-    breakdown.push(`${postMealPadding}h post-meal minimum × ${rate.toFixed(2)} = ${padPay.toFixed(2)}`);
+    breakdown.push(`${roundHours(postMealPadding)}h post-meal minimum × ${rate.toFixed(2)} = ${padPay.toFixed(2)}`);
   }
 
   if (mealPenalties > 0) {
@@ -298,7 +299,7 @@ export function calculateDayPay(
   }
 
   if (minimumHours > 0 && actualHours < minimumHours) {
-    breakdown.unshift(`${actualHours}h worked → ${minimumHours}h minimum applied`);
+    breakdown.unshift(`${roundHours(actualHours)}h worked → ${roundHours(minimumHours)}h minimum applied`);
   }
 
   if (dayMultiplier > 1) {
@@ -871,7 +872,7 @@ export function calculateExpectedPay(
       // of the day groups and the vacation base — see jobPayBreakdown.
       const r = calculateDayPay(hours, rate, 0, 0, 1, undefined, { rule: 'none', unionDuesPercent: overtimeOptions.unionDuesPercent, estimatedTaxPercent: overtimeOptions.estimatedTaxPercent });
       ptoPay += r.totalPay;
-      details.push({ date: job.date, hours, pay: r.totalPay, breakdown: [`PTO ${hours}h × $${rate.toFixed(2)}`, ...r.breakdown] });
+      details.push({ date: job.date, hours, pay: r.totalPay, breakdown: [`PTO ${roundHours(hours)}h × $${rate.toFixed(2)}`, ...r.breakdown] });
       continue;
     }
     const existing = byDate.get(job.date) || { hours: 0, mealPenalties: 0, rate, offClockMealMinutes: 0, postMealPadding: 0, mealDuration: job.mealDuration, mealOnClock: job.mealOnClock, sides: [] };

@@ -1,6 +1,7 @@
 import type { Employer, Job } from './store';
 import { effectiveHoursWorked, netHoursWorked } from './payCalc';
 import { resolveEmployer } from './employerMatch';
+import { roundHours } from './hoursFormat';
 
 export interface PtoBalance {
   /** Earned so far from hours worked for this employer. */
@@ -11,7 +12,8 @@ export interface PtoBalance {
   banked: number;
 }
 
-const round1 = (n: number) => Math.round(n * 10) / 10;
+// PTO is hours: kept to three places like every other hour figure.
+const round1 = roundHours;
 
 /**
  * Paid time off with one employer: earned at its rate on the hours actually
