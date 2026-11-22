@@ -25,7 +25,7 @@ import { payDueDate, payTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from
 import { paidShiftIds, periodNet, periodPayments, projectPeriods, shiftsPaidBy, type PayPeriod, type ProjectPeriod } from '@/lib/payPeriods';
 import { explainPay } from '@/lib/payExplain';
 import PayEstimateCard from '@/components/PayEstimateCard';
-import PaymentProof, { ProofRow, SourceTag, WhoPaid } from '@/components/PaymentProof';
+import PaymentProof, { SourceTag, WhoPaid } from '@/components/PaymentProof';
 import { PROOF_LABELS, proofFromMatch, proofKindOf, type ProofKind } from '@/lib/paymentProof';
 import CalendarKey from '@/components/CalendarKey';
 import ConferenceList from '@/components/ConferenceList';
@@ -58,23 +58,20 @@ import { ptoBalance } from '@/lib/pto';
 import { aiFetch } from '@/lib/aiSwitch';
 import { roundHours } from '@/lib/hoursFormat';
 
-const statusDot: Record<Job['status'], string> = {
-  upcoming: 'bg-dot-upcoming',
-  'in-progress': 'bg-dot-pending',
-  completed: 'bg-dot-pending',
-  cancelled: 'bg-dot-cancelled',
-};
-
-/** The dot rule, in the order it is applied — also what the legend prints. */
+/** The money's colours, in the order they're worked out (see moneyTone), and what the key prints. */
 export const SHIFT_STATES = [
-  { dot: 'bg-dot-overdue', text: 'text-dot-overdue', sample: '8a', label: 'needs hours' },
-  { dot: 'bg-dot-upcoming', text: 'text-dot-upcoming', sample: '8a', label: 'upcoming' },
-  { dot: 'bg-dot-pending', text: 'text-dot-pending', sample: '$475', label: 'pending' },
-  { dot: 'bg-dot-paid', text: 'text-dot-paid', sample: '$475', label: 'paid' },
+  { text: 'text-dot-overdue', sample: '8a', label: 'needs hours' },
+  { text: 'text-dot-upcoming', sample: '8a', label: 'upcoming' },
+  { text: 'text-dot-pending', sample: '$475', label: 'pending' },
+  { text: 'text-dot-paid', sample: '$475', label: 'paid' },
 ] as const;
 
 /** A day's pay, short enough for a calendar square: "$475", "$1.4k". */
 const shortDollars = (n: number) => (n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n.toFixed(0)}`);
+
+/** Money that came in: "$450", or "$300.50" when there are cents. Never "$300.5". */
+const dollars = (n: number) =>
+  `$${n.toLocaleString(undefined, Math.round(n * 100) % 100 === 0 ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 
 const statusColors: Record<Job['status'], string> = {
@@ -85,13 +82,6 @@ const statusColors: Record<Job['status'], string> = {
 };
 
 
-// A job counts as "paid" once a linked income record is marked paid —
-// distinct from just "completed" (worked, pay estimated but not yet received).
-function jobDotClass(job: Job, paidJobIds: Set<string>): string {
-  if (paidJobIds.has(job.id)) return 'bg-dot-paid';
-  if (isOverdueUpcoming(job)) return 'bg-dot-overdue';
-  return statusDot[job.status];
-}
 
 /**
  * Money in the colour of the dots, so green means paid wherever it appears.
@@ -2653,7 +2643,6 @@ export default function CalendarPage() {
   }, [data.events, currentDate]);
 
   const [employerForCard, setEmployerForCard] = useState<{ client: string } | null>(null);
-  const [proofForCard, setProofForCard] = useState<Income | null>(null);
 
   const [rainActive, setRainActive] = useState(false);
   const rain = () => { setRainActive(true); setTimeout(() => setRainActive(false), 2100); };
@@ -3652,10 +3641,7 @@ export default function CalendarPage() {
         }
         return (
           <div className="mt-4 flex flex-col gap-2">
-            <h2 className="text-[9px] font-body uppercase tracking-widest text-muted-foreground/50 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
-              Projects this month
-            </h2>
+            <h2 className="text-[9px] font-body uppercase tracking-widest text-muted-foreground/50">Projects this month</h2>
             <div className="flex flex-col gap-2.5">
               {Object.entries(loggedGroups).map(([key, jobs]) => {
                 const first = jobs[0];
@@ -3665,11 +3651,14 @@ export default function CalendarPage() {
                   return { net: sum.net + b.net, gross: sum.gross + b.gross };
                 }, { net: 0, gross: 0 });
                 const totalEarned = totals[payView];
-                const otherView = payView === 'net' ? 'gross' : 'net';
                 const last = jobs[jobs.length - 1];
                 // A split is two calls on one day, not two days.
                 const dayCount = new Set(jobs.map(j => j.date)).size;
-                const dateRange = dayCount > 1 ? `${format(new Date(last.date + 'T12:00:00'), 'MMM d')} – ${format(new Date(first.date + 'T12:00:00'), 'MMM d')}` : format(new Date(first.date + 'T12:00:00'), 'MMM d');
+                // "Nov 3–5", or "Oct 30 – Nov 2" over a month end. showDay keeps
+                // a stored date that isn't one from taking the list down.
+                const dateRange = dayCount <= 1 ? showDay(first.date)
+                  : last.date.slice(0, 7) === first.date.slice(0, 7) ? `${showDay(last.date)}–${showDay(first.date, 'd')}`
+                  : `${showDay(last.date)} – ${showDay(first.date)}`;
                 const isGroup = jobs.length > 1;
                 const expanded = expandedGroupKey === key;
                 const openJob = (job: Job) => { setSelectedDate(job.date); setSelectedJobId(job.id); };
@@ -3709,47 +3698,39 @@ export default function CalendarPage() {
                             {first.name || first.client}
                             {jobs.some(j => j.pto) && <span className="ml-1.5 align-middle text-[10px] text-mono font-bold border border-foreground/50 px-1">PTO</span>}
                           </p>
-                          <p className="text-[13px] text-mono text-foreground/85 leading-snug mt-0.5">{dateRange}</p>
+                          {/* When, how long, how many hours: one line. */}
+                          <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[13px] text-mono text-foreground/85 leading-snug">
+                            <span>{dateRange}</span>
+                            {isGroup && <span className="text-muted-foreground">· {dayCount > 1 ? `${dayCount} days` : `${jobs.length} calls`}</span>}
+                            {totalHours > 0 && <span className="text-muted-foreground">· {roundHours(totalHours)}h</span>}
+                            {(() => {
+                              const best = jobs.map(j => sixthSeventhDayDates[j.date]).filter(Boolean).sort((a, b) => b.day - a.day)[0];
+                              return best ? <PremiumTag day={best.day} pays={best.pays} /> : null;
+                            })()}
+                          </p>
                           <p className="text-[11px] text-muted-foreground truncate">
                             {first.client}
                             {first.role && <span> · {first.role}</span>}
                           </p>
                         </div>
-                        {/* Pay is the reason this list gets opened, so it's the
-                            one thing sized to be read without stopping. */}
-                        <div className="shrink-0 text-right">
+                        {/* Pay is the reason this list gets opened: one figure,
+                            in the key's colour, for the estimate picked above. */}
+                        <div className="flex shrink-0 items-start gap-1">
                           {totalEarned > 0 ? (
-                            <>
-                              <p className={cn("text-lg font-bold text-mono leading-none", moneyTone(jobs, paidJobIds))}>
-                                ${Math.round(totalEarned).toLocaleString()}<span className="ml-1 text-[9px] font-normal text-muted-foreground">est. {payView}</span>
-                              </p>
-                              {Math.round(totals[otherView]) !== Math.round(totalEarned) && (
-                                <p className="text-[10px] text-mono text-muted-foreground mt-1">${Math.round(totals[otherView]).toLocaleString()} est. {otherView}</p>
-                              )}
-                            </>
+                            <p className={cn("text-lg font-bold text-mono leading-none", moneyTone(jobs, paidJobIds))} data-testid="project-pay">
+                              ${Math.round(totalEarned).toLocaleString()}
+                            </p>
                           ) : (
-                            <p className="text-[11px] text-mono text-muted-foreground leading-none">{statusLabel[first.status]}</p>
+                            <p className={cn("text-[11px] text-mono leading-none", moneyTone(jobs, paidJobIds))}>
+                              {jobs.some(isOverdueUpcoming) ? 'Needs hours' : statusLabel[first.status]}
+                            </p>
                           )}
-                          {totalHours > 0 && <p className="text-[10px] text-mono text-muted-foreground mt-1.5">{roundHours(totalHours)}h</p>}
+                          {isGroup && (
+                            expanded
+                              ? <ChevronDown size={16} className="text-muted-foreground shrink-0" />
+                              : <ChevronRight size={16} className="text-muted-foreground shrink-0" />
+                          )}
                         </div>
-                      </div>
-                      <div className="mt-2.5 flex items-center gap-1.5">
-                        <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", jobDotClass(first, paidJobIds))} />
-                        {isGroup && <span className="text-[10px] text-mono bg-foreground/10 text-foreground/70 px-1.5 py-0.5 rounded-full">{dayCount > 1 ? `${dayCount} days` : `${jobs.length} calls`}</span>}
-                        {first.jobNumber && <span className="text-[10px] text-mono text-muted-foreground/60">#{first.jobNumber}</span>}
-                        {(() => {
-                          const best = jobs.map(j => sixthSeventhDayDates[j.date]).filter(Boolean).sort((a, b) => b.day - a.day)[0];
-                          return best ? <PremiumTag day={best.day} pays={best.pays} /> : null;
-                        })()}
-                        <span className="flex-1" />
-                        {totalHours > 0 && (
-                          <StubMark job={first} paidByHand={paidByHandJobIds.has(first.id)} />
-                        )}
-                        {isGroup && (
-                          expanded
-                            ? <ChevronDown size={14} className="text-muted-foreground shrink-0" />
-                            : <ChevronRight size={14} className="text-muted-foreground shrink-0" />
-                        )}
                       </div>
                       {isSplit && (
                         <div className="mt-2.5 space-y-1.5 border-t border-border/60 pt-2">
@@ -3777,11 +3758,6 @@ export default function CalendarPage() {
                                       {days} day{days === 1 ? '' : 's'}{hours > 0 ? ` · ${roundHours(hours)}h` : ''}{amount > 0 ? ` · $${Math.round(amount).toLocaleString()}` : ''}
                                     </span>
                                   </div>
-                                  {payments.length > 0 && (
-                                    <div className="mt-1 space-y-1 border-l-2 border-dot-paid/40 pl-2">
-                                      {samePaymentGroups(payments).map(g => <ProofRow key={g.first.id} income={g.first} onOpen={() => setProofForCard(g.first)} />)}
-                                    </div>
-                                  )}
                                   <div className="mt-1 flex min-h-[1.5rem] items-center justify-between gap-2">
                                     {payments.length > 0 ? (
                                       <>
@@ -3816,18 +3792,6 @@ export default function CalendarPage() {
                           })}
                         </div>
                       )}
-                      {/* Why the card can or can't say where the pay periods fall, and the way to fix it. */}
-                      {((isSplit && split.assumed) || (!split.known && dayCount > 1)) && (
-                        <button
-                          type="button"
-                          onClick={e => { e.stopPropagation(); setEmployerForCard({ client: first.client }); }}
-                          className="mt-1.5 block text-left text-[10px] text-muted-foreground underline"
-                        >
-                          {split.assumed
-                            ? 'Sun–Sat week assumed. Set the day on the employer.'
-                            : 'Pay periods unknown. Set them on the employer to see if this splits.'}
-                        </button>
-                      )}
                       {!isSplit && (() => {
                         const payments = (incomeByProject.get(key) ?? []).filter(i => i.status === 'paid');
                         // Recorded but not in yet: a pay stub, or a payment set back.
@@ -3841,9 +3805,8 @@ export default function CalendarPage() {
                           const repeated = groups.reduce((n, g) => n + g.repeats.length, 0);
                           const total = groups.reduce((sum, g) => sum + g.first.amount, 0);
                           const last = payments.map(i => i.date).sort().pop()!;
-                          const kinds = [...new Map(groups.map(g => [paymentIcon(g.first).label, g.first])).values()];
+                          // What paid it, and its proof, are in the shift: a tap on this line.
                           return (
-                            <>
                             <div className="mt-2 flex items-center justify-between gap-2">
                               {/* Into the project, where its payments are listed and can be changed. */}
                               <button
@@ -3852,8 +3815,7 @@ export default function CalendarPage() {
                                 className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-left text-[11px] text-mono text-dot-paid hover:underline"
                               >
                                 <Check size={12} className="shrink-0" />
-                                <span>Paid ${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {showDay(last)}</span>
-                                {kinds.map(i => <PayIcon key={i.id} income={i} />)}
+                                <span>Paid {dollars(total)} · {showDay(last)}</span>
                                 {repeated > 0 && <span className="shrink-0 text-warning">· {repeated} repeated</span>}
                                 {comingTotal > 0 && <span className="shrink-0 text-dot-pending">· ${Math.round(comingTotal).toLocaleString()} coming</span>}
                               </button>
@@ -3865,18 +3827,12 @@ export default function CalendarPage() {
                                 <Undo2 size={12} /> Undo
                               </button>
                             </div>
-                            {/* What paid it, and how well it's known: each one opens its proof. */}
-                            <div className="mt-1.5 space-y-1 border-l-2 border-dot-paid/40 pl-2">
-                              {groups.map(g => <ProofRow key={g.first.id} income={g.first} onOpen={() => setProofForCard(g.first)} />)}
-                            </div>
-                            </>
                           );
                         }
                         if (coming.length > 0) {
                           // A stub says the money is coming. It is not the money:
                           // the project stays waiting until it lands.
                           return (
-                            <>
                             <div className="mt-2 flex items-center justify-between gap-2">
                               <button
                                 type="button"
@@ -3884,7 +3840,7 @@ export default function CalendarPage() {
                                 className="flex min-w-0 items-center gap-1.5 text-[11px] text-mono text-dot-pending hover:underline"
                               >
                                 <Receipt size={12} className="shrink-0" />
-                                <span className="truncate">{comingLabel} · ${comingTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} coming</span>
+                                <span className="truncate">{comingLabel} · {dollars(comingTotal)} coming</span>
                               </button>
                               <button
                                 type="button"
@@ -3894,10 +3850,6 @@ export default function CalendarPage() {
                                 <span className="inline-flex items-center gap-1"><Banknote size={12} /> Money in</span>
                               </button>
                             </div>
-                            <div className="mt-1.5 space-y-1 border-l-2 border-dot-pending/40 pl-2">
-                              {samePaymentGroups(coming).map(g => <ProofRow key={g.first.id} income={g.first} onOpen={() => setProofForCard(g.first)} />)}
-                            </div>
-                            </>
                           );
                         }
                         const worked = jobs.filter(j => j.date <= localToday() && effectiveHoursWorked(j) > 0);
@@ -3941,6 +3893,20 @@ export default function CalendarPage() {
                           </div>
                           </Fragment>
                         ))}
+                        {/* Why the card can or can't say where the pay periods
+                            fall, and the way to fix it: with the days, not on
+                            every card. */}
+                        {((isSplit && split.assumed) || (!split.known && dayCount > 1)) && (
+                          <button
+                            type="button"
+                            onClick={e => { e.stopPropagation(); setEmployerForCard({ client: first.client }); }}
+                            className="block w-full px-3 py-2 pl-6 text-left text-[10px] text-muted-foreground underline"
+                          >
+                            {split.assumed
+                              ? 'Sun–Sat week assumed. Set the day on the employer.'
+                              : 'Pay periods unknown. Set them on the employer to see if this splits.'}
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -3951,7 +3917,6 @@ export default function CalendarPage() {
         );
       })()}
 
-      {proofForCard && <PaymentProof income={proofForCard} onClose={() => setProofForCard(null)} />}
 
       {employerForCard && (
         <EmployerEditor
