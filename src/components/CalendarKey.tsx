@@ -83,8 +83,8 @@ export default function CalendarKey({ month, employers, plans, states }: {
 
         <p className="font-8bit mt-3 text-[7px] uppercase text-white/60">Days in a row</p>
         <ul className="mt-1.5 flex gap-2 text-[11px] text-mono">
-          <li className="premium-6 px-1.5 font-bold">6th</li>
-          <li className="premium-7 px-1.5 font-bold">7th</li>
+          <li className="sheen-6 sheen-tag relative px-1.5 py-0.5 font-bold">6th 💰</li>
+          <li className="sheen-7 sheen-tag relative px-1.5 py-0.5 font-bold">7th 🤑</li>
         </ul>
       </PopoverContent>
     </Popover>

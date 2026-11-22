@@ -71,8 +71,10 @@ export const SHIFT_STATES = [
 /** A day's pay, short enough for a calendar square: "$475", "$1.4k". */
 const shortDollars = (n: number) => (n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n.toFixed(0)}`);
 
-/** One row of employer names under a week's days, in px. */
+/** One row of employer names across the top of a week's days, in px. */
 const SPAN_ROW = 13;
+/** The 6th/7th-day banner at the very top of a square, in px. */
+const BANNER_ROW = 12;
 
 /** The line either side of a name across a project's days, with a tick at a closed end. */
 function SpanRule({ cap, side }: { cap: boolean; side: 'left' | 'right' }) {
@@ -3161,6 +3163,12 @@ export default function CalendarPage() {
           {weeks.map((week, wi) => {
             // Each project's employer, once across its days in this row.
             const { spans, levels } = spansFor(week);
+            // Top to bottom in every square: the 6th/7th-day banner (only in a
+            // week that has one), the employer's name, the date, the money.
+            // Every week keeps a row for names and one for money, so the
+            // dates line up down the month.
+            const banner = week.some(d => sixthSeventhDayDates[format(d, 'yyyy-MM-dd')]) ? BANNER_ROW : 0;
+            const nameRows = Math.max(levels, 1);
             return (
             // A faint line between weeks, and between days, so each square reads as one.
             <div key={wi} className="neon-week relative grid grid-cols-7">
@@ -3176,8 +3184,8 @@ export default function CalendarPage() {
                         color: employerColour(span.name),
                         left: `calc(${(span.from / 7) * 100}% + ${inset(span.openLeft)}px)`,
                         width: `calc(${((span.to - span.from + 1) / 7) * 100}% - ${inset(span.openLeft) + inset(span.openRight)}px)`,
-                        // Under the date: 6px of padding and the 24px number, row 0 on top.
-                        top: 31 + span.level * SPAN_ROW,
+                        // At the top: under 6px of padding and any banner, row 0 first.
+                        top: 6 + banner + span.level * SPAN_ROW,
                         height: SPAN_ROW,
                       }}>
                       {multi && <SpanRule cap={!span.openLeft} side="left" />}
@@ -3207,17 +3215,26 @@ export default function CalendarPage() {
                         i > 0 && 'neon-day',
                         !isCurrentMonth && 'opacity-30',
                         todayFlag && 'bg-primary/10',
-                        sixthSeventhStreak && premiumClass(sixthSeventhStreak)
+                        // A sheen and a lit edge, not a fill: the date and money keep their colours.
+                        sixthSeventhStreak && (sixthSeventhStreak.day >= 7 ? 'sheen-7' : 'sheen-6')
                       )}
+                      data-premium={sixthSeventhStreak ? sixthSeventhStreak.day : undefined}
                     >
-                      {sixthSeventhStreak && (
-                        <span className="absolute -right-0.5 -top-1.5 z-10 text-[13px] leading-none" aria-hidden="true">
-                          {sixthSeventhStreak.pays >= 2 ? '🤑' : sixthSeventhStreak.pays > 1 ? '💰' : '🔥'}
+                      {/* The 6th/7th-day banner, inside the square, at its top. */}
+                      {banner > 0 && (
+                        <span data-premium-tag={sixthSeventhStreak ? '' : undefined}
+                          className="sheen-tag flex shrink-0 items-center gap-0.5 text-[8px] font-black uppercase text-mono leading-none"
+                          style={{ height: banner }}>
+                          {sixthSeventhStreak && (
+                            <>
+                              {ordinal(sixthSeventhStreak.day)}
+                              <span className="text-[9px]" aria-hidden="true">{sixthSeventhStreak.pays >= 2 ? '🤑' : sixthSeventhStreak.pays > 1 ? '💰' : '🔥'}</span>
+                            </>
+                          )}
                         </span>
                       )}
-                      {sixthSeventhStreak && (
-                        <span className="absolute left-0.5 top-0 text-[8px] font-black text-mono leading-none">{ordinal(sixthSeventhStreak.day)}</span>
-                      )}
+                      {/* Room for the employer names drawn across the top. */}
+                      <span aria-hidden="true" className="block shrink-0" style={{ height: nameRows * SPAN_ROW + 1 }} />
                       {todayFlag ? (
                         <span className="relative w-6 h-6 flex items-center justify-center">
                           <Star size={24} className="absolute text-primary fill-primary drop-shadow-[0_0_5px_hsl(var(--primary))]" />
@@ -3232,16 +3249,15 @@ export default function CalendarPage() {
                       ) : (
                         <span className="text-xs text-mono leading-none w-6 h-6 flex items-center justify-center text-foreground">{format(day, 'd')}</span>
                       )}
-                      {/* Room for the employer names drawn across the row. */}
-                      {levels > 0 && <span aria-hidden="true" className="block shrink-0" style={{ height: levels * SPAN_ROW + 2 }} />}
                       {/* At the bottom, the day's money, in the colour that
                           says where it stands. Before there's pay to show,
-                          the call time, in the same colours. */}
-                      {liveJobs.length > 0 && (
-                        <span data-testid="day-money" className={cn("mt-0.5 text-[10px] text-mono font-semibold leading-none", moneyTone(liveJobs, paidJobIds))}>
+                          the call time, in the same colours. The row is kept
+                          on an empty day so the dates stay in line. */}
+                      {liveJobs.length > 0 ? (
+                        <span data-testid="day-money" className={cn("mt-0.5 h-3 text-[10px] text-mono font-semibold leading-3", moneyTone(liveJobs, paidJobIds))}>
                           {hasPay ? shortDollars(payByDate[dateKey]) : shortCall(liveJobs[0].startTime) || 'call'}
                         </span>
-                      )}
+                      ) : <span aria-hidden="true" className="mt-0.5 block h-3 shrink-0" />}
                       {/* Plans underline the cell instead of taking a dot in the
                           job row — a recurring one then reads as a stripe down
                           the month, which a dot never did. */}

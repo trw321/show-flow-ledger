@@ -341,6 +341,36 @@
   .premium-6 *,
   .premium-7 * { color: #14061f !important; }
   @keyframes premium-shine { to { background-position: -220% 0; } }
+
+  /* A 6th or 7th day in a row on the month grid: a lit edge and a sheen that
+     passes over the square now and then, not a fill, so the date, the name
+     and the money keep their own colours. The tags elsewhere keep the fill. */
+  .sheen-6 { --hl-a: #fff01f; --hl-b: #39ff14; --hl-glow: rgb(255 240 31 / 0.3); }
+  .sheen-7 { --hl-a: #00f0ff; --hl-b: #c77dff; --hl-glow: rgb(0 240 255 / 0.35); }
+  .sheen-6,
+  .sheen-7 { box-shadow: inset 0 0 0 1px var(--hl-a), inset 0 0 10px var(--hl-glow); }
+  .sheen-6::after,
+  .sheen-7::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: linear-gradient(115deg, transparent 40%, rgb(255 255 255 / 0.14) 47%, color-mix(in srgb, var(--hl-b) 28%, transparent) 50%, rgb(255 255 255 / 0.14) 53%, transparent 60%);
+    background-size: 300% 100%;
+    background-repeat: no-repeat;
+    background-position: 100% 0;
+    animation: day-sheen 6s ease-in-out infinite;
+  }
+  /* Rests off to the left, then sweeps across once. */
+  @keyframes day-sheen {
+    0%, 55% { background-position: 100% 0; }
+    100% { background-position: 0% 0; }
+  }
+  .sheen-tag { color: var(--hl-a, currentColor); text-shadow: 0 0 4px var(--hl-glow, transparent); }
+  @media (prefers-reduced-motion: reduce) {
+    .sheen-6::after,
+    .sheen-7::after { animation: none; background-position: 50% 0; }
+  }
   @media (prefers-reduced-motion: reduce) {
     .premium-6,
     .premium-7 { animation: none; }
