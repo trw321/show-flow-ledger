@@ -10,16 +10,21 @@ interface Props {
   action?: React.ReactNode;
   children: React.ReactNode;
   starCount?: number;
+  /** On a phone, run to the screen's edges: no blue strip down either side. */
+  bleed?: boolean;
 }
 
-export default function SpacePageWrapper({ title, description, action, children, starCount }: Props) {
+export default function SpacePageWrapper({ title, description, action, children, starCount, bleed }: Props) {
   return (
-    <div className="relative rounded-lg border border-border overflow-hidden bg-[#0a0806]">
+    <div className={cn(
+      'relative rounded-lg border border-border overflow-hidden bg-[#0a0806]',
+      bleed && '-mx-4 rounded-none border-x-0 md:mx-0 md:rounded-lg md:border-x',
+    )}>
       <div className="absolute inset-0">
         <VortexCanvas phase="idle" className="w-full h-full" starCount={starCount} />
       </div>
       <div className="absolute inset-0 haze-fog" />
-      <div className="relative z-10 p-4 md:p-5">
+      <div className={cn('relative z-10 p-4 md:p-5', bleed && 'px-3')}>
         {/* Header row always renders so the lamp has reserved space even on
             pages that supply their own <h1> (Income, Settings). */}
         <div className={cn('flex items-start justify-between gap-3', title ? 'mb-4 md:mb-6' : 'mb-2')}>

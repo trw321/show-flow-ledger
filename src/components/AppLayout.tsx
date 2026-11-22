@@ -87,7 +87,9 @@ function BottomTabBar() {
   const items = ALL_NAV_ITEMS.filter(item => !item.tab || prefs.tabs[item.tab]);
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 flex pb-[env(safe-area-inset-bottom)] border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+    // The icons sit low: the bar takes 14px less than the home-bar inset, and
+    // keeps at least 4px, so nothing reaches the home bar itself.
+    <nav className="fixed bottom-0 left-0 right-0 z-50 flex pb-[max(0.25rem,calc(env(safe-area-inset-bottom)_-_14px))] border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
       {items.map(item => {
         const active =
           item.to === '/'
@@ -98,7 +100,7 @@ function BottomTabBar() {
             key={item.to}
             to={item.to}
             className={cn(
-              'flex min-w-0 flex-1 flex-col items-center gap-1 py-2.5 font-body transition-colors',
+              'flex min-w-0 flex-1 flex-col items-center gap-1 pt-3 pb-1.5 font-body transition-colors',
               items.length > 5 ? 'text-[9px]' : 'text-[10px]',
               active ? 'text-primary' : 'text-muted-foreground',
             )}
@@ -156,7 +158,7 @@ export default function AppLayout() {
       {/* Main content — top/bottom margins on mobile mirror the fixed header/tab bar's actual height, safe-area inset included, so content never sits under either.
           No max-width/mx-auto here on purpose — the shell fills the viewport edge-to-edge; any readable-width cap belongs to individual pages, not this wrapper. */}
       <main className="flex-1 flex flex-col min-w-0">
-        <div className="flex-1 px-4 py-6 md:px-8 md:py-8 mt-[calc(3.5rem+env(safe-area-inset-top))] md:mt-0 mb-[calc(4rem+env(safe-area-inset-bottom))] md:mb-0">
+        <div className="flex-1 px-4 py-6 md:px-8 md:py-8 mt-[calc(3.5rem+env(safe-area-inset-top))] md:mt-0 mb-[calc(3.5rem+max(0.25rem,calc(env(safe-area-inset-bottom)_-_14px)))] md:mb-0">
           <PageBoundary page={pathname}><Outlet /></PageBoundary>
         </div>
       </main>

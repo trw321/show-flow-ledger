@@ -266,6 +266,42 @@
     .stamp-landing { display: none; }
   }
 
+  /* Neon 80s on the month grid: the lines glow, the writing stays plain so it
+     reads. Pink between weeks, a fainter cyan between days, drawn as their
+     own 1px lines so the glow never smears the dates or the money. */
+  .neon-grid { position: relative; }
+  .neon-grid::after,
+  .neon-week::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: hsl(312 95% 68% / 0.6);
+    box-shadow: 0 0 6px 0.5px hsl(312 100% 65% / 0.55);
+    pointer-events: none;
+  }
+  .neon-grid::after { bottom: 0; }
+  .neon-week::before { top: 0; }
+  .neon-day::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 1px;
+    background: hsl(188 95% 62% / 0.3);
+    box-shadow: 0 0 5px hsl(188 100% 60% / 0.35);
+    pointer-events: none;
+  }
+  /* A title in white with a pink-and-cyan halo, like a sign in a window. */
+  .neon-title {
+    color: hsl(0 0% 98%);
+    text-shadow: 0 0 3px hsl(312 100% 72% / 0.9), 0 0 10px hsl(312 100% 62% / 0.5), 0 0 18px hsl(188 100% 55% / 0.25);
+  }
+  /* A glow in the writing's own colour, kept faint enough to stay crisp. */
+  .neon-soft { text-shadow: 0 0 5px color-mix(in srgb, currentColor 60%, transparent); }
+
   /* The calendar key: a tiny game menu. Steps, not easing, so it pops like one. */
   .font-8bit { font-family: 'Press Start 2P', var(--font-mono), monospace; }
   .key-8bit {

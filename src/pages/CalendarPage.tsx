@@ -79,8 +79,8 @@ function SpanRule({ cap, side }: { cap: boolean; side: 'left' | 'right' }) {
   // In the name's own colour: the employer's.
   return (
     <span className="relative h-2 min-w-[6px] flex-1">
-      <span className="absolute inset-x-0 top-1/2 h-px bg-current opacity-70" />
-      {cap && <span className={cn('absolute inset-y-0 w-px bg-current opacity-70', side === 'left' ? 'left-0' : 'right-0')} />}
+      <span className="absolute inset-x-0 top-1/2 h-px bg-current opacity-80 shadow-[0_0_4px_currentColor]" />
+      {cap && <span className={cn('absolute inset-y-0 w-px bg-current opacity-80 shadow-[0_0_4px_currentColor]', side === 'left' ? 'left-0' : 'right-0')} />}
     </span>
   );
 }
@@ -2984,6 +2984,7 @@ export default function CalendarPage() {
 
   return (
     <SpacePageWrapper
+      bleed
       title="Calendar"
       description={<span className="hidden sm:inline">{viewMode === 'year' ? 'Your year at a glance' : 'Your month at a glance'}</span>}
       action={
@@ -3131,7 +3132,7 @@ export default function CalendarPage() {
           <ChevronLeft size={22} />
         </button>
         <div className="flex-1 flex items-center justify-center gap-2">
-          <h2 className="font-body text-base font-semibold tracking-wide">
+          <h2 className="neon-title font-body text-base font-semibold tracking-wide">
             {viewMode === 'month' ? format(currentDate, 'MMMM yyyy') : currentYear}
           </h2>
           <Button variant="outline" size="sm" className="h-6 text-[10px] px-2 rounded-full"
@@ -3152,17 +3153,17 @@ export default function CalendarPage() {
           <div className="flex items-center gap-1.5 mb-0.5">
             <div className="grid grid-cols-7 flex-1">
               {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-                <div key={i} className="text-center text-[10px] text-muted-foreground text-mono py-1 font-medium">{d}</div>
+                <div key={i} className="neon-soft text-center text-[10px] text-[hsl(188_90%_72%)] text-mono py-1 font-medium">{d}</div>
               ))}
             </div>
           </div>
-          <div className="border-b border-border/50" data-testid="month-grid">
+          <div className="neon-grid" data-testid="month-grid">
           {weeks.map((week, wi) => {
             // Each project's employer, once across its days in this row.
             const { spans, levels } = spansFor(week);
             return (
             // A faint line between weeks, and between days, so each square reads as one.
-            <div key={wi} className="relative grid grid-cols-7 border-t border-border/50">
+            <div key={wi} className="neon-week relative grid grid-cols-7">
                 {spans.map(span => {
                   const multi = span.to > span.from;
                   // A one-day name gets the whole column: on a small phone it's ~40px.
@@ -3180,7 +3181,7 @@ export default function CalendarPage() {
                         height: SPAN_ROW,
                       }}>
                       {multi && <SpanRule cap={!span.openLeft} side="left" />}
-                      <span className="min-w-0 truncate text-[10px] font-bold leading-none">{span.name}</span>
+                      <span className="neon-soft min-w-0 truncate text-[10px] font-bold leading-none">{span.name}</span>
                       {multi && <SpanRule cap={!span.openRight} side="right" />}
                     </span>
                   );
@@ -3203,7 +3204,7 @@ export default function CalendarPage() {
                       title={sixthSeventhStreak ? `${ordinal(sixthSeventhStreak.day)} day in a row` : "Tap to add a plan or view this day"}
                       className={cn(
                         "relative flex flex-col items-center py-1.5 transition-colors cursor-pointer active:bg-secondary/60 hover:bg-secondary/30",
-                        i > 0 && 'border-l border-border/25',
+                        i > 0 && 'neon-day',
                         !isCurrentMonth && 'opacity-30',
                         todayFlag && 'bg-primary/10',
                         sixthSeventhStreak && premiumClass(sixthSeventhStreak)
@@ -3219,13 +3220,13 @@ export default function CalendarPage() {
                       )}
                       {todayFlag ? (
                         <span className="relative w-6 h-6 flex items-center justify-center">
-                          <Star size={24} className="absolute text-primary fill-primary" />
+                          <Star size={24} className="absolute text-primary fill-primary drop-shadow-[0_0_5px_hsl(var(--primary))]" />
                           <span className="relative text-xs text-mono leading-none text-primary-foreground font-bold">{format(day, 'd')}</span>
                         </span>
                       ) : dayConfs.length > 0 ? (
                         // A conference day's date is gold: the mark sits on the day itself.
                         <span data-testid="conference-mark" aria-label={`${format(day, 'd')}, conference: ${dayConfs.map(c => c.name).join(', ')}`}
-                          className="text-xs text-mono font-bold leading-none w-6 h-6 flex items-center justify-center" style={{ color: conferenceColour() }}>
+                          className="neon-soft text-xs text-mono font-bold leading-none w-6 h-6 flex items-center justify-center" style={{ color: conferenceColour() }}>
                           {format(day, 'd')}
                         </span>
                       ) : (
