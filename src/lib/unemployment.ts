@@ -36,6 +36,8 @@ export interface ClaimWeek {
   partial: boolean;
   /** One line an employer, in the order first worked that week. */
   lines: ClaimLine[];
+  /** Days worked in it (paid time off isn't a day worked). */
+  days: number;
   hours: number;
   gross: number;
   /** Paid time off in the week: in its gross, not its hours. */
@@ -137,10 +139,11 @@ export function claimSummary(
     const first = iso(addDays(parseISO(ending), -6));
     const start = first < from ? from : first;
     const end = ending > through ? through : ending;
-    weeks.set(ending, { weekEnding: ending, start, end, partial: start !== first || end !== ending, lines: [], hours: 0, gross: 0, pto: 0 });
+    weeks.set(ending, { weekEnding: ending, start, end, partial: start !== first || end !== ending, lines: [], days: 0, hours: 0, gross: 0, pto: 0 });
   }
 
   const byEmployer = new Map<string, Omit<ClaimEmployer, 'spanDays'> & { worked: Set<string> }>();
+  const weekDays = new Map<string, Set<string>>();
   for (const job of jobs) {
     if (job.status === 'cancelled' || !isClaimDay(job.date) || job.date < from || job.date > through) continue;
     const week = weeks.get(weekEndingFor(job.date, weekEnd));
@@ -158,6 +161,7 @@ export function claimSummary(
     week.hours += hours;
     week.gross += gross;
     if (job.pto) week.pto += gross;
+    else weekDays.set(week.weekEnding, (weekDays.get(week.weekEnding) ?? new Set<string>()).add(job.date));
 
     const id = name.toLowerCase();
     const e = byEmployer.get(id) ?? { name, paidBy, firstDay: job.date, lastDay: job.date, days: 0, hours: 0, gross: 0, worked: new Set<string>() };
@@ -173,6 +177,7 @@ export function claimSummary(
   const cents = (n: number) => Math.round(n * 100) / 100;
   const weekList = [...weeks.values()].map(w => ({
     ...w,
+    days: weekDays.get(w.weekEnding)?.size ?? 0,
     hours: roundHours(w.hours),
     gross: cents(w.gross),
     pto: cents(w.pto),
@@ -206,6 +211,35 @@ export function claimSummary(
   };
 }
 
+/**
+ * The orders the lists can be put in: by days worked, short to long or long
+ * to short, or by time, oldest first ("🦖 to now") or most recent first.
+ */
+export type ClaimSort = 'recent' | 'oldest' | 'fewDays' | 'mostDays';
+
+/** Weeks in an order. Weeks with the same days worked go most recent first. */
+export function sortWeeks(weeks: ClaimWeek[], sort: ClaimSort): ClaimWeek[] {
+  const recent = (a: ClaimWeek, b: ClaimWeek) => b.weekEnding.localeCompare(a.weekEnding);
+  return [...weeks].sort((a, b) =>
+    sort === 'oldest' ? a.weekEnding.localeCompare(b.weekEnding)
+    : sort === 'fewDays' ? a.days - b.days || recent(a, b)
+    : sort === 'mostDays' ? b.days - a.days || recent(a, b)
+    : recent(a, b));
+}
+
+/**
+ * Employers in an order: most recent by their last day, oldest by their
+ * first. Employers with the same days worked go most recent first.
+ */
+export function sortEmployers(list: ClaimEmployer[], sort: ClaimSort): ClaimEmployer[] {
+  const recent = (a: ClaimEmployer, b: ClaimEmployer) => b.lastDay.localeCompare(a.lastDay) || a.name.localeCompare(b.name);
+  return [...list].sort((a, b) =>
+    sort === 'oldest' ? a.firstDay.localeCompare(b.firstDay) || a.name.localeCompare(b.name)
+    : sort === 'fewDays' ? a.days - b.days || recent(a, b)
+    : sort === 'mostDays' ? b.days - a.days || recent(a, b)
+    : recent(a, b));
+}
+
 /** Money as a claim form takes it: "$1,234.50". */
 export const claimMoney = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 /** A day as a claim form shows it: "Sat, Oct 31, 2026". */
@@ -215,9 +249,9 @@ export const claimDay = (day: string, withWeekday = true) => format(parseISO(day
 export function weeksAsText(weeks: ClaimWeek[]): string {
   return weeks.map(w => {
     const head = `Week ending ${claimDay(w.weekEnding)}${w.partial ? ` (${claimDay(w.start, false)} to ${claimDay(w.end, false)} only)` : ''}`;
-    if (w.lines.length === 0) return `${head}: no work, 0 hours, $0.00`;
+    if (w.lines.length === 0) return `${head}: no work, 0 days, 0 hours, $0.00`;
     const parts = w.lines.map(l => `${l.employer} ${l.hours} hours ${claimMoney(l.gross)}`);
-    return `${head}: ${parts.join('; ')}. Total ${w.hours} hours, ${claimMoney(w.gross)} gross${w.pto > 0 ? ` (includes ${claimMoney(w.pto)} PTO)` : ''}`;
+    return `${head}: ${parts.join('; ')}. Total ${w.days} day${w.days === 1 ? '' : 's'}, ${w.hours} hours, ${claimMoney(w.gross)} gross${w.pto > 0 ? ` (includes ${claimMoney(w.pto)} PTO)` : ''}`;
   }).join('\n');
 }
 

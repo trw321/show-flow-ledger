@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Employer, Job } from './store';
 import { EMPTY_PROFILE } from './payerProfile';
-import { claimSummary, employersAsText, howLongText, weekEndingFor, weekRun, weeksAsText, yearsMonths } from './unemployment';
+import { claimSummary, employersAsText, howLongText, sortEmployers, sortWeeks, weekEndingFor, weekRun, weeksAsText, yearsMonths } from './unemployment';
 
 const job = (id: string, date: string, client: string, extra: Partial<Job> = {}): Job => ({
   id, name: 'TEST ' + id, client, date, startTime: '8:00 AM', endTime: '4:00 PM', hoursWorked: 8,
@@ -98,8 +98,8 @@ describe('copying it out', () => {
   it('writes a line a week, and a line an employer', () => {
     const s = summary([job('a', '2026-10-05', 'Odeum')], '2026-10-01', '2026-10-10');
     const weeks = weeksAsText(s.weeks).split('\n');
-    expect(weeks[0]).toBe('Week ending Sat, Oct 3, 2026 (Oct 1, 2026 to Oct 3, 2026 only): no work, 0 hours, $0.00');
-    expect(weeks[1]).toBe('Week ending Sat, Oct 10, 2026: Odeum 8 hours $400.00. Total 8 hours, $400.00 gross');
+    expect(weeks[0]).toBe('Week ending Sat, Oct 3, 2026 (Oct 1, 2026 to Oct 3, 2026 only): no work, 0 days, 0 hours, $0.00');
+    expect(weeks[1]).toBe('Week ending Sat, Oct 10, 2026: Odeum 8 hours $400.00. Total 1 day, 8 hours, $400.00 gross');
     expect(employersAsText(s.employers, s.longest)).toBe('Worked for longest: Odeum\n\nOdeum: first day Oct 5, 2026, last day Oct 5, 2026 (0 years, 0 months (1 day)), 1 day worked, 8 hours, $400.00 gross');
   });
 });
@@ -136,5 +136,33 @@ describe('who you worked for longest', () => {
 
   it('is nobody with no work', () => {
     expect(summary([], '2026-03-01', '2026-03-31').longest).toBeUndefined();
+  });
+});
+
+describe('putting the lists in order', () => {
+  const s = summary([
+    job('a', '2026-03-02', 'Odeum'), job('b', '2026-03-03', 'Odeum'), job('c', '2026-03-03', 'Odeum', { name: 'TEST evening' }),
+    job('d', '2026-03-10', 'PSS'),
+    job('e', '2026-03-16', 'Clair'), job('f', '2026-03-17', 'Clair'), job('g', '2026-03-18', 'Clair'),
+  ], '2026-03-01', '2026-03-28');
+
+  it('counts the days worked in each week, not the shifts', () => {
+    expect(s.weeks.map(w => [w.weekEnding, w.days])).toEqual([['2026-03-07', 2], ['2026-03-14', 1], ['2026-03-21', 3], ['2026-03-28', 0]]);
+  });
+
+  it('orders the weeks by time either way, and by days worked either way', () => {
+    const order = (sort: Parameters<typeof sortWeeks>[1]) => sortWeeks(s.weeks, sort).map(w => w.weekEnding.slice(5));
+    expect(order('recent')).toEqual(['03-28', '03-21', '03-14', '03-07']);
+    expect(order('oldest')).toEqual(['03-07', '03-14', '03-21', '03-28']);
+    expect(order('fewDays')).toEqual(['03-28', '03-14', '03-07', '03-21']);
+    expect(order('mostDays')).toEqual(['03-21', '03-07', '03-14', '03-28']);
+  });
+
+  it('orders the employers the same ways', () => {
+    const order = (sort: Parameters<typeof sortEmployers>[1]) => sortEmployers(s.employers, sort).map(e => e.name);
+    expect(order('recent')).toEqual(['Clair', 'PSS', 'Odeum']);
+    expect(order('oldest')).toEqual(['Odeum', 'PSS', 'Clair']);
+    expect(order('fewDays')).toEqual(['PSS', 'Odeum', 'Clair']);
+    expect(order('mostDays')).toEqual(['Clair', 'Odeum', 'PSS']);
   });
 });

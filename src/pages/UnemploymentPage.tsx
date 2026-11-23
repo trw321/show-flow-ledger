@@ -12,11 +12,39 @@ import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { localToday } from '@/lib/today';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { EMPLOYER_COLOURS, employerColours, employerId } from '@/lib/employerColours';
-import { WEEKDAYS, claimDay, claimMoney, claimSummary, employersAsText, howLongText, isClaimDay, weekRun, weeksAsText, type WeekEnd } from '@/lib/unemployment';
+import { WEEKDAYS, claimDay, claimMoney, claimSummary, howLongText, isClaimDay, sortEmployers, sortWeeks, weekRun, weeksAsText, type ClaimSort, type WeekEnd } from '@/lib/unemployment';
 import { cn } from '@/lib/utils';
 
 /** A label in the arcade font, small, in the cyan of the calendar's lines. */
 const LABEL = 'font-8bit text-[7px] uppercase leading-relaxed text-[hsl(188_95%_72%)]';
+
+/** A gross figure that copies itself when tapped, with a small copy mark to say so. */
+function GrossButton({ amount, onCopy, className }: { amount: number; onCopy: (n: number) => void; className?: string }) {
+  return (
+    <button type="button" onClick={() => onCopy(amount)} aria-label={`Copy ${claimMoney(amount)}`} data-testid="copy-amount"
+      className={cn('neon-title flex shrink-0 items-center gap-1 font-bold text-mono active:opacity-70', className)}>
+      {claimMoney(amount)}
+      <Copy size={11} className="text-[hsl(188_90%_70%)]" aria-hidden />
+    </button>
+  );
+}
+
+/** The orders the lists can be put in, as the chips say them. */
+const SORTS: { value: ClaimSort; label: string; says: string }[] = [
+  { value: 'recent', label: 'Now → 🦖', says: 'Most recent first' },
+  { value: 'oldest', label: '🦖 → now', says: 'Oldest first' },
+  { value: 'fewDays', label: 'Short → long', says: 'Fewest days worked first' },
+  { value: 'mostDays', label: 'Long → short', says: 'Most days worked first' },
+];
+const SORT_KEY = 'show-flow-claim-sort';
+const loadSort = (): ClaimSort => {
+  try {
+    const saved = localStorage.getItem(SORT_KEY);
+    return SORTS.some(o => o.value === saved) ? saved as ClaimSort : 'recent';
+  } catch {
+    return 'recent';
+  }
+};
 
 /** The dates last picked, so coming back for the next form starts there. This device only. */
 const RANGE_KEY = 'show-flow-claim-range';
@@ -51,6 +79,10 @@ export default function UnemploymentPage() {
   const today = localToday();
   const [range, setRange] = useState(() => loadRange(today));
   const [view, setView] = useState<'weeks' | 'employers'>('weeks');
+  const [sort, setSort] = useState<ClaimSort>(loadSort);
+  useEffect(() => {
+    try { localStorage.setItem(SORT_KEY, sort); } catch { /* only a convenience */ }
+  }, [sort]);
 
   useEffect(() => {
     try { localStorage.setItem(RANGE_KEY, JSON.stringify(range)); } catch { /* only a convenience */ }
@@ -61,6 +93,9 @@ export default function UnemploymentPage() {
     () => claimSummary(data.jobs, data.employers, prefs.payer, range.from, range.through, range.weekEnd),
     [data.jobs, data.employers, prefs.payer, range],
   );
+
+  const weeks = useMemo(() => sortWeeks(summary.weeks, sort), [summary.weeks, sort]);
+  const employers = useMemo(() => sortEmployers(summary.employers, sort), [summary.employers, sort]);
 
   // The same colour each employer has on the calendar.
   const colourOf = useMemo(() => {
@@ -80,31 +115,58 @@ export default function UnemploymentPage() {
   const preset = (months: number) => setRange(r => ({ ...r, from: iso(subMonths(parseISO(today), months)), through: today }));
 
   const copy = async () => {
-    const text = view === 'weeks' ? weeksAsText(summary.weeks) : employersAsText(summary.employers, summary.longest);
+    // Employers: just their names, one a line, ready to paste into a list.
+    const text = view === 'weeks' ? weeksAsText(weeks) : employers.map(e => e.name).join('\n');
     try {
       await navigator.clipboard.writeText(text);
-      toast.success(view === 'weeks' ? `Copied ${summary.weeks.length} weeks` : `Copied ${summary.employers.length} employers`);
+      toast.success(view === 'weeks' ? `Copied ${weeks.length} weeks` : `Copied ${employers.length} employer${employers.length === 1 ? '' : 's'}`);
     } catch {
       toast.error("Couldn't copy here. Try the Excel download.");
     }
   };
 
+  /** Gross as a form's number box takes it: no dollar sign, no commas, cents. */
+  const plain = (n: number) => n.toFixed(2);
+
+  const copyText = async (text: string, said: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(said);
+    } catch {
+      toast.error("Couldn't copy here. Try the Excel download.");
+    }
+  };
+  // Every gross in the list, one a line, in the order showing.
+  const copyGross = () => {
+    const list = view === 'weeks' ? weeks : employers;
+    return copyText(list.map(x => plain(x.gross)).join('\n'), `Copied ${list.length} gross amount${list.length === 1 ? '' : 's'}`);
+  };
+  // Each employer (or week) with its gross, one a line: "Odeum: $19,880.00".
+  const copyBoth = () => {
+    const lines = view === 'weeks'
+      ? weeks.map(w => `Week ending ${claimDay(w.weekEnding, false)}: ${claimMoney(w.gross)}`)
+      : employers.map(e => `${e.name}: ${claimMoney(e.gross)}`);
+    return copyText(lines.join('\n'), `Copied ${lines.length} line${lines.length === 1 ? '' : 's'}`);
+  };
+  // One gross, tapped.
+  const copyAmount = (n: number) => void copyText(plain(n), `Copied ${claimMoney(n)}`);
+
   const download = () => {
-    const weeks = summary.weeks.flatMap(w => {
-      const base = { 'Week ending': w.weekEnding, From: w.start, Through: w.end };
+    const weekRows = weeks.flatMap(w => {
+      const base = { 'Week ending': w.weekEnding, From: w.start, Through: w.end, 'Days worked': w.days };
       return w.lines.length === 0
         ? [{ ...base, Employer: 'No work', Hours: 0, Gross: 0 }]
         : w.lines.map(l => ({ ...base, Employer: l.employer, Hours: l.hours, Gross: l.gross }));
     });
-    const employers = summary.employers.map(e => ({
+    const employerRows = employers.map(e => ({
       Employer: e.name,
       'Worked for longest': [summary.longest?.byStretch === e.name && 'Longest, first day to last', summary.longest?.byDays === e.name && 'Most days worked'].filter(Boolean).join('; '),
       'Paid by': e.paidBy ?? '', 'First day': e.firstDay, 'Last day': e.lastDay, 'How long': howLongText(e.firstDay, e.lastDay),
       'Days worked': e.days, Hours: e.hours, Gross: e.gross,
     }));
     const book = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(weeks), 'Weeks');
-    XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(employers), 'Employers');
+    XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(weekRows), 'Weeks');
+    XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(employerRows), 'Employers');
     XLSX.writeFile(book, `unemployment-claim-${range.from}-to-${range.through}.xlsx`);
   };
 
@@ -204,23 +266,42 @@ export default function UnemploymentPage() {
               ))}
             </div>
 
-            <div className="flex gap-2">
-              <button type="button" onClick={() => void copy()} className="pixel-button pick-off flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono">
-                <Copy size={13} aria-hidden /> Copy {view === 'weeks' ? 'weeks' : 'employers'}
+            <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Order" data-testid="claim-sort">
+              {SORTS.map(o => (
+                <button key={o.value} type="button" role="radio" aria-checked={sort === o.value} aria-label={o.says} onClick={() => setSort(o.value)}
+                  className={cn('pixel-button py-1.5 text-[12px] font-bold text-mono', sort === o.value ? 'pick-on' : 'pick-off')}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Copy: the list, the gross alone, or each with its gross, one a line. */}
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => void copy()} data-testid="copy-list" className="pixel-button pick-off flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono">
+                <Copy size={13} aria-hidden /> {view === 'weeks' ? 'Weeks' : 'Names'}
               </button>
-              <button type="button" onClick={download} className="pixel-button pick-off flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono">
+              <button type="button" onClick={() => void copyGross()} data-testid="copy-gross" className="pixel-button pick-off flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono">
+                <Copy size={13} aria-hidden /> Gross
+              </button>
+              <button type="button" onClick={() => void copyBoth()} data-testid="copy-both" className="pixel-button pick-off flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono">
+                <Copy size={13} aria-hidden /> {view === 'weeks' ? 'Week' : 'Name'} + gross
+              </button>
+              <button type="button" onClick={download} className="pixel-button pick-off flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono">
                 <Download size={13} aria-hidden /> Excel
               </button>
             </div>
 
             {view === 'weeks' ? (
               <ul className="neon-well divide-y divide-[hsl(312_95%_68%/0.25)]" data-testid="claim-weeks">
-                {summary.weeks.map(w => (
+                {weeks.map(w => (
                   <li key={w.weekEnding} className={cn('px-3 py-2.5', w.lines.length === 0 && 'opacity-60')}>
-                    <p className={LABEL}>Week ending</p>
+                    <p className={cn(LABEL, 'flex justify-between gap-2')}>
+                      <span>Week ending</span>
+                      <span>{w.days} day{w.days === 1 ? '' : 's'}</span>
+                    </p>
                     <div className="flex items-baseline justify-between gap-2">
                       <p className="neon-title text-[13px] font-bold text-mono">{claimDay(w.weekEnding)}</p>
-                      <p className="neon-title shrink-0 text-[13px] font-bold text-mono">{claimMoney(w.gross)}</p>
+                      <GrossButton amount={w.gross} onCopy={copyAmount} className="text-[13px]" />
                     </div>
                     {w.partial && (
                       <p className="text-[11px] text-mono text-warning">Only {claimDay(w.start, false)} to {claimDay(w.end, false)} is in your dates</p>
@@ -245,11 +326,11 @@ export default function UnemploymentPage() {
               <p className="neon-well p-4 text-center text-sm text-mono text-muted-foreground">No work in these dates.</p>
             ) : (
               <ul className="space-y-2" data-testid="claim-employers">
-                {summary.employers.map(e => (
+                {employers.map(e => (
                   <li key={e.name} className="neon-well p-3">
                     <div className="flex items-baseline justify-between gap-2">
                       <p className="neon-soft min-w-0 truncate text-base font-bold text-mono" style={{ color: colourOf(e.name) }}>{e.name}</p>
-                      <p className="neon-title shrink-0 text-base font-bold text-mono">{claimMoney(e.gross)}</p>
+                      <GrossButton amount={e.gross} onCopy={copyAmount} className="text-base" />
                     </div>
                     {(summary.longest?.byStretch === e.name || summary.longest?.byDays === e.name) && (
                       <p className="mt-1 flex flex-wrap gap-1.5">
