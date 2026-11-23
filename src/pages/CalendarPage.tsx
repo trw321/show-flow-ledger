@@ -5,6 +5,7 @@ import StubEditor from '@/components/StubEditor';
 import MoneyRain from '@/components/MoneyRain';
 import LiveWorkPay from '@/components/LiveWorkPay';
 import PreampSheet, { PreampGroup } from '@/components/PreampSheet';
+import { useNavigate } from 'react-router-dom';
 import { useNeedsHours } from '@/lib/useNeedsHours';
 import { useSearchParams } from 'react-router-dom';
 import { useData } from '@/lib/DataContext';
@@ -17,7 +18,7 @@ import {
   AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
 import { callText, explicitCalls, parseDayTimeline, withGapOnClock, COMPOSITE_LUNCH_AFTER_HOURS, MEAL_PENALTY_AFTER_HOURS, type DayTimeline } from '@/lib/dayTimeline';
-import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle, Flame, PenLine, Banknote, Wallet, Flag, Undo2, Rocket, Timer, Orbit, Presentation } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle, Flame, PenLine, Banknote, Wallet, Flag, Undo2, Rocket, Timer, Orbit, Presentation, ClipboardCheck } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO, differenceInCalendarDays } from 'date-fns';
 import type { Employer, Job, CalendarEvent, Income, Invoice } from '@/lib/store';
 import { matchPaymentToProject, betterProject, rankedProjectsFor, projectOf, type FoundPayment, type ProjectMatch } from '@/lib/paymentMatch';
@@ -55,6 +56,7 @@ import NewGigPage from '@/pages/NewGigPage';
 import { localToday, showDay } from '@/lib/today';
 import { shortCall } from '@/lib/shortCall';
 import { weekSpans, type DayProject } from '@/lib/projectSpans';
+import { certifyPeriod, certifyStatus, dueText, reminderOn } from '@/lib/reminders';
 import { EMPLOYER_COLOURS, employerColours, employerId } from '@/lib/employerColours';
 import { ptoBalance } from '@/lib/pto';
 import { aiFetch } from '@/lib/aiSwitch';
@@ -2450,6 +2452,7 @@ function EventForm({ initial, onSave, onCancel }: {
 export default function CalendarPage() {
   const { data, authReady, updateJob, deleteJob, addEvent, updateEvent, deleteEvent, addJob, addIncome, updateIncome, deleteIncome } = useData();
   const { prefs, setCalendarPay } = useUserPrefs();
+  const navigate = useNavigate();
   // Which estimate the calendar and the project boxes lead with.
   const payView = prefs.calendarPay ?? 'net';
   const shownPay = (job: Job) => jobPayBreakdown(job, data.jobs, data.employers, prefs.payer)[payView];
@@ -2680,6 +2683,24 @@ export default function CalendarPage() {
   const [conferencesOpen, setConferencesOpen] = useState(false);
   const [conferenceId, setConferenceId] = useState<string | null>(null);
   const openConferences = (id: string | null = null) => { setConferenceId(id); setConferencesOpen(true); };
+
+  // Preamp's cards: each shows when it has something to say and its reminder
+  // hasn't been turned off in Settings.
+  const showHoursCard = reminderOn(prefs.reminders, 'hours') && jobsNeedingHours.length > 0;
+  const showFlaggedCard = reminderOn(prefs.reminders, 'flagged') && flaggedJobs.length > 0;
+  const showPayCard = reminderOn(prefs.reminders, 'latePay') && payTier !== 'none' && !!oldestWaiting;
+  const showConferencesCard = reminderOn(prefs.reminders, 'conferences') && conferenceAlertsNow.length > 0;
+  const certifyNow = prefs.certify ? certifyStatus(prefs.certify, localToday()) : null;
+  const showCertifyCard = reminderOn(prefs.reminders, 'certify') && !!certifyNow?.remind;
+  /** The claim page's week, so the certification's weeks match it. */
+  const claimWeekEnd = (() => {
+    try {
+      const w = JSON.parse(localStorage.getItem('show-flow-claim-range') ?? 'null')?.weekEnd;
+      return Number.isInteger(w) && w >= 0 && w <= 6 ? w : 6;
+    } catch {
+      return 6;
+    }
+  })();
 
   // The month's plans, for the key: each one, its colour, and its days.
   const monthPlans = useMemo(() => {
@@ -3024,8 +3045,23 @@ export default function CalendarPage() {
 
       {/* To-dos live in Preamp, opened from the filament lamp, which runs red
           hot while there are any, instead of stacking above the month. */}
-      <PreampSheet count={(jobsNeedingHours.length > 0 ? 1 : 0) + (flaggedJobs.length > 0 ? 1 : 0) + (payTier !== 'none' && oldestWaiting ? 1 : 0) + (conferenceAlertsNow.length > 0 ? 1 : 0)}>
-      {jobsNeedingHours.length > 0 && (
+      <PreampSheet count={[showHoursCard, showFlaggedCard, showPayCard, showConferencesCard, showCertifyCard].filter(Boolean).length}>
+      {showCertifyCard && certifyNow && prefs.certify && (() => {
+        const period = certifyPeriod(prefs.certify, claimWeekEnd);
+        const span = `${showDay(period.from)} – ${showDay(period.through)}`;
+        return (
+          <PreampGroup
+            testId="preamp-certify"
+            icon={<ClipboardCheck size={18} className={cn('shrink-0', certifyNow.days < 0 ? 'text-dot-late' : 'text-primary')} aria-hidden />}
+            title={`Certify for unemployment · ${dueText(certifyNow.days)}`}
+            summary={`For ${span}: your hours and pay are ready`}
+            tone={certifyNow.days < 0 ? 'border-dot-late/60 bg-dot-late/10' : 'border-primary/60 bg-primary/10'}
+            titleTone={certifyNow.days < 0 ? 'text-dot-late' : 'text-primary'}
+            items={[{ key: 'certify', title: 'Certify', detail: span, open: () => navigate('/benefits/unemployment', { state: { certify: true } }) }]}
+          />
+        );
+      })()}
+      {showHoursCard && (
         <PreampGroup
           testId="preamp-hours"
           icon={<Zap size={18} className="text-accent shrink-0" />}
@@ -3048,7 +3084,7 @@ export default function CalendarPage() {
       {/* "Check this one later" used to set a flag nothing else ever showed.
           This is where it comes back, every flagged shift a tap away, until
           the box is unticked. */}
-      {flaggedJobs.length > 0 && (
+      {showFlaggedCard && (
         <PreampGroup
           testId="preamp-flagged"
           icon={<Flag size={18} className="text-warning shrink-0" aria-hidden />}
@@ -3064,7 +3100,7 @@ export default function CalendarPage() {
         />
       )}
 
-      {payTier !== 'none' && oldestWaiting && (
+      {showPayCard && oldestWaiting && (
         <PreampGroup
           testId="preamp-pay"
           icon={payTier === 'watching' ? <Eye size={18} className="text-primary shrink-0" />
@@ -3090,7 +3126,7 @@ export default function CalendarPage() {
       )}
 
       {/* Conferences coming up, and ones whose new dates need looking up. */}
-      {conferenceAlertsNow.length > 0 && (
+      {showConferencesCard && (
         <PreampGroup
           testId="preamp-conferences"
           icon={<Presentation size={18} className="shrink-0" style={{ color: conferenceColour() }} aria-hidden />}

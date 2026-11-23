@@ -12,6 +12,7 @@ import PageHeader from '@/components/PageHeader';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { REMINDER_LABELS, REMINDER_ORDER, reminderOn } from '@/lib/reminders';
 import { Briefcase, FileText, Crown, SlidersHorizontal, Trash2, Plus, Pencil, X, CloudOff, Cloud, RefreshCw, AlertTriangle, ChevronRight } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptoBalance } from '@/lib/pto';
@@ -211,7 +212,7 @@ function AccountSection() {
 }
 
 export default function SettingsPage() {
-  const { prefs, setWorkerType, setTabEnabled, setAIFreeMode } = useUserPrefs();
+  const { prefs, setWorkerType, setTabEnabled, setAIFreeMode, setReminder } = useUserPrefs();
   const { data, addEmployer, updateEmployer, deleteEmployer, deleteEverything } = useData();
   const { user } = useAuth();
   const [addingEmployer, setAddingEmployer] = useState(false);
@@ -274,6 +275,31 @@ export default function SettingsPage() {
           <p className="mt-0.5 text-[10px] text-muted-foreground">AI readers off. Manual entry and spreadsheet import still work.</p>
         </div>
         <Switch checked={prefs.aiFreeMode} onCheckedChange={setAIFreeMode} aria-label="AI-free mode" />
+      </section>
+
+      {/* Each of Preamp's reminders, on or off. */}
+      <section data-testid="reminder-settings">
+        <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/60 uppercase mb-3">
+          Reminders
+        </p>
+        <div className="rounded-2xl border border-border overflow-hidden divide-y divide-border/50">
+          {REMINDER_ORDER.map(kind => {
+            const { label, description } = REMINDER_LABELS[kind];
+            const on = reminderOn(prefs.reminders, kind);
+            const unset = kind === 'certify' && !prefs.certify;
+            return (
+              <div key={kind} className={cn('flex items-center justify-between px-4 py-3', on ? 'bg-card' : 'bg-secondary/20')}>
+                <div className="min-w-0 pr-4">
+                  <p className="text-sm font-medium">{label}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {unset ? 'Set when it\'s due on Benefits → Unemployment claim' : description}
+                  </p>
+                </div>
+                <Switch checked={on && !unset} disabled={unset} onCheckedChange={v => setReminder(kind, v)} aria-label={`${label} reminder`} />
+              </div>
+            );
+          })}
+        </div>
       </section>
 
       <AccountSection />

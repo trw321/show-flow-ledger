@@ -6,6 +6,7 @@ import { ArrowLeft, Copy, Download } from 'lucide-react';
 import { format, parseISO, subMonths } from 'date-fns';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
 import DateWheels, { Wheel } from '@/components/DateWheels';
+import CertifyPanel from '@/components/CertifyPanel';
 import { useData } from '@/lib/DataContext';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { localToday } from '@/lib/today';
@@ -113,6 +114,9 @@ export default function UnemploymentPage() {
       description="Your weeks and employers for the dates the claim asks about"
     >
       <div className="mx-auto max-w-lg space-y-4" data-testid="claim-page">
+        {/* Certifying every two weeks: when it's due, and the weeks it covers. */}
+        <CertifyPanel weekEnd={range.weekEnd} />
+
         {/* The dates, on wheels. */}
         <div className="space-y-3 border border-[hsl(312_95%_68%/0.5)] bg-[#0b0614]/70 p-3">
           <DateWheels label="From" value={range.from} firstYear={firstYear} lastYear={thisYear} testId="claim-from"

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { EMPTY_PROFILE, type PayerProfile } from '@/lib/payerProfile';
 import type { NetworkContact } from '@/lib/network';
 import { cleanConferences, type Conference } from '@/lib/conferences';
+import { cleanCertify, cleanReminders, type CertifySchedule, type ReminderKind, type Reminders } from '@/lib/reminders';
 import { supabase } from '@/integrations/supabase/client';
 import { prefsKeyFor } from '@/lib/store';
 import { PREFS_CHANGED_EVENT, PREFS_SYNCED_EVENT } from '@/lib/sync';
@@ -41,6 +42,10 @@ export interface UserPrefs {
   contacts: NetworkContact[];
   /** Conferences to look out for, year after year. */
   conferences: Conference[];
+  /** Which of Preamp's reminders are off. Unset is on. */
+  reminders: Reminders;
+  /** When unemployment certification is next due, and how often, once set. */
+  certify?: CertifySchedule;
 }
 
 export const TAB_LABELS: Record<TabKey, { label: string; description: string }> = {
@@ -59,7 +64,7 @@ export const WORKER_PRESETS: Record<'w2' | '1099' | 'boss', Record<TabKey, boole
   boss:   { expenses: true,  income: true, payouts: true,  crew: true,  invoices: true, network: true, benefits: true },
 };
 
-const DEFAULT_PREFS: UserPrefs = { workerType: '1099', tabs: WORKER_PRESETS['1099'], payer: EMPTY_PROFILE, aiFreeMode: false, contacts: [], conferences: [] };
+const DEFAULT_PREFS: UserPrefs = { workerType: '1099', tabs: WORKER_PRESETS['1099'], payer: EMPTY_PROFILE, aiFreeMode: false, contacts: [], conferences: [], reminders: {} };
 
 function loadPrefs(uid?: string | null): UserPrefs {
   try {
@@ -79,6 +84,8 @@ function loadPrefs(uid?: string | null): UserPrefs {
       calendarPay: parsed.calendarPay,
       aiFreeMode: parsed.aiFreeMode ?? false,
       conferences: cleanConferences(parsed.conferences),
+      reminders: cleanReminders(parsed.reminders),
+      certify: cleanCertify(parsed.certify),
       contacts: Array.isArray(parsed.contacts) ? parsed.contacts.filter((c: unknown) => !!c && typeof (c as NetworkContact).id === 'string' && typeof (c as NetworkContact).name === 'string') : [],
     };
   } catch {
@@ -107,6 +114,9 @@ interface UserPrefsContextValue {
   setAIFreeMode: (enabled: boolean) => void;
   setContacts: (contacts: NetworkContact[]) => void;
   setConferences: (conferences: Conference[]) => void;
+  setReminder: (kind: ReminderKind, on: boolean) => void;
+  /** The certification schedule, and (when given) its reminder on or off with it, in one save. */
+  setCertify: (schedule: CertifySchedule | undefined, remind?: boolean) => void;
 }
 
 const UserPrefsContext = createContext<UserPrefsContextValue | null>(null);
@@ -157,6 +167,9 @@ export function UserPrefsProvider({ children }: { children: React.ReactNode }) {
   const setAIFreeMode = (enabled: boolean) => update({ ...prefs, aiFreeMode: enabled });
   const setContacts = (contacts: NetworkContact[]) => update({ ...prefs, contacts });
   const setConferences = (conferences: Conference[]) => update({ ...prefs, conferences });
+  const setReminder = (kind: ReminderKind, on: boolean) => update({ ...prefs, reminders: { ...prefs.reminders, [kind]: on } });
+  const setCertify = (certify: CertifySchedule | undefined, remind?: boolean) =>
+    update({ ...prefs, certify, reminders: remind === undefined ? prefs.reminders : { ...prefs.reminders, certify: remind } });
 
   const setTabEnabled = (tab: TabKey, enabled: boolean) => {
     const next = { ...prefs.tabs, [tab]: enabled };
@@ -166,7 +179,7 @@ export function UserPrefsProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <UserPrefsContext.Provider value={{ prefs, setWorkerType, setTabEnabled, setPayer, setInvoiceFrom, setCalendarPay, setAIFreeMode, setContacts, setConferences }}>
+    <UserPrefsContext.Provider value={{ prefs, setWorkerType, setTabEnabled, setPayer, setInvoiceFrom, setCalendarPay, setAIFreeMode, setContacts, setConferences, setReminder, setCertify }}>
       {children}
     </UserPrefsContext.Provider>
   );
