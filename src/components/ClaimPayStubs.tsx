@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { addDays, format, parseISO } from 'date-fns';
-import { Camera, Check, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { CalendarPlus, Camera, Check, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import DateWheels from '@/components/DateWheels';
 import StubEditor from '@/components/StubEditor';
 import { aiFetch } from '@/lib/aiSwitch';
 import { readFileAsDataUrl, resizeImageForStorage } from '@/lib/imageResize';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
+import { useData } from '@/lib/DataContext';
 import { localToday } from '@/lib/today';
 import {
-  claimDay, claimMoney, isClaimDay, readAmount, sameStub, weekEndingFor,
+  claimDay, claimMoney, isClaimDay, readAmount, sameStub, stubDays, stubShifts, weekEndingFor,
   type ClaimStub, type StubUse, type WeekEnd,
 } from '@/lib/unemployment';
 import { cn } from '@/lib/utils';
@@ -35,6 +36,9 @@ interface Found {
   keep: boolean;
   /** The stub already kept for the same employer and pay period. */
   already?: ClaimStub;
+  /** The days it lists hours for, and its rate: what lets it go on the calendar. */
+  days?: { date: string; hours: number }[];
+  rate?: number;
 }
 
 /** "Mar 1 – Mar 14, 2026", or "Dec 28, 2025 – Jan 10, 2026" across a year. */
@@ -54,7 +58,7 @@ function StubStatus({ use }: { use?: StubUse }) {
     return (
       <>
         <span className={cn(TAG, CYAN)}>On calendar</span>
-        <span className="text-muted-foreground">{use.shifts} shift{use.shifts === 1 ? '' : 's'} counted instead, est. {claimMoney(use.estimate)}</span>
+        <span className="text-muted-foreground">{use.shifts} shift{use.shifts === 1 ? '' : 's'} there say which weeks; its {claimMoney(use.stub.gross)} is used for them (the app's estimate was {claimMoney(use.estimate)})</span>
       </>
     );
   }
@@ -100,6 +104,7 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
   request?: { start: string; end: string; nonce: number } | null;
 }) {
   const { prefs, setClaimStubs } = useUserPrefs();
+  const { addJob } = useData();
   const stubs = prefs.claimStubs;
   const [editing, setEditing] = useState<{ id?: string; draft: Draft } | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
@@ -193,7 +198,9 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
         const gross = Number(r.grossPay) > 0 ? Math.round(Number(r.grossPay) * 100) / 100 : 0;
         const already = employer && a && b ? sameStub(stubs, { employer, start: a, end: b }) : undefined;
         const complete = !!employer && !!a && !!b && (hours > 0 || gross > 0);
-        return { key: `${i}`, employer, start: a, end: b, hours, gross, already, keep: complete && !already };
+        const days = a && b ? stubDays(r.hoursBreakdown, a, b) : undefined;
+        const rate = Number(r.hourlyRate) > 0 ? Number(r.hourlyRate) : undefined;
+        return { key: `${i}`, employer, start: a, end: b, hours, gross, already, keep: complete && !already, days, rate };
       });
       // The same paycheck read twice off one image is one.
       const seen = new Set<string>();
@@ -219,7 +226,10 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
     let added = 0;
     for (const f of found) {
       if (!f.keep || !f.employer || !f.start || !f.end || sameStub(list, { employer: f.employer, start: f.start, end: f.end })) continue;
-      list = [...list, { id: crypto.randomUUID(), employer: f.employer, start: f.start, end: f.end, hours: f.hours, gross: f.gross, createdAt: now }];
+      list = [...list, {
+        id: crypto.randomUUID(), employer: f.employer, start: f.start, end: f.end, hours: f.hours, gross: f.gross, createdAt: now,
+        ...(f.days ? { days: f.days } : {}), ...(f.rate ? { rate: f.rate } : {}),
+      }];
       added++;
     }
     setClaimStubs(list);
@@ -231,6 +241,18 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
   const fixFound = (f: Found) => {
     setEditing({ draft: { employer: f.employer, start: f.start ?? f.end ?? localToday(), end: f.end ?? f.start ?? localToday(), hours: f.hours ? String(f.hours) : '', gross: f.gross ? f.gross.toFixed(2) : '' } });
     setFound(cur => cur && cur.filter(x => x.key !== f.key));
+  };
+
+  /**
+   * A counted stub onto the calendar: a past shift on each day it lists, so
+   * its work is on the calendar too. It then matches them, so nothing counts
+   * twice. A day that already has that shift isn't added again.
+   */
+  const toCalendar = async (stub: ClaimStub) => {
+    const shifts = stubShifts(stub, new Date().toISOString());
+    let added = 0;
+    for (const job of shifts) if (await addJob(job)) added++;
+    toast.success(added ? `Added ${added} shift${added === 1 ? '' : 's'} to the calendar, marked as from the pay stub` : 'Those days are already on the calendar');
   };
 
   const listed = [...stubs].sort((a, b) => b.end.localeCompare(a.end));
@@ -288,6 +310,7 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
                     <p className="text-[11px] text-muted-foreground">
                       {f.start && f.end ? periodText(f.start, f.end) : f.end ? `period ending ${claimDay(f.end, false)}` : 'no pay period read'}
                       {' · '}{f.hours ? `${f.hours} h` : 'no hours'}
+                      {f.days && ` · lists ${f.days.length} day${f.days.length === 1 ? '' : 's'}`}
                     </p>
                     {f.already && <p className="text-[11px] text-muted-foreground"><span className={cn(TAG, 'border-border text-muted-foreground')}>Already have it</span> not added twice</p>}
                     {!complete && !f.already && (
@@ -368,6 +391,19 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
               <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-mono" data-testid="stub-status">
                 <StubStatus use={uses.find(u => u.stub.id === s.id)} />
               </p>
+              {/* Counted, so its work isn't on the calendar: put it there, from the days it lists. */}
+              {uses.find(u => u.stub.id === s.id)?.status === 'counted' && (
+                s.days?.length ? (
+                  <button type="button" onClick={() => void toCalendar(s)} data-testid="stub-to-calendar"
+                    className="pixel-button pick-off mt-1.5 flex w-full items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono">
+                    <CalendarPlus size={13} aria-hidden /> Add {s.days.length} day{s.days.length === 1 ? '' : 's'} to the calendar
+                  </button>
+                ) : (
+                  <p className="mt-1 text-[11px] text-mono text-muted-foreground">
+                    It doesn't list which days, so it isn't put on the calendar. Add those shifts on the days you worked and it'll match them.
+                  </p>
+                )
+              )}
             </li>
           ))}
         </ul>

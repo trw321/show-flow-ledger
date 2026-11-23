@@ -41,6 +41,8 @@ For each one:
 - totalHours: total hours paid for that paycheck, if shown.
 - grossPay: gross earnings for that paycheck, before deductions.
 - netPay: take-home pay for that paycheck, if shown.
+- hourlyRate: its straight-time hourly rate, if printed.
+- hoursBreakdown: only if that paycheck itemizes hours by date (e.g. "10/27 10 ST, 11/3 12.5 OT"): one entry per date and hour type, with date (YYYY-MM-DD), hours and type (ST, OT or DT). Never spread a total over dates or assume 8-hour days: null when no dates are printed beside hours.
 
 Rules:
 - One entry per paycheck. Its earnings lines (Regular, Overtime, Vacation...) are parts of it, never entries of their own.
@@ -120,8 +122,22 @@ If you can't determine the date, use today's date. Return ONLY valid JSON.`
                     totalHours: { type: ["number", "null"] },
                     grossPay: { type: ["number", "null"] },
                     netPay: { type: ["number", "null"] },
+                    hourlyRate: { type: ["number", "null"] },
+                    hoursBreakdown: {
+                      type: ["array", "null"],
+                      items: {
+                        type: "object",
+                        properties: {
+                          date: { type: "string", description: "YYYY-MM-DD" },
+                          hours: { type: "number" },
+                          type: { type: "string", enum: ["ST", "OT", "DT"] },
+                        },
+                        required: ["date", "hours", "type"],
+                        additionalProperties: false,
+                      },
+                    },
                   },
-                  required: ["employer", "payPeriodStart", "payPeriodEnd", "checkDate", "totalHours", "grossPay", "netPay"],
+                  required: ["employer", "payPeriodStart", "payPeriodEnd", "checkDate", "totalHours", "grossPay", "netPay", "hourlyRate", "hoursBreakdown"],
                   additionalProperties: false,
                 },
               },

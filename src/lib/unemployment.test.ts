@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Employer, Job } from './store';
 import { EMPTY_PROFILE } from './payerProfile';
-import { claimSummary, cleanStubs, employersAsText, howLongText, isUnclearEmployer, readAmount, sameStub, sortEmployers, sortWeeks, suggestEmployer, weekEndingFor, weekRun, weeksAsText, yearsMonths, type ClaimStub } from './unemployment';
+import { claimSummary, cleanStubs, employersAsText, howLongText, isUnclearEmployer, readAmount, sameStub, sortEmployers, sortWeeks, stubDays, stubShifts, suggestEmployer, weekEndingFor, weekRun, weeksAsText, yearsMonths, type ClaimStub } from './unemployment';
 
 const job = (id: string, date: string, client: string, extra: Partial<Job> = {}): Job => ({
   id, name: 'TEST ' + id, client, date, startTime: '8:00 AM', endTime: '4:00 PM', hoursWorked: 8,
@@ -183,11 +183,21 @@ describe('pay stubs on a claim', () => {
     expect(weeksAsText(s.weeks).split('\n')[0]).toBe('Week ending Sat, Mar 7, 2026: Odeum (from pay stub) 40 hours $2,000.00. Total 40 hours, $2,000.00 gross');
   });
 
-  it('leaves a stub to the calendar when the calendar has that work', () => {
+  it("uses a stub's actual figures for the shifts the calendar has, placed as they fall", () => {
+    // The calendar's one shift says when; the stub says what was paid.
     const s = claimSummary([job('a', '2026-03-03', 'Odeum')], [], EMPTY_PROFILE, '2026-03-01', '2026-03-14', 6, [stub('s1', 'Odeum', '2026-03-01', '2026-03-14', 80, 4000)]);
-    expect(s.gross).toBe(400);
+    expect(s.gross).toBe(4000);
+    expect(s.hours).toBe(80);
+    expect(s.weeks.map(w => w.gross)).toEqual([4000, 0]);
+    expect(s.weeks[0].lines).toEqual([{ employer: 'Odeum', hours: 80, gross: 4000, perStub: true }]);
     expect(s.weeks.some(w => w.fromStub)).toBe(false);
-    expect(s.stubs[0]).toMatchObject({ used: false, shifts: 1, estimate: 400 });
+    expect(s.stubs[0]).toMatchObject({ status: 'calendar', used: false, shifts: 1, estimate: 400 });
+  });
+
+  it("shares a stub's figures over its shifts' weeks by their estimate", () => {
+    const s = claimSummary([job('a', '2026-03-03', 'Odeum'), job('b', '2026-03-10', 'Odeum')], [], EMPTY_PROFILE, '2026-03-01', '2026-03-14', 6,
+      [stub('s1', 'Odeum', '2026-03-01', '2026-03-14', 20, 900)]);
+    expect(s.weeks.map(w => [w.hours, w.gross])).toEqual([[10, 450], [10, 450]]);
   });
 
   it('still counts a stub for another employer the same weeks', () => {
@@ -267,5 +277,50 @@ describe('employers the app could not name', () => {
     expect(suggestEmployer({ notes: 'Worked for island creative, 7th day of pay period', name: 'moscone', venue: 'moscone' }, known)).toBe('ISLAND CREATIVE MANAGEMENT LLC');
     expect(suggestEmployer({ notes: 'odeum load out' }, known)).toBe('odeum');
     expect(suggestEmployer({ notes: 'show call', name: 'moscone' }, known)).toBeUndefined();
+  });
+});
+
+describe('one employer however it was typed', () => {
+  it('puts "Odeum" and "odeum" under one name, in every week', () => {
+    const s = summary([job('a', '2026-10-05', 'Odeum'), job('b', '2026-10-06', 'odeum'), job('c', '2026-10-20', 'odeum')], '2026-10-04', '2026-10-24');
+    expect(s.employers.map(e => e.name)).toEqual(['Odeum']);
+    expect(s.weeks.map(w => w.lines.map(l => `${l.employer} ${l.hours}`))).toEqual([['Odeum 16'], [], ['Odeum 8']]);
+  });
+});
+
+describe('a stub onto the calendar', () => {
+  it('keeps only the days a stub lists inside its pay period, a line a day', () => {
+    expect(stubDays([
+      { date: '2026-10-27', hours: 8, type: 'ST' }, { date: '2026-10-27', hours: 2, type: 'OT' },
+      { date: '2026-11-03', hours: 12.5, type: 'ST' },
+      { date: '2026-12-01', hours: 8, type: 'ST' }, { date: 'Oct 28', hours: 8 }, { date: '2026-10-29', hours: 0 }, null,
+    ], '2026-10-25', '2026-11-07')).toEqual([{ date: '2026-10-27', hours: 10 }, { date: '2026-11-03', hours: 12.5 }]);
+    expect(stubDays(null, '2026-10-25', '2026-11-07')).toBeUndefined();
+    expect(stubDays([{ date: 'Oct 28', hours: 8 }], '2026-10-25', '2026-11-07')).toBeUndefined();
+  });
+
+  it('makes a shift a listed day, at the printed rate, and none when no days are listed', () => {
+    const stub: ClaimStub = { id: 's', employer: 'TEST Co', start: '2026-10-25', end: '2026-11-07', hours: 22.5, gross: 1234.5, days: [{ date: '2026-10-27', hours: 10 }, { date: '2026-11-03', hours: 12.5 }], createdAt: 'x' };
+    const shifts = stubShifts(stub, 'now');
+    expect(shifts.map(j => [j.date, j.hoursWorked, j.hourlyRate, j.client, j.status])).toEqual([
+      ['2026-10-27', 10, 54.87, 'TEST Co', 'completed'], ['2026-11-03', 12.5, 54.87, 'TEST Co', 'completed'],
+    ]);
+    expect(shifts[0].notes).toBe('From a pay stub: TEST Co, Oct 25, 2026 to Nov 7, 2026, 22.5 h, $1,234.50 gross.');
+    expect(stubShifts({ ...stub, rate: 50 }, 'now')[0].hourlyRate).toBe(50);
+    expect(stubShifts({ ...stub, days: undefined }, 'now')).toEqual([]);
+  });
+
+  it('keeps days and rate when reading stored stubs', () => {
+    const [s] = cleanStubs([{ id: 'a', employer: 'TEST Co', start: '2026-10-25', end: '2026-11-07', hours: 22.5, gross: 1234.5, rate: 50, days: [{ date: '2026-10-27', hours: 10 }, { date: 'junk', hours: 3 }] }]);
+    expect(s.days).toEqual([{ date: '2026-10-27', hours: 10 }]);
+    expect(s.rate).toBe(50);
+  });
+
+  it('once on the calendar, the stub matches its shifts and isn\'t counted again', () => {
+    const stub: ClaimStub = { id: 's', employer: 'TEST Co', start: '2026-10-25', end: '2026-11-07', hours: 22.5, gross: 1234.5, days: [{ date: '2026-10-27', hours: 10 }], createdAt: 'x' };
+    const jobs = stubShifts(stub, 'now').map((j, i) => ({ ...j, id: 'j' + i, createdAt: 'x' }) as Job);
+    const s = claimSummary(jobs, [], EMPTY_PROFILE, '2026-10-01', '2026-11-30', 6, [stub]);
+    expect(s.stubs[0].status).toBe('calendar');
+    expect(s.weeks.filter(w => w.fromStub)).toEqual([]);
   });
 });

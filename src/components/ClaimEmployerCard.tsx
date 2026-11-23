@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { Copy, Pencil } from 'lucide-react';
+import { ChevronDown, Copy, Pencil } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import DateWheels from '@/components/DateWheels';
@@ -19,6 +19,14 @@ import { cn } from '@/lib/utils';
 const LABEL = 'font-8bit text-[7px] uppercase leading-relaxed text-[hsl(188_95%_72%)]';
 const TAG = 'font-8bit shrink-0 border px-1.5 py-0.5 text-[7px] uppercase';
 
+/** One week of work for one employer: its hours and gross, and whether a pay stub gave them. */
+export interface EmployerWeek {
+  weekEnding: string;
+  hours: number;
+  gross: number;
+  fromStub: boolean;
+}
+
 /**
  * One employer on the claim. Its pencil opens what the claim form needs
  * that the shifts don't say, right on the box: the name the state knows it
@@ -27,8 +35,11 @@ const TAG = 'font-8bit shrink-0 border px-1.5 py-0.5 text-[7px] uppercase';
  * ("Unknown") shows its shifts as they were saved, with a guess from what's
  * written on them, and a box to say who it was for: that puts the shifts
  * themselves right.
+ *
+ * Tap the box (its name or its figures) to see its weeks: each week you
+ * worked for them, with the hours and gross, ready to copy.
  */
-export default function ClaimEmployerCard({ employer: e, colour, longest, shifts, knownEmployers, onCopy }: {
+export default function ClaimEmployerCard({ employer: e, colour, longest, shifts, weeks, knownEmployers, onCopy }: {
   employer: ClaimEmployer;
   colour: string;
   /** Its badge, when it's the one worked for longest. */
@@ -37,7 +48,10 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
   shifts: Job[];
   knownEmployers: string[];
   onCopy: (amount: number) => void;
+  /** Its weeks with work, most recent first. */
+  weeks: EmployerWeek[];
 }) {
+  const [open, setOpen] = useState(false);
   const { updateJob } = useData();
   const { prefs, setClaimEmployers } = useUserPrefs();
   const key = claimEmployerKey(e.name);
@@ -73,7 +87,12 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
   return (
     <li className={cn('neon-well p-3', unclear && 'shadow-[inset_0_0_0_1px_hsl(var(--dot-overdue))]')} data-testid="claim-employer">
       <div className="flex items-baseline justify-between gap-2">
-        <p className="neon-soft min-w-0 truncate text-base font-bold text-mono" style={{ color: colour }}>{claimNameOf(e)}</p>
+        <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} data-testid="employer-toggle"
+          aria-label={`${claimNameOf(e)}: ${open ? 'hide' : 'show'} week by week`}
+          className="flex min-w-0 items-center gap-1.5 text-left">
+          <span className="neon-soft truncate text-base font-bold text-mono" style={{ color: colour }}>{claimNameOf(e)}</span>
+          <ChevronDown size={15} className={cn('shrink-0 text-[hsl(188_90%_70%)] transition-transform', open && 'rotate-180')} aria-hidden />
+        </button>
         <button type="button" onClick={() => onCopy(e.gross)} aria-label={`Copy ${claimMoney(e.gross)}`} data-testid="copy-amount"
           className="neon-title flex shrink-0 items-center gap-1 text-base font-bold text-mono active:opacity-70">
           {claimMoney(e.gross)} <Copy size={11} className="text-[hsl(188_90%_70%)]" aria-hidden />
@@ -123,13 +142,45 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
 
       {!draft ? (
         <>
-          <dl className="mt-2 grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5 text-[12px] text-mono">
+          <dl onClick={() => setOpen(o => !o)} className="mt-2 grid cursor-pointer grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5 text-[12px] text-mono">
             <dt className={LABEL}>First day</dt><dd className="text-right">{claimDay(e.firstDay, false)}</dd>
             <dt className={LABEL}>Last day</dt><dd className="text-right">{claimDay(e.lastDay, false)}</dd>
             <dt className={LABEL}>How long</dt><dd className="text-right" data-testid="how-long">{howLongText(e.firstDay, e.lastDay)}</dd>
             <dt className={LABEL}>Days worked</dt><dd className="text-right">{e.days}{e.fromStub ? ' + pay stubs' : ''}</dd>
             <dt className={LABEL}>Hours</dt><dd className="text-right">{e.hours}</dd>
           </dl>
+
+          {/* Its weeks, opened by a tap on the box. */}
+          {open && (
+            <div className="mt-2 border-t border-[hsl(312_95%_68%/0.3)] pt-2" data-testid="employer-weeks">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <p className={LABEL}>Week by week · {weeks.length}</p>
+                {weeks.length > 0 && (
+                  <button type="button" data-testid="employer-weeks-copy"
+                    onClick={() => void copyText(weeks.map(w => `Week ending ${claimDay(w.weekEnding, false)}: ${claimMoney(w.gross)}`).join('\n'))}
+                    className="flex items-center gap-1 text-[11px] text-mono text-[hsl(188_90%_70%)]">
+                    <Copy size={11} aria-hidden /> Week + gross
+                  </button>
+                )}
+              </div>
+              {weeks.length === 0 ? (
+                <p className="text-[11px] text-mono text-muted-foreground">No weeks with work in your dates.</p>
+              ) : (
+                <ul className="divide-y divide-[hsl(312_95%_68%/0.15)]">
+                  {weeks.map(w => (
+                    <li key={w.weekEnding} className="flex items-baseline justify-between gap-2 py-1 text-[12px] text-mono">
+                      <span className="min-w-0 truncate">{claimDay(w.weekEnding)}</span>
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        {w.fromStub && <span className="font-8bit border border-[hsl(46_100%_58%)] px-1 text-[6px] uppercase leading-relaxed text-[hsl(46_100%_58%)]">Stub</span>}
+                        <span className="text-muted-foreground">{w.hours} h ·</span>
+                        <span className="neon-title font-bold">{claimMoney(w.gross)}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
           <div className="mt-2 flex gap-2">
             <button type="button" onClick={() => setDraft({ ...(e.info ?? {}) })} data-testid="employer-edit"
               className="pixel-button pick-off flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono">

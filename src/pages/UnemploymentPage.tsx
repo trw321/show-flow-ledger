@@ -8,7 +8,7 @@ import SpacePageWrapper from '@/components/SpacePageWrapper';
 import DateWheels, { Wheel } from '@/components/DateWheels';
 import CertifyPanel from '@/components/CertifyPanel';
 import ClaimPayStubs from '@/components/ClaimPayStubs';
-import ClaimEmployerCard from '@/components/ClaimEmployerCard';
+import ClaimEmployerCard, { type EmployerWeek } from '@/components/ClaimEmployerCard';
 import { useData } from '@/lib/DataContext';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { localToday } from '@/lib/today';
@@ -133,6 +133,25 @@ export default function UnemploymentPage() {
     setClaimChecked(checked.has(weekEnding) ? prefs.claimChecked.filter(d => d !== weekEnding) : [...prefs.claimChecked, weekEnding]);
   const [stubRequest, setStubRequest] = useState<{ start: string; end: string; nonce: number } | null>(null);
 
+  // Each employer's weeks with work, most recent first: shown when its box is tapped.
+  const weeksOf = useMemo(() => {
+    const by = new Map<string, Map<string, EmployerWeek>>();
+    for (const w of summary.weeks) {
+      for (const l of w.lines) {
+        const weeksFor = by.get(l.employer) ?? new Map<string, EmployerWeek>();
+        const cur = weeksFor.get(w.weekEnding) ?? { weekEnding: w.weekEnding, hours: 0, gross: 0, fromStub: false };
+        weeksFor.set(w.weekEnding, {
+          ...cur,
+          hours: Math.round((cur.hours + l.hours) * 1000) / 1000,
+          gross: Math.round((cur.gross + l.gross) * 100) / 100,
+          fromStub: cur.fromStub || !!l.fromStub || !!l.perStub,
+        });
+        by.set(l.employer, weeksFor);
+      }
+    }
+    return (name: string) => [...(by.get(name)?.values() ?? [])].sort((a, b) => b.weekEnding.localeCompare(a.weekEnding));
+  }, [summary.weeks]);
+
   // Every employer you've worked for, to pick from.
   const knownEmployers = useMemo(() => [...new Set([
     ...data.employers.map(e => e.name),
@@ -183,7 +202,7 @@ export default function UnemploymentPage() {
       const base = { 'Week ending': w.weekEnding, From: w.start, Through: w.end, 'Days worked': w.days };
       return w.lines.length === 0
         ? [{ ...base, Employer: 'No work', Hours: 0, Gross: 0 }]
-        : w.lines.map(l => ({ ...base, Employer: l.fromStub ? `${l.employer} (from pay stub)` : l.employer, Hours: l.hours, Gross: l.gross }));
+        : w.lines.map(l => ({ ...base, Employer: l.fromStub ? `${l.employer} (from pay stub)` : l.perStub ? `${l.employer} (per pay stub)` : l.employer, Hours: l.hours, Gross: l.gross }));
     });
     const employerRows = employers.map(e => ({
       Employer: claimNameOf(e),
@@ -380,7 +399,7 @@ export default function UnemploymentPage() {
                           <li key={l.employer + (l.fromStub ? ' stub' : '')} className="flex items-baseline justify-between gap-2 text-[12px] text-mono">
                             <span className="flex min-w-0 items-center gap-1.5">
                               <span className="neon-soft truncate font-bold" style={{ color: colourOf(l.employer) }}>{l.employer}</span>
-                              {l.fromStub && <span className="font-8bit shrink-0 border border-[hsl(46_100%_58%)] px-1 text-[6px] uppercase leading-relaxed text-[hsl(46_100%_58%)]" data-testid="stub-tag">Stub</span>}
+                              {(l.fromStub || l.perStub) && <span className="font-8bit shrink-0 border border-[hsl(46_100%_58%)] px-1 text-[6px] uppercase leading-relaxed text-[hsl(46_100%_58%)]" data-testid="stub-tag" title={l.perStub ? "Its pay stub's figures" : 'From a pay stub'}>Stub</span>}
                             </span>
                             <span className="shrink-0 text-muted-foreground">{l.hours} h · {claimMoney(l.gross)}</span>
                           </li>
@@ -398,7 +417,7 @@ export default function UnemploymentPage() {
             ) : (
               <ul className="space-y-2" data-testid="claim-employers">
                 {employers.map(e => (
-                  <ClaimEmployerCard key={e.name} employer={e} colour={colourOf(e.name)} onCopy={copyAmount} knownEmployers={knownEmployers}
+                  <ClaimEmployerCard key={e.name} employer={e} colour={colourOf(e.name)} onCopy={copyAmount} knownEmployers={knownEmployers} weeks={weeksOf(e.name)}
                     longest={summary.longest?.byStretch === e.name ? 'stretch' : summary.longest?.byDays === e.name ? 'days' : undefined}
                     shifts={data.jobs.filter(j => j.status !== 'cancelled' && isClaimDay(j.date) && j.date >= range.from && j.date <= range.through
                       && claimEmployerOf(j, data.employers) === e.name)} />
