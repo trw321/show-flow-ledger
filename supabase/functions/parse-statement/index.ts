@@ -16,6 +16,9 @@ serve(async (req) => {
     const isIncome = type === "income";
     const isTimesheet = type === "timesheet";
     const isPaystub = type === "paystub";
+    // Every pay stub in one image: a payroll site's list of paychecks, a
+    // screenshot of several stubs, a year's summary by pay period.
+    const isPaystubs = type === "paystubs";
 
     const jobsList = jobs?.length
       ? `Available jobs to match against: ${jobs.map((j: { name: string; client: string }) => `"${j.name}" (client: ${j.client})`).join(", ")}`
@@ -26,7 +29,25 @@ serve(async (req) => {
     const today = new Date().toISOString().split("T")[0];
     const datesNote = `\n\nDATES. Today is ${today}. Documents you are shown are recent: dated within the last few months, never more than a few days in the future. A two-digit year belongs to this century: "10/23/26" is ${today.slice(0, 2)}26-10-23, never 2023. Read slashed or dashed US dates month first ("10/23/26" is October 23). When no year is printed, use the year that puts the date closest before today. Never use a year earlier than the one printed.`;
 
-    const basePrompt = isPaystub
+    const basePrompt = isPaystubs
+      ? `You read pay stubs for an AV/entertainment technician who is filing for unemployment and needs, for every paycheck, who paid, the pay period, the hours and the gross pay.
+
+The image may hold MANY paychecks: a payroll website's list of pay statements, a screenshot of several stubs, an earnings history table with one row per pay period, or a single stub. Return one entry per paycheck / pay period you can see. Read every row; do not stop at the first.
+
+For each one:
+- employer: the paying company or payroll agency as printed on that row or stub. When the page belongs to one employer (its name in the header, a single company's payroll portal), use that name for every row.
+- payPeriodStart / payPeriodEnd: the pay period it covers (YYYY-MM-DD each): the days the work was done, not the check or pay date. If only a period end or "week ending" is printed, put it in payPeriodEnd and null in payPeriodStart. Null for both when no period is printed; never work one out from the check date.
+- checkDate: the check / pay / deposit date, if printed (YYYY-MM-DD).
+- totalHours: total hours paid for that paycheck, if shown.
+- grossPay: gross earnings for that paycheck, before deductions.
+- netPay: take-home pay for that paycheck, if shown.
+
+Rules:
+- One entry per paycheck. Its earnings lines (Regular, Overtime, Vacation...) are parts of it, never entries of their own.
+- Skip year-to-date (YTD) columns and any totals row that adds several paychecks together.
+- Never list the same paycheck twice, even if it shows twice on the page.
+- Use null for anything not legible or not shown. Do not guess or estimate.`
+      : isPaystub
       ? `You are a pay stub parser for an AV/entertainment industry technician. Analyze the uploaded pay stub or check-stub image and extract its full structured breakdown — this is used to verify calculated pay against what was actually paid, so accuracy on the dollar figures matters more than completeness of any narrative text.
 
 Extract:
@@ -71,7 +92,9 @@ If you can't determine the date, use today's date. Return ONLY valid JSON.`
       : `You are a financial document parser specializing in bank statements and receipts. Extract all transactions/line items you can identify. For each transaction extract: description, amount (as a number), date (as YYYY-MM-DD), and category. Categories should be one of: Travel, Gear Rental, Consumables, Fuel, Meals, Lodging, Labor, Insurance, Software, Tools, Entertainment, Medical, Rent, IATSE Union Dues, Other. If you can't determine the category, use "Other". If you can't determine the date, use today's date. Return ONLY valid JSON.`;
     const systemPrompt = basePrompt + datesNote;
 
-    const userPrompt = isPaystub
+    const userPrompt = isPaystubs
+      ? "List every paycheck / pay period in this image: employer, pay period start and end, check date, total hours, gross pay and net pay for each. Skip year-to-date figures and totals rows."
+      : isPaystub
       ? "Extract the full structured breakdown from this pay stub image: employer, pay period, hours, rate, gross, dues, tax, vacation, and net pay."
       : isTimesheet
       ? "Extract all work sessions/time entries from this handwritten note, timesheet, call sheet, or schedule image. Calculate hours from any clock-in/clock-out times. Return structured time entries."
@@ -79,7 +102,35 @@ If you can't determine the date, use today's date. Return ONLY valid JSON.`
       ? "Extract all income/payment/deposit transactions from this bank statement, invoice, or pay stub/payment notification image. If this is a pay stub or earnings statement, return exactly ONE transaction whose amount is the net (take-home) pay — not one per earnings row and not the gross. A pay stub shown with its check is still ONE transaction. Return a JSON array of objects with fields: client, description, amount, date, invoiceNumber, and breakdown (per-date ST/OT/DT hours) if the payment note itemizes which dates/hours it covers."
       : "Extract all expense transactions from this bank statement or receipt image. Return a JSON array of objects with fields: description, amount, date, category.";
 
-    const toolDef: GatewayToolDef = isPaystub
+    const toolDef: GatewayToolDef = isPaystubs
+      ? {
+          name: "extract_paystubs",
+          parameters: {
+            type: "object",
+            properties: {
+              stubs: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    employer: { type: ["string", "null"] },
+                    payPeriodStart: { type: ["string", "null"], description: "YYYY-MM-DD" },
+                    payPeriodEnd: { type: ["string", "null"], description: "YYYY-MM-DD" },
+                    checkDate: { type: ["string", "null"], description: "YYYY-MM-DD" },
+                    totalHours: { type: ["number", "null"] },
+                    grossPay: { type: ["number", "null"] },
+                    netPay: { type: ["number", "null"] },
+                  },
+                  required: ["employer", "payPeriodStart", "payPeriodEnd", "checkDate", "totalHours", "grossPay", "netPay"],
+                  additionalProperties: false,
+                },
+              },
+            },
+            required: ["stubs"],
+            additionalProperties: false,
+          },
+        }
+      : isPaystub
       ? {
           name: "extract_paystub",
           description: "Extract the structured pay breakdown from a pay stub image",
@@ -229,7 +280,9 @@ If you can't determine the date, use today's date. Return ONLY valid JSON.`
 
     const result = await callToolWithGateway(systemPrompt, userContent, toolDef);
 
-    const responseBody = isPaystub
+    const responseBody = isPaystubs
+      ? { paystubs: result.stubs ?? [] }
+      : isPaystub
       ? { paystub: result }
       : isTimesheet
       ? { entries: result.entries ?? [] }

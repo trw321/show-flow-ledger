@@ -62,7 +62,32 @@ export interface ClaimEmployer {
   gross: number;
   /** Some of it came from pay stubs: its first and last day are then its stubs' pay periods. */
   fromStub?: boolean;
+  /** What you've put in for the claim on its box (see ClaimEmployerInfo). */
+  info?: ClaimEmployerInfo;
+  /** Its first or last day is one you set, not the calendar's. */
+  datesSet?: boolean;
 }
+
+/**
+ * An employer as the claim should show it, filled in on its box: the name
+ * the state knows it by, its address and phone, a note, and the first and
+ * last day you worked for them when that's outside the dates picked.
+ * Keyed by the employer's name, ignoring case. Kept with your synced settings.
+ */
+export interface ClaimEmployerInfo {
+  claimName?: string;
+  address?: string;
+  phone?: string;
+  note?: string;
+  firstDay?: string;
+  lastDay?: string;
+}
+
+/** The key an employer's claim details are kept under. */
+export const claimEmployerKey = (name: string) => name.trim().replace(/\s+/g, ' ').toLowerCase();
+
+/** The name for the claim: the one you set, or the app's. */
+export const claimNameOf = (e: Pick<ClaimEmployer, 'name' | 'info'>) => e.info?.claimName || e.name;
 
 /**
  * A pay stub, summed up: who paid, the pay period, its hours and gross.
@@ -80,10 +105,21 @@ export interface ClaimStub {
   createdAt: string;
 }
 
-/** What became of a stub on a claim: counted, or left to the calendar's own shifts. */
+/**
+ * What became of a stub on a claim. Nothing is counted twice:
+ * - counted: the calendar had nothing for that employer in its pay period;
+ * - calendar: the calendar's shifts there count instead (matched against it);
+ * - duplicate: another stub has the same employer and pay period, and that
+ *   one counts;
+ * - overlap: another stub for the same employer covers some of the same
+ *   days, and that one counts until the dates are put right.
+ */
 export interface StubUse {
   stub: ClaimStub;
-  /** Counted: the calendar had nothing for that employer in its pay period. */
+  status: 'counted' | 'calendar' | 'duplicate' | 'overlap';
+  /** The stub it repeats or overlaps. */
+  matchedWith?: ClaimStub;
+  /** Counted: status is 'counted'. */
   used: boolean;
   /** Shifts the calendar has for it instead, and what the app estimates they paid. */
   shifts: number;
@@ -121,6 +157,49 @@ export function readAmount(text: string): number {
 }
 
 /**
+ * The stub already kept for the same employer and the same pay period, if
+ * there is one: adding it again would only be a copy.
+ */
+export function sameStub(list: ClaimStub[], stub: Pick<ClaimStub, 'employer' | 'start' | 'end'>, except?: string): ClaimStub | undefined {
+  const key = claimEmployerKey(stub.employer);
+  return list.find(o => o.id !== except && claimEmployerKey(o.employer) === key && o.start === stub.start && o.end === stub.end);
+}
+
+/** Employers' claim details as stored, made safe to read: text trimmed, days only if real. */
+export function cleanClaimEmployers(raw: unknown): Record<string, ClaimEmployerInfo> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out: Record<string, ClaimEmployerInfo> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!value || typeof value !== 'object') continue;
+    const v = value as Record<string, unknown>;
+    const text = (x: unknown) => (typeof x === 'string' && x.trim() ? x.trim() : undefined);
+    const info: ClaimEmployerInfo = {
+      claimName: text(v.claimName), address: text(v.address), phone: text(v.phone), note: text(v.note),
+      firstDay: isClaimDay(v.firstDay) ? v.firstDay : undefined,
+      lastDay: isClaimDay(v.lastDay) ? v.lastDay : undefined,
+    };
+    if (info.firstDay && info.lastDay && info.lastDay < info.firstDay) [info.firstDay, info.lastDay] = [info.lastDay, info.firstDay];
+    const kept = Object.fromEntries(Object.entries(info).filter(([, x]) => x !== undefined)) as ClaimEmployerInfo;
+    if (Object.keys(kept).length > 0) out[claimEmployerKey(key)] = kept;
+  }
+  return out;
+}
+
+/** The claim's dates as stored: both real days, and a day of the week for its end (Saturday if not). */
+export function cleanClaimRange(raw: unknown): { from: string; through: string; weekEnd: WeekEnd } | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  if (!isClaimDay(r.from) || !isClaimDay(r.through)) return undefined;
+  const w = Number(r.weekEnd);
+  return { from: r.from, through: r.through, weekEnd: (Number.isInteger(w) && w >= 0 && w <= 6 ? w : 6) as WeekEnd };
+}
+
+/** The weeks ticked off as checked: real days only, each once. */
+export function cleanChecked(raw: unknown): string[] {
+  return Array.isArray(raw) ? [...new Set(raw.filter(isClaimDay))].sort() : [];
+}
+
+/**
  * Stubs as stored, made safe to read: no employer, a pay period that isn't
  * real dates, or neither hours nor pay, and it's left out. An end before the
  * start is the same days turned round.
@@ -148,6 +227,41 @@ export function cleanStubs(raw: unknown): ClaimStub[] {
 export function weekEndingFor(day: string, weekEnd: WeekEnd = 6): string {
   const d = parseISO(day);
   return iso(addDays(d, (weekEnd - d.getDay() + 7) % 7));
+}
+
+/** The employer a shift counts under on the claim: its own name where the client matches one. */
+export const claimEmployerOf = (job: Job, employers: Employer[]) => employerOf(job, employers).name;
+
+/**
+ * An employer the app couldn't name: a shift saved as "Unknown", "N/A",
+ * "TBD", or with no employer at all. A claim needs who you worked for, so
+ * these are shown with what the shift says, to be put right.
+ */
+export function isUnclearEmployer(name: string): boolean {
+  return /^(unknown|no employer named|n\/?a|tbd|none|\?+|-+)$/i.test(name.trim()) || name.trim() === '';
+}
+
+/** Words a company's name ends in that say nothing about which company it is. */
+const COMPANY_WORDS = /\b(llc|inc|incorporated|corp|corporation|co|company|ltd|lp|llp|group|management|services|service|productions?|usa)\b\.?/gi;
+
+/**
+ * Who a shift the app couldn't name was most likely for, from what's written
+ * on it (its notes, name and venue), among the employers you've worked for:
+ * "Worked for island creative" is ISLAND CREATIVE MANAGEMENT LLC. Undefined
+ * when nothing on it names one.
+ */
+export function suggestEmployer(job: Partial<Pick<Job, 'notes' | 'name' | 'venue'>>, known: string[]): string | undefined {
+  const text = ` ${[job.notes, job.name, job.venue].filter(Boolean).join(' ').toLowerCase().replace(/[^a-z0-9]+/g, ' ')} `;
+  let best: { name: string; length: number } | undefined;
+  for (const name of known) {
+    if (isUnclearEmployer(name)) continue;
+    const core = name.toLowerCase().replace(COMPANY_WORDS, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+    if (core.length < 3) continue;
+    // Its first two words, or its one: enough to know it, short of the legal tail.
+    const words = core.split(' ').slice(0, 2).join(' ');
+    if (text.includes(` ${words} `) && (!best || words.length > best.length)) best = { name, length: words.length };
+  }
+  return best?.name;
 }
 
 /** The employer a shift is for, by its own name where the client matches one, and who paid. */
@@ -201,6 +315,7 @@ export function claimSummary(
   through: string,
   weekEnd: WeekEnd = 6,
   stubs: ClaimStub[] = [],
+  info: Record<string, ClaimEmployerInfo> = {},
 ): ClaimSummary {
   if (!isClaimDay(from) || !isClaimDay(through) || through < from) return EMPTY;
 
@@ -246,6 +361,8 @@ export function claimSummary(
   }
 
   const stubUses: StubUse[] = [];
+  /** Stubs already counted, by employer: a later one on the same days isn't. */
+  const countedStubs = new Map<string, ClaimStub[]>();
   for (const stub of stubs) {
     if (!isClaimDay(stub.start) || !isClaimDay(stub.end) || stub.end < from || stub.start > through) continue;
     const { name } = employerOf({ client: stub.employer } as Job, employers);
@@ -256,10 +373,19 @@ export function claimSummary(
     const worked = shifts.map(j => ({ hours: j.pto ? 0 : netHoursWorked(j), gross: jobPayBreakdown(j, jobs, employers, payer).gross }))
       .filter(x => x.hours > 0 || x.gross > 0);
     if (worked.length > 0) {
-      stubUses.push({ stub, used: false, shifts: worked.length, estimate: cents(worked.reduce((t, x) => t + x.gross, 0)) });
+      stubUses.push({ stub, status: 'calendar', used: false, shifts: worked.length, estimate: cents(worked.reduce((t, x) => t + x.gross, 0)) });
       continue;
     }
-    stubUses.push({ stub, used: true, shifts: 0, estimate: 0 });
+    // Already counted: the same pay period again, or some of its days.
+    const before = countedStubs.get(id) ?? [];
+    const same = before.find(o => o.start === stub.start && o.end === stub.end);
+    const overlapping = same ?? before.find(o => o.start <= stub.end && stub.start <= o.end);
+    if (overlapping) {
+      stubUses.push({ stub, status: same ? 'duplicate' : 'overlap', matchedWith: overlapping, used: false, shifts: 0, estimate: 0 });
+      continue;
+    }
+    countedStubs.set(id, [...before, stub]);
+    stubUses.push({ stub, status: 'counted', used: true, shifts: 0, estimate: 0 });
     // Nothing on the calendar: the stub stands in, spread evenly over its days.
     const total = differenceInCalendarDays(parseISO(stub.end), parseISO(stub.start)) + 1;
     const first = stub.start < from ? from : stub.start;
@@ -305,14 +431,25 @@ export function claimSummary(
   }));
   // The most recent employer first: the order claim forms ask in.
   const employerList = [...byEmployer.values()]
-    .sort((a, b) => b.lastDay.localeCompare(a.lastDay) || a.name.localeCompare(b.name))
-    .map(({ worked, ...e }) => ({
-      ...e,
-      days: worked.size,
-      spanDays: differenceInCalendarDays(parseISO(e.lastDay), parseISO(e.firstDay)) + 1,
-      hours: roundHours(e.hours),
-      gross: cents(e.gross),
-    }));
+    .map(({ worked, ...e }) => {
+      // A first or last day you set on its box stands: your time with them
+      // can start or end outside the dates picked.
+      const set = info[claimEmployerKey(e.name)];
+      const firstDay = set?.firstDay ?? e.firstDay;
+      const lastDay = set?.lastDay && set.lastDay >= firstDay ? set.lastDay : e.lastDay;
+      return {
+        ...e,
+        firstDay,
+        lastDay,
+        ...(set ? { info: set } : {}),
+        ...(set?.firstDay || set?.lastDay ? { datesSet: true } : {}),
+        days: worked.size,
+        spanDays: differenceInCalendarDays(parseISO(lastDay), parseISO(firstDay)) + 1,
+        hours: roundHours(e.hours),
+        gross: cents(e.gross),
+      };
+    })
+    .sort((a, b) => b.lastDay.localeCompare(a.lastDay) || a.name.localeCompare(b.name));
   const best = (score: (e: ClaimEmployer) => number[]) => [...employerList].sort((a, b) => {
     const x = score(a);
     const y = score(b);

@@ -1,19 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
-import { ArrowLeft, Copy, Download } from 'lucide-react';
+import { ArrowLeft, Check, Copy, Download, Plus } from 'lucide-react';
 import { format, parseISO, subMonths } from 'date-fns';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
 import DateWheels, { Wheel } from '@/components/DateWheels';
 import CertifyPanel from '@/components/CertifyPanel';
 import ClaimPayStubs from '@/components/ClaimPayStubs';
+import ClaimEmployerCard from '@/components/ClaimEmployerCard';
 import { useData } from '@/lib/DataContext';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { localToday } from '@/lib/today';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { EMPLOYER_COLOURS, employerColours, employerId } from '@/lib/employerColours';
-import { WEEKDAYS, claimDay, claimMoney, claimSummary, howLongText, isClaimDay, sortEmployers, sortWeeks, weekRun, type ClaimSort, type WeekEnd } from '@/lib/unemployment';
+import { WEEKDAYS, claimDay, claimEmployerOf, claimMoney, claimNameOf, claimSummary, howLongText, isClaimDay, sortEmployers, sortWeeks, weekRun, type ClaimSort, type WeekEnd } from '@/lib/unemployment';
 import { cn } from '@/lib/utils';
 
 /** "1 day", "3 days". */
@@ -79,9 +80,30 @@ const WEEK_ENDS = WEEKDAYS.map((day, i) => ({ value: i, label: day.slice(0, 3).t
  */
 export default function UnemploymentPage() {
   const { data } = useData();
-  const { prefs } = useUserPrefs();
+  const { prefs, setClaimChecked, setClaimRange } = useUserPrefs();
   const today = localToday();
-  const [range, setRange] = useState(() => loadRange(today));
+  // The dates come from your synced settings, so every device opens on them;
+  // this device's last ones stand in until those have loaded.
+  const [range, setRange] = useState<ClaimRange>(() => (prefs.claimRange as ClaimRange | undefined) ?? loadRange(today));
+  const touched = useRef(false);
+  const synced = prefs.claimRange;
+  useEffect(() => {
+    if (!touched.current && synced) setRange(synced as ClaimRange);
+  }, [synced?.from, synced?.through, synced?.weekEnd]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Saved by itself a moment after the last change, and saved now with Save.
+  const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved');
+  const saveRange = useRef(setClaimRange);
+  saveRange.current = setClaimRange;
+  const changeRange = (next: (r: ClaimRange) => ClaimRange) => {
+    touched.current = true;
+    setSaveState('saving');
+    setRange(next);
+  };
+  const saveNow = () => {
+    saveRange.current(range);
+    setSaveState('saved');
+    toast.success('Dates saved');
+  };
   const [view, setView] = useState<'weeks' | 'employers'>('weeks');
   const [sort, setSort] = useState<ClaimSort>(loadSort);
   useEffect(() => {
@@ -89,16 +111,33 @@ export default function UnemploymentPage() {
   }, [sort]);
 
   useEffect(() => {
-    try { localStorage.setItem(RANGE_KEY, JSON.stringify(range)); } catch { /* only a convenience */ }
+    try { localStorage.setItem(RANGE_KEY, JSON.stringify(range)); } catch { /* the synced copy is the one that matters */ }
+    if (!touched.current) return;
+    const t = window.setTimeout(() => { saveRange.current(range); setSaveState('saved'); }, 600);
+    return () => window.clearTimeout(t);
   }, [range]);
 
   const backwards = range.through < range.from;
   const summary = useMemo(
-    () => claimSummary(data.jobs, data.employers, prefs.payer, range.from, range.through, range.weekEnd, prefs.claimStubs),
-    [data.jobs, data.employers, prefs.payer, range, prefs.claimStubs],
+    () => claimSummary(data.jobs, data.employers, prefs.payer, range.from, range.through, range.weekEnd, prefs.claimStubs, prefs.claimEmployers),
+    [data.jobs, data.employers, prefs.payer, range, prefs.claimStubs, prefs.claimEmployers],
   );
 
   const weeks = useMemo(() => sortWeeks(summary.weeks, sort), [summary.weeks, sort]);
+
+  // Weeks ticked off as checked (entered on the state's site, say), and a
+  // week's "+": the pay stub form, set to that week.
+  const checked = useMemo(() => new Set(prefs.claimChecked), [prefs.claimChecked]);
+  const checkedHere = summary.weeks.filter(w => checked.has(w.weekEnding)).length;
+  const toggleChecked = (weekEnding: string) =>
+    setClaimChecked(checked.has(weekEnding) ? prefs.claimChecked.filter(d => d !== weekEnding) : [...prefs.claimChecked, weekEnding]);
+  const [stubRequest, setStubRequest] = useState<{ start: string; end: string; nonce: number } | null>(null);
+
+  // Every employer you've worked for, to pick from.
+  const knownEmployers = useMemo(() => [...new Set([
+    ...data.employers.map(e => e.name),
+    ...data.jobs.map(j => j.client?.trim()).filter((n): n is string => !!n),
+  ])].sort((a, b) => a.localeCompare(b)), [data.jobs, data.employers]);
   const employers = useMemo(() => sortEmployers(summary.employers, sort), [summary.employers, sort]);
 
   // The same colour each employer has on the calendar.
@@ -116,7 +155,7 @@ export default function UnemploymentPage() {
   const thisYear = Number(today.slice(0, 4));
   const firstYear = Math.min(thisYear - 6, Number(range.from.slice(0, 4)));
 
-  const preset = (months: number) => setRange(r => ({ ...r, from: iso(subMonths(parseISO(today), months)), through: today }));
+  const preset = (months: number) => changeRange(r => ({ ...r, from: iso(subMonths(parseISO(today), months)), through: today }));
 
   /** Gross as a form's number box takes it: no dollar sign, no commas, cents. */
   const plain = (n: number) => n.toFixed(2);
@@ -133,7 +172,7 @@ export default function UnemploymentPage() {
   const copyBoth = () => {
     const lines = view === 'weeks'
       ? weeks.map(w => `Week ending ${claimDay(w.weekEnding, false)}: ${claimMoney(w.gross)}`)
-      : employers.map(e => `${e.name}: ${claimMoney(e.gross)}`);
+      : employers.map(e => `${claimNameOf(e)}: ${claimMoney(e.gross)}`);
     return copyText(lines.join('\n'), `Copied ${lines.length} line${lines.length === 1 ? '' : 's'}`);
   };
   // One gross, tapped.
@@ -147,7 +186,9 @@ export default function UnemploymentPage() {
         : w.lines.map(l => ({ ...base, Employer: l.fromStub ? `${l.employer} (from pay stub)` : l.employer, Hours: l.hours, Gross: l.gross }));
     });
     const employerRows = employers.map(e => ({
-      Employer: e.name,
+      Employer: claimNameOf(e),
+      'On the calendar as': e.info?.claimName ? e.name : '',
+      Address: e.info?.address ?? '', Phone: e.info?.phone ?? '', Note: e.info?.note ?? '',
       'Worked for longest': [summary.longest?.byStretch === e.name && 'Longest, first day to last', summary.longest?.byDays === e.name && 'Most days worked'].filter(Boolean).join('; '),
       'Paid by': e.paidBy ?? '', 'First day': e.firstDay, 'Last day': e.lastDay, 'How long': howLongText(e.firstDay, e.lastDay),
       'Days worked': e.days, Hours: e.hours, Gross: e.gross, 'From pay stubs': e.fromStub ? 'Yes' : '',
@@ -184,9 +225,9 @@ export default function UnemploymentPage() {
         {/* The dates, on wheels. */}
         <div className="space-y-3 border border-[hsl(312_95%_68%/0.5)] bg-[#0b0614]/70 p-3">
           <DateWheels label="From" value={range.from} firstYear={firstYear} lastYear={thisYear} testId="claim-from"
-            onChange={from => setRange(r => ({ ...r, from }))} />
+            onChange={from => changeRange(r => ({ ...r, from }))} />
           <DateWheels label="Through" value={range.through} firstYear={firstYear} lastYear={thisYear} testId="claim-through"
-            onChange={through => setRange(r => ({ ...r, through }))} />
+            onChange={through => changeRange(r => ({ ...r, through }))} />
           {/* Most states count weeks Sunday to Saturday; some don't. */}
           <div className="flex items-center gap-3" data-testid="claim-week-end">
             <div className="min-w-0 flex-1">
@@ -194,8 +235,8 @@ export default function UnemploymentPage() {
               <p className="mt-1 text-[11px] text-mono text-muted-foreground">{weekRun(range.weekEnd)}</p>
             </div>
             <div className="w-24 shrink-0">
-              <Wheel label="Weeks end on" items={WEEK_ENDS} value={range.weekEnd} testId="claim-week-end-wheel"
-                onChange={v => setRange(r => ({ ...r, weekEnd: v as WeekEnd }))} />
+              <Wheel loop label="Weeks end on" items={WEEK_ENDS} value={range.weekEnd} testId="claim-week-end-wheel"
+                onChange={v => changeRange(r => ({ ...r, weekEnd: v as WeekEnd }))} />
             </div>
           </div>
           <div className="flex gap-2">
@@ -205,11 +246,19 @@ export default function UnemploymentPage() {
               </button>
             ))}
           </div>
+          {/* Saves by itself; says so, and can be saved on the spot. */}
+          <div className="flex items-center justify-between gap-2" data-testid="claim-saved">
+            <span className={cn('text-[11px] font-bold text-mono', saveState === 'saved' ? 'text-dot-paid' : 'text-muted-foreground')}>
+              {saveState === 'saved' ? '✓ Saved' : 'Saving…'}
+            </span>
+            <button type="button" onClick={saveNow} data-testid="claim-save" className="pixel-button pick-off px-3 py-1 text-[11px] font-bold text-mono">
+              Save
+            </button>
+          </div>
         </div>
 
         {/* Pay stubs, for work that isn't on the calendar. */}
-        <ClaimPayStubs uses={summary.stubs} weekEnd={range.weekEnd} colourOf={colourOf}
-          employerNames={[...new Set([...data.employers.map(e => e.name), ...data.jobs.map(j => j.client?.trim()).filter((n): n is string => !!n)])].sort()} />
+        <ClaimPayStubs uses={summary.stubs} weekEnd={range.weekEnd} colourOf={colourOf} employerNames={knownEmployers} request={stubRequest} />
 
         {backwards ? (
           <p className="border border-dot-late/60 bg-dot-late/10 p-3 text-sm text-dot-late" role="alert">
@@ -286,9 +335,32 @@ export default function UnemploymentPage() {
             </div>
 
             {view === 'weeks' ? (
+              <>
+              <p className="flex items-center justify-between text-[11px] text-mono text-muted-foreground" data-testid="checked-count">
+                <span>Checked {checkedHere} of {summary.weeks.length} weeks</span>
+                {checkedHere > 0 && (
+                  <button type="button" onClick={() => setClaimChecked(prefs.claimChecked.filter(d => !summary.weeks.some(w => w.weekEnding === d)))}
+                    className="text-[hsl(188_90%_70%)] underline">Clear ticks</button>
+                )}
+              </p>
               <ul className="neon-well divide-y divide-[hsl(312_95%_68%/0.25)]" data-testid="claim-weeks">
                 {weeks.map(w => (
-                  <li key={w.weekEnding} className={cn('px-3 py-2.5', w.lines.length === 0 && 'opacity-60')}>
+                  <li key={w.weekEnding} className={cn('flex gap-2.5 px-3 py-2.5', checked.has(w.weekEnding) && 'bg-[hsl(140_100%_52%/0.06)]')}>
+                    <div className="flex shrink-0 flex-col items-center gap-1.5 pt-0.5">
+                      <button type="button" onClick={() => toggleChecked(w.weekEnding)} aria-pressed={checked.has(w.weekEnding)}
+                        aria-label={`${checked.has(w.weekEnding) ? 'Checked' : 'Check'}: week ending ${claimDay(w.weekEnding, false)}`} data-testid="week-check"
+                        className={cn('flex h-6 w-6 items-center justify-center border', checked.has(w.weekEnding)
+                          ? 'border-dot-paid bg-dot-paid/20 text-dot-paid shadow-[0_0_6px_hsl(var(--dot-paid)/0.6)]'
+                          : 'border-[hsl(188_95%_62%/0.6)] text-transparent')}>
+                        <Check size={15} strokeWidth={3} aria-hidden />
+                      </button>
+                      <button type="button" onClick={() => setStubRequest({ start: w.start, end: w.end, nonce: Date.now() })}
+                        aria-label={`Add a pay stub for the week ending ${claimDay(w.weekEnding, false)}`} data-testid="week-add"
+                        className="flex h-6 w-6 items-center justify-center border border-[hsl(312_95%_68%/0.6)] text-[hsl(312_95%_75%)]">
+                        <Plus size={14} aria-hidden />
+                      </button>
+                    </div>
+                    <div className={cn('min-w-0 flex-1', w.lines.length === 0 && 'opacity-60')}>
                     <p className={cn(LABEL, 'flex justify-between gap-2')}>
                       <span>Week ending</span>
                       <span>{w.fromStub && w.days === 0 ? 'Pay stub' : `${w.days} day${w.days === 1 ? '' : 's'}`}</span>
@@ -316,34 +388,20 @@ export default function UnemploymentPage() {
                         {w.pto > 0 && <li className="text-[11px] text-mono text-muted-foreground">Includes {claimMoney(w.pto)} paid time off</li>}
                       </ul>
                     )}
+                    </div>
                   </li>
                 ))}
               </ul>
+              </>
             ) : summary.employers.length === 0 ? (
               <p className="neon-well p-4 text-center text-sm text-mono text-muted-foreground">No work in these dates.</p>
             ) : (
               <ul className="space-y-2" data-testid="claim-employers">
                 {employers.map(e => (
-                  <li key={e.name} className="neon-well p-3">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <p className="neon-soft min-w-0 truncate text-base font-bold text-mono" style={{ color: colourOf(e.name) }}>{e.name}</p>
-                      <GrossButton amount={e.gross} onCopy={copyAmount} className="text-base" />
-                    </div>
-                    {(summary.longest?.byStretch === e.name || summary.longest?.byDays === e.name) && (
-                      <p className="mt-1 flex flex-wrap gap-1.5">
-                        {summary.longest?.byStretch === e.name && <span className="font-8bit border border-[hsl(46_100%_58%)] px-1.5 py-0.5 text-[7px] uppercase text-[hsl(46_100%_58%)]">Longest</span>}
-                        {summary.longest?.byDays === e.name && summary.longest.byStretch !== e.name && <span className="font-8bit border border-[hsl(46_100%_58%)] px-1.5 py-0.5 text-[7px] uppercase text-[hsl(46_100%_58%)]">Most days</span>}
-                      </p>
-                    )}
-                    {e.paidBy && <p className="text-[11px] text-mono text-muted-foreground">Paid by {e.paidBy}</p>}
-                    <dl className="mt-2 grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5 text-[12px] text-mono">
-                      <dt className={LABEL}>First day</dt><dd className="text-right">{claimDay(e.firstDay, false)}</dd>
-                      <dt className={LABEL}>Last day</dt><dd className="text-right">{claimDay(e.lastDay, false)}</dd>
-                      <dt className={LABEL}>How long</dt><dd className="text-right" data-testid="how-long">{howLongText(e.firstDay, e.lastDay)}</dd>
-                      <dt className={LABEL}>Days worked</dt><dd className="text-right">{e.days}{e.fromStub ? ' + pay stubs' : ''}</dd>
-                      <dt className={LABEL}>Hours</dt><dd className="text-right">{e.hours}</dd>
-                    </dl>
-                  </li>
+                  <ClaimEmployerCard key={e.name} employer={e} colour={colourOf(e.name)} onCopy={copyAmount} knownEmployers={knownEmployers}
+                    longest={summary.longest?.byStretch === e.name ? 'stretch' : summary.longest?.byDays === e.name ? 'days' : undefined}
+                    shifts={data.jobs.filter(j => j.status !== 'cancelled' && isClaimDay(j.date) && j.date >= range.from && j.date <= range.through
+                      && claimEmployerOf(j, data.employers) === e.name)} />
                 ))}
               </ul>
             )}

@@ -1,10 +1,12 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { format, getDaysInMonth, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 
 /** How tall one value is in a wheel's window, in px: the window shows exactly one. */
 const ITEM = 44;
+/** How long after a touch, a mouse wheel or a key a scroll still counts as yours, in ms. */
+const YOURS_FOR = 1500;
 
 interface WheelItem<T> { value: T; label: string }
 
@@ -13,9 +15,15 @@ interface WheelItem<T> { value: T; label: string }
  * or tap the arrows, or use the arrow keys) and the next one rolls in. The
  * window is one value tall, so the ones either side stay out of sight.
  * Given `onPick`, a tap on the window (or Enter) asks for a grid of every
- * value, to go straight to one instead of rolling through.
+ * value, to go straight to one instead of rolling through. With `loop`, it
+ * goes round: up from the first is the last (SUN up is SAT).
+ *
+ * Only a scroll you make changes the value. A wheel set before it was on
+ * screen used to sit on its first entry (JAN) while the date was really
+ * something else, and any stray scroll would then have saved JAN; it now
+ * puts itself back on the chosen value whenever it shows or changes size.
  */
-export function Wheel<T extends string | number>({ items, value, onChange, label, testId, onPick, picking }: {
+export function Wheel<T extends string | number>({ items, value, onChange, label, testId, onPick, picking, loop }: {
   items: WheelItem<T>[];
   value: T;
   onChange: (value: T) => void;
@@ -24,33 +32,72 @@ export function Wheel<T extends string | number>({ items, value, onChange, label
   onPick?: () => void;
   /** Its grid is open: the window lights up to say which one it's for. */
   picking?: boolean;
+  loop?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const settle = useRef<number>();
+  const lastYours = useRef(0);
+  const n = items.length;
   const index = Math.max(0, items.findIndex(i => i.value === value));
+  // Going round: three copies, kept on the middle one, so there's always
+  // more above and below.
+  const shown = loop ? [...items, ...items, ...items] : items;
+  const at = useCallback((i: number) => (loop ? n + i : i) * ITEM, [loop, n]);
+  const indexRef = useRef(index);
+  indexRef.current = index;
 
-  // Keep the window on the chosen value when it changes from outside: an
-  // arrow, a preset, a pick from the grid, or a shorter month pulling the
-  // day back.
-  useLayoutEffect(() => {
+  const yours = () => Date.now() - lastYours.current < YOURS_FOR;
+  const markYours = () => { lastYours.current = Date.now(); };
+
+  /** The window back on the chosen value, unless you're the one moving it. */
+  const resync = useCallback(() => {
     const el = ref.current;
-    if (el && Math.round(el.scrollTop / ITEM) !== index) el.scrollTop = index * ITEM;
-  }, [index, items.length]);
+    if (!el || Date.now() - lastYours.current < YOURS_FOR) return;
+    const want = at(indexRef.current);
+    if (Math.abs(el.scrollTop - want) > 1) el.scrollTop = want;
+  }, [at]);
 
-  // Once a swipe comes to rest, the value under the window is the one chosen.
+  // After every render: an arrow, a preset, a pick from the grid, a shorter
+  // month pulling the day back.
+  useLayoutEffect(() => { resync(); });
+
+  // When it shows or changes size: set while hidden, it didn't take.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => resync());
+    ro.observe(el);
+    const io = new IntersectionObserver(entries => { if (entries.some(e => e.isIntersecting)) resync(); });
+    io.observe(el);
+    const back = () => resync();
+    window.addEventListener('pageshow', back);
+    document.addEventListener('visibilitychange', back);
+    return () => { ro.disconnect(); io.disconnect(); window.removeEventListener('pageshow', back); document.removeEventListener('visibilitychange', back); };
+  }, [resync]);
+
+  // Once your swipe comes to rest, the value under the window is the one chosen.
   const onScroll = () => {
     window.clearTimeout(settle.current);
+    if (!yours()) {
+      // Not you (the page moving it): put it back, change nothing.
+      settle.current = window.setTimeout(resync, 120);
+      return;
+    }
+    markYours(); // a fling carries on after the finger lifts
     settle.current = window.setTimeout(() => {
       const el = ref.current;
       if (!el) return;
-      const at = Math.min(items.length - 1, Math.max(0, Math.round(el.scrollTop / ITEM)));
-      if (items[at] && items[at].value !== value) onChange(items[at].value);
-    }, 120);
+      const raw = Math.round(el.scrollTop / ITEM);
+      const i = loop ? ((raw % n) + n) % n : Math.min(n - 1, Math.max(0, raw));
+      lastYours.current = 0;
+      if (loop) el.scrollTop = at(i); // back to the middle copy: the same value
+      if (items[i] && items[i].value !== value) onChange(items[i].value);
+    }, 140);
   };
 
   const step = (by: number) => {
-    const at = Math.min(items.length - 1, Math.max(0, index + by));
-    if (at !== index) onChange(items[at].value);
+    const i = loop ? (index + by + n) % n : Math.min(n - 1, Math.max(0, index + by));
+    if (i !== index) onChange(items[i].value);
   };
 
   return (
@@ -62,6 +109,10 @@ export function Wheel<T extends string | number>({ items, value, onChange, label
       <div
         ref={ref}
         onScroll={onScroll}
+        onTouchStart={markYours}
+        onTouchMove={markYours}
+        onPointerDown={markYours}
+        onWheel={markYours}
         // A swipe scrolls and doesn't click; a tap clicks.
         onClick={onPick}
         role="spinbutton"
@@ -69,7 +120,7 @@ export function Wheel<T extends string | number>({ items, value, onChange, label
         aria-label={onPick ? `${label}. Tap to pick from a list.` : label}
         aria-valuenow={index}
         aria-valuemin={0}
-        aria-valuemax={items.length - 1}
+        aria-valuemax={n - 1}
         aria-valuetext={items[index]?.label}
         aria-expanded={onPick ? !!picking : undefined}
         data-testid={testId}
@@ -85,9 +136,9 @@ export function Wheel<T extends string | number>({ items, value, onChange, label
         )}
         style={{ height: ITEM }}
       >
-        {items.map(item => (
-          <div key={String(item.value)} className="neon-title flex snap-center items-center justify-center text-lg font-bold text-mono"
-            style={{ height: ITEM }}>
+        {shown.map((item, k) => (
+          <div key={`${k}-${String(item.value)}`} className="neon-title flex snap-center items-center justify-center text-lg font-bold text-mono"
+            style={{ height: ITEM }} aria-hidden={k !== (loop ? n + index : index)}>
             {item.label}
           </div>
         ))}

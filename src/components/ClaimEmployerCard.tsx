@@ -1,0 +1,183 @@
+import { useState } from 'react';
+import { toast } from 'sonner';
+import { Copy, Pencil } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import DateWheels from '@/components/DateWheels';
+import type { Job } from '@/lib/store';
+import { useData } from '@/lib/DataContext';
+import { useUserPrefs } from '@/lib/UserPrefsContext';
+import { localToday } from '@/lib/today';
+import { roundHours } from '@/lib/hoursFormat';
+import { netHoursWorked } from '@/lib/payCalc';
+import {
+  claimDay, claimEmployerKey, claimMoney, claimNameOf, howLongText, isUnclearEmployer, suggestEmployer,
+  type ClaimEmployer, type ClaimEmployerInfo,
+} from '@/lib/unemployment';
+import { cn } from '@/lib/utils';
+
+const LABEL = 'font-8bit text-[7px] uppercase leading-relaxed text-[hsl(188_95%_72%)]';
+const TAG = 'font-8bit shrink-0 border px-1.5 py-0.5 text-[7px] uppercase';
+
+/**
+ * One employer on the claim. Its pencil opens what the claim form needs
+ * that the shifts don't say, right on the box: the name the state knows it
+ * by, address, phone, a note, and the first and last day you worked for them
+ * when that's outside the dates picked. An employer the app couldn't name
+ * ("Unknown") shows its shifts as they were saved, with a guess from what's
+ * written on them, and a box to say who it was for: that puts the shifts
+ * themselves right.
+ */
+export default function ClaimEmployerCard({ employer: e, colour, longest, shifts, knownEmployers, onCopy }: {
+  employer: ClaimEmployer;
+  colour: string;
+  /** Its badge, when it's the one worked for longest. */
+  longest?: 'stretch' | 'days';
+  /** Its shifts in the dates picked, to show when the app couldn't name it. */
+  shifts: Job[];
+  knownEmployers: string[];
+  onCopy: (amount: number) => void;
+}) {
+  const { updateJob } = useData();
+  const { prefs, setClaimEmployers } = useUserPrefs();
+  const key = claimEmployerKey(e.name);
+  const [draft, setDraft] = useState<ClaimEmployerInfo | null>(null);
+  const [who, setWho] = useState('');
+  const unclear = isUnclearEmployer(e.name);
+  const guess = unclear ? shifts.map(j => suggestEmployer(j, knownEmployers)).find(Boolean) : undefined;
+  const thisYear = Number(localToday().slice(0, 4));
+
+  const save = () => {
+    if (!draft) return;
+    const clean = Object.fromEntries(Object.entries(draft).filter(([, v]) => typeof v === 'string' && v.trim())) as ClaimEmployerInfo;
+    const next = { ...prefs.claimEmployers };
+    if (Object.keys(clean).length) next[key] = clean; else delete next[key];
+    setClaimEmployers(next);
+    setDraft(null);
+    toast.success(`Saved ${clean.claimName || e.name}`);
+  };
+
+  // Who an unnamed employer's shifts were for: set on the shifts themselves.
+  const assign = async (name: string) => {
+    const to = name.trim();
+    if (!to) { toast.error('Put in who it was for.'); return; }
+    for (const j of shifts) await updateJob(j.id, { client: to });
+    toast.success(`${shifts.length} shift${shifts.length === 1 ? '' : 's'} now for ${to}`);
+    setWho('');
+  };
+
+  const copyText = async (text: string) => {
+    try { await navigator.clipboard.writeText(text); toast.success('Copied'); } catch { toast.error("Couldn't copy here."); }
+  };
+
+  return (
+    <li className={cn('neon-well p-3', unclear && 'shadow-[inset_0_0_0_1px_hsl(var(--dot-overdue))]')} data-testid="claim-employer">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="neon-soft min-w-0 truncate text-base font-bold text-mono" style={{ color: colour }}>{claimNameOf(e)}</p>
+        <button type="button" onClick={() => onCopy(e.gross)} aria-label={`Copy ${claimMoney(e.gross)}`} data-testid="copy-amount"
+          className="neon-title flex shrink-0 items-center gap-1 text-base font-bold text-mono active:opacity-70">
+          {claimMoney(e.gross)} <Copy size={11} className="text-[hsl(188_90%_70%)]" aria-hidden />
+        </button>
+      </div>
+      {e.info?.claimName && <p className="text-[11px] text-mono text-muted-foreground">On the calendar as {e.name}</p>}
+      <p className="mt-1 flex flex-wrap items-center gap-1.5">
+        {longest === 'stretch' && <span className={cn(TAG, 'border-[hsl(46_100%_58%)] text-[hsl(46_100%_58%)]')}>Longest</span>}
+        {longest === 'days' && <span className={cn(TAG, 'border-[hsl(46_100%_58%)] text-[hsl(46_100%_58%)]')}>Most days</span>}
+        {unclear && <span className={cn(TAG, 'border-dot-overdue text-dot-overdue')} data-testid="unclear-tag">Not sure who this is</span>}
+        {e.datesSet && <span className={cn(TAG, 'border-border text-muted-foreground')}>Days set by you</span>}
+      </p>
+      {e.paidBy && <p className="text-[11px] text-mono text-muted-foreground">Paid by {e.paidBy}</p>}
+      {(e.info?.address || e.info?.phone) && (
+        <p className="mt-1 text-[11px] text-mono">{[e.info.address, e.info.phone].filter(Boolean).join(' · ')}</p>
+      )}
+      {e.info?.note && <p className="text-[11px] text-mono text-muted-foreground">{e.info.note}</p>}
+
+      {/* An employer the app couldn't name: what it was going on, and the fix. */}
+      {unclear && shifts.length > 0 && (
+        <div className="mt-2 space-y-2 border-t border-[hsl(312_95%_68%/0.3)] pt-2" data-testid="unclear-detail">
+          <p className="text-[11px] text-mono text-muted-foreground">The shift{shifts.length === 1 ? '' : 's'} didn't say who paid. What was saved:</p>
+          <ul className="space-y-1.5 text-[11px] text-mono">
+            {shifts.map(j => (
+              <li key={j.id} className="border-l-2 border-dot-overdue/60 pl-2">
+                <span className="font-bold">{claimDay(j.date)}</span>
+                {j.name && <> · {j.name}</>}{j.venue && j.venue !== j.name && <> · {j.venue}</>}
+                {' · '}{roundHours(netHoursWorked(j))} h{j.startTime ? ` · ${j.startTime}${j.endTime ? `–${j.endTime}` : ''}` : ''}
+                {j.notes && <span className="block text-muted-foreground">“{j.notes}”</span>}
+              </li>
+            ))}
+          </ul>
+          {guess && (
+            <button type="button" onClick={() => void assign(guess)} data-testid="unclear-guess"
+              className="pixel-button pick-on w-full px-2 py-1.5 text-left text-[11px] font-bold text-mono">
+              It says it was {guess}: set that
+            </button>
+          )}
+          <div className="flex gap-2">
+            <Input value={who} onChange={ev => setWho(ev.target.value)} list="claim-known-employers" placeholder="Who was it for?"
+              className="h-9 text-mono text-[13px]" data-testid="unclear-who" />
+            <button type="button" onClick={() => void assign(who)} className="pixel-button pick-off shrink-0 px-2.5 text-[11px] font-bold text-mono">Set</button>
+          </div>
+          <datalist id="claim-known-employers">{knownEmployers.filter(n => !isUnclearEmployer(n)).map(n => <option key={n} value={n} />)}</datalist>
+        </div>
+      )}
+
+      {!draft ? (
+        <>
+          <dl className="mt-2 grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5 text-[12px] text-mono">
+            <dt className={LABEL}>First day</dt><dd className="text-right">{claimDay(e.firstDay, false)}</dd>
+            <dt className={LABEL}>Last day</dt><dd className="text-right">{claimDay(e.lastDay, false)}</dd>
+            <dt className={LABEL}>How long</dt><dd className="text-right" data-testid="how-long">{howLongText(e.firstDay, e.lastDay)}</dd>
+            <dt className={LABEL}>Days worked</dt><dd className="text-right">{e.days}{e.fromStub ? ' + pay stubs' : ''}</dd>
+            <dt className={LABEL}>Hours</dt><dd className="text-right">{e.hours}</dd>
+          </dl>
+          <div className="mt-2 flex gap-2">
+            <button type="button" onClick={() => setDraft({ ...(e.info ?? {}) })} data-testid="employer-edit"
+              className="pixel-button pick-off flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono">
+              <Pencil size={12} aria-hidden /> Edit
+            </button>
+            {(e.info?.address || e.info?.phone) && (
+              <button type="button" onClick={() => void copyText([claimNameOf(e), e.info?.address, e.info?.phone].filter(Boolean).join('\n'))}
+                className="pixel-button pick-off flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono">
+                <Copy size={12} aria-hidden /> Copy details
+              </button>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="mt-2 space-y-2.5 border-t border-[hsl(312_95%_68%/0.3)] pt-2.5" data-testid="employer-form">
+          {([
+            ['claimName', 'Name on the claim', e.name],
+            ['address', 'Address', '123 Main St, San Francisco, CA'],
+            ['phone', 'Phone', '(415) 555-0100'],
+          ] as const).map(([field, label, placeholder]) => (
+            <label key={field} className="block space-y-1">
+              <span className={LABEL}>{label}</span>
+              <Input value={draft[field] ?? ''} placeholder={placeholder} inputMode={field === 'phone' ? 'tel' : undefined}
+                onChange={ev => setDraft({ ...draft, [field]: ev.target.value })} className="text-mono text-[13px]" data-testid={`employer-${field}`} />
+            </label>
+          ))}
+          <label className="block space-y-1">
+            <span className={LABEL}>Note</span>
+            <Textarea value={draft.note ?? ''} rows={2} placeholder="Reason for leaving, who to ask for"
+              onChange={ev => setDraft({ ...draft, note: ev.target.value })} className="text-mono text-[13px]" />
+          </label>
+          <div className="space-y-2">
+            <p className="text-[11px] text-mono text-muted-foreground">Started or finished outside your dates? Set the real days.</p>
+            <DateWheels label="First day" value={draft.firstDay ?? e.firstDay} firstYear={thisYear - 20} lastYear={thisYear}
+              onChange={firstDay => setDraft({ ...draft, firstDay })} testId="employer-first" />
+            <DateWheels label="Last day" value={draft.lastDay ?? e.lastDay} firstYear={thisYear - 20} lastYear={thisYear}
+              onChange={lastDay => setDraft({ ...draft, lastDay })} testId="employer-last" />
+            {(draft.firstDay || draft.lastDay) && (
+              <button type="button" onClick={() => setDraft({ ...draft, firstDay: undefined, lastDay: undefined })}
+                className="text-[11px] text-mono text-[hsl(188_90%_70%)] underline">Use the days from your shifts</button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setDraft(null)} className="pixel-button pick-off flex-1 py-1.5 text-[11px] font-bold text-mono">Cancel</button>
+            <button type="button" onClick={save} data-testid="employer-save" className="pixel-button pick-on flex-1 py-1.5 text-[11px] font-bold text-mono">Save</button>
+          </div>
+        </div>
+      )}
+    </li>
+  );
+}
