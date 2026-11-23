@@ -89,6 +89,40 @@ export function certifyPeriod(schedule: CertifySchedule, weekEnd: WeekEnd = 6): 
   return { from: iso(addDays(parseISO(through), 1 - schedule.every)), through };
 }
 
+/**
+ * The certification as an event for your phone's calendar: one alert at 9 AM
+ * on each due date, repeating with the schedule, so the phone gives one
+ * small nudge (just a buzz in silent mode) even with the app closed. Local
+ * time, wherever the phone is. Added again after a change, the same UID lets
+ * the calendar treat it as the same event where it can.
+ */
+export function certifyCalendar(schedule: CertifySchedule, stamp: Date, link: string): string {
+  const utc = stamp.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Show Flow//Certify reminder//EN',
+    'CALSCALE:GREGORIAN',
+    'BEGIN:VEVENT',
+    'UID:certify-reminder@show-flow',
+    `DTSTAMP:${utc}`,
+    `DTSTART:${schedule.next.replace(/-/g, '')}T090000`,
+    'DURATION:PT15M',
+    `RRULE:FREQ=WEEKLY;INTERVAL=${schedule.every / 7}`,
+    'SUMMARY:Certify for unemployment',
+    'DESCRIPTION:Your hours and pay for the weeks are in Show Flow\\, under Benefits > Unemployment claim.',
+    `URL:${link}`,
+    'BEGIN:VALARM',
+    'ACTION:DISPLAY',
+    'DESCRIPTION:Certify for unemployment',
+    'TRIGGER:PT0M',
+    'END:VALARM',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ];
+  return lines.join('\r\n') + '\r\n';
+}
+
 /** "today", "tomorrow", "in 5 days", "1 day late", "3 days late". */
 export function dueText(days: number): string {
   if (days === 0) return 'due today';

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { afterCertifying, certifyPeriod, certifyStatus, cleanCertify, cleanReminders, dueText, reminderOn, startCertify } from './reminders';
+import { afterCertifying, certifyCalendar, certifyPeriod, certifyStatus, cleanCertify, cleanReminders, dueText, reminderOn, startCertify } from './reminders';
 
 describe('turning reminders off', () => {
   it('has every reminder on until it is turned off', () => {
@@ -43,6 +43,19 @@ describe('certifying', () => {
     // Due midweek: the two full weeks before it.
     expect(certifyPeriod({ every: 14, next: '2026-12-02' })).toEqual({ from: '2026-11-15', through: '2026-11-28' });
     expect(certifyPeriod({ every: 7, next: '2026-11-29' })).toEqual({ from: '2026-11-22', through: '2026-11-28' });
+  });
+
+  it('makes one calendar alert at 9 AM on each due date, repeating with the schedule', () => {
+    const ics = certifyCalendar({ every: 14, next: '2026-11-24' }, new Date('2026-11-23T18:30:05.123Z'), 'https://show-flow.vercel.app/benefits/unemployment');
+    const lines = ics.split('\r\n');
+    expect(lines[0]).toBe('BEGIN:VCALENDAR');
+    expect(lines).toContain('DTSTART:20261124T090000');
+    expect(lines).toContain('RRULE:FREQ=WEEKLY;INTERVAL=2');
+    expect(lines).toContain('DTSTAMP:20261123T183005Z');
+    expect(lines).toContain('URL:https://show-flow.vercel.app/benefits/unemployment');
+    expect(lines.filter(l => l === 'BEGIN:VALARM')).toHaveLength(1);
+    expect(ics.endsWith('END:VCALENDAR\r\n')).toBe(true);
+    expect(certifyCalendar({ every: 7, next: '2026-11-24' }, new Date(), 'x')).toContain('RRULE:FREQ=WEEKLY;INTERVAL=1');
   });
 
   it('reads a stored schedule safely', () => {

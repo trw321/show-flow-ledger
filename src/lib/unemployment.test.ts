@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Employer, Job } from './store';
 import { EMPTY_PROFILE } from './payerProfile';
-import { claimSummary, employersAsText, weekEndingFor, weekRun, weeksAsText } from './unemployment';
+import { claimSummary, employersAsText, howLongText, weekEndingFor, weekRun, weeksAsText, yearsMonths } from './unemployment';
 
 const job = (id: string, date: string, client: string, extra: Partial<Job> = {}): Job => ({
   id, name: 'TEST ' + id, client, date, startTime: '8:00 AM', endTime: '4:00 PM', hoursWorked: 8,
@@ -100,6 +100,41 @@ describe('copying it out', () => {
     const weeks = weeksAsText(s.weeks).split('\n');
     expect(weeks[0]).toBe('Week ending Sat, Oct 3, 2026 (Oct 1, 2026 to Oct 3, 2026 only): no work, 0 hours, $0.00');
     expect(weeks[1]).toBe('Week ending Sat, Oct 10, 2026: Odeum 8 hours $400.00. Total 8 hours, $400.00 gross');
-    expect(employersAsText(s.employers)).toBe('Odeum: first day Oct 5, 2026, last day Oct 5, 2026, 1 day, 8 hours, $400.00 gross');
+    expect(employersAsText(s.employers, s.longest)).toBe('Worked for longest: Odeum\n\nOdeum: first day Oct 5, 2026, last day Oct 5, 2026 (0 years, 0 months (1 day)), 1 day worked, 8 hours, $400.00 gross');
+  });
+});
+
+describe('who you worked for longest', () => {
+  it('can be one employer by stretch and another by days worked', () => {
+    // Odeum: two days, a year apart. PSS: five days in one week.
+    const s = summary([
+      job('o1', '2025-07-08', 'Odeum'), job('o2', '2026-07-08', 'Odeum'),
+      ...['2026-03-02', '2026-03-03', '2026-03-04', '2026-03-05', '2026-03-06'].map((d, i) => job('p' + i, d, 'PSS')),
+    ], '2025-07-01', '2026-09-30');
+    expect(s.longest).toEqual({ byStretch: 'Odeum', byDays: 'PSS' });
+    expect(s.employers.find(e => e.name === 'Odeum')?.spanDays).toBe(366);
+    expect(s.employers.find(e => e.name === 'PSS')?.spanDays).toBe(5);
+    const text = employersAsText(s.employers, s.longest).split('\n');
+    expect(text.slice(0, 2)).toEqual(['Worked for longest, first day to last: Odeum', 'Most days worked: PSS']);
+  });
+
+  it('breaks a tie on stretch by days worked', () => {
+    const s = summary([
+      job('a1', '2026-03-02', 'Odeum'), job('a2', '2026-03-09', 'Odeum'),
+      job('b1', '2026-03-02', 'PSS'), job('b2', '2026-03-05', 'PSS'), job('b3', '2026-03-09', 'PSS'),
+    ], '2026-03-01', '2026-03-31');
+    expect(s.longest).toEqual({ byStretch: 'PSS', byDays: 'PSS' });
+  });
+
+  it('says how long in years and months', () => {
+    expect(yearsMonths('2025-07-01', '2026-06-30')).toEqual({ years: 1, months: 0, days: 0 });
+    expect(howLongText('2025-07-01', '2026-09-30')).toBe('1 year, 3 months');
+    expect(howLongText('2026-03-02', '2026-07-01')).toBe('0 years, 4 months');
+    expect(howLongText('2023-01-15', '2026-02-14')).toBe('3 years, 1 month');
+    expect(howLongText('2026-03-02', '2026-03-13')).toBe('0 years, 0 months (12 days)');
+  });
+
+  it('is nobody with no work', () => {
+    expect(summary([], '2026-03-01', '2026-03-31').longest).toBeUndefined();
   });
 });

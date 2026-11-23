@@ -1,4 +1,4 @@
-import { addDays, format, isValid, parseISO } from 'date-fns';
+import { addDays, addMonths, differenceInCalendarDays, differenceInMonths, format, isValid, parseISO } from 'date-fns';
 import type { Employer, Job } from './store';
 import type { PayerProfile } from './payerProfile';
 import { jobPayBreakdown, netHoursWorked } from './payCalc';
@@ -50,6 +50,8 @@ export interface ClaimEmployer {
   lastDay: string;
   /** Days worked (paid time off isn't a day worked). */
   days: number;
+  /** First day to last day, both counted: how long you worked for them, start to finish. */
+  spanDays: number;
   hours: number;
   gross: number;
 }
@@ -57,6 +59,13 @@ export interface ClaimEmployer {
 export interface ClaimSummary {
   weeks: ClaimWeek[];
   employers: ClaimEmployer[];
+  /**
+   * Who you worked for longest, which a claim can ask. Two ways, since they
+   * can be different employers: the longest stretch, first day to last
+   * (more days worked breaks a tie), and the most days worked (more hours
+   * breaks a tie).
+   */
+  longest?: { byStretch: string; byDays: string };
   hours: number;
   gross: number;
 }
@@ -85,6 +94,24 @@ function employerOf(job: Job, employers: Employer[]): { name: string; paidBy?: s
 }
 
 const EMPTY: ClaimSummary = { weeks: [], employers: [], hours: 0, gross: 0 };
+
+/**
+ * How long you worked for an employer, first day to last, both counted, in
+ * the years and months a claim asks for, and the days left over.
+ */
+export function yearsMonths(firstDay: string, lastDay: string): { years: number; months: number; days: number } {
+  const start = parseISO(firstDay);
+  const after = addDays(parseISO(lastDay), 1);
+  const total = differenceInMonths(after, start);
+  return { years: Math.floor(total / 12), months: total % 12, days: differenceInCalendarDays(after, addMonths(start, total)) };
+}
+
+/** "1 year, 3 months", "0 years, 4 months", or "0 years, 0 months (12 days)" under a month. */
+export function howLongText(firstDay: string, lastDay: string): string {
+  const { years, months, days } = yearsMonths(firstDay, lastDay);
+  const ym = `${years} year${years === 1 ? '' : 's'}, ${months} month${months === 1 ? '' : 's'}`;
+  return years === 0 && months === 0 ? `${ym} (${days} day${days === 1 ? '' : 's'})` : ym;
+}
 /** Past this many weeks the range is a typo, not a claim. */
 const MAX_WEEKS = 600;
 
@@ -113,7 +140,7 @@ export function claimSummary(
     weeks.set(ending, { weekEnding: ending, start, end, partial: start !== first || end !== ending, lines: [], hours: 0, gross: 0, pto: 0 });
   }
 
-  const byEmployer = new Map<string, ClaimEmployer & { worked: Set<string> }>();
+  const byEmployer = new Map<string, Omit<ClaimEmployer, 'spanDays'> & { worked: Set<string> }>();
   for (const job of jobs) {
     if (job.status === 'cancelled' || !isClaimDay(job.date) || job.date < from || job.date > through) continue;
     const week = weeks.get(weekEndingFor(job.date, weekEnd));
@@ -154,10 +181,26 @@ export function claimSummary(
   // The most recent employer first: the order claim forms ask in.
   const employerList = [...byEmployer.values()]
     .sort((a, b) => b.lastDay.localeCompare(a.lastDay) || a.name.localeCompare(b.name))
-    .map(({ worked, ...e }) => ({ ...e, days: worked.size, hours: roundHours(e.hours), gross: cents(e.gross) }));
+    .map(({ worked, ...e }) => ({
+      ...e,
+      days: worked.size,
+      spanDays: differenceInCalendarDays(parseISO(e.lastDay), parseISO(e.firstDay)) + 1,
+      hours: roundHours(e.hours),
+      gross: cents(e.gross),
+    }));
+  const best = (score: (e: ClaimEmployer) => number[]) => [...employerList].sort((a, b) => {
+    const x = score(a);
+    const y = score(b);
+    for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return y[i] - x[i];
+    return a.name.localeCompare(b.name);
+  })[0]?.name;
+  const longest = employerList.length > 0
+    ? { byStretch: best(e => [e.spanDays, e.days, e.hours])!, byDays: best(e => [e.days, e.hours, e.spanDays])! }
+    : undefined;
   return {
     weeks: weekList,
     employers: employerList,
+    longest,
     hours: roundHours(weekList.reduce((s, w) => s + w.hours, 0)),
     gross: cents(weekList.reduce((s, w) => s + w.gross, 0)),
   };
@@ -178,7 +221,11 @@ export function weeksAsText(weeks: ClaimWeek[]): string {
   }).join('\n');
 }
 
-/** The employers as text to paste: one line each. */
-export function employersAsText(list: ClaimEmployer[]): string {
-  return list.map(e => `${e.name}${e.paidBy ? ` (paid by ${e.paidBy})` : ''}: first day ${claimDay(e.firstDay, false)}, last day ${claimDay(e.lastDay, false)}, ${e.days} day${e.days === 1 ? '' : 's'}, ${e.hours} hours, ${claimMoney(e.gross)} gross`).join('\n');
+/** The employers as text to paste: who you worked for longest first, then one line each. */
+export function employersAsText(list: ClaimEmployer[], longest?: ClaimSummary['longest']): string {
+  const head = !longest ? []
+    : longest.byStretch === longest.byDays ? [`Worked for longest: ${longest.byStretch}`]
+    : [`Worked for longest, first day to last: ${longest.byStretch}`, `Most days worked: ${longest.byDays}`];
+  const lines = list.map(e => `${e.name}${e.paidBy ? ` (paid by ${e.paidBy})` : ''}: first day ${claimDay(e.firstDay, false)}, last day ${claimDay(e.lastDay, false)} (${howLongText(e.firstDay, e.lastDay)}), ${e.days} day${e.days === 1 ? '' : 's'} worked, ${e.hours} hours, ${claimMoney(e.gross)} gross`);
+  return [...head, ...(head.length ? [''] : []), ...lines].join('\n');
 }

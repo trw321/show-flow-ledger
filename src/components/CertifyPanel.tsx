@@ -1,12 +1,12 @@
 import { forwardRef, useMemo } from 'react';
 import { toast } from 'sonner';
-import { Check, Copy } from 'lucide-react';
+import { BellRing, Check, Copy } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import DateWheels from '@/components/DateWheels';
 import { useData } from '@/lib/DataContext';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { localToday } from '@/lib/today';
-import { afterCertifying, certifyPeriod, certifyStatus, dueText, reminderOn, startCertify } from '@/lib/reminders';
+import { afterCertifying, certifyCalendar, certifyPeriod, certifyStatus, dueText, reminderOn, startCertify } from '@/lib/reminders';
 import { claimDay, claimMoney, claimSummary, weeksAsText, type WeekEnd } from '@/lib/unemployment';
 import { cn } from '@/lib/utils';
 
@@ -43,6 +43,22 @@ const CertifyPanel = forwardRef<HTMLElement, { weekEnd: WeekEnd }>(function Cert
     } catch {
       toast.error("Couldn't copy here.");
     }
+  };
+
+  // One alert on the phone itself, from its own calendar: a single buzz on
+  // each due date, even with the app closed. No sign-in or server needed.
+  const phoneAlert = () => {
+    if (!schedule) return;
+    const ics = certifyCalendar(schedule, new Date(), `${window.location.origin}/benefits/unemployment`);
+    const url = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'certify-reminder.ics';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    toast.success('Open it to add the alert to your calendar');
   };
 
   const certified = () => {
@@ -107,6 +123,16 @@ const CertifyPanel = forwardRef<HTMLElement, { weekEnd: WeekEnd }>(function Cert
               className="pixel-button pick-on flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold">
               <Check size={13} aria-hidden /> I certified
             </button>
+          </div>
+
+          <div className="flex items-center gap-3 border-t border-border/60 pt-3">
+            <button type="button" onClick={phoneAlert} data-testid="certify-phone-alert"
+              className="pixel-button pick-off flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-bold">
+              <BellRing size={13} aria-hidden /> Phone alert
+            </button>
+            <p className="text-[10px] text-mono text-muted-foreground">
+              One quiet alert at 9 AM each due date, in your phone's calendar. Add it again if you change the date.
+            </p>
           </div>
         </>
       )}

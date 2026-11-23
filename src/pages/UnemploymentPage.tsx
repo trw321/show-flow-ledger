@@ -12,8 +12,11 @@ import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { localToday } from '@/lib/today';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { EMPLOYER_COLOURS, employerColours, employerId } from '@/lib/employerColours';
-import { WEEKDAYS, claimDay, claimMoney, claimSummary, employersAsText, isClaimDay, weekRun, weeksAsText, type WeekEnd } from '@/lib/unemployment';
+import { WEEKDAYS, claimDay, claimMoney, claimSummary, employersAsText, howLongText, isClaimDay, weekRun, weeksAsText, type WeekEnd } from '@/lib/unemployment';
 import { cn } from '@/lib/utils';
+
+/** A label in the arcade font, small, in the cyan of the calendar's lines. */
+const LABEL = 'font-8bit text-[7px] uppercase leading-relaxed text-[hsl(188_95%_72%)]';
 
 /** The dates last picked, so coming back for the next form starts there. This device only. */
 const RANGE_KEY = 'show-flow-claim-range';
@@ -77,7 +80,7 @@ export default function UnemploymentPage() {
   const preset = (months: number) => setRange(r => ({ ...r, from: iso(subMonths(parseISO(today), months)), through: today }));
 
   const copy = async () => {
-    const text = view === 'weeks' ? weeksAsText(summary.weeks) : employersAsText(summary.employers);
+    const text = view === 'weeks' ? weeksAsText(summary.weeks) : employersAsText(summary.employers, summary.longest);
     try {
       await navigator.clipboard.writeText(text);
       toast.success(view === 'weeks' ? `Copied ${summary.weeks.length} weeks` : `Copied ${summary.employers.length} employers`);
@@ -94,7 +97,10 @@ export default function UnemploymentPage() {
         : w.lines.map(l => ({ ...base, Employer: l.employer, Hours: l.hours, Gross: l.gross }));
     });
     const employers = summary.employers.map(e => ({
-      Employer: e.name, 'Paid by': e.paidBy ?? '', 'First day': e.firstDay, 'Last day': e.lastDay, Days: e.days, Hours: e.hours, Gross: e.gross,
+      Employer: e.name,
+      'Worked for longest': [summary.longest?.byStretch === e.name && 'Longest, first day to last', summary.longest?.byDays === e.name && 'Most days worked'].filter(Boolean).join('; '),
+      'Paid by': e.paidBy ?? '', 'First day': e.firstDay, 'Last day': e.lastDay, 'How long': howLongText(e.firstDay, e.lastDay),
+      'Days worked': e.days, Hours: e.hours, Gross: e.gross,
     }));
     const book = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(weeks), 'Weeks');
@@ -151,41 +157,70 @@ export default function UnemploymentPage() {
           <>
             {/* What it comes to. */}
             <div className="grid grid-cols-2 gap-2 text-center" data-testid="claim-totals">
-              <div className="border border-border p-2">
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground text-mono">Weeks · employers</p>
-                <p className="text-lg font-bold text-mono">{summary.weeks.length} · {summary.employers.length}</p>
+              <div className="neon-well p-2.5">
+                <p className={LABEL}>Weeks · employers</p>
+                <p className="neon-title mt-1 text-xl font-bold text-mono">{summary.weeks.length} · {summary.employers.length}</p>
               </div>
-              <div className="border border-border p-2">
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground text-mono">{summary.hours} hours · gross</p>
-                <p className="text-lg font-bold text-mono text-dot-paid">{claimMoney(summary.gross)}</p>
+              <div className="neon-well p-2.5">
+                <p className={LABEL}>{summary.hours} hours · gross</p>
+                <p className="neon-title mt-1 text-xl font-bold text-mono">{claimMoney(summary.gross)}</p>
               </div>
             </div>
+
+            {/* Claims ask who you worked for longest. First day to last and most
+                days worked can be different employers, so both are here. */}
+            {summary.longest && (() => {
+              const { byStretch, byDays } = summary.longest;
+              const of = (name: string) => summary.employers.find(e => e.name === name)!;
+              const line = (label: string, name: string, detail: string) => (
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="min-w-0">
+                    <span className={cn(LABEL, 'block')}>{label}</span>
+                    <span className="neon-soft block truncate text-base font-bold text-mono" style={{ color: colourOf(name) }}>{name}</span>
+                  </span>
+                  <span className="shrink-0 text-right text-[11px] text-mono text-muted-foreground">{detail}</span>
+                </div>
+              );
+              return (
+                <div className="neon-well space-y-2 p-3" data-testid="claim-longest">
+                  {byStretch === byDays
+                    ? line('Worked for longest', byStretch, `${howLongText(of(byStretch).firstDay, of(byStretch).lastDay)} · ${of(byStretch).days} days worked`)
+                    : (
+                      <>
+                        {line('Longest, first day to last', byStretch, `${howLongText(of(byStretch).firstDay, of(byStretch).lastDay)}`)}
+                        {line('Most days worked', byDays, `${of(byDays).days} days · ${of(byDays).hours} h`)}
+                      </>
+                    )}
+                </div>
+              );
+            })()}
 
             <div className="flex gap-2" role="tablist" aria-label="Show">
               {(['weeks', 'employers'] as const).map(v => (
                 <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => setView(v)}
-                  className={cn('pixel-button flex-1 py-2 text-sm font-bold', view === v ? 'pick-on' : 'pick-off')}>
+                  className={cn('pixel-button font-8bit flex-1 py-2.5 text-[9px] uppercase', view === v ? 'pick-on' : 'pick-off')}>
                   {v === 'weeks' ? 'By week' : 'By employer'}
                 </button>
               ))}
             </div>
 
             <div className="flex gap-2">
-              <button type="button" onClick={() => void copy()} className="pixel-button pick-off flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold">
+              <button type="button" onClick={() => void copy()} className="pixel-button pick-off flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono">
                 <Copy size={13} aria-hidden /> Copy {view === 'weeks' ? 'weeks' : 'employers'}
               </button>
-              <button type="button" onClick={download} className="pixel-button pick-off flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold">
+              <button type="button" onClick={download} className="pixel-button pick-off flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono">
                 <Download size={13} aria-hidden /> Excel
               </button>
             </div>
 
             {view === 'weeks' ? (
-              <ul className="divide-y divide-border/60 border border-border" data-testid="claim-weeks">
+              <ul className="neon-well divide-y divide-[hsl(312_95%_68%/0.25)]" data-testid="claim-weeks">
                 {summary.weeks.map(w => (
                   <li key={w.weekEnding} className={cn('px-3 py-2.5', w.lines.length === 0 && 'opacity-60')}>
+                    <p className={LABEL}>Week ending</p>
                     <div className="flex items-baseline justify-between gap-2">
-                      <p className="text-sm font-semibold">Week ending {claimDay(w.weekEnding)}</p>
-                      <p className="shrink-0 text-sm font-bold text-mono">{claimMoney(w.gross)}</p>
+                      <p className="neon-title text-[13px] font-bold text-mono">{claimDay(w.weekEnding)}</p>
+                      <p className="neon-title shrink-0 text-[13px] font-bold text-mono">{claimMoney(w.gross)}</p>
                     </div>
                     {w.partial && (
                       <p className="text-[11px] text-mono text-warning">Only {claimDay(w.start, false)} to {claimDay(w.end, false)} is in your dates</p>
@@ -207,28 +242,35 @@ export default function UnemploymentPage() {
                 ))}
               </ul>
             ) : summary.employers.length === 0 ? (
-              <p className="border border-border p-4 text-center text-sm text-muted-foreground">No work in these dates.</p>
+              <p className="neon-well p-4 text-center text-sm text-mono text-muted-foreground">No work in these dates.</p>
             ) : (
               <ul className="space-y-2" data-testid="claim-employers">
                 {summary.employers.map(e => (
-                  <li key={e.name} className="border border-border bg-[#0b0614]/60 p-3">
+                  <li key={e.name} className="neon-well p-3">
                     <div className="flex items-baseline justify-between gap-2">
-                      <p className="neon-soft min-w-0 truncate text-base font-bold" style={{ color: colourOf(e.name) }}>{e.name}</p>
-                      <p className="shrink-0 text-base font-bold text-mono">{claimMoney(e.gross)}</p>
+                      <p className="neon-soft min-w-0 truncate text-base font-bold text-mono" style={{ color: colourOf(e.name) }}>{e.name}</p>
+                      <p className="neon-title shrink-0 text-base font-bold text-mono">{claimMoney(e.gross)}</p>
                     </div>
-                    {e.paidBy && <p className="text-[11px] text-muted-foreground">Paid by {e.paidBy}</p>}
-                    <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[12px] text-mono">
-                      <dt className="text-muted-foreground">First day</dt><dd className="text-right">{claimDay(e.firstDay, false)}</dd>
-                      <dt className="text-muted-foreground">Last day</dt><dd className="text-right">{claimDay(e.lastDay, false)}</dd>
-                      <dt className="text-muted-foreground">Days worked</dt><dd className="text-right">{e.days}</dd>
-                      <dt className="text-muted-foreground">Hours</dt><dd className="text-right">{e.hours}</dd>
+                    {(summary.longest?.byStretch === e.name || summary.longest?.byDays === e.name) && (
+                      <p className="mt-1 flex flex-wrap gap-1.5">
+                        {summary.longest?.byStretch === e.name && <span className="font-8bit border border-[hsl(46_100%_58%)] px-1.5 py-0.5 text-[7px] uppercase text-[hsl(46_100%_58%)]">Longest</span>}
+                        {summary.longest?.byDays === e.name && summary.longest.byStretch !== e.name && <span className="font-8bit border border-[hsl(46_100%_58%)] px-1.5 py-0.5 text-[7px] uppercase text-[hsl(46_100%_58%)]">Most days</span>}
+                      </p>
+                    )}
+                    {e.paidBy && <p className="text-[11px] text-mono text-muted-foreground">Paid by {e.paidBy}</p>}
+                    <dl className="mt-2 grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5 text-[12px] text-mono">
+                      <dt className={LABEL}>First day</dt><dd className="text-right">{claimDay(e.firstDay, false)}</dd>
+                      <dt className={LABEL}>Last day</dt><dd className="text-right">{claimDay(e.lastDay, false)}</dd>
+                      <dt className={LABEL}>How long</dt><dd className="text-right" data-testid="how-long">{howLongText(e.firstDay, e.lastDay)}</dd>
+                      <dt className={LABEL}>Days worked</dt><dd className="text-right">{e.days}</dd>
+                      <dt className={LABEL}>Hours</dt><dd className="text-right">{e.hours}</dd>
                     </dl>
                   </li>
                 ))}
               </ul>
             )}
 
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-[10px] text-mono leading-relaxed text-muted-foreground">
               Gross is the app's estimate from your shifts, before taxes and dues, counted in the week the work was done.
               Weeks run {weekRun(range.weekEnd)}. Check it against your pay stubs before you file.
             </p>
