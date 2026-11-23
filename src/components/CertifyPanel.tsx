@@ -74,7 +74,7 @@ const CertifyPanel = forwardRef<HTMLElement, { weekEnd: WeekEnd }>(function Cert
         <div className="min-w-0">
           <p className="font-8bit text-[8px] uppercase text-[hsl(188_95%_72%)]">Certify</p>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            {schedule ? `Every ${schedule.every === 14 ? '2 weeks' : 'week'}` : 'A reminder when your update to the state is due'}
+            {on ? `Every ${schedule.every === 14 ? '2 weeks' : 'week'}` : 'A reminder when your update to the state is due'}
           </p>
         </div>
         <label className="flex shrink-0 items-center gap-2 text-[11px] text-mono">
@@ -83,7 +83,8 @@ const CertifyPanel = forwardRef<HTMLElement, { weekEnd: WeekEnd }>(function Cert
         </label>
       </div>
 
-      {schedule && status && period && (
+      {/* Switched off, it folds up; the schedule is kept for switching back on. */}
+      {on && schedule && status && period && (
         <>
           <p className={cn('text-sm font-bold text-mono', status.days < 0 ? 'text-dot-late' : status.days <= 1 ? 'text-primary' : 'text-foreground')} data-testid="certify-status">
             Next one {dueText(status.days)} · {claimDay(schedule.next)}

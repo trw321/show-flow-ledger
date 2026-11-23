@@ -83,7 +83,8 @@
        and from every base colour, because a dot is six pixels and the only
        thing telling them apart is the hue. */
     /* Neon: full saturation, bright, so they read like lit tubes on the dark. */
-    --dot-upcoming:  196 100% 62%;
+    /* Sky blue: lighter and airier than a cyan, so "still ahead" reads calm. */
+    --dot-upcoming:  200 95% 74%;
     /* Worked-or-working and waiting on the money are one thing to the eye:
        pending. Two violets a few degrees apart only looked like a smudge. */
     --dot-pending:   278 100% 75%;
