@@ -24,6 +24,8 @@ export interface ClaimLine {
   employer: string;
   hours: number;
   gross: number;
+  /** It came from a pay stub, not from shifts on the calendar. */
+  fromStub?: boolean;
 }
 
 export interface ClaimWeek {
@@ -42,6 +44,8 @@ export interface ClaimWeek {
   gross: number;
   /** Paid time off in the week: in its gross, not its hours. */
   pto: number;
+  /** Some of it came from a pay stub. */
+  fromStub: boolean;
 }
 
 export interface ClaimEmployer {
@@ -56,6 +60,34 @@ export interface ClaimEmployer {
   spanDays: number;
   hours: number;
   gross: number;
+  /** Some of it came from pay stubs: its first and last day are then its stubs' pay periods. */
+  fromStub?: boolean;
+}
+
+/**
+ * A pay stub, summed up: who paid, the pay period, its hours and gross.
+ * For work that isn't on the calendar, the stub stands in for it on the
+ * claim. Kept with your synced settings.
+ */
+export interface ClaimStub {
+  id: string;
+  employer: string;
+  /** The pay period, YYYY-MM-DD, both days included. */
+  start: string;
+  end: string;
+  hours: number;
+  gross: number;
+  createdAt: string;
+}
+
+/** What became of a stub on a claim: counted, or left to the calendar's own shifts. */
+export interface StubUse {
+  stub: ClaimStub;
+  /** Counted: the calendar had nothing for that employer in its pay period. */
+  used: boolean;
+  /** Shifts the calendar has for it instead, and what the app estimates they paid. */
+  shifts: number;
+  estimate: number;
 }
 
 export interface ClaimSummary {
@@ -70,6 +102,8 @@ export interface ClaimSummary {
   longest?: { byStretch: string; byDays: string };
   hours: number;
   gross: number;
+  /** The pay stubs with pay periods in the range, and whether each was counted. */
+  stubs: StubUse[];
 }
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
@@ -78,6 +112,37 @@ export const isClaimDay = (value: unknown): value is string =>
   typeof value === 'string' && ISO.test(value) && isValid(parseISO(value));
 
 const iso = (d: Date) => format(d, 'yyyy-MM-dd');
+const cents = (n: number) => Math.round(n * 100) / 100;
+
+/** A money or hours figure as typed: "$1,234.50" is 1234.5. Not a number is NaN. */
+export function readAmount(text: string): number {
+  const t = text.replace(/[$,\s]/g, '');
+  return t === '' ? NaN : Number(t);
+}
+
+/**
+ * Stubs as stored, made safe to read: no employer, a pay period that isn't
+ * real dates, or neither hours nor pay, and it's left out. An end before the
+ * start is the same days turned round.
+ */
+export function cleanStubs(raw: unknown): ClaimStub[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ClaimStub[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const r = item as Record<string, unknown>;
+    const employer = typeof r.employer === 'string' ? r.employer.trim() : '';
+    const hours = Number(r.hours);
+    const gross = Number(r.gross);
+    if (typeof r.id !== 'string' || !employer || !isClaimDay(r.start) || !isClaimDay(r.end)) continue;
+    const h = Number.isFinite(hours) && hours > 0 ? hours : 0;
+    const g = Number.isFinite(gross) && gross > 0 ? cents(gross) : 0;
+    if (h === 0 && g === 0) continue;
+    const [start, end] = r.start <= r.end ? [r.start, r.end] : [r.end, r.start];
+    out.push({ id: r.id, employer, start, end, hours: h, gross: g, createdAt: typeof r.createdAt === 'string' ? r.createdAt : '' });
+  }
+  return out;
+}
 
 /** The last day of the week a day is in: the next Saturday, or whichever day weeks end on. */
 export function weekEndingFor(day: string, weekEnd: WeekEnd = 6): string {
@@ -95,7 +160,7 @@ function employerOf(job: Job, employers: Employer[]): { name: string; paidBy?: s
   return { name, paidBy: paidBy && paidBy.toLowerCase() !== name.toLowerCase() ? paidBy : undefined };
 }
 
-const EMPTY: ClaimSummary = { weeks: [], employers: [], hours: 0, gross: 0 };
+const EMPTY: ClaimSummary = { weeks: [], employers: [], hours: 0, gross: 0, stubs: [] };
 
 /**
  * How long you worked for an employer, first day to last, both counted, in
@@ -122,6 +187,11 @@ const MAX_WEEKS = 600;
  * in the range (a week with no work is there with nothing in it, so none gets
  * skipped), and every employer. Shifts that were cancelled, are still a plan,
  * or have a date that isn't one are left out.
+ *
+ * A pay stub counts where the calendar has nothing for its employer in its
+ * pay period: its hours and gross are spread evenly over the period's days,
+ * so a two-week stub puts half in each week. Where the calendar does have
+ * shifts, they count and the stub is only there to check them against.
  */
 export function claimSummary(
   jobs: Job[],
@@ -130,6 +200,7 @@ export function claimSummary(
   from: string,
   through: string,
   weekEnd: WeekEnd = 6,
+  stubs: ClaimStub[] = [],
 ): ClaimSummary {
   if (!isClaimDay(from) || !isClaimDay(through) || through < from) return EMPTY;
 
@@ -139,7 +210,7 @@ export function claimSummary(
     const first = iso(addDays(parseISO(ending), -6));
     const start = first < from ? from : first;
     const end = ending > through ? through : ending;
-    weeks.set(ending, { weekEnding: ending, start, end, partial: start !== first || end !== ending, lines: [], days: 0, hours: 0, gross: 0, pto: 0 });
+    weeks.set(ending, { weekEnding: ending, start, end, partial: start !== first || end !== ending, lines: [], days: 0, hours: 0, gross: 0, pto: 0, fromStub: false });
   }
 
   const byEmployer = new Map<string, Omit<ClaimEmployer, 'spanDays'> & { worked: Set<string> }>();
@@ -174,13 +245,62 @@ export function claimSummary(
     byEmployer.set(id, e);
   }
 
-  const cents = (n: number) => Math.round(n * 100) / 100;
+  const stubUses: StubUse[] = [];
+  for (const stub of stubs) {
+    if (!isClaimDay(stub.start) || !isClaimDay(stub.end) || stub.end < from || stub.start > through) continue;
+    const { name } = employerOf({ client: stub.employer } as Job, employers);
+    const id = name.toLowerCase();
+    // The calendar first: its shifts for this employer in the stub's pay period.
+    const shifts = jobs.filter(j => j.status !== 'cancelled' && isClaimDay(j.date) && j.date >= stub.start && j.date <= stub.end
+      && employerOf(j, employers).name.toLowerCase() === id);
+    const worked = shifts.map(j => ({ hours: j.pto ? 0 : netHoursWorked(j), gross: jobPayBreakdown(j, jobs, employers, payer).gross }))
+      .filter(x => x.hours > 0 || x.gross > 0);
+    if (worked.length > 0) {
+      stubUses.push({ stub, used: false, shifts: worked.length, estimate: cents(worked.reduce((t, x) => t + x.gross, 0)) });
+      continue;
+    }
+    stubUses.push({ stub, used: true, shifts: 0, estimate: 0 });
+    // Nothing on the calendar: the stub stands in, spread evenly over its days.
+    const total = differenceInCalendarDays(parseISO(stub.end), parseISO(stub.start)) + 1;
+    const first = stub.start < from ? from : stub.start;
+    const last = stub.end > through ? through : stub.end;
+    const daysIn = new Map<string, number>();
+    for (let d = first; d <= last; d = iso(addDays(parseISO(d), 1))) {
+      const ending = weekEndingFor(d, weekEnd);
+      daysIn.set(ending, (daysIn.get(ending) ?? 0) + 1);
+    }
+    let inHours = 0;
+    let inGross = 0;
+    for (const [ending, n] of daysIn) {
+      const week = weeks.get(ending);
+      if (!week) continue;
+      const hours = (stub.hours * n) / total;
+      const gross = (stub.gross * n) / total;
+      let line = week.lines.find(l => l.employer === name && l.fromStub);
+      if (!line) week.lines.push(line = { employer: name, hours: 0, gross: 0, fromStub: true });
+      line.hours += hours;
+      line.gross += gross;
+      week.hours += hours;
+      week.gross += gross;
+      inHours += hours;
+      inGross += gross;
+    }
+    const e = byEmployer.get(id) ?? { name, firstDay: first, lastDay: last, days: 0, hours: 0, gross: 0, worked: new Set<string>() };
+    if (first < e.firstDay) e.firstDay = first;
+    if (last > e.lastDay) e.lastDay = last;
+    e.hours += inHours;
+    e.gross += inGross;
+    e.fromStub = true;
+    byEmployer.set(id, e);
+  }
+
   const weekList = [...weeks.values()].map(w => ({
     ...w,
     days: weekDays.get(w.weekEnding)?.size ?? 0,
     hours: roundHours(w.hours),
     gross: cents(w.gross),
     pto: cents(w.pto),
+    fromStub: w.lines.some(l => l.fromStub),
     lines: w.lines.map(l => ({ ...l, hours: roundHours(l.hours), gross: cents(l.gross) })),
   }));
   // The most recent employer first: the order claim forms ask in.
@@ -208,35 +328,36 @@ export function claimSummary(
     longest,
     hours: roundHours(weekList.reduce((s, w) => s + w.hours, 0)),
     gross: cents(weekList.reduce((s, w) => s + w.gross, 0)),
+    stubs: stubUses,
   };
 }
 
 /**
- * The orders the lists can be put in: by days worked, short to long or long
- * to short, or by time, oldest first ("🦖 to now") or most recent first.
+ * The orders the lists can be put in: by hours, low to high or high to low,
+ * or by time, oldest first ("🦖 to now") or most recent first.
  */
-export type ClaimSort = 'recent' | 'oldest' | 'fewDays' | 'mostDays';
+export type ClaimSort = 'recent' | 'oldest' | 'fewHours' | 'mostHours';
 
-/** Weeks in an order. Weeks with the same days worked go most recent first. */
+/** Weeks in an order. Weeks with the same hours go most recent first. */
 export function sortWeeks(weeks: ClaimWeek[], sort: ClaimSort): ClaimWeek[] {
   const recent = (a: ClaimWeek, b: ClaimWeek) => b.weekEnding.localeCompare(a.weekEnding);
   return [...weeks].sort((a, b) =>
     sort === 'oldest' ? a.weekEnding.localeCompare(b.weekEnding)
-    : sort === 'fewDays' ? a.days - b.days || recent(a, b)
-    : sort === 'mostDays' ? b.days - a.days || recent(a, b)
+    : sort === 'fewHours' ? a.hours - b.hours || recent(a, b)
+    : sort === 'mostHours' ? b.hours - a.hours || recent(a, b)
     : recent(a, b));
 }
 
 /**
  * Employers in an order: most recent by their last day, oldest by their
- * first. Employers with the same days worked go most recent first.
+ * first. Employers with the same hours go most recent first.
  */
 export function sortEmployers(list: ClaimEmployer[], sort: ClaimSort): ClaimEmployer[] {
   const recent = (a: ClaimEmployer, b: ClaimEmployer) => b.lastDay.localeCompare(a.lastDay) || a.name.localeCompare(b.name);
   return [...list].sort((a, b) =>
     sort === 'oldest' ? a.firstDay.localeCompare(b.firstDay) || a.name.localeCompare(b.name)
-    : sort === 'fewDays' ? a.days - b.days || recent(a, b)
-    : sort === 'mostDays' ? b.days - a.days || recent(a, b)
+    : sort === 'fewHours' ? a.hours - b.hours || recent(a, b)
+    : sort === 'mostHours' ? b.hours - a.hours || recent(a, b)
     : recent(a, b));
 }
 
@@ -250,8 +371,8 @@ export function weeksAsText(weeks: ClaimWeek[]): string {
   return weeks.map(w => {
     const head = `Week ending ${claimDay(w.weekEnding)}${w.partial ? ` (${claimDay(w.start, false)} to ${claimDay(w.end, false)} only)` : ''}`;
     if (w.lines.length === 0) return `${head}: no work, 0 days, 0 hours, $0.00`;
-    const parts = w.lines.map(l => `${l.employer} ${l.hours} hours ${claimMoney(l.gross)}`);
-    return `${head}: ${parts.join('; ')}. Total ${w.days} day${w.days === 1 ? '' : 's'}, ${w.hours} hours, ${claimMoney(w.gross)} gross${w.pto > 0 ? ` (includes ${claimMoney(w.pto)} PTO)` : ''}`;
+    const parts = w.lines.map(l => `${l.employer}${l.fromStub ? ' (from pay stub)' : ''} ${l.hours} hours ${claimMoney(l.gross)}`);
+    return `${head}: ${parts.join('; ')}. Total ${w.fromStub ? '' : `${w.days} day${w.days === 1 ? '' : 's'}, `}${w.hours} hours, ${claimMoney(w.gross)} gross${w.pto > 0 ? ` (includes ${claimMoney(w.pto)} PTO)` : ''}`;
   }).join('\n');
 }
 
