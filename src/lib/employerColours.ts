@@ -1,16 +1,16 @@
 /**
- * Each employer's colour on the month grid, as an HSL triplet. Clear of the
- * money's four status colours (amber 40, sky 205, lilac 272, green 152), the
- * conference gold (46) and red, so an employer's name never reads as paid,
- * late or waiting.
+ * Each employer's colour on the month grid, as an HSL triplet, neon bright.
+ * Kept off the money's status hues (amber 45, blue 196, violet 278, green
+ * 140, red 2) and the conference gold (46), so an employer's bar never reads
+ * as paid, late or waiting.
  */
 export const EMPLOYER_COLOURS = [
-  '178 80% 52%', // teal
-  '312 85% 68%', // pink
-  '84 80% 55%', // lime
-  '0 0% 92%', // white
-  '22 95% 62%', // orange
-  '236 90% 75%', // periwinkle
+  '170 100% 48%', // aqua
+  '312 100% 66%', // pink
+  '84 100% 52%', // lime
+  '0 0% 96%', // white
+  '24 100% 56%', // orange
+  '232 100% 72%', // periwinkle
 ] as const;
 
 /** How an employer is told apart: its name, ignoring case and spacing. */

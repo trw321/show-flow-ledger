@@ -82,12 +82,16 @@
     /* The five things a shift can be. Fixed hues, well apart from each other
        and from every base colour, because a dot is six pixels and the only
        thing telling them apart is the hue. */
-    --dot-upcoming:  205 88% 70%;
+    /* Neon: full saturation, bright, so they read like lit tubes on the dark. */
+    --dot-upcoming:  196 100% 62%;
     /* Worked-or-working and waiting on the money are one thing to the eye:
        pending. Two violets a few degrees apart only looked like a smudge. */
-    --dot-pending:   272 62% 78%;
-    --dot-paid:      152 86% 56%;
-    --dot-overdue:    40 96% 60%;
+    --dot-pending:   278 100% 75%;
+    --dot-paid:      140 100% 52%;
+    /* "overdue" here is a shift whose hours are overdue: amber, needs hours. */
+    --dot-overdue:    45 100% 55%;
+    /* Pay past the day it was due. */
+    --dot-late:        2 100% 62%;
     --dot-cancelled: 344 70% 56%;
 
     /* Square. Nothing in a terminal has rounded corners. */

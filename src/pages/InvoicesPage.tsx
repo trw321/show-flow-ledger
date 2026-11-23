@@ -36,7 +36,7 @@ type Draft = Omit<Invoice, 'id' | 'createdAt'>;
 
 function statusOf(v: Invoice, today: string): { label: string; tone: string } {
   if (v.status === 'paid') return { label: 'Paid', tone: 'border-dot-paid/50 text-dot-paid' };
-  if (invoiceOverdue(v, today)) return { label: 'Overdue', tone: 'border-dot-overdue/60 text-dot-overdue' };
+  if (invoiceOverdue(v, today)) return { label: 'Overdue', tone: 'border-dot-late/60 text-dot-late' };
   if (v.status === 'sent') return { label: 'Sent', tone: 'border-dot-pending/50 text-dot-pending' };
   return { label: 'Draft', tone: 'border-border text-muted-foreground' };
 }

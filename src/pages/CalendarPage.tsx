@@ -65,6 +65,7 @@ export const SHIFT_STATES = [
   { text: 'text-dot-overdue', sample: '8a', label: 'needs hours' },
   { text: 'text-dot-upcoming', sample: '8a', label: 'upcoming' },
   { text: 'text-dot-pending', sample: '$475', label: 'pending' },
+  { text: 'text-dot-late', sample: '$475', label: 'overdue' },
   { text: 'text-dot-paid', sample: '$475', label: 'paid' },
 ] as const;
 
@@ -93,12 +94,14 @@ const statusColors: Record<Job['status'], string> = {
 /**
  * Money in the colour of the dots, so green means paid wherever it appears.
  * Expected pay used to be green everywhere, which read as money that had
- * arrived. Paid once every worked shift is paid; amber if one still needs its
- * hours; lavender while worked and waiting; light blue while still ahead.
+ * arrived. Paid once every worked shift is paid; red once a worked shift's pay
+ * is past the day it was due; amber if one still needs its hours; violet while
+ * worked and waiting; blue while still ahead.
  */
-function moneyTone(jobs: Job[], paidJobIds: Set<string>): string {
+function moneyTone(jobs: Job[], paidJobIds: Set<string>, latePayIds?: Set<string>): string {
   const worked = jobs.filter(j => effectiveHoursWorked(j) > 0);
   if (worked.length > 0 && worked.every(j => paidJobIds.has(j.id))) return 'text-dot-paid';
+  if (latePayIds && worked.some(j => latePayIds.has(j.id) && !paidJobIds.has(j.id))) return 'text-dot-late';
   if (jobs.some(isOverdueUpcoming)) return 'text-dot-overdue';
   if (worked.length > 0) return 'text-dot-pending';
   return 'text-dot-upcoming';
@@ -121,8 +124,9 @@ function reviewReason(job: Job): { kind: 'payment' | 'payroll' | 'manual'; text:
 
 // Card wash behind a shift — same status meaning as the dot, just readable
 // from across the list instead of a 6px dot.
-function cardTintClass(job: Job, paidJobIds: Set<string>): string {
+function cardTintClass(job: Job, paidJobIds: Set<string>, late = false): string {
   if (paidJobIds.has(job.id)) return 'from-dot-paid/25 via-dot-paid/[0.07] to-transparent';
+  if (late) return 'from-dot-late/25 via-dot-late/[0.07] to-transparent';
   if (isOverdueUpcoming(job)) return 'from-dot-overdue/25 via-dot-overdue/[0.07] to-transparent';
   if (job.status === 'completed') return 'from-dot-pending/25 via-dot-pending/[0.07] to-transparent';
   if (job.status === 'cancelled') return 'from-dot-cancelled/20 via-dot-cancelled/[0.05] to-transparent';
@@ -2648,6 +2652,11 @@ export default function CalendarPage() {
   const daysPastDue = oldestWaiting ? differenceInCalendarDays(new Date(), parseISO(oldestWaiting.due)) : 0;
   const payTier: PayTimingTier = oldestWaiting ? payTimingTier(daysPastDue) : 'none';
   const overdueWaiting = waitingOnPay.filter(w => w.due <= localToday());
+  // Worked shifts whose pay is past the day it was due, not on it: their money shows red.
+  const latePayIds = useMemo(
+    () => new Set(waitingOnPay.filter(w => w.due < localToday()).flatMap(w => w.jobs.map(j => j.id))),
+    [waitingOnPay],
+  );
   const overdueCount = overdueWaiting.length;
   /** Opens one shift from a to-do. */
   const openShift = (job: Job) => { setSelectedDate(job.date); setSelectedJobId(job.id); };
@@ -3248,7 +3257,7 @@ export default function CalendarPage() {
                           the call time, in the same colours. The row is kept
                           on an empty day so the dates stay in line. */}
                       {liveJobs.length > 0 ? (
-                        <span data-testid="day-money" className={cn("mt-0.5 h-3 text-[10px] text-mono font-semibold leading-3", moneyTone(liveJobs, paidJobIds))}>
+                        <span data-testid="day-money" className={cn("mt-0.5 h-3 text-[10px] text-mono font-semibold leading-3", moneyTone(liveJobs, paidJobIds, latePayIds))}>
                           {hasPay ? shortDollars(payByDate[dateKey]) : shortCall(liveJobs[0].startTime) || 'call'}
                         </span>
                       ) : <span aria-hidden="true" className="mt-0.5 block h-3 shrink-0" />}
@@ -3328,7 +3337,7 @@ export default function CalendarPage() {
                 >
                   <div className="flex items-center justify-between mb-0.5">
                     <p className="text-[9px] font-body font-medium uppercase tracking-wider text-foreground/60">{format(monthStart, 'MMM')}</p>
-                    {monthPay > 0 && <span className={cn("text-[7px] text-mono font-semibold", moneyTone(monthShifts, paidJobIds))}>${monthPay >= 1000 ? `${(monthPay / 1000).toFixed(1)}k` : monthPay.toFixed(0)}</span>}
+                    {monthPay > 0 && <span className={cn("text-[7px] text-mono font-semibold", moneyTone(monthShifts, paidJobIds, latePayIds))}>${monthPay >= 1000 ? `${(monthPay / 1000).toFixed(1)}k` : monthPay.toFixed(0)}</span>}
                   </div>
                   <div className="grid grid-cols-7 gap-px">
                     {cells.map((day, ci) => {
@@ -3360,7 +3369,7 @@ export default function CalendarPage() {
               <span className="text-xs text-muted-foreground">{yearStats.totalJobs > 0 ? `${yearStats.totalJobs} job${yearStats.totalJobs !== 1 ? 's' : ''}` : 'No jobs yet'}</span>
               <div className="flex items-center gap-3">
                 {yearStats.totalHours > 0 && <span className="text-xs text-mono font-semibold text-primary">{roundHours(yearStats.totalHours)}h</span>}
-                {yearStats.totalPay > 0 && <span className={cn("text-xs text-mono font-bold", moneyTone(yearJobsInView, paidJobIds))}>${yearStats.totalPay >= 1000 ? `${(yearStats.totalPay / 1000).toFixed(1)}k` : yearStats.totalPay.toFixed(0)}</span>}
+                {yearStats.totalPay > 0 && <span className={cn("text-xs text-mono font-bold", moneyTone(yearJobsInView, paidJobIds, latePayIds))}>${yearStats.totalPay >= 1000 ? `${(yearStats.totalPay / 1000).toFixed(1)}k` : yearStats.totalPay.toFixed(0)}</span>}
               </div>
             </div>
           </div>
@@ -3574,7 +3583,7 @@ export default function CalendarPage() {
                 {payByDate[selectedDate!] && (
                   <div className="flex items-center justify-between pt-2 border-t border-border text-sm text-mono">
                     <span className="text-muted-foreground">Estimated {payView}</span>
-                    <span className={cn("font-bold", moneyTone(jobsByDate[selectedDate!] ?? [], paidJobIds))}>${payByDate[selectedDate!].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    <span className={cn("font-bold", moneyTone(jobsByDate[selectedDate!] ?? [], paidJobIds, latePayIds))}>${payByDate[selectedDate!].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 )}
 
@@ -3705,7 +3714,7 @@ export default function CalendarPage() {
                   </DialogTitle>
                   <DialogDescription>
                     {days[0].name ? `${days[0].name} · ` : ''}{span} · {dayCount} day{dayCount === 1 ? '' : 's'}
-                    {total > 0 && <> · <span className={cn('font-semibold', moneyTone(days, paidJobIds))}>${Math.round(total).toLocaleString()}</span> est. {payView}</>}
+                    {total > 0 && <> · <span className={cn('font-semibold', moneyTone(days, paidJobIds, latePayIds))}>${Math.round(total).toLocaleString()}</span> est. {payView}</>}
                   </DialogDescription>
                 </DialogHeader>
                 <ul className="divide-y divide-border/60 border border-border">
@@ -3725,7 +3734,7 @@ export default function CalendarPage() {
                               {job.startTime ? `${job.startTime}${job.endTime ? ` – ${job.endTime}` : ''}` : 'No call time'}{job.role ? ` · ${job.role}` : ''}
                             </span>
                           </span>
-                          <span className={cn('shrink-0 text-sm text-mono font-semibold', moneyTone([job], paidJobIds))}>
+                          <span className={cn('shrink-0 text-sm text-mono font-semibold', moneyTone([job], paidJobIds, latePayIds))}>
                             {pay > 0 ? `$${Math.round(pay).toLocaleString()}` : isOverdueUpcoming(job) ? 'needs hours' : statusLabel[job.status]}
                           </span>
                           <ChevronRight size={16} className="shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -3863,7 +3872,7 @@ export default function CalendarPage() {
                         says what it is from across the list without reading it.
                         There was an outlined bolt watermarked behind this; it
                         read as a stray graphic rather than as texture. */}
-                    <div aria-hidden className={cn("pointer-events-none absolute inset-0 bg-gradient-to-br", cardTintClass(first, paidJobIds))} />
+                    <div aria-hidden className={cn("pointer-events-none absolute inset-0 bg-gradient-to-br", cardTintClass(first, paidJobIds, jobs.some(j => latePayIds.has(j.id))))} />
                     {isSplit && <div className="hazard-tape relative"><span>⚠ Splits {split.periods.length} pay periods ⚠</span></div>}
                     <div
                       onClick={() => isGroup ? setExpandedGroupKey(expanded ? null : key) : openJob(first)}
@@ -3897,11 +3906,11 @@ export default function CalendarPage() {
                             in the key's colour, for the estimate picked above. */}
                         <div className="flex shrink-0 items-start gap-1">
                           {totalEarned > 0 ? (
-                            <p className={cn("text-lg font-bold text-mono leading-none", moneyTone(jobs, paidJobIds))} data-testid="project-pay">
+                            <p className={cn("text-lg font-bold text-mono leading-none", moneyTone(jobs, paidJobIds, latePayIds))} data-testid="project-pay">
                               ${Math.round(totalEarned).toLocaleString()}
                             </p>
                           ) : (
-                            <p className={cn("text-[11px] text-mono leading-none", moneyTone(jobs, paidJobIds))}>
+                            <p className={cn("text-[11px] text-mono leading-none", moneyTone(jobs, paidJobIds, latePayIds))}>
                               {jobs.some(isOverdueUpcoming) ? 'Needs hours' : statusLabel[first.status]}
                             </p>
                           )}
@@ -3957,7 +3966,7 @@ export default function CalendarPage() {
                                       </>
                                     ) : due ? (
                                       <>
-                                        <p className={cn('min-w-0 truncate text-[11px] text-mono', late > 0 ? 'text-warning' : 'text-dot-pending')}>
+                                        <p className={cn('min-w-0 truncate text-[11px] text-mono', late > 0 ? 'text-dot-late' : 'text-dot-pending')}>
                                           {invoice ? `${invoice.status === 'draft' ? 'Draft' : 'Invoiced'} ${invoice.number}` : p.firstCheck ? 'Waiting on first check' : 'Waiting on pay'} · {late > 0 ? `${late}d late` : `due ${format(parseISO(due), 'MMM d')}`}
                                         </p>
                                         <button type="button" onClick={e => { e.stopPropagation(); void markProjectPaid(lead); }} className={rowButton}><Wallet size={12} /> Mark paid</button>
@@ -4039,7 +4048,7 @@ export default function CalendarPage() {
                         const invoice = jobs.map(j => openInvoiceOf.get(j.id)).find(Boolean);
                         return (
                           <div className="mt-2 flex items-center justify-between gap-2">
-                            <p className={cn('text-[11px] text-mono', late > 0 ? 'text-warning' : 'text-dot-pending')}>
+                            <p className={cn('text-[11px] text-mono', late > 0 ? 'text-dot-late' : 'text-dot-pending')}>
                               {invoice ? `${invoice.status === 'draft' ? 'Draft' : 'Invoiced'} ${invoice.number}` : split.periods[0]?.firstCheck ? 'Waiting on first check' : 'Waiting on pay'} · {late > 0 ? `${late}d late` : `due ${format(parseISO(due), 'MMM d')}`}
                             </p>
                             <button

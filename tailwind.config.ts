@@ -26,6 +26,7 @@ export default {
           pending: 'hsl(var(--dot-pending))',
           paid: 'hsl(var(--dot-paid))',
           overdue: 'hsl(var(--dot-overdue))',
+          late: 'hsl(var(--dot-late))',
           cancelled: 'hsl(var(--dot-cancelled))',
         },
         border: "hsl(var(--border))",
