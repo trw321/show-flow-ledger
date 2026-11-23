@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { HeartPulse } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ChevronRight, HeartPulse } from 'lucide-react';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
 import HealthWelfareCard from '@/components/HealthWelfareCard';
 import YearOfServiceCard from '@/components/YearOfServiceCard';
@@ -43,6 +44,16 @@ export default function BenefitsPage() {
       description="Local 16 health & welfare, and Local 8 Year of Service"
     >
       <div className="max-w-lg mx-auto space-y-4">
+        {/* Filing for unemployment: your weeks and employers for the dates it asks. */}
+        <Link to="/benefits/unemployment" data-testid="open-unemployment"
+          className="neon-well flex items-center justify-between gap-3 px-3 py-2.5">
+          <span className="min-w-0">
+            <span className="neon-title block text-sm font-bold">Unemployment claim</span>
+            <span className="block text-[11px] text-muted-foreground">Weeks and employers for any dates, ready to copy</span>
+          </span>
+          <ChevronRight size={18} className="shrink-0 text-[hsl(188_90%_70%)]" aria-hidden />
+        </Link>
+
         {/* The headline: are you covered, and are you on track for the next quarter. */}
         <div className="grid gap-2" data-testid="benefits-headline">
           <div className={cn('rounded-lg border-2 p-3', lastStanding.covered ? 'border-dot-paid bg-dot-paid/10' : 'border-warning bg-warning/10')}>

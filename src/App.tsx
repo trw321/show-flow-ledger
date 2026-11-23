@@ -13,6 +13,7 @@ import CrewPage from '@/pages/CrewPage';
 import InvoicesPage from '@/pages/InvoicesPage';
 import NetworkPage from '@/pages/NetworkPage';
 import BenefitsPage from '@/pages/BenefitsPage';
+import UnemploymentPage from '@/pages/UnemploymentPage';
 import InvoicePrintPage from '@/pages/InvoicePrintPage';
 import SettingsPage from '@/pages/SettingsPage';
 import AuthPage from '@/pages/AuthPage';
@@ -51,6 +52,7 @@ export default function App() {
             <Route path="/invoices" element={<InvoicesPage />} />
             <Route path="/network" element={<NetworkPage />} />
             <Route path="/benefits" element={<BenefitsPage />} />
+            <Route path="/benefits/unemployment" element={<UnemploymentPage />} />
             <Route path="/pay" element={<Navigate to="/money" replace />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<NotFound />} />
