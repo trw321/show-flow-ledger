@@ -55,7 +55,7 @@ export function Wheel<T extends string | number>({ items, value, onChange, label
 
   return (
     <div className="flex min-w-0 flex-1 flex-col items-center">
-      <button type="button" onClick={() => step(-1)} aria-label={`${label}: back one`}
+      <button type="button" onClick={() => step(-1)} aria-label={`${label}: up`}
         className="flex h-6 w-full items-center justify-center text-[hsl(188_90%_70%)] active:opacity-60">
         <ChevronUp size={16} aria-hidden />
       </button>
@@ -92,7 +92,7 @@ export function Wheel<T extends string | number>({ items, value, onChange, label
           </div>
         ))}
       </div>
-      <button type="button" onClick={() => step(1)} aria-label={`${label}: forward one`}
+      <button type="button" onClick={() => step(1)} aria-label={`${label}: down`}
         className="flex h-6 w-full items-center justify-center text-[hsl(188_90%_70%)] active:opacity-60">
         <ChevronDown size={16} aria-hidden />
       </button>
@@ -143,6 +143,10 @@ export default function DateWheels({ label, value, onChange, firstYear, lastYear
   };
   const days = Array.from({ length: getDaysInMonth(d) }, (_, i) => ({ value: i + 1, label: String(i + 1) }));
   const years = Array.from({ length: lastYear - firstYear + 1 }, (_, i) => ({ value: firstYear + i, label: String(firstYear + i) }));
+  // Numbers count up as you go up: 28, then 29 above it; 2025, then 2026.
+  // Months read like a calendar page, earlier above: SEP, then AUG above it.
+  const daysUp = [...days].reverse();
+  const yearsUp = [...years].reverse();
   const toggle = (which: 'month' | 'day' | 'year') => setPicking(p => (p === which ? null : which));
   // Picked: set it, and fold the grid away.
   const choose = (y: number, m: number, dd: number) => { set(y, m, dd); setPicking(null); };
@@ -154,9 +158,9 @@ export default function DateWheels({ label, value, onChange, firstYear, lastYear
       <div className="flex gap-2">
         <Wheel label={`${label} month`} items={MONTHS} value={month} onChange={m => set(year, m, day)} testId={testId && `${testId}-month`}
           onPick={() => toggle('month')} picking={picking === 'month'} />
-        <Wheel label={`${label} day`} items={days} value={day} onChange={dd => set(year, month, dd)} testId={testId && `${testId}-day`}
+        <Wheel label={`${label} day`} items={daysUp} value={day} onChange={dd => set(year, month, dd)} testId={testId && `${testId}-day`}
           onPick={() => toggle('day')} picking={picking === 'day'} />
-        <Wheel label={`${label} year`} items={years} value={year} onChange={y => set(y, month, day)} testId={testId && `${testId}-year`}
+        <Wheel label={`${label} year`} items={yearsUp} value={year} onChange={y => set(y, month, day)} testId={testId && `${testId}-year`}
           onPick={() => toggle('year')} picking={picking === 'year'} />
       </div>
 
