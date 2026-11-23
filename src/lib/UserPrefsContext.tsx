@@ -55,6 +55,8 @@ export interface UserPrefs {
   claimChecked: string[];
   /** The unemployment claim's dates and the day its weeks end, kept so every device opens on them. */
   claimRange?: { from: string; through: string; weekEnd: number };
+  /** On the claim, a pay stub's own pay for shifts already on the calendar, instead of their estimates. Off unless chosen. */
+  claimUseStubPay?: boolean;
 }
 
 export const TAB_LABELS: Record<TabKey, { label: string; description: string }> = {
@@ -99,6 +101,7 @@ function loadPrefs(uid?: string | null): UserPrefs {
       claimEmployers: cleanClaimEmployers(parsed.claimEmployers),
       claimChecked: cleanChecked(parsed.claimChecked),
       claimRange: cleanClaimRange(parsed.claimRange),
+      claimUseStubPay: parsed.claimUseStubPay === true,
       contacts: Array.isArray(parsed.contacts) ? parsed.contacts.filter((c: unknown) => !!c && typeof (c as NetworkContact).id === 'string' && typeof (c as NetworkContact).name === 'string') : [],
     };
   } catch {
@@ -134,6 +137,7 @@ interface UserPrefsContextValue {
   setClaimEmployers: (info: Record<string, ClaimEmployerInfo>) => void;
   setClaimChecked: (weeks: string[]) => void;
   setClaimRange: (range: { from: string; through: string; weekEnd: number }) => void;
+  setClaimUseStubPay: (on: boolean) => void;
 }
 
 const UserPrefsContext = createContext<UserPrefsContextValue | null>(null);
@@ -188,6 +192,7 @@ export function UserPrefsProvider({ children }: { children: React.ReactNode }) {
   const setClaimEmployers = (claimEmployers: Record<string, ClaimEmployerInfo>) => update({ ...prefs, claimEmployers });
   const setClaimChecked = (claimChecked: string[]) => update({ ...prefs, claimChecked });
   const setClaimRange = (claimRange: { from: string; through: string; weekEnd: number }) => update({ ...prefs, claimRange });
+  const setClaimUseStubPay = (claimUseStubPay: boolean) => update({ ...prefs, claimUseStubPay });
   const setReminder = (kind: ReminderKind, on: boolean) => update({ ...prefs, reminders: { ...prefs.reminders, [kind]: on } });
   const setCertify = (certify: CertifySchedule | undefined, remind?: boolean) =>
     update({ ...prefs, certify, reminders: remind === undefined ? prefs.reminders : { ...prefs.reminders, certify: remind } });
@@ -200,7 +205,7 @@ export function UserPrefsProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <UserPrefsContext.Provider value={{ prefs, setWorkerType, setTabEnabled, setPayer, setInvoiceFrom, setCalendarPay, setAIFreeMode, setContacts, setConferences, setReminder, setCertify, setClaimStubs, setClaimEmployers, setClaimChecked, setClaimRange }}>
+    <UserPrefsContext.Provider value={{ prefs, setWorkerType, setTabEnabled, setPayer, setInvoiceFrom, setCalendarPay, setAIFreeMode, setContacts, setConferences, setReminder, setCertify, setClaimStubs, setClaimEmployers, setClaimChecked, setClaimRange, setClaimUseStubPay }}>
       {children}
     </UserPrefsContext.Provider>
   );

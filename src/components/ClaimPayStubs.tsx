@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { addDays, format, parseISO } from 'date-fns';
 import { CalendarPlus, Camera, Check, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import DateWheels from '@/components/DateWheels';
 import StubEditor from '@/components/StubEditor';
 import { aiFetch } from '@/lib/aiSwitch';
@@ -49,7 +50,7 @@ function periodText(start: string, end: string) {
 }
 
 /** What a stub came to on the claim, in a tag and a few words. */
-function StubStatus({ use }: { use?: StubUse }) {
+function StubStatus({ use, stubPay }: { use?: StubUse; stubPay: boolean }) {
   if (!use) return <span className={cn(TAG, 'border-border text-muted-foreground')}>Outside dates</span>;
   if (use.status === 'counted') {
     return <><span className={cn(TAG, GOLD)}>Counted</span><span className="text-muted-foreground">nothing on the calendar for it</span></>;
@@ -58,7 +59,11 @@ function StubStatus({ use }: { use?: StubUse }) {
     return (
       <>
         <span className={cn(TAG, CYAN)}>On calendar</span>
-        <span className="text-muted-foreground">{use.shifts} shift{use.shifts === 1 ? '' : 's'} there say which weeks; its {claimMoney(use.stub.gross)} is used for them (the app's estimate was {claimMoney(use.estimate)})</span>
+        <span className="text-muted-foreground">
+          {stubPay
+            ? <>{use.shifts} shift{use.shifts === 1 ? '' : 's'} there say which weeks; its {claimMoney(use.stub.gross)} is used for them (the app's estimate was {claimMoney(use.estimate)})</>
+            : <>{use.shifts} shift{use.shifts === 1 ? '' : 's'} there count as they are, est. {claimMoney(use.estimate)}; the stub says {claimMoney(use.stub.gross)}</>}
+        </span>
       </>
     );
   }
@@ -103,7 +108,9 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
   /** A week's "+": open the form set to that week. */
   request?: { start: string; end: string; nonce: number } | null;
 }) {
-  const { prefs, setClaimStubs } = useUserPrefs();
+  const { prefs, setClaimStubs, setClaimUseStubPay } = useUserPrefs();
+  const stubPay = !!prefs.claimUseStubPay;
+  const anyOnCalendar = uses.some(u => u.status === 'calendar');
   const { addJob } = useData();
   const stubs = prefs.claimStubs;
   const [editing, setEditing] = useState<{ id?: string; draft: Draft } | null>(null);
@@ -373,6 +380,19 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
         </div>
       )}
 
+      {/* For shifts the calendar has: their own estimates (the default), or the stub's pay shared over them. */}
+      {anyOnCalendar && (
+        <label className="flex items-start justify-between gap-3 border-t border-[hsl(312_95%_68%/0.3)] pt-2.5" data-testid="stub-pay-option">
+          <span className="min-w-0">
+            <span className="block text-[12px] font-bold text-mono">Use the stub's pay for shifts on the calendar</span>
+            <span className="block text-[11px] text-mono text-muted-foreground">
+              Off: each shift counts at its own estimate. On: the stub's gross and hours are shared over its shifts' weeks.
+            </span>
+          </span>
+          <Switch checked={stubPay} onCheckedChange={setClaimUseStubPay} aria-label="Use the stub's pay for shifts on the calendar" data-testid="stub-pay-switch" />
+        </label>
+      )}
+
       {listed.length > 0 && (
         <ul className="divide-y divide-[hsl(312_95%_68%/0.2)] border-t border-[hsl(312_95%_68%/0.3)]" data-testid="stub-list">
           {listed.map(s => (
@@ -389,7 +409,7 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
                 </span>
               </div>
               <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-mono" data-testid="stub-status">
-                <StubStatus use={uses.find(u => u.stub.id === s.id)} />
+                <StubStatus use={uses.find(u => u.stub.id === s.id)} stubPay={stubPay} />
               </p>
               {/* Counted, so its work isn't on the calendar: put it there, from the days it lists. */}
               {uses.find(u => u.stub.id === s.id)?.status === 'counted' && (

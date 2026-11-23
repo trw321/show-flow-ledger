@@ -114,9 +114,9 @@ export interface ClaimStub {
 /**
  * What became of a stub on a claim. Nothing is counted twice:
  * - counted: the calendar had nothing for that employer in its pay period;
- * - calendar: the calendar has those shifts, which place the work in its
- *   weeks; the stub's own gross and hours, what was actually paid, stand in
- *   for the app's estimate of them;
+ * - calendar: the calendar has those shifts, and they count: at the app's
+ *   estimate, or (with "use stub pay" on) with the stub's own gross and
+ *   hours shared out over their weeks;
  * - duplicate: another stub has the same employer and pay period, and that
  *   one counts;
  * - overlap: another stub for the same employer covers some of the same
@@ -336,10 +336,12 @@ const MAX_WEEKS = 600;
  * A pay stub counts where the calendar has nothing for its employer in its
  * pay period: its hours and gross are spread evenly over the period's days,
  * so a two-week stub puts half in each week. Where the calendar does have
- * those shifts, they say which weeks the work was in, and the stub's own
- * gross and hours (what was actually paid) take the place of the app's
- * estimate for them, shared out as the shifts are. Either way nothing is
- * counted twice.
+ * those shifts, they count as they are, and the stub sits beside them to
+ * check. With useStubPay on, the stub's own gross and hours (what was
+ * actually paid) take the place of the app's estimate for them instead,
+ * shared out as the shifts are: an option, since it evens the stub's pay
+ * over the shifts rather than keeping each shift's own figure. Either way
+ * nothing is counted twice.
  */
 export function claimSummary(
   jobs: Job[],
@@ -350,6 +352,7 @@ export function claimSummary(
   weekEnd: WeekEnd = 6,
   stubs: ClaimStub[] = [],
   info: Record<string, ClaimEmployerInfo> = {},
+  useStubPay = false,
 ): ClaimSummary {
   if (!isClaimDay(from) || !isClaimDay(through) || through < from) return EMPTY;
 
@@ -411,6 +414,7 @@ export function claimSummary(
       const estimate = worked.reduce((t, x) => t + x.gross, 0);
       const workedHours = worked.reduce((t, x) => t + x.hours, 0);
       stubUses.push({ stub, status: 'calendar', used: false, shifts: worked.length, estimate: cents(estimate) });
+      if (!useStubPay) continue;
       // The stub's figures in place of the estimate, week by week as the
       // shifts fall (the part of them inside the dates).
       const perWeek = new Map<string, { gross: number; hours: number }>();

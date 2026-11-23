@@ -183,9 +183,16 @@ describe('pay stubs on a claim', () => {
     expect(weeksAsText(s.weeks).split('\n')[0]).toBe('Week ending Sat, Mar 7, 2026: Odeum (from pay stub) 40 hours $2,000.00. Total 40 hours, $2,000.00 gross');
   });
 
-  it("uses a stub's actual figures for the shifts the calendar has, placed as they fall", () => {
-    // The calendar's one shift says when; the stub says what was paid.
+  it('leaves the calendar\'s shifts as they are, the stub beside them, unless asked', () => {
     const s = claimSummary([job('a', '2026-03-03', 'Odeum')], [], EMPTY_PROFILE, '2026-03-01', '2026-03-14', 6, [stub('s1', 'Odeum', '2026-03-01', '2026-03-14', 80, 4000)]);
+    expect(s.gross).toBe(400);
+    expect(s.weeks[0].lines).toEqual([{ employer: 'Odeum', hours: 8, gross: 400 }]);
+    expect(s.stubs[0]).toMatchObject({ status: 'calendar', used: false, shifts: 1, estimate: 400 });
+  });
+
+  it("uses a stub's actual figures for the shifts the calendar has, when asked", () => {
+    // The calendar's one shift says when; the stub says what was paid.
+    const s = claimSummary([job('a', '2026-03-03', 'Odeum')], [], EMPTY_PROFILE, '2026-03-01', '2026-03-14', 6, [stub('s1', 'Odeum', '2026-03-01', '2026-03-14', 80, 4000)], {}, true);
     expect(s.gross).toBe(4000);
     expect(s.hours).toBe(80);
     expect(s.weeks.map(w => w.gross)).toEqual([4000, 0]);
@@ -196,7 +203,7 @@ describe('pay stubs on a claim', () => {
 
   it("shares a stub's figures over its shifts' weeks by their estimate", () => {
     const s = claimSummary([job('a', '2026-03-03', 'Odeum'), job('b', '2026-03-10', 'Odeum')], [], EMPTY_PROFILE, '2026-03-01', '2026-03-14', 6,
-      [stub('s1', 'Odeum', '2026-03-01', '2026-03-14', 20, 900)]);
+      [stub('s1', 'Odeum', '2026-03-01', '2026-03-14', 20, 900)], {}, true);
     expect(s.weeks.map(w => [w.hours, w.gross])).toEqual([[10, 450], [10, 450]]);
   });
 

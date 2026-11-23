@@ -119,8 +119,8 @@ export default function UnemploymentPage() {
 
   const backwards = range.through < range.from;
   const summary = useMemo(
-    () => claimSummary(data.jobs, data.employers, prefs.payer, range.from, range.through, range.weekEnd, prefs.claimStubs, prefs.claimEmployers),
-    [data.jobs, data.employers, prefs.payer, range, prefs.claimStubs, prefs.claimEmployers],
+    () => claimSummary(data.jobs, data.employers, prefs.payer, range.from, range.through, range.weekEnd, prefs.claimStubs, prefs.claimEmployers, !!prefs.claimUseStubPay),
+    [data.jobs, data.employers, prefs.payer, range, prefs.claimStubs, prefs.claimEmployers, prefs.claimUseStubPay],
   );
 
   const weeks = useMemo(() => sortWeeks(summary.weeks, sort), [summary.weeks, sort]);
