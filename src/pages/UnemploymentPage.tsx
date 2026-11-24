@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
-import { ArrowLeft, Check, Copy, Download, Plus } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, Copy, Download, Plus } from 'lucide-react';
 import { format, parseISO, subMonths } from 'date-fns';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
 import DateWheels, { Wheel } from '@/components/DateWheels';
@@ -101,9 +101,19 @@ export default function UnemploymentPage() {
     setSaveState('saving');
     setRange(next);
   };
+  // The wheels fold away once the dates are saved and not being changed:
+  // shut when the page opens on saved dates, open the first time.
+  const [datesOpen, setDatesOpen] = useState(() => !prefs.claimRange);
+  const openedByHand = useRef(false);
+  // Saved dates arrive a moment after the page: shut then, unless you opened them or are changing them.
+  useEffect(() => {
+    if (synced && !touched.current && !openedByHand.current) setDatesOpen(false);
+  }, [!!synced]); // eslint-disable-line react-hooks/exhaustive-deps
+  const openDates = () => { openedByHand.current = true; setDatesOpen(true); };
   const saveNow = () => {
     saveRange.current(range);
     setSaveState('saved');
+    setDatesOpen(false);
     toast.success('Dates saved');
   };
   const [view, setView] = useState<'weeks' | 'employers'>('weeks');
@@ -251,8 +261,31 @@ export default function UnemploymentPage() {
         {/* Certifying every two weeks: when it's due, and the weeks it covers. */}
         <CertifyPanel weekEnd={range.weekEnd} />
 
-        {/* The dates, on wheels. */}
-        <div className="space-y-3 border border-[hsl(312_95%_68%/0.5)] bg-[#0b0614]/70 p-3">
+        {/* The dates: one line once saved, the wheels when tapped (or when they run backwards). */}
+        {!(datesOpen || backwards) ? (
+          <button type="button" onClick={openDates} aria-expanded={false} data-testid="claim-dates-summary"
+            className="flex w-full items-center justify-between gap-3 border border-[hsl(312_95%_68%/0.5)] bg-[#0b0614]/70 p-3 text-left">
+            <span className="min-w-0">
+              <span className="block font-8bit text-[8px] uppercase text-[hsl(312_95%_75%)]">Claim dates</span>
+              <span className="mt-1 block text-[13px] font-bold text-mono text-foreground">{claimDay(range.from, false)} to {claimDay(range.through, false)}</span>
+              <span className="block text-[11px] text-mono text-muted-foreground">
+                Weeks run {weekRun(range.weekEnd)} · <span className={saveState === 'saved' ? 'text-dot-paid' : ''}>{saveState === 'saved' ? '✓ Saved' : 'Saving…'}</span>
+              </span>
+            </span>
+            <span className="flex shrink-0 items-center gap-1 text-[11px] font-bold text-mono text-[hsl(188_90%_70%)]">
+              Change <ChevronDown size={14} aria-hidden />
+            </span>
+          </button>
+        ) : (
+        <div className="space-y-3 border border-[hsl(312_95%_68%/0.5)] bg-[#0b0614]/70 p-3" data-testid="claim-dates">
+          {/* Fold it back without changing anything. */}
+          {!backwards && prefs.claimRange && (
+            <button type="button" onClick={() => setDatesOpen(false)} aria-expanded data-testid="claim-dates-fold"
+              className="flex w-full items-center justify-between gap-2 text-left">
+              <span className="font-8bit text-[8px] uppercase text-[hsl(312_95%_75%)]">Claim dates</span>
+              <ChevronDown size={14} className="rotate-180 text-[hsl(188_90%_70%)]" aria-hidden />
+            </button>
+          )}
           <DateWheels label="From" value={range.from} firstYear={firstYear} lastYear={thisYear} testId="claim-from"
             onChange={from => changeRange(r => ({ ...r, from }))} />
           <DateWheels label="Through" value={range.through} firstYear={firstYear} lastYear={thisYear} testId="claim-through"
@@ -285,6 +318,7 @@ export default function UnemploymentPage() {
             </button>
           </div>
         </div>
+        )}
 
         {/* Pay stubs, for work that isn't on the calendar. */}
         <ClaimPayStubs uses={summary.stubs} weekEnd={range.weekEnd} colourOf={colourOf} employerNames={knownEmployers} request={stubRequest} />
