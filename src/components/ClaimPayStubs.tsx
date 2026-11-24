@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns';
-import { CalendarPlus, Camera, Check, ChevronRight, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { CalendarPlus, Camera, Check, ChevronDown, ChevronRight, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import DateWheels from '@/components/DateWheels';
@@ -493,7 +493,7 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
       {listed.length > 0 && (
         <ul className="divide-y divide-[hsl(312_95%_68%/0.2)] border-t border-[hsl(312_95%_68%/0.3)]" data-testid="stub-list">
           {listed.map(s => (
-            <li key={s.id} className="py-2">
+            <li key={s.id} id={`claim-stub-${s.id}`} className="py-2 transition-colors">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="neon-soft min-w-0 truncate text-[13px] font-bold text-mono" style={{ color: colourOf(s.employer) }}>{s.employer}</span>
                 <span className="neon-title shrink-0 text-[13px] font-bold text-mono">{claimMoney(s.gross)}</span>
@@ -514,8 +514,18 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
                 if (use?.status !== 'calendar' || !use.covered?.length) return null;
                 const diff = s.gross - use.estimate;
                 return (
-                  <div className="mt-1.5 space-y-1.5 border border-[hsl(188_95%_62%/0.35)] p-2" data-testid="stub-covered">
-                    <p className={LABEL}>Shifts it covers · {use.covered.length}</p>
+                  <details className="group mt-1.5 border border-[hsl(188_95%_62%/0.35)]" data-testid="stub-covered">
+                    {/* Folded until tapped: which figure counts shows either way. */}
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-2 [&::-webkit-details-marker]:hidden" data-testid="stub-covered-toggle">
+                      <span className="min-w-0">
+                        <span className={cn(LABEL, 'block')}>Shifts it covers · {use.covered.length}</span>
+                        <span className="block text-[11px] text-mono text-muted-foreground">
+                          Counted: {use.usesPay ? `the stub's ${claimMoney(s.gross)} (estimate ${claimMoney(use.estimate)})` : `the estimate, ${claimMoney(use.estimate)} · stub says ${claimMoney(s.gross)}`}
+                        </span>
+                      </span>
+                      <ChevronDown size={15} className="shrink-0 text-[hsl(188_90%_70%)] transition-transform group-open:rotate-180" aria-hidden />
+                    </summary>
+                    <div className="space-y-1.5 px-2 pb-2">
                     <ul className="divide-y divide-[hsl(188_95%_62%/0.15)]">
                       {use.covered.map(c => (
                         <li key={c.jobId} className="space-y-0.5 py-1.5 text-[12px] text-mono" data-testid="stub-covered-shift">
@@ -553,7 +563,8 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
                         {s.usePay ? <><Check size={13} aria-hidden /> Using this stub's pay</> : `Use this stub's pay (${claimMoney(s.gross)})`}
                       </button>
                     )}
-                  </div>
+                    </div>
+                  </details>
                 );
               })()}
               {/* A bulk stub over many weeks: averaged over them, or not. */}

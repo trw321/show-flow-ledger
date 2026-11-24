@@ -34,6 +34,20 @@ export interface ClaimLine {
    * unless "use the stub's pay" is on.
    */
   stubSays?: number;
+  /** The pay stubs behind this line, and each one's part of it: the proof, to be looked at. */
+  stubs?: LineStub[];
+}
+
+/**
+ * A pay stub's part in one week's line: counted (it stands in for work the
+ * calendar doesn't have), pays (its pay stands in for the calendar's
+ * estimate) or says (shown beside the estimate, not counted).
+ */
+export interface LineStub {
+  id: string;
+  role: 'counted' | 'pays' | 'says';
+  hours: number;
+  gross: number;
 }
 
 export interface ClaimWeek {
@@ -136,6 +150,8 @@ export interface ClaimStub {
    * same as "use the stub's pay" for every stub, for this one.
    */
   usePay?: boolean;
+  /** A day in the claim week you said it counts in, whole: its pay period crosses weeks and it wasn't split by its days. */
+  week?: string;
   createdAt: string;
 }
 
@@ -308,6 +324,7 @@ export function cleanStubs(raw: unknown): ClaimStub[] {
       ...(Number(r.rate) > 0 ? { rate: Number(r.rate) } : {}),
       ...(r.noWeeks === true ? { noWeeks: true } : {}),
       ...(r.usePay === true ? { usePay: true } : {}),
+      ...(isClaimDay(r.week) ? { week: r.week } : {}),
     });
   }
   return out;
@@ -542,6 +559,7 @@ export function claimSummary(
           const line = weeks.get(ending)?.lines.find(l => !l.fromStub && l.employer.toLowerCase() === id);
           if (!line) continue;
           line.stubSays = (line.stubSays ?? 0) + stub.gross * share(w);
+          (line.stubs ??= []).push({ id: stub.id, role: 'says', hours: stub.hours * share(w), gross: stub.gross * share(w) });
           said.gross += stub.gross * share(w);
           said.hours += stub.hours * share(w);
           said.estimate += w.gross;
@@ -565,6 +583,7 @@ export function claimSummary(
         line.gross += dGross;
         line.hours += dHours;
         line.perStub = true;
+        (line.stubs ??= []).push({ id: stub.id, role: 'pays', hours: est.hours + dHours, gross: est.gross + dGross });
         week.gross += dGross;
         week.hours += dHours;
         if (e) {
@@ -602,22 +621,43 @@ export function claimSummary(
       byEmployer.set(id, e);
       continue;
     }
+    // Which weeks it counts in, and how much of it in each:
+    // - the week you put it in, whole;
+    // - a week's stub or shorter, whole in the claim week holding most of its
+    //   days (a Monday-to-Sunday pay week isn't 6/7 in one claim week and
+    //   1/7 in the next: an hour worked once isn't 0.857 h and 0.143 h);
+    // - a longer one shared by its days in each week, as far as the dates go.
     const daysIn = new Map<string, number>();
     for (let d = first; d <= last; d = iso(addDays(parseISO(d), 1))) {
       const ending = weekEndingFor(d, weekEnd);
       daysIn.set(ending, (daysIn.get(ending) ?? 0) + 1);
     }
+    const parts = new Map<string, number>();
+    const chosen = stub.week ? weekEndingFor(stub.week, weekEnd) : undefined;
+    if (chosen && weeks.has(chosen)) parts.set(chosen, 1);
+    else {
+      const allDays = new Map<string, number>();
+      for (let d = stub.start; d <= stub.end; d = iso(addDays(parseISO(d), 1))) {
+        const ending = weekEndingFor(d, weekEnd);
+        allDays.set(ending, (allDays.get(ending) ?? 0) + 1);
+      }
+      // Most days, and on a tie the later week: the one its period ends in.
+      const most = [...allDays].sort((a, b) => b[1] - a[1] || b[0].localeCompare(a[0]))[0]?.[0];
+      if (total <= 7 && most && weeks.has(most)) parts.set(most, 1);
+      else for (const [ending, n] of daysIn) parts.set(ending, n / total);
+    }
     let inHours = 0;
     let inGross = 0;
-    for (const [ending, n] of daysIn) {
+    for (const [ending, part] of parts) {
       const week = weeks.get(ending);
       if (!week) continue;
-      const hours = (stub.hours * n) / total;
-      const gross = (stub.gross * n) / total;
+      const hours = stub.hours * part;
+      const gross = stub.gross * part;
       let line = week.lines.find(l => l.fromStub && l.employer.toLowerCase() === id);
       if (!line) week.lines.push(line = { employer: name, hours: 0, gross: 0, fromStub: true });
       line.hours += hours;
       line.gross += gross;
+      (line.stubs ??= []).push({ id: stub.id, role: 'counted', hours, gross });
       week.hours += hours;
       week.gross += gross;
       inHours += hours;
@@ -644,6 +684,7 @@ export function claimSummary(
     lines: w.lines.map(l => ({
       ...l, employer: spelling(l.employer), hours: roundHours(l.hours), gross: cents(l.gross),
       ...(l.stubSays != null ? { stubSays: cents(l.stubSays) } : {}),
+      ...(l.stubs ? { stubs: l.stubs.map(x => ({ ...x, hours: roundHours(x.hours), gross: cents(x.gross) })) } : {}),
     })),
   }));
   // The most recent employer first: the order claim forms ask in.

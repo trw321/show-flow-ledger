@@ -8,6 +8,9 @@ const job = (id: string, date: string, client: string, extra: Partial<Job> = {})
   status: 'completed', hourlyRate: 50, createdAt: 'x', ...extra,
 } as Job);
 
+/** A week's lines without the stubs behind them. */
+const plain = <T extends { stubs?: unknown }>(lines: T[]) => lines.map(({ stubs: _, ...l }) => l);
+
 const summary = (jobs: Job[], from: string, through: string, employers: Employer[] = []) =>
   claimSummary(jobs, employers, EMPTY_PROFILE, from, through);
 
@@ -32,7 +35,7 @@ describe('the weeks of a claim', () => {
     const s = summary([job('a', '2026-10-06', 'Odeum')], '2026-10-01', '2026-10-31');
     expect(s.weeks.map(w => w.weekEnding)).toEqual(['2026-10-03', '2026-10-10', '2026-10-17', '2026-10-24', '2026-10-31']);
     expect(s.weeks.map(w => w.hours)).toEqual([0, 8, 0, 0, 0]);
-    expect(s.weeks[1].lines).toEqual([{ employer: 'Odeum', hours: 8, gross: 400 }]);
+    expect(plain(s.weeks[1].lines)).toEqual([{ employer: 'Odeum', hours: 8, gross: 400 }]);
   });
 
   it('says when the range cuts a week short', () => {
@@ -176,7 +179,7 @@ describe('pay stubs on a claim', () => {
     // A two-week stub, Sunday Mar 1 to Saturday Mar 14: half in each week.
     const s = claimSummary([], [], EMPTY_PROFILE, '2026-03-01', '2026-03-14', 6, [stub('s1', 'Odeum', '2026-03-01', '2026-03-14', 80, 4000)]);
     expect(s.weeks.map(w => [w.weekEnding, w.hours, w.gross, w.fromStub])).toEqual([['2026-03-07', 40, 2000, true], ['2026-03-14', 40, 2000, true]]);
-    expect(s.weeks[0].lines).toEqual([{ employer: 'Odeum', hours: 40, gross: 2000, fromStub: true }]);
+    expect(plain(s.weeks[0].lines)).toEqual([{ employer: 'Odeum', hours: 40, gross: 2000, fromStub: true }]);
     expect(s.employers[0]).toMatchObject({ name: 'Odeum', firstDay: '2026-03-01', lastDay: '2026-03-14', days: 0, hours: 80, gross: 4000, fromStub: true });
     expect(s.stubs).toEqual([{ stub: expect.objectContaining({ id: 's1' }), status: 'counted', used: true, shifts: 0, estimate: 0 }]);
     expect(weeksAsText(s.weeks)[0]).toBeDefined();
@@ -187,7 +190,7 @@ describe('pay stubs on a claim', () => {
     const s = claimSummary([job('a', '2026-03-03', 'Odeum')], [], EMPTY_PROFILE, '2026-03-01', '2026-03-14', 6, [stub('s1', 'Odeum', '2026-03-01', '2026-03-14', 80, 4000)]);
     expect(s.gross).toBe(400);
     // What the stub says is shown beside it, not counted.
-    expect(s.weeks[0].lines).toEqual([{ employer: 'Odeum', hours: 8, gross: 400, stubSays: 4000 }]);
+    expect(plain(s.weeks[0].lines)).toEqual([{ employer: 'Odeum', hours: 8, gross: 400, stubSays: 4000 }]);
     expect(s.employers[0]).toMatchObject({ gross: 400, stubSays: { gross: 4000, hours: 80, estimate: 400, stubs: 1 } });
     expect(s.stubs[0]).toMatchObject({ status: 'calendar', used: false, shifts: 1, estimate: 400 });
   });
@@ -210,7 +213,7 @@ describe('pay stubs on a claim', () => {
       [stub('s1', 'Island Creative', '2026-03-15', '2026-03-21', 10, 700), stub('s2', 'RockForce Operations LLC', '2026-03-22', '2026-03-28', 1, 45)]);
     expect(s.employers.map(e => e.name)).toEqual(['RockForce Operations LLC', 'ISLAND CREATIVE MANAGEMENT LLC']);
     expect(s.employers[1]).toMatchObject({ gross: 1100, hours: 18, fromStub: true });
-    expect(s.weeks[2].lines).toEqual([{ employer: 'ISLAND CREATIVE MANAGEMENT LLC', hours: 10, gross: 700, fromStub: true }]);
+    expect(plain(s.weeks[2].lines)).toEqual([{ employer: 'ISLAND CREATIVE MANAGEMENT LLC', hours: 10, gross: 700, fromStub: true }]);
   });
 
   it("says nothing beside the line once the stub's pay is used", () => {
@@ -225,7 +228,7 @@ describe('pay stubs on a claim', () => {
     expect(s.gross).toBe(4000);
     expect(s.hours).toBe(80);
     expect(s.weeks.map(w => w.gross)).toEqual([4000, 0]);
-    expect(s.weeks[0].lines).toEqual([{ employer: 'Odeum', hours: 80, gross: 4000, perStub: true }]);
+    expect(plain(s.weeks[0].lines)).toEqual([{ employer: 'Odeum', hours: 80, gross: 4000, perStub: true }]);
     expect(s.weeks.some(w => w.fromStub)).toBe(false);
     expect(s.stubs[0]).toMatchObject({ status: 'calendar', used: false, shifts: 1, estimate: 400 });
   });
@@ -397,7 +400,7 @@ describe('linking one employer to another', () => {
     const s = claimSummary(jobs, [], EMPTY_PROFILE, '2026-03-01', '2026-03-14', 6, [], info);
     expect(s.employers).toHaveLength(1);
     expect(s.employers[0]).toMatchObject({ name: 'Odeum', days: 3, hours: 24, gross: 1200, linked: ['Odeum Live', 'Odium'] });
-    expect(s.weeks[0].lines).toEqual([{ employer: 'Odeum', hours: 16, gross: 800 }]);
+    expect(plain(s.weeks[0].lines)).toEqual([{ employer: 'Odeum', hours: 16, gross: 800 }]);
   });
 
   it('links a pay stub typed by hand the same way', () => {
@@ -445,8 +448,8 @@ describe("one stub's pay for the calendar shifts it covers", () => {
     const s = claimSummary(shifts, [], EMPTY_PROFILE, '2026-08-01', '2026-08-31', 6, stubs(true));
     expect(s.employers[0]).toMatchObject({ name: 'Panotechnics', gross: 1340, hours: 32 });
     expect(s.gross).toBe(1340);
-    expect(s.weeks.find(w => w.weekEnding === '2026-08-22')!.lines).toEqual([{ employer: 'Panotechnics', hours: 24, gross: 1050, perStub: true }]);
-    expect(s.weeks.find(w => w.weekEnding === '2026-08-29')!.lines).toEqual([{ employer: 'Panotechnics', hours: 8, gross: 290, perStub: true }]);
+    expect(plain(s.weeks.find(w => w.weekEnding === '2026-08-22')!.lines)).toEqual([{ employer: 'Panotechnics', hours: 24, gross: 1050, perStub: true }]);
+    expect(plain(s.weeks.find(w => w.weekEnding === '2026-08-29')!.lines)).toEqual([{ employer: 'Panotechnics', hours: 8, gross: 290, perStub: true }]);
     expect(s.stubs.map(u => u.usesPay)).toEqual([true, true]);
   });
 
@@ -467,5 +470,39 @@ describe("one stub's pay for the calendar shifts it covers", () => {
 
   it('keeps the choice when stored', () => {
     expect(cleanStubs([{ ...stubs(true)[0] }, { ...stubs(false)[0], id: 'z', usePay: 1 }]).map(x => !!x.usePay)).toEqual([true, false]);
+  });
+});
+
+describe("a stub's weeks, and the proof behind each", () => {
+  // RockForce: one hour, on a Monday-to-Sunday pay week.
+  const rock = (extra: Partial<ClaimStub> = {}): ClaimStub => ({ id: 'r1', employer: 'RockForce Operations LLC', start: '2026-07-13', end: '2026-07-19', hours: 1, gross: 45.73, createdAt: 'x', ...extra });
+
+  it('puts a week-long stub whole in the claim week with most of its days, not 0.857 h and 0.143 h', () => {
+    const s = claimSummary([], [], EMPTY_PROFILE, '2026-07-01', '2026-08-31', 6, [rock()]);
+    const withWork = s.weeks.filter(w => w.lines.length > 0);
+    expect(withWork.map(w => [w.weekEnding, w.hours, w.gross])).toEqual([['2026-07-18', 1, 45.73]]);
+    expect(withWork[0].lines[0].stubs).toEqual([{ id: 'r1', role: 'counted', hours: 1, gross: 45.73 }]);
+  });
+
+  it('puts it whole in the week you choose', () => {
+    const s = claimSummary([], [], EMPTY_PROFILE, '2026-07-01', '2026-08-31', 6, [rock({ week: '2026-07-19' })]);
+    expect(s.weeks.filter(w => w.lines.length > 0).map(w => w.weekEnding)).toEqual(['2026-07-25']);
+  });
+
+  it('still shares a longer stub by its days', () => {
+    const s = claimSummary([], [], EMPTY_PROFILE, '2026-07-01', '2026-08-31', 6, [rock({ start: '2026-07-27', end: '2026-08-07', hours: 10, gross: 732.8 })]);
+    expect(s.weeks.filter(w => w.lines.length > 0).map(w => [w.weekEnding, w.hours, w.gross])).toEqual([['2026-08-01', 5, 366.4], ['2026-08-08', 5, 366.4]]);
+  });
+
+  it('keeps the week you chose when stored, and only a real day', () => {
+    expect(cleanStubs([rock({ week: '2026-07-19' }), { ...rock(), id: 'z', week: 'Jul 19' }]).map(x => x.week)).toEqual(['2026-07-19', undefined]);
+  });
+
+  it('says which stub paid a line, and how', () => {
+    const shift = job('a', '2026-03-03', 'Odeum');
+    const said = claimSummary([shift], [], EMPTY_PROFILE, '2026-03-01', '2026-03-07', 6, [{ id: 's', employer: 'Odeum', start: '2026-03-01', end: '2026-03-07', hours: 8, gross: 500, createdAt: 'x' }]);
+    expect(said.weeks[0].lines[0].stubs).toEqual([{ id: 's', role: 'says', hours: 8, gross: 500 }]);
+    const paid = claimSummary([shift], [], EMPTY_PROFILE, '2026-03-01', '2026-03-07', 6, [{ id: 's', employer: 'Odeum', start: '2026-03-01', end: '2026-03-07', hours: 8, gross: 500, usePay: true, createdAt: 'x' }]);
+    expect(paid.weeks[0].lines[0].stubs).toEqual([{ id: 's', role: 'pays', hours: 8, gross: 500 }]);
   });
 });

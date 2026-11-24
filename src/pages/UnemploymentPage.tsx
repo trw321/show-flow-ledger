@@ -9,13 +9,14 @@ import DateWheels, { Wheel } from '@/components/DateWheels';
 import CertifyPanel from '@/components/CertifyPanel';
 import ClaimPayStubs from '@/components/ClaimPayStubs';
 import ClaimPastePay from '@/components/ClaimPastePay';
+import ClaimStubProof from '@/components/ClaimStubProof';
 import ClaimEmployerCard, { type EmployerWeek } from '@/components/ClaimEmployerCard';
 import { useData } from '@/lib/DataContext';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { localToday } from '@/lib/today';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { EMPLOYER_COLOURS, employerColours, employerId } from '@/lib/employerColours';
-import { WEEKDAYS, claimDay, claimEmployerOf, claimMoney, claimNameOf, claimSummary, howLongText, isClaimDay, sortEmployers, sortWeeks, weekRun, type ClaimSort, type WeekEnd } from '@/lib/unemployment';
+import { WEEKDAYS, claimDay, claimEmployerOf, claimMoney, claimNameOf, claimSummary, howLongText, isClaimDay, sortEmployers, sortWeeks, weekRun, type ClaimLine, type ClaimSort, type ClaimWeek, type WeekEnd } from '@/lib/unemployment';
 import { cn } from '@/lib/utils';
 
 /** "1 day", "3 days". */
@@ -106,6 +107,8 @@ export default function UnemploymentPage() {
     toast.success('Dates saved');
   };
   const [view, setView] = useState<'weeks' | 'employers'>('weeks');
+  /** A week's line whose pay stubs are being looked at. */
+  const [proof, setProof] = useState<{ week: ClaimWeek; line: ClaimLine } | null>(null);
   const [sort, setSort] = useState<ClaimSort>(loadSort);
   useEffect(() => {
     try { localStorage.setItem(SORT_KEY, sort); } catch { /* only a convenience */ }
@@ -286,6 +289,10 @@ export default function UnemploymentPage() {
         {/* Pay stubs, for work that isn't on the calendar. */}
         <ClaimPayStubs uses={summary.stubs} weekEnd={range.weekEnd} colourOf={colourOf} employerNames={knownEmployers} request={stubRequest} />
 
+        {/* The proof behind a week's line: its pay stubs, tapped. */}
+        <ClaimStubProof open={!!proof} onClose={() => setProof(null)} week={proof?.week ?? null} line={proof?.line ?? null}
+          uses={summary.stubs} claimWeeks={summary.weeks} weekEnd={range.weekEnd} />
+
         {/* A pay list pasted from a payroll site, week by week. */}
         <ClaimPastePay weekEnd={range.weekEnd} colourOf={colourOf} employerNames={knownEmployers} from={range.from} through={range.through} />
 
@@ -409,14 +416,21 @@ export default function UnemploymentPage() {
                           <li key={l.employer + (l.fromStub ? ' stub' : '')} className="flex flex-wrap items-baseline justify-between gap-x-2 text-[12px] text-mono">
                             <span className="flex min-w-0 items-center gap-1.5">
                               <span className="neon-soft truncate font-bold" style={{ color: colourOf(l.employer) }}>{l.employer}</span>
-                              {(l.fromStub || l.perStub) && <span className="font-8bit shrink-0 border border-[hsl(46_100%_58%)] px-1 text-[6px] uppercase leading-relaxed text-[hsl(46_100%_58%)]" data-testid="stub-tag" title={l.perStub ? "Its pay stub's figures" : 'From a pay stub'}>Stub</span>}
+                              {(l.fromStub || l.perStub) && (
+                                <button type="button" onClick={() => setProof({ week: w, line: l })} disabled={!l.stubs?.length} data-testid="stub-tag"
+                                  aria-label={`See the pay stub behind ${l.employer}, week ending ${claimDay(w.weekEnding, false)}`}
+                                  className="font-8bit shrink-0 border border-[hsl(46_100%_58%)] px-1 py-0.5 text-[6px] uppercase leading-relaxed text-[hsl(46_100%_58%)] underline-offset-2 active:opacity-70">
+                                  Stub ›
+                                </button>
+                              )}
                             </span>
                             <span className="shrink-0 text-muted-foreground">{l.hours} h · {claimMoney(l.gross)}</span>
                             {/* A pay stub for these shifts, beside the estimate that's counted. */}
                             {l.stubSays != null && (
-                              <span className="basis-full text-right text-[11px] text-[hsl(46_100%_58%)]" data-testid="stub-says">
-                                pay stub says {claimMoney(l.stubSays)} · estimate counted
-                              </span>
+                              <button type="button" onClick={() => setProof({ week: w, line: l })} data-testid="stub-says"
+                                className="basis-full text-right text-[11px] text-[hsl(46_100%_58%)] underline underline-offset-2">
+                                pay stub says {claimMoney(l.stubSays)} · estimate counted ›
+                              </button>
                             )}
                           </li>
                         ))}
