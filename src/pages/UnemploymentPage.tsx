@@ -223,7 +223,7 @@ export default function UnemploymentPage() {
       const use = summary.stubs.find(u => u.stub.id === st.id);
       return {
         Employer: st.employer, From: st.start, Through: st.end, Hours: st.hours, Gross: st.gross,
-        Counted: !use ? 'No: outside your dates' : use.used ? 'Yes: nothing on the calendar for it' : `No: the calendar's ${use.shifts} shift(s) count instead`,
+        Counted: !use ? 'No: outside your dates' : use.used ? 'Yes: nothing on the calendar for it' : use.usesPay ? `Yes: for the calendar's ${use.shifts} shift(s), in place of their estimate` : use.status === 'calendar' ? `No: the calendar's ${use.shifts} shift(s) count instead` : 'No: another stub covers the same days',
       };
     });
     const book = XLSX.utils.book_new();

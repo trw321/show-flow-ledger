@@ -1062,9 +1062,12 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   const projectMoneyIn = samePaymentGroups(projectPayments.filter(i => i.status === 'paid' && proofKindOf(i) !== 'marked')).reduce((sum, g) => sum + g.first.amount, 0);
   const projectMarked = projectPayments.filter(i => proofKindOf(i) === 'marked').length;
   const projectSpan = (() => {
-    const dates = project.map(j => j.date).sort();
-    const first = format(new Date(dates[0] + 'T12:00:00'), 'MMM d');
-    const last = format(new Date(dates[dates.length - 1] + 'T12:00:00'), 'MMM d');
+    // Real days only: a stored "Aug 20" on one of the project's shifts used to
+    // take the whole shift view down when it was opened.
+    const real = project.map(j => j.date).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+    const dates = real.length > 0 ? real : [job.date];
+    const first = showDay(dates[0]);
+    const last = showDay(dates[dates.length - 1]);
     const days = new Set(dates).size;
     return `${first === last ? first : `${first} – ${last}`} · ${days} day${days === 1 ? '' : 's'}`;
   })();

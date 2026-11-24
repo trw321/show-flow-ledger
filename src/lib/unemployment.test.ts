@@ -420,3 +420,52 @@ describe('linking one employer to another', () => {
     expect(cleanClaimEmployers({ Odium: { linkTo: ' Odeum ' }, Odeum: { linkTo: 'odeum' } })).toEqual({ odium: { linkTo: 'Odeum' } });
   });
 });
+
+describe("one stub's pay for the calendar shifts it covers", () => {
+  // Panotechnics, as on the calendar: four shifts at $30 for 8 hours, $240 each.
+  const pano = (id: string, date: string) => job(id, date, 'Panotechnics', { hourlyRate: 30 });
+  const shifts = [pano('a', '2026-08-16'), pano('b', '2026-08-17'), pano('c', '2026-08-18'), pano('d', '2026-08-29')];
+  const stubs = (usePay: boolean): ClaimStub[] => [
+    { id: 's1', employer: 'Panotechnics LLC', start: '2026-08-15', end: '2026-08-21', hours: 0, gross: 1050, createdAt: 'x', ...(usePay ? { usePay: true } : {}) },
+    { id: 's2', employer: 'Panotechnics LLC', start: '2026-08-22', end: '2026-08-29', hours: 0, gross: 290, createdAt: 'x', ...(usePay ? { usePay: true } : {}) },
+  ];
+
+  it('counts the estimate, and shows each shift beside its part of the stub, until asked', () => {
+    const s = claimSummary(shifts, [], EMPTY_PROFILE, '2026-08-01', '2026-08-31', 6, stubs(false));
+    expect(s.employers[0]).toMatchObject({ name: 'Panotechnics', gross: 960, hours: 32 });
+    expect(s.stubs[0].covered).toEqual([
+      { jobId: 'a', date: '2026-08-16', hours: 8, rate: 30, estimate: 240, share: 350 },
+      { jobId: 'b', date: '2026-08-17', hours: 8, rate: 30, estimate: 240, share: 350 },
+      { jobId: 'c', date: '2026-08-18', hours: 8, rate: 30, estimate: 240, share: 350 },
+    ]);
+    expect(s.stubs[0].usesPay).toBeUndefined();
+  });
+
+  it("counts the stubs' pay instead, once, when each is asked to", () => {
+    const s = claimSummary(shifts, [], EMPTY_PROFILE, '2026-08-01', '2026-08-31', 6, stubs(true));
+    expect(s.employers[0]).toMatchObject({ name: 'Panotechnics', gross: 1340, hours: 32 });
+    expect(s.gross).toBe(1340);
+    expect(s.weeks.find(w => w.weekEnding === '2026-08-22')!.lines).toEqual([{ employer: 'Panotechnics', hours: 24, gross: 1050, perStub: true }]);
+    expect(s.weeks.find(w => w.weekEnding === '2026-08-29')!.lines).toEqual([{ employer: 'Panotechnics', hours: 8, gross: 290, perStub: true }]);
+    expect(s.stubs.map(u => u.usesPay)).toEqual([true, true]);
+  });
+
+  it("shares a stub by each shift's own estimate: a $40 rigging call more than a $30 one", () => {
+    const mixed = [pano('a', '2026-08-16'), job('b', '2026-08-17', 'Panotechnics', { hourlyRate: 40 })];
+    const s = claimSummary(mixed, [], EMPTY_PROFILE, '2026-08-01', '2026-08-31', 6, [{ ...stubs(true)[0], gross: 700 }]);
+    expect(s.stubs[0].covered!.map(c => c.share)).toEqual([300, 400]);
+    expect(s.gross).toBe(700);
+  });
+
+  it('never pays a shift twice from two stubs', () => {
+    const twice: ClaimStub[] = [{ ...stubs(true)[0] }, { ...stubs(true)[0], id: 's3', start: '2026-08-16', end: '2026-08-18', gross: 999 }];
+    const s = claimSummary(shifts.slice(0, 3), [], EMPTY_PROFILE, '2026-08-01', '2026-08-31', 6, twice);
+    expect(s.gross).toBe(1050);
+    expect(s.stubs.map(u => u.status)).toEqual(['calendar', 'overlap']);
+    expect(s.stubs[1].matchedWith!.id).toBe('s1');
+  });
+
+  it('keeps the choice when stored', () => {
+    expect(cleanStubs([{ ...stubs(true)[0] }, { ...stubs(false)[0], id: 'z', usePay: 1 }]).map(x => !!x.usePay)).toEqual([true, false]);
+  });
+});

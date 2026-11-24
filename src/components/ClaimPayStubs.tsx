@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns';
-import { CalendarPlus, Camera, Check, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { CalendarPlus, Camera, Check, ChevronRight, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import DateWheels from '@/components/DateWheels';
@@ -69,8 +70,8 @@ function StubStatus({ use, stubPay }: { use?: StubUse; stubPay: boolean }) {
       <>
         <span className={cn(TAG, CYAN)}>On calendar</span>
         <span className="text-muted-foreground">
-          {stubPay
-            ? <>{use.shifts} shift{use.shifts === 1 ? '' : 's'} there say which weeks; its {claimMoney(use.stub.gross)} is used for them (the app's estimate was {claimMoney(use.estimate)})</>
+          {use.usesPay
+            ? <>its {claimMoney(use.stub.gross)} is counted for the {use.shifts} shift{use.shifts === 1 ? '' : 's'} there, in place of their estimate ({claimMoney(use.estimate)})</>
             : <>{use.shifts} shift{use.shifts === 1 ? '' : 's'} there count as they are, est. {claimMoney(use.estimate)}; the stub says {claimMoney(use.stub.gross)}</>}
         </span>
       </>
@@ -120,8 +121,22 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
   const { prefs, setClaimStubs, setClaimUseStubPay } = useUserPrefs();
   const stubPay = !!prefs.claimUseStubPay;
   const anyOnCalendar = uses.some(u => u.status === 'calendar');
-  const { addJob } = useData();
+  const { data, addJob, updateJob } = useData();
+  const navigate = useNavigate();
   const stubs = prefs.claimStubs;
+  /** A covered shift's rate, changed right here: it changes on the calendar too. */
+  const setRate = async (jobId: string, text: string) => {
+    const job = data.jobs.find(j => j.id === jobId);
+    const rate = readAmount(text);
+    if (!job || !Number.isFinite(rate) || rate <= 0 || rate === Number(job.hourlyRate)) return;
+    await updateJob(jobId, { hourlyRate: Math.round(rate * 100) / 100 });
+    toast.success(`${claimDay(job.date, false)}: $${rate}/h, on the calendar too`);
+  };
+  /** One stub's own pay for the shifts it covers, or their estimates. */
+  const setUsePay = (s: ClaimStub, on: boolean) => {
+    setClaimStubs(stubs.map(x => (x.id === s.id ? (on ? { ...x, usePay: true } : (({ usePay: _, ...rest }) => rest)(x)) : x)));
+    toast.success(on ? `${s.employer}: the stub's ${claimMoney(s.gross)} is counted` : `${s.employer}: the calendar's estimate is counted`);
+  };
   const [editing, setEditing] = useState<{ id?: string; draft: Draft } | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
@@ -174,6 +189,10 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
       employer, start: d.start, end: d.end, hours, gross: Math.round(gross * 100) / 100,
       createdAt: before?.createdAt ?? new Date().toISOString(),
       ...(d.noWeeks && multiWeek(d.start, d.end) ? { noWeeks: true } : {}),
+      // Kept through an edit: its own pay for the calendar's shifts, its rate, and its days if the period is the same.
+      ...(before?.usePay ? { usePay: true } : {}),
+      ...(before?.rate ? { rate: before.rate } : {}),
+      ...(before?.days && before.start === d.start && before.end === d.end ? { days: before.days } : {}),
     };
     setClaimStubs(before ? stubs.map(s => (s.id === before.id ? stub : s)) : [...stubs, stub]);
     toast.success(before ? 'Pay stub saved' : 'Pay stub added');
@@ -403,6 +422,14 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
         <div className="space-y-3 border-t border-[hsl(312_95%_68%/0.3)] pt-3" data-testid="stub-form">
           <label className="block space-y-1">
             <span className={LABEL}>Employer</span>
+            {employerNames.length > 0 && (
+              <select value={employerNames.includes(editing.draft.employer) ? editing.draft.employer : ''} onChange={e => e.target.value && set({ employer: e.target.value })}
+                aria-label="Pick the employer" data-testid="stub-employer-pick"
+                className="w-full border border-[hsl(188_95%_62%/0.5)] bg-background p-2 text-base text-mono text-foreground">
+                <option value="">Pick an employer, or type one below…</option>
+                {[...employerNames].sort((a, b) => a.localeCompare(b)).map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            )}
             <Input value={editing.draft.employer} list="claim-stub-employers" placeholder="Who the stub is from"
               onChange={e => set({ employer: e.target.value })} className="text-mono" data-testid="stub-employer" />
             <datalist id="claim-stub-employers">{employerNames.map(n => <option key={n} value={n} />)}</datalist>
@@ -481,6 +508,54 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
               <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-mono" data-testid="stub-status">
                 <StubStatus use={uses.find(u => u.stub.id === s.id)} stubPay={stubPay} />
               </p>
+              {/* On the calendar: each shift it covers, its estimate and its part of the stub, and which counts. */}
+              {(() => {
+                const use = uses.find(u => u.stub.id === s.id);
+                if (use?.status !== 'calendar' || !use.covered?.length) return null;
+                const diff = s.gross - use.estimate;
+                return (
+                  <div className="mt-1.5 space-y-1.5 border border-[hsl(188_95%_62%/0.35)] p-2" data-testid="stub-covered">
+                    <p className={LABEL}>Shifts it covers · {use.covered.length}</p>
+                    <ul className="divide-y divide-[hsl(188_95%_62%/0.15)]">
+                      {use.covered.map(c => (
+                        <li key={c.jobId} className="space-y-0.5 py-1.5 text-[12px] text-mono" data-testid="stub-covered-shift">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <button type="button" onClick={() => navigate(`/?job=${c.jobId}`)} className="flex min-w-0 items-center gap-0.5 text-left font-bold text-[hsl(188_90%_70%)]"
+                              aria-label={`Open the shift on ${claimDay(c.date, false)}`}>
+                              <span className="truncate">{claimDay(c.date)} · {c.hours} h</span><ChevronRight size={13} className="shrink-0" aria-hidden />
+                            </button>
+                            <span className={cn('shrink-0', use.usesPay ? 'text-muted-foreground line-through' : 'neon-title font-bold')}>est. {claimMoney(c.estimate)}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2 text-[11px]">
+                            <label className="flex items-center gap-1 text-muted-foreground">
+                              Rate $
+                              <input key={`${c.jobId}-${c.rate ?? ''}`} defaultValue={c.rate ?? ''} inputMode="decimal" aria-label={`Rate for ${claimDay(c.date, false)}`}
+                                onBlur={e => void setRate(c.jobId, e.target.value)} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                                data-testid="stub-covered-rate"
+                                className="w-16 border border-[hsl(188_95%_62%/0.4)] bg-background px-1.5 py-0.5 text-base text-foreground" />
+                              /h
+                            </label>
+                            <span className={cn('shrink-0', use.usesPay ? 'neon-title font-bold text-[hsl(46_100%_58%)]' : 'text-[hsl(46_100%_58%)]')}>stub {claimMoney(c.share)}</span>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="flex flex-wrap justify-between gap-x-2 border-t border-[hsl(188_95%_62%/0.25)] pt-1 text-[11px] text-mono">
+                      <span>Estimate {claimMoney(use.estimate)} · stub {claimMoney(s.gross)}</span>
+                      <span className={diff >= 0 ? 'text-dot-paid' : 'text-warning'}>{diff >= 0 ? '+' : '−'}{claimMoney(Math.abs(diff))}</span>
+                    </p>
+                    <p className="text-[11px] text-mono font-bold" data-testid="stub-covered-counts">
+                      Counted: {use.usesPay ? `the stub's ${claimMoney(s.gross)}` : `the estimate, ${claimMoney(use.estimate)}`}. Never both.
+                    </p>
+                    {!stubPay && (
+                      <button type="button" onClick={() => setUsePay(s, !s.usePay)} aria-pressed={!!s.usePay} data-testid="stub-use-pay"
+                        className={cn('pixel-button flex w-full items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono', s.usePay ? 'pick-on' : 'pick-off')}>
+                        {s.usePay ? <><Check size={13} aria-hidden /> Using this stub's pay</> : `Use this stub's pay (${claimMoney(s.gross)})`}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
               {/* A bulk stub over many weeks: averaged over them, or not. */}
               {uses.find(u => u.stub.id === s.id)?.status === 'counted' && multiWeek(s.start, s.end) && (
                 <div className="mt-1.5 space-y-1">
