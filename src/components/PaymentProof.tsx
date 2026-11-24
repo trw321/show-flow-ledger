@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useData } from '@/lib/DataContext';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { readFileAsDataUrl, resizeImageForStorage } from '@/lib/imageResize';
+import { asImage } from '@/lib/pdfImage';
 import { explainPay } from '@/lib/payExplain';
 import { matchPaymentToProject } from '@/lib/paymentMatch';
 import { effectiveHoursWorked } from '@/lib/payCalc';
@@ -245,9 +246,11 @@ export default function PaymentProof({ income, onClose }: { income: Income; onCl
                 <p className="text-[10px] text-muted-foreground">Pay stub: earnings and deductions. Check: the check. Deposit: the bank showing what landed.</p>
                 </>
               )}
-              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={async e => {
-                const file = e.target.files?.[0];
+              <input ref={fileRef} type="file" accept="image/*,application/pdf,.pdf" className="hidden" onChange={async e => {
+                const picked = e.target.files?.[0];
                 e.currentTarget.value = '';
+                // A PDF is kept and read as a picture of its pages.
+                const file = picked && await asImage(picked);
                 if (file) setEditing(await readFileAsDataUrl(file));
               }} />
             </div>

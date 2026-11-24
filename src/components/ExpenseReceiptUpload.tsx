@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Upload, Loader2, Check, X, FileImage } from 'lucide-react';
 import { toast } from 'sonner';
+import { asImage } from '@/lib/pdfImage';
 import { aiFetch } from '@/lib/aiSwitch';
 
 const categories = [
@@ -35,8 +36,11 @@ export default function ExpenseReceiptUpload({ externalOpen, onExternalOpenChang
   // Allow overriding category per row before import
   const [overrides, setOverrides] = useState<Record<number, string>>({});
 
-  const handleFile = useCallback(async (file: File) => {
-    if (!file.type.startsWith('image/')) { toast.error('Please upload an image file'); return; }
+  const handleFile = useCallback(async (picked: File) => {
+    // A PDF receipt is read as a picture of its pages.
+    const file = await asImage(picked);
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast.error('Please upload an image or a PDF'); return; }
     if (file.size > 10 * 1024 * 1024) { toast.error('File too large (max 10MB)'); return; }
 
     setLoading(true);
@@ -138,7 +142,7 @@ export default function ExpenseReceiptUpload({ externalOpen, onExternalOpenChang
             <input
               id="expense-receipt-input"
               type="file"
-              accept="image/*"
+              accept="image/*,application/pdf,.pdf"
               className="hidden"
               onClick={e => e.stopPropagation()}
               onChange={e => { const f = e.target.files?.[0]; if (f) { handleFile(f); e.currentTarget.value = ''; } }}

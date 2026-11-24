@@ -8,6 +8,7 @@ import DateWheels from '@/components/DateWheels';
 import StubEditor from '@/components/StubEditor';
 import { aiFetch } from '@/lib/aiSwitch';
 import { readFileAsDataUrl, resizeImageForStorage } from '@/lib/imageResize';
+import { isPdf, pdfPageImages } from '@/lib/pdfImage';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { useData } from '@/lib/DataContext';
 import { localToday } from '@/lib/today';
@@ -22,6 +23,8 @@ const TAG = 'font-8bit shrink-0 border px-1.5 py-0.5 text-[7px] uppercase';
 const GOLD = 'border-[hsl(46_100%_58%)] text-[hsl(46_100%_58%)]';
 const CYAN = 'border-[hsl(188_95%_62%)] text-[hsl(188_95%_72%)]';
 const iso = (d: Date) => format(d, 'yyyy-MM-dd');
+/** A PDF's pages read, at most: each is one read. */
+const MAX_PDF_PAGES = 10;
 
 interface Draft { employer: string; start: string; end: string; hours: string; gross: string }
 
@@ -116,6 +119,10 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
   const [editing, setEditing] = useState<{ id?: string; draft: Draft } | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
+  /** Which page of a PDF is being read, when it has more than one. */
+  const [readingPage, setReadingPage] = useState<string | null>(null);
+  /** What the found list was read from, to say so. */
+  const [readFrom, setReadFrom] = useState<'photo' | 'PDF'>('photo');
   const [found, setFound] = useState<Found[] | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const sectionRef = useRef<HTMLElement>(null);
@@ -172,30 +179,38 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
     toast(`Removed the ${s.employer} stub`, { action: { label: 'Undo', onClick: () => setClaimStubs(before) } });
   };
 
-  const pickPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (fileRef.current) fileRef.current.value = '';
-    if (!file) return;
-    if (!file.type.startsWith('image/')) { toast.error("A photo or screenshot of the stubs, please: a PDF can't be read here."); return; }
-    setPhoto(await readFileAsDataUrl(file));
+  /** What the reader finds on one picture. */
+  const readOne = async (image: string): Promise<Record<string, unknown>[]> => {
+    const blob = await (await fetch(image)).blob();
+    const small = await resizeImageForStorage(new File([blob], 'stubs.jpg', { type: blob.type || 'image/jpeg' }));
+    const resp = await aiFetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-statement`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
+      body: JSON.stringify({ imageBase64: small.split(',')[1], mimeType: 'image/jpeg', type: 'paystubs' }),
+    });
+    const body = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(body.error || 'Could not read the stubs');
+    return Array.isArray(body.paystubs) ? body.paystubs : [];
   };
 
-  // Painted over: read every paycheck in it, and list them to confirm.
-  const readPhoto = async (edited: string) => {
+  /** Every paycheck in a photo, or on every page of a PDF, listed to confirm. */
+  const readImages = async (images: string[]) => {
     setPhoto(null);
     setEditing(null);
     setReading(true);
     try {
-      const blob = await (await fetch(edited)).blob();
-      const small = await resizeImageForStorage(new File([blob], 'stubs.jpg', { type: blob.type || 'image/jpeg' }));
-      const resp = await aiFetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-statement`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
-        body: JSON.stringify({ imageBase64: small.split(',')[1], mimeType: 'image/jpeg', type: 'paystubs' }),
-      });
-      const body = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(body.error || 'Could not read the stubs');
-      const raw: Record<string, unknown>[] = Array.isArray(body.paystubs) ? body.paystubs : [];
+      const raw: Record<string, unknown>[] = [];
+      // One page that can't be read doesn't lose the others.
+      let failed: unknown = null;
+      for (const [n, image] of images.entries()) {
+        setReadingPage(images.length > 1 ? `page ${n + 1} of ${images.length}` : null);
+        try {
+          raw.push(...await readOne(image));
+        } catch (err) {
+          failed = err;
+        }
+      }
+      if (raw.length === 0 && failed) throw failed;
       const list: Found[] = raw.map((r, i) => {
         const start = isClaimDay(r.payPeriodStart) ? r.payPeriodStart : undefined;
         const end = isClaimDay(r.payPeriodEnd) ? r.payPeriodEnd : undefined;
@@ -223,7 +238,38 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
       toast.error(err instanceof Error ? err.message : 'Could not read the stubs');
     } finally {
       setReading(false);
+      setReadingPage(null);
     }
+  };
+
+  // Painted over: read every paycheck in it, and list them to confirm.
+  const readPhoto = (edited: string) => readImages([edited]);
+
+  const pickPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (fileRef.current) fileRef.current.value = '';
+    if (!file) return;
+    // A PDF: every page read, one at a time. A PDF has nothing to paint
+    // out on the phone, so it goes straight to the reader, as on a shift.
+    setReadFrom(isPdf(file) ? 'PDF' : 'photo');
+    if (isPdf(file)) {
+      setReading(true);
+      setReadingPage('opening the PDF');
+      try {
+        const { pages, total } = await pdfPageImages(file, MAX_PDF_PAGES);
+        if (pages.length === 0) throw new Error('empty');
+        if (total > pages.length) toast.info(`Reading the first ${pages.length} of its ${total} pages`);
+        await readImages(pages);
+      } catch (err) {
+        console.error(err);
+        toast.error('Could not open that PDF. A screenshot of it works too.');
+        setReading(false);
+        setReadingPage(null);
+      }
+      return;
+    }
+    if (!file.type.startsWith('image/')) { toast.error('A photo, screenshot or PDF of the stubs, please.'); return; }
+    setPhoto(await readFileAsDataUrl(file));
   };
 
   const confirmFound = () => {
@@ -275,7 +321,7 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
         <div className="flex shrink-0 gap-1.5">
           <button type="button" onClick={() => fileRef.current?.click()} data-testid="stub-photo" disabled={reading}
             className="pixel-button pick-off flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold text-mono">
-            {reading ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <Camera size={13} aria-hidden />} Photo
+            {reading ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <Camera size={13} aria-hidden />} Photo/PDF
           </button>
           {!editing && (
             <button type="button" onClick={startNew} data-testid="stub-add"
@@ -284,18 +330,18 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
             </button>
           )}
         </div>
-        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => void pickPhoto(e)} data-testid="stub-file" />
+        <input ref={fileRef} type="file" accept="image/*,application/pdf,.pdf" className="hidden" onChange={e => void pickPhoto(e)} data-testid="stub-file" />
       </div>
 
       {/* Paint out anything private before it's read. */}
       {photo && <StubEditor source={photo} onCancel={() => setPhoto(null)} onDone={edited => void readPhoto(edited)} />}
-      {reading && <p className="text-[11px] text-mono text-muted-foreground">Reading every paycheck in it…</p>}
+      {reading && <p className="text-[11px] text-mono text-muted-foreground" data-testid="stub-reading">Reading every paycheck in it…{readingPage ? ` (${readingPage})` : ''}</p>}
 
       {/* What the reader found: every paycheck, to confirm before it's kept. */}
       {found && (
         <div className="space-y-2 border-t border-[hsl(312_95%_68%/0.3)] pt-2.5" data-testid="stub-found">
-          <p className={LABEL}>Read from the photo · {found.length} paycheck{found.length === 1 ? '' : 's'}</p>
-          <p className="text-[11px] text-mono text-muted-foreground">Check each against the photo. Ticked ones are added.</p>
+          <p className={LABEL}>Read from the {readFrom} · {found.length} paycheck{found.length === 1 ? '' : 's'}</p>
+          <p className="text-[11px] text-mono text-muted-foreground">Check each against the {readFrom}. Ticked ones are added.</p>
           <ul className="space-y-1.5">
             {found.map(f => {
               const complete = !!f.employer && !!f.start && !!f.end && (f.hours > 0 || f.gross > 0);

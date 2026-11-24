@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Upload, Camera, PenLine, Check, X, Loader2, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
+import { asImage } from '@/lib/pdfImage';
 import type { CalendarEvent } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { aiFetch } from '@/lib/aiSwitch';
@@ -119,9 +120,12 @@ export default function EventIntake({ date, onCancel, onSaveMany }: Props) {
   };
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const picked = e.target.files?.[0];
+    if (!picked) return;
     try {
+      // A PDF is read as a picture of its pages.
+      const file = await asImage(picked);
+      if (!file) return;
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve((reader.result as string).split(',')[1]);
@@ -282,7 +286,7 @@ export default function EventIntake({ date, onCancel, onSaveMany }: Props) {
   // ── Default: paste-or-photo, same shape as the Job Log intake box ──────────
   return (
     <div className="rounded-md border border-primary/30 bg-primary/5 p-3 space-y-2">
-      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoSelect} />
+      <input ref={fileInputRef} type="file" accept="image/*,application/pdf,.pdf" className="hidden" onChange={handlePhotoSelect} />
       <textarea
         value={text}
         onChange={e => setText(e.target.value)}

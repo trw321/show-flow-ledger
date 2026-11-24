@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Upload, Loader2, Check, Plus, X, ChevronRight, ChevronDown, AlertTriangle, Trash2, Camera, PenLine, Phone, ChevronsUp, Clock } from 'lucide-react';
 import { toast } from 'sonner';
+import { asImage } from '@/lib/pdfImage';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { isDuplicateJob, findLikelyDuplicate } from '@/lib/jobDedup';
@@ -749,8 +750,11 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (prefs.aiFreeMode) { toast.info('AI is off. Use Manual entry or import a spreadsheet.'); return; }
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const picked = e.target.files?.[0];
+    if (!picked) return;
+    // A PDF offer is read as a picture of its pages.
+    const file = await asImage(picked);
+    if (!file) { if (fileInputRef.current) fileInputRef.current.value = ''; return; }
     setIsParsing(true);
     setVortexPhase('vortex');
     setParseProgress('Reading image…');
@@ -907,7 +911,7 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,application/pdf,.pdf"
         className="hidden"
         onChange={handlePhotoSelect}
       />

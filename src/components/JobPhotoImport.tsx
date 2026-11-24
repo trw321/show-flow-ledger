@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Camera, Loader2, Check, ImagePlus } from 'lucide-react';
 import { toast } from 'sonner';
+import { asImage } from '@/lib/pdfImage';
 import type { Job } from '@/lib/store';
 import { getJobDedupKey } from '@/lib/jobDedup';
 import { aiFetch } from '@/lib/aiSwitch';
@@ -59,9 +60,12 @@ export default function JobPhotoImport({
     };
   }, [open]);
 
-  const parseImage = useCallback(async (file: File) => {
+  const parseImage = useCallback(async (picked: File) => {
+    // A PDF offer is read as a picture of its pages.
+    const file = await asImage(picked);
+    if (!file) return;
     if (!file.type.startsWith('image/')) {
-      toast.error('Please upload an image file');
+      toast.error('Please upload an image or a PDF');
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -221,7 +225,7 @@ export default function JobPhotoImport({
       <input
         ref={fileRef}
         type="file"
-        accept="image/*"
+        accept="image/*,application/pdf,.pdf"
         className="hidden"
         disabled={isParsing || isImporting}
         onChange={handleFileChange}

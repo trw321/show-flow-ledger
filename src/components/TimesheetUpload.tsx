@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Upload, Loader2, Check, X, FileImage, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
+import { asImage } from '@/lib/pdfImage';
 import { getJobDedupKey } from '@/lib/jobDedup';
 import type { Job } from '@/lib/store';
 import { aiFetch } from '@/lib/aiSwitch';
@@ -33,8 +34,11 @@ export default function TimesheetUpload() {
 
   const jobs = data.jobs.map(j => ({ id: j.id, name: j.name, client: j.client }));
 
-  const handleFile = useCallback(async (file: File) => {
-    if (!file.type.startsWith('image/')) { toast.error('Please upload an image file'); return; }
+  const handleFile = useCallback(async (picked: File) => {
+    // A PDF timesheet is read as a picture of its pages.
+    const file = await asImage(picked);
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast.error('Please upload an image or a PDF'); return; }
     if (file.size > 10 * 1024 * 1024) { toast.error('File too large (max 10MB)'); return; }
 
     setLoading(true);
@@ -241,7 +245,7 @@ export default function TimesheetUpload() {
             <FileImage size={32} className="text-muted-foreground mb-3" />
             <p className="text-sm text-muted-foreground">Drop a photo of your notes, timesheet, or call sheet</p>
             <p className="text-xs text-muted-foreground mt-1">JPG, PNG, WEBP • Max 10MB</p>
-            <input id="timesheet-upload-input" type="file" accept="image/*" className="hidden" onClick={e => e.stopPropagation()} onChange={e => { const f = e.target.files?.[0]; if (f) { handleFile(f); e.currentTarget.value = ''; } }} />
+            <input id="timesheet-upload-input" type="file" accept="image/*,application/pdf,.pdf" className="hidden" onClick={e => e.stopPropagation()} onChange={e => { const f = e.target.files?.[0]; if (f) { handleFile(f); e.currentTarget.value = ''; } }} />
           </div>
         )}
 
