@@ -224,7 +224,7 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
                 <ul className="divide-y divide-[hsl(312_95%_68%/0.15)]">
                   {weeks.map(w => (
                     <li key={w.weekEnding} className="flex flex-wrap items-baseline justify-between gap-x-2 py-1 text-[12px] text-mono">
-                      <span className="min-w-0 truncate">{claimDay(w.weekEnding)}</span>
+                      <span className="min-w-0 truncate">Week ending {claimDay(w.weekEnding, false)}</span>
                       <span className="flex shrink-0 items-center gap-1.5">
                         {w.fromStub && <span className="font-8bit border border-[hsl(46_100%_58%)] px-1 text-[6px] uppercase leading-relaxed text-[hsl(46_100%_58%)]">Stub</span>}
                         <span className="text-muted-foreground">{w.hours} h ·</span>
