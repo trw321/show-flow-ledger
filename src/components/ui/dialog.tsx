@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { focusPanel } from "@/lib/noKeyboard";
+import { selectableRef } from "@/lib/textSelection";
 
 const Dialog = DialogPrimitive.Root;
 
@@ -35,7 +36,8 @@ const DialogContent = React.forwardRef<
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
-      ref={ref}
+      // Text in it can be selected with a finger: see textSelection.
+      ref={selectableRef(ref)}
       // Opens on the panel, not its first box, so no keyboard comes up.
       onOpenAutoFocus={e => focusPanel(e, onOpenAutoFocus)}
       className={cn(
