@@ -59,15 +59,17 @@ export default function ClaimPastePay({ weekEnd, employerNames, colourOf, from, 
   // payments for one period make one), and a stub a week for the lines
   // without one, as they're counted above.
   const units = useMemo(() => {
-    const byPeriod = new Map<string, { start: string; end: string; gross: number }>();
+    const byPeriod = new Map<string, { start: string; end: string; gross: number; paidOn?: string }>();
     for (const r of kept) {
       if (!r.period) continue;
       const k = `${r.period.start}|${r.period.end}`;
-      const cur = byPeriod.get(k) ?? { start: r.period.start, end: r.period.end, gross: 0 };
+      const cur = byPeriod.get(k) ?? { start: r.period.start, end: r.period.end, gross: 0, ...(r.noPayDate ? {} : { paidOn: r.date }) };
       cur.gross = Math.round((cur.gross + r.amount) * 100) / 100;
       byPeriod.set(k, cur);
     }
-    const weekly = payListWeeks(kept.filter(r => !r.period), weekEnd, weekBefore).map(w => ({ start: w.start, end: w.weekEnding, gross: w.total }));
+    // A week's stub keeps its pay date when it has one payday.
+    const weekly = payListWeeks(kept.filter(r => !r.period), weekEnd, weekBefore)
+      .map(w => ({ start: w.start, end: w.weekEnding, gross: w.total, ...(w.dates.length === 1 ? { paidOn: w.dates[0] } : {}) }));
     return [...byPeriod.values(), ...weekly];
   }, [kept, weekEnd, weekBefore]);
   const adding = units.filter(u => !(name && sameStub(prefs.claimStubs, { employer: name, start: u.start, end: u.end })));
@@ -79,7 +81,7 @@ export default function ClaimPastePay({ weekEnd, employerNames, colourOf, from, 
     const now = new Date().toISOString();
     const added = adding.map(u => ({
       id: crypto.randomUUID(), employer: name, start: u.start, end: u.end,
-      hours: hoursFor(u.gross), gross: u.gross, createdAt: now, ...(perHour > 0 ? { rate: perHour } : {}),
+      hours: hoursFor(u.gross), gross: u.gross, createdAt: now, ...(perHour > 0 ? { rate: perHour } : {}), ...(u.paidOn ? { paidOn: u.paidOn } : {}),
     }));
     setClaimStubs([...prefs.claimStubs, ...added]);
     toast.success(added.length ? `Added ${added.length} pay stub${added.length === 1 ? '' : 's'} for ${name}, ${claimMoney(added.reduce((s, x) => s + x.gross, 0))}` : 'Those are already on the claim');

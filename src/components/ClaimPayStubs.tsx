@@ -4,7 +4,6 @@ import { toast } from 'sonner';
 import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { CalendarPlus, Camera, Check, ChevronDown, ChevronRight, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
 import DateWheels from '@/components/DateWheels';
 import StubEditor from '@/components/StubEditor';
 import { aiFetch } from '@/lib/aiSwitch';
@@ -14,8 +13,8 @@ import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { useData } from '@/lib/DataContext';
 import { localToday } from '@/lib/today';
 import {
-  claimDay, claimMoney, isClaimDay, readAmount, sameStub, stubDays, stubShifts, weekEndingFor,
-  type ClaimStub, type StubUse, type WeekEnd,
+  claimDay, claimMoney, isClaimDay, readAmount, sameStub, stubDays, stubShifts, stubWeeks, weekEndingFor,
+  type ClaimStub, type StubUse, type StubWeek, type WeekEnd,
 } from '@/lib/unemployment';
 import { cn } from '@/lib/utils';
 
@@ -27,7 +26,7 @@ const iso = (d: Date) => format(d, 'yyyy-MM-dd');
 /** A PDF's pages read, at most: each is one read. */
 const MAX_PDF_PAGES = 10;
 
-interface Draft { employer: string; start: string; end: string; hours: string; gross: string; noWeeks?: boolean }
+interface Draft { employer: string; start: string; end: string; hours: string; gross: string; noWeeks?: boolean; paidOn?: string }
 
 /** A pay period longer than a week: one that would be averaged over several. */
 const multiWeek = (start: string, end: string) => {
@@ -50,6 +49,10 @@ interface Found {
   /** The days it lists hours for, and its rate: what lets it go on the calendar. */
   days?: { date: string; hours: number }[];
   rate?: number;
+  /** Its own weeks, when it prints them. */
+  weeks?: StubWeek[];
+  /** The pay date read off it. */
+  paidOn?: string;
 }
 
 /** "Mar 1 – Mar 14, 2026", or "Dec 28, 2025 – Jan 10, 2026" across a year. */
@@ -60,7 +63,7 @@ function periodText(start: string, end: string) {
 }
 
 /** What a stub came to on the claim, in a tag and a few words. */
-function StubStatus({ use, stubPay }: { use?: StubUse; stubPay: boolean }) {
+function StubStatus({ use }: { use?: StubUse }) {
   if (!use) return <span className={cn(TAG, 'border-border text-muted-foreground')}>Outside dates</span>;
   if (use.status === 'counted') {
     return <><span className={cn(TAG, GOLD)}>Counted</span><span className="text-muted-foreground">nothing on the calendar for it</span></>;
@@ -68,11 +71,11 @@ function StubStatus({ use, stubPay }: { use?: StubUse; stubPay: boolean }) {
   if (use.status === 'calendar') {
     return (
       <>
-        <span className={cn(TAG, CYAN)}>On calendar</span>
+        <span className={cn(TAG, use.usesPay ? GOLD : CYAN)}>{use.usesPay ? 'Believed' : 'Estimate used'}</span>
         <span className="text-muted-foreground">
           {use.usesPay
-            ? <>its {claimMoney(use.stub.gross)} is counted for the {use.shifts} shift{use.shifts === 1 ? '' : 's'} there, in place of their estimate ({claimMoney(use.estimate)})</>
-            : <>{use.shifts} shift{use.shifts === 1 ? '' : 's'} there count as they are, est. {claimMoney(use.estimate)}; the stub says {claimMoney(use.stub.gross)}</>}
+            ? <>its {claimMoney(use.stub.gross)} counts, placed by the {use.shifts} shift{use.shifts === 1 ? '' : 's'} on the calendar (their estimate {claimMoney(use.estimate)})</>
+            : <>the calendar's estimate, {claimMoney(use.estimate)}, counts; the stub says {claimMoney(use.stub.gross)}</>}
         </span>
       </>
     );
@@ -118,9 +121,8 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
   /** A week's "+": open the form set to that week. */
   request?: { start: string; end: string; nonce: number } | null;
 }) {
-  const { prefs, setClaimStubs, setClaimUseStubPay } = useUserPrefs();
-  const stubPay = !!prefs.claimUseStubPay;
-  const anyOnCalendar = uses.some(u => u.status === 'calendar');
+  const { prefs, setClaimStubs } = useUserPrefs();
+
   const { data, addJob, updateJob } = useData();
   const navigate = useNavigate();
   const stubs = prefs.claimStubs;
@@ -132,10 +134,10 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
     await updateJob(jobId, { hourlyRate: Math.round(rate * 100) / 100 });
     toast.success(`${claimDay(job.date, false)}: $${rate}/h, on the calendar too`);
   };
-  /** One stub's own pay for the shifts it covers, or their estimates. */
-  const setUsePay = (s: ClaimStub, on: boolean) => {
-    setClaimStubs(stubs.map(x => (x.id === s.id ? (on ? { ...x, usePay: true } : (({ usePay: _, ...rest }) => rest)(x)) : x)));
-    toast.success(on ? `${s.employer}: the stub's ${claimMoney(s.gross)} is counted` : `${s.employer}: the calendar's estimate is counted`);
+  /** A stub is believed; this one's shifts can count at the calendar's estimate instead. */
+  const setUseEstimate = (s: ClaimStub, on: boolean) => {
+    setClaimStubs(stubs.map(x => (x.id === s.id ? (on ? { ...x, useEstimate: true } : (({ useEstimate: _, ...rest }) => rest)(x)) : x)));
+    toast.success(on ? `${s.employer}: the calendar's estimate counts` : `${s.employer}: the stub's ${claimMoney(s.gross)} counts`);
   };
   const [editing, setEditing] = useState<{ id?: string; draft: Draft } | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
@@ -164,7 +166,7 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
     setEditing({ draft: { employer: '', start: iso(addDays(parseISO(lastWeek), -6)), end: lastWeek, hours: '', gross: '' } });
   };
   const edit = (s: ClaimStub) =>
-    setEditing({ id: s.id, draft: { employer: s.employer, start: s.start, end: s.end, hours: s.hours ? String(s.hours) : '', gross: s.gross ? s.gross.toFixed(2) : '', noWeeks: !!s.noWeeks } });
+    setEditing({ id: s.id, draft: { employer: s.employer, start: s.start, end: s.end, hours: s.hours ? String(s.hours) : '', gross: s.gross ? s.gross.toFixed(2) : '', noWeeks: !!s.noWeeks, paidOn: s.paidOn ?? '' } });
   const set = (patch: Partial<Draft>) => setEditing(cur => cur && { ...cur, draft: { ...cur.draft, ...patch } });
   /** The pay period as a week, or two, ending on the day it ends. */
   const spanWeeks = (weeks: 1 | 2) =>
@@ -189,6 +191,9 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
       employer, start: d.start, end: d.end, hours, gross: Math.round(gross * 100) / 100,
       createdAt: before?.createdAt ?? new Date().toISOString(),
       ...(d.noWeeks && multiWeek(d.start, d.end) ? { noWeeks: true } : {}),
+      ...(d.paidOn && isClaimDay(d.paidOn) ? { paidOn: d.paidOn } : {}),
+      ...(before?.useEstimate ? { useEstimate: true } : {}),
+      ...(before?.weeks && before.start === d.start && before.end === d.end ? { weeks: before.weeks } : {}),
       // Kept through an edit: its own pay for the calendar's shifts, its rate, and its days if the period is the same.
       ...(before?.usePay ? { usePay: true } : {}),
       ...(before?.rate ? { rate: before.rate } : {}),
@@ -254,7 +259,9 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
         const complete = !!employer && !!a && !!b && (hours > 0 || gross > 0);
         const days = a && b ? stubDays(r.hoursBreakdown, a, b) : undefined;
         const rate = Number(r.hourlyRate) > 0 ? Number(r.hourlyRate) : undefined;
-        return { key: `${i}`, employer, start: a, end: b, hours, gross, already, keep: complete && !already, days, rate };
+        const weeks = a && b ? stubWeeks(r.weekBreakdown, a, b) : undefined;
+        const paidOn = isClaimDay(r.checkDate) ? r.checkDate : undefined;
+        return { key: `${i}`, employer, start: a, end: b, hours, gross, already, keep: complete && !already, days, rate, weeks, paidOn };
       });
       // The same paycheck read twice off one image is one.
       const seen = new Set<string>();
@@ -314,6 +321,7 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
       list = [...list, {
         id: crypto.randomUUID(), employer: f.employer, start: f.start, end: f.end, hours: f.hours, gross: f.gross, createdAt: now,
         ...(f.days ? { days: f.days } : {}), ...(f.rate ? { rate: f.rate } : {}),
+        ...(f.weeks ? { weeks: f.weeks } : {}), ...(f.paidOn ? { paidOn: f.paidOn } : {}),
       }];
       added++;
     }
@@ -396,6 +404,8 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
                       {f.start && f.end ? periodText(f.start, f.end) : f.end ? `period ending ${claimDay(f.end, false)}` : 'no pay period read'}
                       {' · '}{f.hours ? `${f.hours} h` : 'no hours'}
                       {f.days && ` · lists ${f.days.length} day${f.days.length === 1 ? '' : 's'}`}
+                      {f.weeks && ` · ${f.weeks.length} week${f.weeks.length === 1 ? '' : 's'} on it`}
+                      {f.paidOn && ` · paid ${claimDay(f.paidOn, false)}`}
                     </p>
                     {f.already && <p className="text-[11px] text-muted-foreground"><span className={cn(TAG, 'border-border text-muted-foreground')}>Already have it</span> not added twice</p>}
                     {!complete && !f.already && (
@@ -459,6 +469,12 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
                 className="text-mono" data-testid="stub-gross" />
             </label>
           </div>
+          {/* When it was paid: a different thing from the days worked. */}
+          <label className="block space-y-1">
+            <span className={LABEL}>Paid on · optional</span>
+            <input type="date" value={editing.draft.paidOn ?? ''} onChange={e => set({ paidOn: e.target.value })} data-testid="stub-paid-on"
+              className="w-full border border-[hsl(188_95%_62%/0.5)] bg-background p-2 text-base text-mono text-foreground" />
+          </label>
           {/* A bulk total over many weeks: averaged, or counted in no one week. */}
           {multiWeek(editing.draft.start, editing.draft.end) && (
             <label className="flex items-start gap-2.5 text-[12px] text-mono" data-testid="stub-no-weeks-form">
@@ -477,19 +493,6 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
         </div>
       )}
 
-      {/* For shifts the calendar has: their own estimates (the default), or the stub's pay shared over them. */}
-      {anyOnCalendar && (
-        <label className="flex items-start justify-between gap-3 border-t border-[hsl(312_95%_68%/0.3)] pt-2.5" data-testid="stub-pay-option">
-          <span className="min-w-0">
-            <span className="block text-[12px] font-bold text-mono">Use the stub's pay for shifts on the calendar</span>
-            <span className="block text-[11px] text-mono text-muted-foreground">
-              Off: each shift counts at its own estimate. On: the stub's gross and hours are shared over its shifts' weeks.
-            </span>
-          </span>
-          <Switch checked={stubPay} onCheckedChange={setClaimUseStubPay} aria-label="Use the stub's pay for shifts on the calendar" data-testid="stub-pay-switch" />
-        </label>
-      )}
-
       {listed.length > 0 && (
         <ul className="divide-y divide-[hsl(312_95%_68%/0.2)] border-t border-[hsl(312_95%_68%/0.3)]" data-testid="stub-list">
           {listed.map(s => (
@@ -499,15 +502,31 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
                 <span className="neon-title shrink-0 text-[13px] font-bold text-mono">{claimMoney(s.gross)}</span>
               </div>
               <div className="flex items-center justify-between gap-2 text-[11px] text-mono text-muted-foreground">
-                <span className="min-w-0 truncate">{periodText(s.start, s.end)} · {s.hours} h</span>
+                <span className="min-w-0 truncate">Worked {periodText(s.start, s.end)} · {s.hours} h{s.paidOn ? ` · paid ${claimDay(s.paidOn, false)}` : ''}</span>
                 <span className="flex shrink-0 items-center gap-1">
                   <button type="button" onClick={() => edit(s)} aria-label={`Edit the ${s.employer} stub`} className="p-1 hover:text-foreground"><Pencil size={13} /></button>
                   <button type="button" onClick={() => remove(s)} aria-label={`Remove the ${s.employer} stub`} className="p-1 hover:text-dot-late"><Trash2 size={13} /></button>
                 </span>
               </div>
               <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-mono" data-testid="stub-status">
-                <StubStatus use={uses.find(u => u.stub.id === s.id)} stubPay={stubPay} />
+                <StubStatus use={uses.find(u => u.stub.id === s.id)} />
               </p>
+              {/* Far from the calendar: worth a look, and why. */}
+              {(() => {
+                const c = uses.find(u => u.stub.id === s.id)?.check;
+                if (!c?.farOff) return null;
+                const why = c.hours !== undefined && c.hours >= 1
+                  ? `${c.hours} h on the stub aren't on the calendar: a shift may be missing`
+                  : c.hours !== undefined && c.hours <= -1
+                    ? `the calendar has ${-c.hours} h more than the stub: a shift may be on the wrong stub, or the stub is for part of it`
+                    : `${claimMoney(Math.abs(c.gross))} ${c.gross > 0 ? 'more' : 'less'} than the calendar's estimate for the same hours: a rate may be off`;
+                return (
+                  <p className="mt-0.5 flex flex-wrap items-baseline gap-1.5 text-[11px] text-mono" data-testid="stub-far-off">
+                    <span className={cn(TAG, 'border-dot-overdue text-dot-overdue')}>Check</span>
+                    <span className="text-dot-overdue">{why}</span>
+                  </p>
+                );
+              })()}
               {/* On the calendar: each shift it covers, its estimate and its part of the stub, and which counts. */}
               {(() => {
                 const use = uses.find(u => u.stub.id === s.id);
@@ -557,12 +576,10 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
                     <p className="text-[11px] text-mono font-bold" data-testid="stub-covered-counts">
                       Counted: {use.usesPay ? `the stub's ${claimMoney(s.gross)}` : `the estimate, ${claimMoney(use.estimate)}`}. Never both.
                     </p>
-                    {!stubPay && (
-                      <button type="button" onClick={() => setUsePay(s, !s.usePay)} aria-pressed={!!s.usePay} data-testid="stub-use-pay"
-                        className={cn('pixel-button flex w-full items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono', s.usePay ? 'pick-on' : 'pick-off')}>
-                        {s.usePay ? <><Check size={13} aria-hidden /> Using this stub's pay</> : `Use this stub's pay (${claimMoney(s.gross)})`}
-                      </button>
-                    )}
+                    <button type="button" onClick={() => setUseEstimate(s, !s.useEstimate)} aria-pressed={!!s.useEstimate} data-testid="stub-use-estimate"
+                      className={cn('pixel-button flex w-full items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono', s.useEstimate ? 'pick-on' : 'pick-off')}>
+                      {s.useEstimate ? `Believe the stub (${claimMoney(s.gross)}) again` : `Use the calendar's estimate (${claimMoney(use.estimate)}) instead`}
+                    </button>
                     </div>
                   </details>
                 );

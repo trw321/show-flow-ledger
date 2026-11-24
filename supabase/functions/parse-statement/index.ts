@@ -43,6 +43,7 @@ For each one:
 - netPay: take-home pay for that paycheck, if shown.
 - hourlyRate: its straight-time hourly rate, if printed.
 - hoursBreakdown: only if that paycheck itemizes hours by date (e.g. "10/27 10 ST, 11/3 12.5 OT"): one entry per date and hour type, with date (YYYY-MM-DD), hours and type (ST, OT or DT). Never spread a total over dates or assume 8-hour days: null when no dates are printed beside hours.
+- weekBreakdown: only if that paycheck prints its hours or earnings week by week (a two-week stub with "Week 1 01/25-01/31 9.00 hrs $559.74" and "Week 2 ...", "W/E 01/31: 9.00", or an earnings line per week): one entry per week with start (its first day, YYYY-MM-DD, or null), end (its last day, YYYY-MM-DD), hours and gross for that week (null when not printed). These are the weeks the work was done, which the person needs for an unemployment claim. Never split a total into weeks yourself: null when no per-week figures are printed.
 
 Rules:
 - One entry per paycheck. Its earnings lines (Regular, Overtime, Vacation...) are parts of it, never entries of their own.
@@ -95,7 +96,7 @@ If you can't determine the date, use today's date. Return ONLY valid JSON.`
     const systemPrompt = basePrompt + datesNote;
 
     const userPrompt = isPaystubs
-      ? "List every paycheck / pay period in this image: employer, pay period start and end, check date, total hours, gross pay and net pay for each. Skip year-to-date figures and totals rows."
+      ? "List every paycheck / pay period in this image: employer, pay period start and end (the days worked), check date (when it was paid), total hours, gross pay and net pay for each, and its week-by-week hours and earnings when it prints them. Skip year-to-date figures and totals rows."
       : isPaystub
       ? "Extract the full structured breakdown from this pay stub image: employer, pay period, hours, rate, gross, dues, tax, vacation, and net pay."
       : isTimesheet
@@ -136,8 +137,22 @@ If you can't determine the date, use today's date. Return ONLY valid JSON.`
                         additionalProperties: false,
                       },
                     },
+                    weekBreakdown: {
+                      type: ["array", "null"],
+                      items: {
+                        type: "object",
+                        properties: {
+                          start: { type: ["string", "null"], description: "YYYY-MM-DD" },
+                          end: { type: "string", description: "YYYY-MM-DD, the week's last day" },
+                          hours: { type: ["number", "null"] },
+                          gross: { type: ["number", "null"] },
+                        },
+                        required: ["start", "end", "hours", "gross"],
+                        additionalProperties: false,
+                      },
+                    },
                   },
-                  required: ["employer", "payPeriodStart", "payPeriodEnd", "checkDate", "totalHours", "grossPay", "netPay", "hourlyRate", "hoursBreakdown"],
+                  required: ["employer", "payPeriodStart", "payPeriodEnd", "checkDate", "totalHours", "grossPay", "netPay", "hourlyRate", "hoursBreakdown", "weekBreakdown"],
                   additionalProperties: false,
                 },
               },

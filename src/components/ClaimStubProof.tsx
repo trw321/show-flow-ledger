@@ -79,8 +79,12 @@ export default function ClaimStubProof({ open, onClose, week, line, uses, claimW
             const total = differenceInCalendarDays(parseISO(stub.end), parseISO(stub.start)) + 1;
             const touched = weeksTouched(stub, weekEnd, claimWeeks);
             const daysHere = week ? Math.max(0, differenceInCalendarDays(parseISO(stub.end < week.end ? stub.end : week.end), parseISO(stub.start > week.start ? stub.start : week.start)) + 1) : 0;
-            const why = part.role === 'pays'
-              ? "Its pay counts for the calendar's shifts this week, in place of their estimate."
+            const why = use?.placedBy === 'weeks'
+              ? 'Its own weekly breakdown puts this here.'
+              : use?.placedBy === 'days'
+                ? 'The days it lists hours for put this here.'
+                : part.role === 'pays'
+              ? `Believed: its pay counts in place of the calendar's estimate, placed by its shifts on the calendar${use?.check?.hours && use.check.hours >= 1 ? `, and the ${use.check.hours} h not on the calendar over its pay period` : ''}.`
               : part.role === 'says'
                 ? "Shown only: the calendar's estimate for these shifts is what's counted."
                 : stub.week
@@ -95,7 +99,9 @@ export default function ClaimStubProof({ open, onClose, week, line, uses, claimW
                   <span className="neon-title shrink-0 font-bold">{claimMoney(stub.gross)}</span>
                 </div>
                 <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[12px] text-mono">
-                  <dt className={LABEL}>Pay period</dt><dd className="text-right">{claimDay(stub.start, false)} to {claimDay(stub.end, false)}</dd>
+                  <dt className={LABEL}>Worked</dt><dd className="text-right">{claimDay(stub.start, false)} to {claimDay(stub.end, false)}</dd>
+                  {stub.paidOn ? <><dt className={LABEL}>Paid on</dt><dd className="text-right">{claimDay(stub.paidOn, false)}</dd></> : null}
+                  {stub.weeks?.length ? <><dt className={LABEL}>Its weeks</dt><dd className="text-right">{stub.weeks.map(w => `${claimDay(w.end, false).replace(/, \d{4}$/, '')}: ${w.hours ? `${w.hours} h ` : ''}${w.gross ? claimMoney(w.gross) : ''}`).join(' · ')}</dd></> : null}
                   <dt className={LABEL}>Hours</dt><dd className="text-right">{stub.hours || 'not on it'}</dd>
                   {stub.rate ? <><dt className={LABEL}>Rate</dt><dd className="text-right">${stub.rate}/h</dd></> : null}
                   <dt className={LABEL}>In this week</dt><dd className="text-right font-bold text-[hsl(46_100%_58%)]">{part.hours ? `${part.hours} h · ` : ''}{claimMoney(part.gross)}</dd>

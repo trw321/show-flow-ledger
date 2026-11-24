@@ -144,15 +144,29 @@ export interface ClaimStub {
    * under its employer and in the totals, in no one week.
    */
   noWeeks?: boolean;
-  /**
-   * Its own pay counts for the calendar's shifts it covers, in place of their
-   * estimates (a rate that changes call to call, a rigging call at $40). The
-   * same as "use the stub's pay" for every stub, for this one.
-   */
+  /** From before stubs were believed by default: its pay counted for the calendar's shifts. Now always so, unless useEstimate. */
   usePay?: boolean;
+  /**
+   * The calendar's estimate for the shifts it covers counts instead of the
+   * stub's pay. A stub is believed unless you say otherwise: it's what was
+   * actually paid, and the calendar only places it and checks it.
+   */
+  useEstimate?: boolean;
+  /** The pay date (check or deposit date), beside the pay period's dates worked. */
+  paidOn?: string;
+  /** The stub's own weeks, when it breaks its hours or pay down by week: where it counts. */
+  weeks?: StubWeek[];
   /** A day in the claim week you said it counts in, whole: its pay period crosses weeks and it wasn't split by its days. */
   week?: string;
   createdAt: string;
+}
+
+/** One week of a stub, as it prints it: "Week ending 01/31 9.00 hrs $559.74". */
+export interface StubWeek {
+  start?: string;
+  end: string;
+  hours?: number;
+  gross?: number;
 }
 
 /** One calendar shift a stub covers: its estimate, and its share of what the stub says. */
@@ -200,8 +214,17 @@ export interface StubUse {
   estimate: number;
   /** Those shifts, one by one. */
   covered?: CoveredShift[];
-  /** Its pay stands in for their estimates (its own choice, or "use the stub's pay" for all). */
+  /** Its pay stands in for their estimates: believed, as stubs are unless told otherwise. */
   usesPay?: boolean;
+  /**
+   * How far the stub is from the calendar's shifts in its pay period: its
+   * gross less their estimate, its hours less theirs (when it has hours).
+   * farOff when it's more than a little: hours the calendar doesn't have, or
+   * a rate that isn't right.
+   */
+  check?: { gross: number; hours?: number; farOff: boolean };
+  /** What put it in its weeks: its own weeks, the days it lists, the week you chose, its shifts on the calendar, or its pay period. */
+  placedBy?: 'weeks' | 'days' | 'chosen' | 'shifts' | 'period';
 }
 
 export interface ClaimSummary {
@@ -285,6 +308,29 @@ export function cleanChecked(raw: unknown): string[] {
  * period, hours above nothing, one entry a day (ST, OT and DT on a day added
  * together). Undefined when there are none.
  */
+export function stubWeeks(raw: unknown, start: string, end: string): StubWeek[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: StubWeek[] = [];
+  for (const w of raw) {
+    if (!w || typeof w !== 'object') continue;
+    const r = w as Record<string, unknown>;
+    const wEnd = isClaimDay(r.end) ? r.end : isClaimDay(r.weekEnding) ? r.weekEnding : undefined;
+    if (!wEnd) continue;
+    // Within a week of the pay period, either side: a week printed for another stub isn't this one's.
+    if (wEnd < iso(addDays(parseISO(start), -7)) || wEnd > iso(addDays(parseISO(end), 7))) continue;
+    const hours = Number(r.hours);
+    const gross = Number(r.gross);
+    if (!(hours > 0) && !(gross > 0)) continue;
+    out.push({
+      end: wEnd,
+      ...(isClaimDay(r.start) && r.start <= wEnd ? { start: r.start } : {}),
+      ...(hours > 0 ? { hours: Math.round(hours * 1000) / 1000 } : {}),
+      ...(gross > 0 ? { gross: cents(gross) } : {}),
+    });
+  }
+  return out.length ? out.sort((a, b) => a.end.localeCompare(b.end)) : undefined;
+}
+
 export function stubDays(raw: unknown, start: string, end: string): { date: string; hours: number }[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const byDay = new Map<string, number>();
@@ -324,6 +370,9 @@ export function cleanStubs(raw: unknown): ClaimStub[] {
       ...(Number(r.rate) > 0 ? { rate: Number(r.rate) } : {}),
       ...(r.noWeeks === true ? { noWeeks: true } : {}),
       ...(r.usePay === true ? { usePay: true } : {}),
+      ...(r.useEstimate === true ? { useEstimate: true } : {}),
+      ...(isClaimDay(r.paidOn) ? { paidOn: r.paidOn } : {}),
+      ...(stubWeeks(r.weeks, start, end) ? { weeks: stubWeeks(r.weeks, start, end) } : {}),
       ...(isClaimDay(r.week) ? { week: r.week } : {}),
     });
   }
@@ -512,6 +561,103 @@ export function claimSummary(
   const paidByStub = new Map<string, ClaimStub>();
   /** Stubs already counted, by employer: a later one on the same days isn't. */
   const countedStubs = new Map<string, ClaimStub[]>();
+
+  /** The claim week a stretch of days counts in: the one holding most of them, and on a tie the later. */
+  const weekOfStretch = (start: string, end: string): string => {
+    const days = new Map<string, number>();
+    for (let d = start; d <= end && days.size < 60; d = iso(addDays(parseISO(d), 1))) {
+      const k = weekEndingFor(d, weekEnd);
+      days.set(k, (days.get(k) ?? 0) + 1);
+    }
+    return [...days].sort((x, y) => y[1] - x[1] || y[0].localeCompare(x[0]))[0]?.[0] ?? weekEndingFor(end, weekEnd);
+  };
+
+  /**
+   * Where a stub's pay goes, week by week (only the weeks in the claim), and
+   * what put it there. In order:
+   * - its own weeks, when it prints them;
+   * - the days it lists hours for;
+   * - the week you put it in;
+   * - the calendar's shifts it covers (as much of it as their hours
+   *   account for), and the rest of it over its pay period;
+   * - its pay period: whole in the week with most of its days when it's a
+   *   week or less (an hour worked once isn't 0.857 h and 0.143 h), shared
+   *   by its days in the dates when it's longer.
+   */
+  const placeStub = (stub: ClaimStub, covered: { date: string; hours: number; gross: number }[] = []) => {
+    const out = new Map<string, { gross: number; hours: number }>();
+    const put = (ending: string, gross: number, hours: number) => {
+      if (!weeks.has(ending)) return;
+      const cur = out.get(ending) ?? { gross: 0, hours: 0 };
+      out.set(ending, { gross: cur.gross + gross, hours: cur.hours + hours });
+    };
+    if (stub.weeks?.length) {
+      const allGross = stub.weeks.every(w => (w.gross ?? 0) > 0);
+      const sumGross = allGross ? stub.weeks.reduce((t, w) => t + (w.gross ?? 0), 0) : 0;
+      const sumHours = stub.weeks.reduce((t, w) => t + (w.hours ?? 0), 0);
+      for (const w of stub.weeks) {
+        const share = sumGross > 0 ? (w.gross ?? 0) / sumGross : sumHours > 0 ? (w.hours ?? 0) / sumHours : 1 / stub.weeks.length;
+        const hShare = sumHours > 0 ? (w.hours ?? 0) / sumHours : share;
+        put(weekOfStretch(w.start ?? iso(addDays(parseISO(w.end), -6)), w.end), stub.gross * share, stub.hours > 0 ? stub.hours * hShare : (w.hours ?? 0));
+      }
+      return { out, by: 'weeks' as const };
+    }
+    const dayHours = (stub.days ?? []).reduce((t, d) => t + d.hours, 0);
+    if (dayHours > 0) {
+      for (const d of stub.days!) put(weekEndingFor(d.date, weekEnd), (stub.gross * d.hours) / dayHours, stub.hours > 0 ? (stub.hours * d.hours) / dayHours : d.hours);
+      return { out, by: 'days' as const };
+    }
+    const chosen = stub.week ? weekEndingFor(stub.week, weekEnd) : undefined;
+    if (chosen && weeks.has(chosen)) {
+      put(chosen, stub.gross, stub.hours);
+      return { out, by: 'chosen' as const };
+    }
+    let rest = 1;
+    if (covered.length > 0) {
+      const calHours = covered.reduce((t, x) => t + x.hours, 0);
+      const estimate = covered.reduce((t, x) => t + x.gross, 0);
+      // The part of the stub its shifts on the calendar account for, by hours.
+      const part = stub.hours > 0 && calHours > 0 ? Math.min(1, calHours / stub.hours) : 1;
+      for (const x of covered) {
+        if (x.date < from || x.date > through) continue;
+        const share = estimate > 0 ? x.gross / estimate : calHours > 0 ? x.hours / calHours : 1 / covered.length;
+        const hShare = calHours > 0 ? x.hours / calHours : share;
+        put(weekEndingFor(x.date, weekEnd), stub.gross * part * share, stub.hours > 0 ? stub.hours * part * hShare : x.hours);
+      }
+      rest = 1 - part;
+      if (rest < 0.0001) return { out, by: 'shifts' as const };
+    }
+    const total = differenceInCalendarDays(parseISO(stub.end), parseISO(stub.start)) + 1;
+    if (total <= 7) {
+      put(weekOfStretch(stub.start, stub.end), stub.gross * rest, stub.hours * rest);
+    } else {
+      const first = stub.start < from ? from : stub.start;
+      const last = stub.end > through ? through : stub.end;
+      for (let d = first; d <= last; d = iso(addDays(parseISO(d), 1))) {
+        put(weekEndingFor(d, weekEnd), (stub.gross * rest) / total, (stub.hours * rest) / total);
+      }
+    }
+    return { out, by: covered.length > 0 ? 'shifts' as const : 'period' as const };
+  };
+
+  /** A stub's part of a week: on the employer's calendar line when its pay stands in for those shifts, else a line of its own. */
+  const addToWeek = (stub: ClaimStub, name: string, ending: string, gross: number, hours: number, role: 'counted' | 'pays') => {
+    const week = weeks.get(ending);
+    if (!week) return;
+    const id = name.toLowerCase();
+    let line = role === 'pays' ? week.lines.find(l => !l.fromStub && l.employer.toLowerCase() === id) : undefined;
+    if (line) line.perStub = true;
+    else {
+      line = week.lines.find(l => l.fromStub && l.employer.toLowerCase() === id);
+      if (!line) week.lines.push(line = { employer: name, hours: 0, gross: 0, fromStub: true });
+    }
+    line.hours += hours;
+    line.gross += gross;
+    (line.stubs ??= []).push({ id: stub.id, role, hours, gross });
+    week.hours += hours;
+    week.gross += gross;
+  };
+
   for (const stub of stubs) {
     if (!isClaimDay(stub.start) || !isClaimDay(stub.end) || stub.end < from || stub.start > through) continue;
     const name = stubEmployer(stub.employer);
@@ -521,7 +667,7 @@ export function claimSummary(
       && employerOf(j, employers).name.toLowerCase() === id);
     const workedAll = shifts.map(j => ({ job: j, date: j.date, hours: j.pto ? 0 : netHoursWorked(j), gross: jobPayBreakdown(j, jobs, employers, payer).gross }))
       .filter(x => x.hours > 0 || x.gross > 0)
-      .sort((a, b) => a.date.localeCompare(b.date));
+      .sort((x, y) => x.date.localeCompare(y.date));
     // A shift another stub's pay already stands for isn't paid twice.
     const worked = workedAll.filter(x => !paidByStub.has(x.job.id));
     if (workedAll.length > 0 && worked.length === 0) {
@@ -531,7 +677,8 @@ export function claimSummary(
     if (worked.length > 0) {
       const estimate = worked.reduce((t, x) => t + x.gross, 0);
       const workedHours = worked.reduce((t, x) => t + x.hours, 0);
-      const usesPay = useStubPay || !!stub.usePay;
+      // Believed, unless you've said the calendar's estimate is right instead.
+      const usesPay = useStubPay || !stub.useEstimate;
       // Each shift's part of the stub: as their estimates are, else their hours, else evenly.
       const part = (x: { gross: number; hours: number }) =>
         estimate > 0 ? x.gross / estimate : workedHours > 0 ? x.hours / workedHours : 1 / worked.length;
@@ -539,19 +686,24 @@ export function claimSummary(
         jobId: x.job.id, date: x.date, hours: roundHours(x.hours), estimate: cents(x.gross), share: cents(stub.gross * part(x)),
         ...(Number(x.job.hourlyRate) > 0 ? { rate: Number(x.job.hourlyRate) } : {}),
       }));
-      stubUses.push({ stub, status: 'calendar', used: false, shifts: worked.length, estimate: cents(estimate), covered, ...(usesPay ? { usesPay: true } : {}) });
-      if (usesPay) for (const x of worked) paidByStub.set(x.job.id, stub);
-      // Its shifts week by week (the part of them inside the dates).
-      const perWeek = new Map<string, { gross: number; hours: number; n: number }>();
-      for (const x of worked) {
-        if (x.date < from || x.date > through) continue;
-        const k = weekEndingFor(x.date, weekEnd);
-        const cur = perWeek.get(k) ?? { gross: 0, hours: 0, n: 0 };
-        perWeek.set(k, { gross: cur.gross + x.gross, hours: cur.hours + x.hours, n: cur.n + 1 });
-      }
+      // How far the stub is from the calendar: more than a little is worth a look.
+      const grossOff = stub.gross - estimate;
+      const hoursOff = stub.hours > 0 ? stub.hours - workedHours : undefined;
+      const farOff = Math.abs(grossOff) > Math.max(25, 0.15 * Math.max(stub.gross, estimate))
+        || (hoursOff !== undefined && Math.abs(hoursOff) >= 1 && Math.abs(hoursOff) > 0.15 * stub.hours);
+      const check = { gross: cents(grossOff), ...(hoursOff !== undefined ? { hours: roundHours(hoursOff) } : {}), farOff };
+
       if (!usesPay) {
+        stubUses.push({ stub, status: 'calendar', used: false, shifts: worked.length, estimate: cents(estimate), covered, check });
         // Not counted, but shown under its employer: what the stub says for
         // each week, by the week's share of its shifts, beside the estimate.
+        const perWeek = new Map<string, { gross: number; hours: number; n: number }>();
+        for (const x of worked) {
+          if (x.date < from || x.date > through) continue;
+          const k = weekEndingFor(x.date, weekEnd);
+          const cur = perWeek.get(k) ?? { gross: 0, hours: 0, n: 0 };
+          perWeek.set(k, { gross: cur.gross + x.gross, hours: cur.hours + x.hours, n: cur.n + 1 });
+        }
         const share = (w: { gross: number; hours: number; n: number }) =>
           estimate > 0 ? w.gross / estimate : workedHours > 0 ? w.hours / workedHours : w.n / worked.length;
         const said = { gross: 0, hours: 0, estimate: 0 };
@@ -571,26 +723,32 @@ export function claimSummary(
         }
         continue;
       }
-      // The stub's figures in place of the estimate, week by week as the
-      // shifts fall.
-      const e = byEmployer.get(id);
-      for (const [ending, est] of perWeek) {
-        const week = weeks.get(ending);
+
+      // Believed: the estimates of the shifts it covers come out, and the
+      // stub's own pay goes where it says it was earned.
+      for (const x of worked) paidByStub.set(x.job.id, stub);
+      const e = byEmployer.get(id) ?? { name, firstDay: worked[0].date, lastDay: worked[worked.length - 1].date, days: 0, hours: 0, gross: 0, worked: new Set<string>() };
+      for (const x of worked) {
+        if (x.date < from || x.date > through) continue;
+        const week = weeks.get(weekEndingFor(x.date, weekEnd));
         const line = week?.lines.find(l => !l.fromStub && l.employer.toLowerCase() === id);
         if (!week || !line) continue;
-        const dGross = stub.gross > 0 && estimate > 0 ? (stub.gross * est.gross) / estimate - est.gross : 0;
-        const dHours = stub.hours > 0 && workedHours > 0 ? (stub.hours * est.hours) / workedHours - est.hours : 0;
-        line.gross += dGross;
-        line.hours += dHours;
+        line.gross -= x.gross;
+        line.hours -= x.hours;
         line.perStub = true;
-        (line.stubs ??= []).push({ id: stub.id, role: 'pays', hours: est.hours + dHours, gross: est.gross + dGross });
-        week.gross += dGross;
-        week.hours += dHours;
-        if (e) {
-          e.gross += dGross;
-          e.hours += dHours;
-        }
+        week.gross -= x.gross;
+        week.hours -= x.hours;
+        e.gross -= x.gross;
+        e.hours -= x.hours;
       }
+      const { out, by } = placeStub(stub, worked);
+      for (const [ending, v] of out) {
+        addToWeek(stub, name, ending, v.gross, v.hours, 'pays');
+        e.gross += v.gross;
+        e.hours += v.hours;
+      }
+      byEmployer.set(id, e);
+      stubUses.push({ stub, status: 'calendar', used: false, shifts: worked.length, estimate: cents(estimate), covered, usesPay: true, check, placedBy: by });
       continue;
     }
     // Already counted: the same pay period again, or some of its days.
@@ -602,12 +760,12 @@ export function claimSummary(
       continue;
     }
     countedStubs.set(id, [...before, stub]);
-    stubUses.push({ stub, status: 'counted', used: true, shifts: 0, estimate: 0 });
-    // Nothing on the calendar: the stub stands in, spread evenly over its days.
+    // Nothing on the calendar: the stub stands in for the work.
     const total = differenceInCalendarDays(parseISO(stub.end), parseISO(stub.start)) + 1;
     const first = stub.start < from ? from : stub.start;
     const last = stub.end > through ? through : stub.end;
     if (stub.noWeeks) {
+      stubUses.push({ stub, status: 'counted', used: true, shifts: 0, estimate: 0 });
       // Not averaged: the part of it inside the dates, under its employer and in no week.
       const share = (differenceInCalendarDays(parseISO(last), parseISO(first)) + 1) / total;
       const piece = { stubId: stub.id, employer: name, start: first, end: last, hours: stub.hours * share, gross: stub.gross * share };
@@ -621,47 +779,14 @@ export function claimSummary(
       byEmployer.set(id, e);
       continue;
     }
-    // Which weeks it counts in, and how much of it in each:
-    // - the week you put it in, whole;
-    // - a week's stub or shorter, whole in the claim week holding most of its
-    //   days (a Monday-to-Sunday pay week isn't 6/7 in one claim week and
-    //   1/7 in the next: an hour worked once isn't 0.857 h and 0.143 h);
-    // - a longer one shared by its days in each week, as far as the dates go.
-    const daysIn = new Map<string, number>();
-    for (let d = first; d <= last; d = iso(addDays(parseISO(d), 1))) {
-      const ending = weekEndingFor(d, weekEnd);
-      daysIn.set(ending, (daysIn.get(ending) ?? 0) + 1);
-    }
-    const parts = new Map<string, number>();
-    const chosen = stub.week ? weekEndingFor(stub.week, weekEnd) : undefined;
-    if (chosen && weeks.has(chosen)) parts.set(chosen, 1);
-    else {
-      const allDays = new Map<string, number>();
-      for (let d = stub.start; d <= stub.end; d = iso(addDays(parseISO(d), 1))) {
-        const ending = weekEndingFor(d, weekEnd);
-        allDays.set(ending, (allDays.get(ending) ?? 0) + 1);
-      }
-      // Most days, and on a tie the later week: the one its period ends in.
-      const most = [...allDays].sort((a, b) => b[1] - a[1] || b[0].localeCompare(a[0]))[0]?.[0];
-      if (total <= 7 && most && weeks.has(most)) parts.set(most, 1);
-      else for (const [ending, n] of daysIn) parts.set(ending, n / total);
-    }
+    const { out, by } = placeStub(stub);
+    stubUses.push({ stub, status: 'counted', used: true, shifts: 0, estimate: 0, placedBy: by });
     let inHours = 0;
     let inGross = 0;
-    for (const [ending, part] of parts) {
-      const week = weeks.get(ending);
-      if (!week) continue;
-      const hours = stub.hours * part;
-      const gross = stub.gross * part;
-      let line = week.lines.find(l => l.fromStub && l.employer.toLowerCase() === id);
-      if (!line) week.lines.push(line = { employer: name, hours: 0, gross: 0, fromStub: true });
-      line.hours += hours;
-      line.gross += gross;
-      (line.stubs ??= []).push({ id: stub.id, role: 'counted', hours, gross });
-      week.hours += hours;
-      week.gross += gross;
-      inHours += hours;
-      inGross += gross;
+    for (const [ending, v] of out) {
+      addToWeek(stub, name, ending, v.gross, v.hours, 'counted');
+      inHours += v.hours;
+      inGross += v.gross;
     }
     const e = byEmployer.get(id) ?? { name, firstDay: first, lastDay: last, days: 0, hours: 0, gross: 0, worked: new Set<string>() };
     if (first < e.firstDay) e.firstDay = first;
