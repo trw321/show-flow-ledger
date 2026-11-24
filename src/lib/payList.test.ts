@@ -81,6 +81,52 @@ describe('a pay list week by week', () => {
 
   it('puts two paydays in one week together', () => {
     const weeks = payListWeeks([{ date: '2026-06-01', amount: 100 }, { date: '2026-06-03', amount: 50.25 }], 6);
-    expect(weeks).toEqual([{ start: '2026-05-31', weekEnding: '2026-06-06', total: 150.25, dates: ['2026-06-01', '2026-06-03'] }]);
+    expect(weeks).toEqual([{ start: '2026-05-31', weekEnding: '2026-06-06', total: 150.25, dates: ['2026-06-01', '2026-06-03'], byPeriod: false }]);
+  });
+});
+
+describe('a pay list with pay periods on its lines', () => {
+  it('reads the period beside the pay date, however it is written', () => {
+    const { rows, skipped } = readPayList([
+      'Jun 3, 2026\tMay 24, 2026 - May 30, 2026\t$595.00',
+      'Pay date 06/10/2026 Period 05/31/2026 to 06/06/2026 Net $280.00',
+      '2026-06-17\t2026-06-07 thru 2026-06-13\t$1,400.00',
+      'Jun 24, 2026  Jun 14 – Jun 20, 2026  $350.00',
+      'Jan 6, 2026  Dec 28 – Jan 3  $122.50',
+    ].join('\n'), TODAY);
+    expect(skipped).toEqual([]);
+    expect(rows.map(r => `${r.date} ${r.period?.start}..${r.period?.end} ${r.amount}`)).toEqual([
+      '2026-06-03 2026-05-24..2026-05-30 595',
+      '2026-06-10 2026-05-31..2026-06-06 280',
+      '2026-06-17 2026-06-07..2026-06-13 1400',
+      '2026-06-24 2026-06-14..2026-06-20 350',
+      // Over New Year: the period's start is the year before its end.
+      '2026-01-06 2025-12-28..2026-01-03 122.5',
+    ]);
+  });
+
+  it('takes the period alone, its end standing for the pay date', () => {
+    const { rows } = readPayList('May 24 - May 30, 2026 $595.00', TODAY);
+    expect(rows[0]).toMatchObject({ date: '2026-05-30', period: { start: '2026-05-24', end: '2026-05-30' }, noPayDate: true, amount: 595 });
+  });
+
+  it('keeps one date as a pay date, with no period', () => {
+    const { rows } = readPayList('Jun 3, 2026 $595.00', TODAY);
+    expect(rows[0].period).toBeUndefined();
+  });
+
+  it('counts a line with a period in the week worked, not the week paid', () => {
+    const { rows } = readPayList('Jun 3, 2026\tMay 24, 2026 - May 30, 2026\t$595.00', TODAY);
+    // Paid Wednesday Jun 3; worked the week ending Saturday May 30.
+    expect(payListWeeks(rows, 6)).toEqual([{ start: '2026-05-24', weekEnding: '2026-05-30', total: 595, dates: ['2026-06-03'], byPeriod: true }]);
+    // "The week before" is for lines without a period: this one doesn't move.
+    expect(payListWeeks(rows, 6, true)[0].weekEnding).toBe('2026-05-30');
+  });
+
+  it('puts a Monday-to-Sunday period whole in the week with most of its days, and shares a two-week one', () => {
+    const one = readPayList('Jul 22, 2026 Jul 13, 2026 - Jul 19, 2026 $45.73', TODAY).rows;
+    expect(payListWeeks(one, 6).map(w => [w.weekEnding, w.total])).toEqual([['2026-07-18', 45.73]]);
+    const two = readPayList('Aug 12, 2026 Jul 26, 2026 - Aug 8, 2026 $1,000.00', TODAY).rows;
+    expect(payListWeeks(two, 6).map(w => [w.weekEnding, w.total])).toEqual([['2026-08-01', 500], ['2026-08-08', 500]]);
   });
 });

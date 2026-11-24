@@ -52,19 +52,37 @@ export default function ClaimPastePay({ weekEnd, employerNames, colourOf, from, 
   const hoursFor = (gross: number) => (perHour > 0 ? Math.round((gross / perHour) * 100) / 100 : 0);
   const name = employer.trim();
   const already = (w: { start: string; weekEnding: string }) => (name ? sameStub(prefs.claimStubs, { employer: name, start: w.start, end: w.weekEnding }) : undefined);
-  const adding = weeks.filter(w => !already(w));
+  const periodKept = (r: { period?: { start: string; end: string } }) => (name && r.period ? sameStub(prefs.claimStubs, { employer: name, start: r.period.start, end: r.period.end }) : undefined);
+  /** Lines without a pay period: the only ones "the week paid / the week before" moves. */
+  const undated = kept.filter(r => !r.period).length;
+  // What gets kept: a stub for each pay period read off the lines (two
+  // payments for one period make one), and a stub a week for the lines
+  // without one, as they're counted above.
+  const units = useMemo(() => {
+    const byPeriod = new Map<string, { start: string; end: string; gross: number }>();
+    for (const r of kept) {
+      if (!r.period) continue;
+      const k = `${r.period.start}|${r.period.end}`;
+      const cur = byPeriod.get(k) ?? { start: r.period.start, end: r.period.end, gross: 0 };
+      cur.gross = Math.round((cur.gross + r.amount) * 100) / 100;
+      byPeriod.set(k, cur);
+    }
+    const weekly = payListWeeks(kept.filter(r => !r.period), weekEnd, weekBefore).map(w => ({ start: w.start, end: w.weekEnding, gross: w.total }));
+    return [...byPeriod.values(), ...weekly];
+  }, [kept, weekEnd, weekBefore]);
+  const adding = units.filter(u => !(name && sameStub(prefs.claimStubs, { employer: name, start: u.start, end: u.end })));
 
   const cancel = () => { setRead(null); setKeep([]); };
 
   const confirm = () => {
     if (!name) { toast.error('Who paid it? Add the employer first.'); return; }
     const now = new Date().toISOString();
-    const added = adding.map(w => ({
-      id: crypto.randomUUID(), employer: name, start: w.start, end: w.weekEnding,
-      hours: hoursFor(w.total), gross: w.total, createdAt: now, ...(perHour > 0 ? { rate: perHour } : {}),
+    const added = adding.map(u => ({
+      id: crypto.randomUUID(), employer: name, start: u.start, end: u.end,
+      hours: hoursFor(u.gross), gross: u.gross, createdAt: now, ...(perHour > 0 ? { rate: perHour } : {}),
     }));
     setClaimStubs([...prefs.claimStubs, ...added]);
-    toast.success(added.length ? `Added ${added.length} week${added.length === 1 ? '' : 's'} for ${name}, ${claimMoney(added.reduce((s, x) => s + x.gross, 0))}` : 'Those weeks are already on the claim');
+    toast.success(added.length ? `Added ${added.length} pay stub${added.length === 1 ? '' : 's'} for ${name}, ${claimMoney(added.reduce((s, x) => s + x.gross, 0))}` : 'Those are already on the claim');
     setRead(null);
     setKeep([]);
     setText('');
@@ -112,6 +130,13 @@ export default function ClaimPastePay({ weekEnd, employerNames, colourOf, from, 
                       <span className="font-bold">{claimDay(r.date)}</span>
                       <span className="neon-title shrink-0 font-bold">{claimMoney(r.amount)}</span>
                     </div>
+                    {r.period && (
+                      <p className="text-[11px] text-[hsl(188_90%_70%)]" data-testid="paste-period">
+                        Worked {claimDay(r.period.start, false).replace(/, \d{4}$/, '')} – {claimDay(r.period.end, false)}
+                        {r.noPayDate ? ' · no pay date on the line' : ''}
+                        {periodKept(r) ? ' · already on the claim' : ''}
+                      </p>
+                    )}
                     {(r.yearAssumed || r.offColumn || r.repeat || r.others.length > 0) && (
                       <div className="mt-0.5 flex flex-wrap gap-1 text-[11px] text-muted-foreground">
                         {r.yearAssumed && <span className={cn(TAG, GOLD)}>Year assumed</span>}
@@ -148,8 +173,9 @@ export default function ClaimPastePay({ weekEnd, employerNames, colourOf, from, 
             <Input value={rate} inputMode="decimal" placeholder="35.00 (works out the hours)" onChange={e => setRate(e.target.value)}
               className="text-mono" data-testid="paste-rate" />
           </label>
+          {undated > 0 && (
           <div className="space-y-1">
-            <span className={LABEL}>Count each in</span>
+            <span className={LABEL}>{undated < kept.length ? `Lines without a pay period (${undated}): count each in` : 'Count each in'}</span>
             <div className="grid grid-cols-2 gap-2">
               {([false, true] as const).map(before => (
                 <button key={String(before)} type="button" onClick={() => setWeekBefore(before)} aria-pressed={weekBefore === before}
@@ -161,15 +187,21 @@ export default function ClaimPastePay({ weekEnd, employerNames, colourOf, from, 
             </div>
             <p className="text-[11px] text-mono text-muted-foreground">
               The claim wants the week you worked. If this payroll pays a week behind, pick the week before.
+              {undated < kept.length ? ' Lines with a pay period go in the weeks worked.' : ''}
             </p>
           </div>
+          )}
+          {undated === 0 && kept.length > 0 && (
+            <p className="text-[11px] text-mono text-muted-foreground">Every line has its pay period, so each goes in the weeks worked.</p>
+          )}
 
           {/* Week by week, as it would go on the claim. */}
           <div className="space-y-1.5" data-testid="paste-weeks">
             <p className={LABEL}>Week by week · {weeks.length} week{weeks.length === 1 ? '' : 's'} · {claimMoney(total)}</p>
             <ul className="divide-y divide-[hsl(188_95%_62%/0.2)] border border-[hsl(188_95%_62%/0.4)]">
               {weeks.map(w => {
-                const have = already(w);
+                // Only a week made of lines without a period is kept as that week's stub.
+                const have = !w.byPeriod && already(w);
                 const outside = w.weekEnding < from || w.start > through;
                 return (
                   <li key={w.weekEnding} className={cn('px-2.5 py-1.5 text-[12px] text-mono', have && 'opacity-60')} data-testid="paste-week">
@@ -180,6 +212,7 @@ export default function ClaimPastePay({ weekEnd, employerNames, colourOf, from, 
                     <p className="text-[11px] text-muted-foreground">
                       {w.dates.length} payment{w.dates.length === 1 ? '' : 's'} ({w.dates.map(d => claimDay(d, false).replace(/, \d{4}$/, '')).join(', ')})
                       {perHour > 0 && ` · ${hoursFor(w.total)} h`}
+                      {w.byPeriod && ' · by pay period'}
                     </p>
                     {(have || outside) && (
                       <div className="mt-0.5 flex flex-wrap gap-1">
@@ -198,7 +231,7 @@ export default function ClaimPastePay({ weekEnd, employerNames, colourOf, from, 
             <button type="button" onClick={cancel} className="pixel-button pick-off flex-1 py-1.5 text-[11px] font-bold text-mono">Cancel</button>
             <button type="button" onClick={confirm} disabled={adding.length === 0 || !name} data-testid="paste-confirm"
               className="pixel-button pick-on flex-1 py-1.5 text-[11px] font-bold text-mono disabled:opacity-40">
-              {name ? `Add ${adding.length} week${adding.length === 1 ? '' : 's'}` : 'Add the employer'}
+              {name ? `Add ${adding.length} to the claim` : 'Add the employer'}
             </button>
           </div>
         </div>
