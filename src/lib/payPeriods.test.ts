@@ -217,3 +217,58 @@ describe('what a payment pays', () => {
     expect(paidShiftIds(run, [{ ...paid('a', 800, '2026-11-13'), status: 'pending' }], [e]).size).toBe(0);
   });
 });
+
+describe('a part payment: the employer first, then its oldest weeks', () => {
+  // Freeman's November, as logged: two job numbers, one employer, one check.
+  const fm = (id: string, date: string, job: string, extra: Partial<Job> = {}) =>
+    shift(id, date, { client: 'FREEMAN AUDIO VISUAL SOLUTIONS INC', name: 'MSFT IGNITE', jobNumber: job, ...extra });
+  const nov = [
+    fm('n8', '2026-11-08', '2026-3926'), fm('n9', '2026-11-09', '2026-3926'),
+    fm('n19', '2026-11-19', '2026-3927'), fm('n20', '2026-11-20', '2026-3926'), fm('n21', '2026-11-21', '2026-3926'),
+  ];
+  const check = (jobId: string, amount: number, date: string, extra: Partial<Income> = {}): Income =>
+    ({ ...paid(jobId, amount, date), client: 'Freeman Audio Visual, LLC', ...extra });
+
+  it('pays the days before it came, and leaves the rest owed', () => {
+    const c = check('n8', 600, '2026-11-13');
+    expect([...paidShiftIds(nov, [c], [])].sort()).toEqual(['n8', 'n9']);
+    expect(shiftsPaidBy(c, nov, [c], []).map(j => j.id)).toEqual(['n8', 'n9']);
+  });
+
+  it('pays the oldest days of the employer, whichever job number they were on', () => {
+    // Put on the Nov 20 shift, it still pays Nov 8 and 9 first.
+    const c = check('n20', 600, '2026-11-22');
+    expect([...paidShiftIds(nov, [c], [])].sort()).toEqual(['n8', 'n9']);
+    expect(shiftsPaidBy(c, nov, [c], []).map(j => j.id)).toEqual(['n8', 'n9']);
+    // The next check takes the next days, across both jobs.
+    const next = check('n8', 800, '2026-11-27', { id: 'next' });
+    expect([...paidShiftIds(nov, [c, next], [])].sort()).toEqual(['n19', 'n20', 'n21', 'n8', 'n9']);
+    expect(shiftsPaidBy(next, nov, [c, next], []).map(j => j.id)).toEqual(['n19', 'n20', 'n21']);
+  });
+
+  it('knows the employer however its name is written', () => {
+    const typed = [...nov.slice(0, 2), fm('x', '2026-11-10', '2026-4000', { client: 'Freeman Audio Visual Solutions, Inc.' })];
+    const c = check('x', 900, '2026-11-13');
+    expect([...paidShiftIds(typed, [c], [])].sort()).toEqual(['n8', 'n9', 'x']);
+  });
+
+  it('does not reach another employer, or old work on another job', () => {
+    const other = [...nov, shift('o', '2026-11-07', { jobNumber: '2026-5000' })];
+    const c = check('n8', 600, '2026-11-13');
+    expect([...paidShiftIds(other, [c], [])].sort()).toEqual(['n8', 'n9']);
+    // March, on another job number: long since paid outside the app.
+    const march = [fm('m', '2026-03-17', '2026-0929'), ...nov];
+    expect([...paidShiftIds(march, [c], [])].sort()).toEqual(['n8', 'n9']);
+  });
+
+  it('takes a Mark paid tap at its word, for its own job only', () => {
+    const tap = check('n20', 10, '2026-11-22', { matchProof: { kind: 'marked', at: 'x' } });
+    expect([...paidShiftIds(nov, [tap], [])].sort()).toEqual(['n20', 'n21', 'n8', 'n9']);
+  });
+
+  it('never throws on a date it cannot read', () => {
+    const c = check('n8', 600, 'Nov 13');
+    expect(() => paidShiftIds(nov, [c], [])).not.toThrow();
+    expect(() => shiftsPaidBy(c, nov, [c], [])).not.toThrow();
+  });
+});

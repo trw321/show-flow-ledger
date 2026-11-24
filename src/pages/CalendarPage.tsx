@@ -23,7 +23,7 @@ import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addM
 import type { Employer, Job, CalendarEvent, Income, Invoice } from '@/lib/store';
 import { matchPaymentToProject, betterProject, rankedProjectsFor, projectOf, type FoundPayment, type ProjectMatch } from '@/lib/paymentMatch';
 import { payDueDate, payTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
-import { paidShiftIds, periodNet, periodPayments, projectPeriods, shiftsPaidBy, type PayPeriod, type ProjectPeriod } from '@/lib/payPeriods';
+import { employerCovers, paidShiftIds, periodNet, periodPayments, projectPeriods, shiftsPaidBy, type PayPeriod, type ProjectPeriod } from '@/lib/payPeriods';
 import { explainPay } from '@/lib/payExplain';
 import PayEstimateCard from '@/components/PayEstimateCard';
 import PaymentProof, { SourceTag, WhoPaid } from '@/components/PaymentProof';
@@ -362,6 +362,25 @@ function paymentIcon(i: Income): { Icon: typeof Wallet; label: string } {
  * Payments that are the same one recorded more than once: the same amount, on
  * the same day, the same way. Each group keeps its first; the rest are repeats.
  */
+/** Days as short runs: "Nov 8–9", "Nov 8–9, 20–21", "Oct 30 – Nov 2". A date that isn't one is left out. */
+function dayRuns(dates: string[]): string {
+  const days = [...new Set(dates)].filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(parseISO(d).getTime())).sort();
+  const runs: [string, string][] = [];
+  for (const d of days) {
+    const last = runs[runs.length - 1];
+    if (last && differenceInCalendarDays(parseISO(d), parseISO(last[1])) === 1) last[1] = d;
+    else runs.push([d, d]);
+  }
+  let month = '';
+  return runs.map(([a, b]) => {
+    // The month once, until it changes: "Nov 8–9, 20–21".
+    const from = format(parseISO(a), a.slice(0, 7) === month ? 'd' : 'MMM d');
+    month = b.slice(0, 7);
+    if (a === b) return from;
+    return a.slice(0, 7) === b.slice(0, 7) ? `${from}–${format(parseISO(b), 'd')}` : `${from} – ${format(parseISO(b), 'MMM d')}`;
+  }).join(', ');
+}
+
 function samePaymentGroups(payments: Income[]): { first: Income; repeats: Income[] }[] {
   const groups = new Map<string, { first: Income; repeats: Income[] }>();
   for (const i of payments) {
@@ -2576,6 +2595,22 @@ export default function CalendarPage() {
     return map;
   }, [projectKeyOf, data.income]);
 
+  // An employer's check pays its oldest unpaid days first, whichever of its
+  // projects they were on (see employerCovers): those projects list it too.
+  const reachedFrom = useMemo(() => {
+    const byId = new Map(data.income.map(i => [i.id, i]));
+    const map = new Map<string, Income[]>();
+    for (const [id, days] of employerCovers(data.jobs, data.income, data.employers, prefs.payer)) {
+      const payment = byId.get(id);
+      const own = payment?.jobId ? projectKeyOf.get(payment.jobId) : undefined;
+      if (!payment) continue;
+      for (const k of new Set(days.map(j => projectKeyOf.get(j.id) ?? j.id))) {
+        if (k !== own) map.set(k, [...(map.get(k) ?? []), payment]);
+      }
+    }
+    return map;
+  }, [data.jobs, data.income, data.employers, prefs.payer, projectKeyOf]);
+
   // The first day worked for each employer: where a slow first check's wait
   // starts from.
   const firstDayAt = useMemo(() => {
@@ -2643,8 +2678,9 @@ export default function CalendarPage() {
         }
         continue;
       }
-      if ((incomeByProject.get(key) ?? []).some(i => i.status === 'paid')) continue;
-      wait(key, sorted);
+      // A part payment leaves the days it didn't reach still waiting.
+      const unpaid = sorted.filter(j => !paidJobIds.has(j.id));
+      if (unpaid.length > 0) wait(key, unpaid);
     }
     // Most overdue first: the one the alert is about.
     return waiting.sort((a, b) => a.due.localeCompare(b.due));
@@ -2743,7 +2779,10 @@ export default function CalendarPage() {
       });
       return;
     }
-    const worked = scope.filter(j => effectiveHoursWorked(j) > 0 && j.date <= localToday());
+    const workedAll = scope.filter(j => effectiveHoursWorked(j) > 0 && j.date <= localToday());
+    // After a part payment, only the days it didn't reach.
+    const owed = workedAll.filter(j => !paidJobIds.has(j.id));
+    const worked = owed.length > 0 ? owed : workedAll;
     const amount = Math.round(worked.reduce((sum, j) => sum + jobPayBreakdown(j, data.jobs, data.employers, prefs.payer).net, 0) * 100) / 100;
     if (worked.length === 0 || amount <= 0) {
       // Nothing to estimate from: the shift itself has Add pay.
@@ -2752,7 +2791,7 @@ export default function CalendarPage() {
       return;
     }
     const created = await addIncome({
-      jobId: worked[0].id, client: worked[0].client, description: 'Marked paid', amount, matchProof: proofFromMatch('marked'),
+      jobId: worked[0].id, client: worked[0].client, description: 'Marked paid', amount, matchProof: { ...proofFromMatch('marked'), covers: worked.map(j => j.id) },
       date: localToday(), status: 'paid', enteredByHand: true,
     });
     rain();
@@ -3564,12 +3603,15 @@ export default function CalendarPage() {
                           stub, a deposit, or only marked paid. */}
                       {(() => {
                         const key = projectGroupKey(job);
-                        const groups = samePaymentGroups((incomeByProject.get(key) ?? []).filter(i => i.status === 'paid'));
+                        const linked = (incomeByProject.get(key) ?? []).filter(i => i.status === 'paid');
+                        const groups = samePaymentGroups([...linked, ...(reachedFrom.get(key) ?? []).filter(i => !linked.includes(i))]);
                         if (groups.length === 0) return null;
                         const actual = groups.reduce((sum, g) => sum + g.first.amount, 0);
-                        const expected = data.jobs
-                          .filter(j => projectGroupKey(j) === key && effectiveHoursWorked(j) > 0)
-                          .reduce((sum, j) => sum + shownPay(j), 0);
+                        const worked = data.jobs.filter(j => projectGroupKey(j) === key && effectiveHoursWorked(j) > 0);
+                        // A part payment is checked against the days it reached.
+                        const reached = worked.filter(j => paidJobIds.has(j.id));
+                        const owed = worked.filter(j => !paidJobIds.has(j.id) && j.date <= localToday());
+                        const expected = (owed.length > 0 && reached.length > 0 ? reached : worked).reduce((sum, j) => sum + shownPay(j), 0);
                         const gap = actual - expected;
                         const fmt = (n: number) => '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         return (
@@ -3578,8 +3620,9 @@ export default function CalendarPage() {
                               <span className="font-bold">Paid {fmt(actual)}</span>
                               <span className="opacity-70"> · expected {fmt(expected)} {payView}</span>
                               {Math.abs(gap) >= 0.01 && <span className={cn('ml-1 font-bold', gap > 0 ? 'text-dot-paid' : 'text-warning')}>({gap > 0 ? '+' : '−'}{fmt(Math.abs(gap))})</span>}
-                              <span className="opacity-60"> · whole project</span>
+                              <span className="opacity-60"> · {owed.length > 0 && reached.length > 0 ? `for ${dayRuns(reached.map(j => j.date))}` : 'whole project'}</span>
                             </p>
+                            {owed.length > 0 && <p className="font-bold" data-testid="day-owed">Still owed {dayRuns(owed.map(j => j.date))}</p>}
                             <div className="flex flex-wrap gap-1">
                               {groups.map(g => <SourceTag key={g.first.id} income={g.first} />)}
                             </div>
@@ -3895,8 +3938,10 @@ export default function CalendarPage() {
                   ? periodPayments(split.periods, (incomeByProject.get(key) ?? []).filter(i => i.status === 'paid'), periodExpected)
                   : new Map<number, Income[]>();
                 const periodIndex = new Map(split.periods.flatMap((p, i) => p.jobs.map(j => [j.id, i] as const)));
+                // Its days, the earliest on top, a day's own calls morning first.
+                const daysShown = [...jobs].sort((a, b) => (a.date === b.date ? compareCalls(a, b) : a.date.localeCompare(b.date)));
                 const newPeriodAt = new Set<string>();
-                jobs.reduce<number | undefined>((seen, j) => {
+                daysShown.reduce<number | undefined>((seen, j) => {
                   const at = periodIndex.get(j.id);
                   if (at === undefined) return seen;
                   if (seen !== undefined && at !== seen) newPeriodAt.add(j.id);
@@ -4018,7 +4063,12 @@ export default function CalendarPage() {
                         </div>
                       )}
                       {!isSplit && (() => {
-                        const payments = (incomeByProject.get(key) ?? []).filter(i => i.status === 'paid');
+                        const linked = (incomeByProject.get(key) ?? []).filter(i => i.status === 'paid');
+                        // With the employer's checks that reached these days from another of its projects.
+                        const payments = [...linked, ...(reachedFrom.get(key) ?? []).filter(i => !linked.includes(i))];
+                        const workedSoFar = jobs.filter(j => j.date <= localToday() && effectiveHoursWorked(j) > 0);
+                        const owed = workedSoFar.filter(j => !paidJobIds.has(j.id));
+                        const paidDays = workedSoFar.filter(j => paidJobIds.has(j.id));
                         // Recorded but not in yet: a pay stub, or a payment set back.
                         const coming = (incomeByProject.get(key) ?? []).filter(i => i.status === 'pending');
                         const comingTotal = samePaymentGroups(coming).reduce((sum, g) => sum + g.first.amount, 0);
@@ -4030,27 +4080,56 @@ export default function CalendarPage() {
                           const repeated = groups.reduce((n, g) => n + g.repeats.length, 0);
                           const total = groups.reduce((sum, g) => sum + g.first.amount, 0);
                           const last = payments.map(i => i.date).sort().pop()!;
+                          // A part payment: the days it reached, and the days still owed.
+                          const owedDue = owed.length > 0 ? payDueFor(owed) : null;
+                          const owedLate = owedDue ? differenceInCalendarDays(new Date(), parseISO(owedDue)) : 0;
+                          const owedAmount = owed.reduce((sum, j) => sum + shownPay(j), 0);
                           // What paid it, and its proof, are in the shift: a tap on this line.
                           return (
-                            <div className="mt-2 flex items-center justify-between gap-2">
-                              {/* Into the project, where its payments are listed and can be changed. */}
-                              <button
-                                type="button"
-                                onClick={e => { e.stopPropagation(); openJob(first); }}
-                                className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-left text-[11px] text-mono text-dot-paid hover:underline"
-                              >
-                                <Check size={12} className="shrink-0" />
-                                <span>Paid {dollars(total)} · {showDay(last)}</span>
-                                {repeated > 0 && <span className="shrink-0 text-warning">· {repeated} repeated</span>}
-                                {comingTotal > 0 && <span className="shrink-0 text-dot-pending">· ${Math.round(comingTotal).toLocaleString()} coming</span>}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={e => { e.stopPropagation(); void unmarkProjectPaid(first); }}
-                                className="pixel-button pick-off flex shrink-0 items-center gap-1 px-2 py-1 text-[11px] font-bold"
-                              >
-                                <Undo2 size={12} /> Undo
-                              </button>
+                            <div className="mt-2 space-y-1.5" data-testid="project-paid">
+                              <div className="flex items-center justify-between gap-2">
+                                {/* Into the project, where its payments are listed and can be changed. */}
+                                <button
+                                  type="button"
+                                  onClick={e => { e.stopPropagation(); openJob(first); }}
+                                  className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-left text-[11px] text-mono text-dot-paid hover:underline"
+                                >
+                                  <Check size={12} className="shrink-0" />
+                                  <span>Paid {dollars(total)} · {showDay(last)}</span>
+                                  {owed.length > 0 && (
+                                    <span className="shrink-0" data-testid="project-paid-days">
+                                      · {paidDays.length > 0 ? `for ${dayRuns(paidDays.map(j => j.date))}` : 'went to earlier work'}
+                                    </span>
+                                  )}
+                                  {repeated > 0 && <span className="shrink-0 text-warning">· {repeated} repeated</span>}
+                                  {comingTotal > 0 && <span className="shrink-0 text-dot-pending">· ${Math.round(comingTotal).toLocaleString()} coming</span>}
+                                </button>
+                                {linked.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={e => { e.stopPropagation(); void unmarkProjectPaid(first); }}
+                                    className="pixel-button pick-off flex shrink-0 items-center gap-1 px-2 py-1 text-[11px] font-bold"
+                                  >
+                                    <Undo2 size={12} /> Undo
+                                  </button>
+                                )}
+                              </div>
+                              {owedDue && (
+                                <div className="flex items-center justify-between gap-2" data-testid="project-owed">
+                                  <p className={cn('min-w-0 text-[11px] text-mono', owedLate > 0 ? 'text-dot-late' : 'text-dot-pending')}>
+                                    Still owed {dayRuns(owed.map(j => j.date))}
+                                    {owedAmount > 0 && <> · ${Math.round(owedAmount).toLocaleString()}</>}
+                                    {' · '}{owedLate > 0 ? `${owedLate}d late` : `due ${format(parseISO(owedDue), 'MMM d')}`}
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={e => { e.stopPropagation(); void markProjectPaid(owed[0]); }}
+                                    className="pixel-button pick-off shrink-0 px-2 py-1 text-[11px] font-bold"
+                                  >
+                                    <span className="inline-flex items-center gap-1"><Wallet size={12} /> Mark paid</span>
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           );
                         }
@@ -4100,7 +4179,7 @@ export default function CalendarPage() {
                     </div>
                     {isGroup && expanded && (
                       <div className="border-t border-primary/20 divide-y divide-primary/10">
-                        {jobs.map(job => (
+                        {daysShown.map(job => (
                           <Fragment key={job.id}>
                           {newPeriodAt.has(job.id) && <p className="period-cut px-3 py-1">✂ new pay period</p>}
                           <div

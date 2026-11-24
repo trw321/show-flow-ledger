@@ -48,8 +48,9 @@ export interface EmployerMatch {
 }
 
 /** Best-scoring saved employer for a typed client/employer name, or null if there are none to compare against. */
-export function bestEmployerMatch(name: string, employers: Employer[]): EmployerMatch | null {
-  if (!name.trim() || employers.length === 0) return null;
+export function bestEmployerMatch(name: string | null | undefined, employers: Employer[]): EmployerMatch | null {
+  // A shift saved without a client has no name to match.
+  if (!name?.trim() || employers.length === 0) return null;
   let best: EmployerMatch | null = null;
   for (const employer of employers) {
     const score = nameSimilarity(name, employer.name);
@@ -65,7 +66,7 @@ export const AUTO_MATCH_THRESHOLD = 0.82;
 export const SUGGEST_MATCH_THRESHOLD = 0.55;
 
 /** Resolves a job's employer profile by name, tolerating typos/case/punctuation — used everywhere pay is calculated so a near-match still applies the employer's rules instead of silently falling back to defaults. */
-export function resolveEmployer(clientName: string, employers: Employer[]): Employer | undefined {
+export function resolveEmployer(clientName: string | null | undefined, employers: Employer[]): Employer | undefined {
   const match = bestEmployerMatch(clientName, employers);
   return match && match.score >= AUTO_MATCH_THRESHOLD ? match.employer : undefined;
 }
