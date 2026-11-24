@@ -8,6 +8,7 @@ import SpacePageWrapper from '@/components/SpacePageWrapper';
 import DateWheels, { Wheel } from '@/components/DateWheels';
 import CertifyPanel from '@/components/CertifyPanel';
 import ClaimPayStubs from '@/components/ClaimPayStubs';
+import ClaimPastePay from '@/components/ClaimPastePay';
 import ClaimEmployerCard, { type EmployerWeek } from '@/components/ClaimEmployerCard';
 import { useData } from '@/lib/DataContext';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
@@ -278,6 +279,9 @@ export default function UnemploymentPage() {
 
         {/* Pay stubs, for work that isn't on the calendar. */}
         <ClaimPayStubs uses={summary.stubs} weekEnd={range.weekEnd} colourOf={colourOf} employerNames={knownEmployers} request={stubRequest} />
+
+        {/* A pay list pasted from a payroll site, week by week. */}
+        <ClaimPastePay weekEnd={range.weekEnd} colourOf={colourOf} employerNames={knownEmployers} from={range.from} through={range.through} />
 
         {backwards ? (
           <p className="border border-dot-late/60 bg-dot-late/10 p-3 text-sm text-dot-late" role="alert">
