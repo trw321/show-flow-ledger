@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { addDays, format, parseISO } from 'date-fns';
+import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { CalendarPlus, Camera, Check, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -26,7 +26,13 @@ const iso = (d: Date) => format(d, 'yyyy-MM-dd');
 /** A PDF's pages read, at most: each is one read. */
 const MAX_PDF_PAGES = 10;
 
-interface Draft { employer: string; start: string; end: string; hours: string; gross: string }
+interface Draft { employer: string; start: string; end: string; hours: string; gross: string; noWeeks?: boolean }
+
+/** A pay period longer than a week: one that would be averaged over several. */
+const multiWeek = (start: string, end: string) => {
+  const days = differenceInCalendarDays(parseISO(end), parseISO(start)) + 1;
+  return Number.isFinite(days) && days > 7;
+};
 
 /** One paycheck the reader found in a photo, before you've confirmed it. */
 interface Found {
@@ -143,7 +149,7 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
     setEditing({ draft: { employer: '', start: iso(addDays(parseISO(lastWeek), -6)), end: lastWeek, hours: '', gross: '' } });
   };
   const edit = (s: ClaimStub) =>
-    setEditing({ id: s.id, draft: { employer: s.employer, start: s.start, end: s.end, hours: s.hours ? String(s.hours) : '', gross: s.gross ? s.gross.toFixed(2) : '' } });
+    setEditing({ id: s.id, draft: { employer: s.employer, start: s.start, end: s.end, hours: s.hours ? String(s.hours) : '', gross: s.gross ? s.gross.toFixed(2) : '', noWeeks: !!s.noWeeks } });
   const set = (patch: Partial<Draft>) => setEditing(cur => cur && { ...cur, draft: { ...cur.draft, ...patch } });
   /** The pay period as a week, or two, ending on the day it ends. */
   const spanWeeks = (weeks: 1 | 2) =>
@@ -167,10 +173,17 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
       id: before?.id ?? crypto.randomUUID(),
       employer, start: d.start, end: d.end, hours, gross: Math.round(gross * 100) / 100,
       createdAt: before?.createdAt ?? new Date().toISOString(),
+      ...(d.noWeeks && multiWeek(d.start, d.end) ? { noWeeks: true } : {}),
     };
     setClaimStubs(before ? stubs.map(s => (s.id === before.id ? stub : s)) : [...stubs, stub]);
     toast.success(before ? 'Pay stub saved' : 'Pay stub added');
     setEditing(null);
+  };
+
+  /** A bulk stub: averaged over its weeks, or counted for its employer in no one week. */
+  const setNoWeeks = (s: ClaimStub, on: boolean) => {
+    setClaimStubs(stubs.map(x => (x.id === s.id ? (on ? { ...x, noWeeks: true } : (({ noWeeks: _, ...rest }) => rest)(x)) : x)));
+    toast.success(on ? `${s.employer}: not averaged over its weeks` : `${s.employer}: averaged over its weeks`);
   };
 
   const remove = (s: ClaimStub) => {
@@ -419,6 +432,17 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
                 className="text-mono" data-testid="stub-gross" />
             </label>
           </div>
+          {/* A bulk total over many weeks: averaged, or counted in no one week. */}
+          {multiWeek(editing.draft.start, editing.draft.end) && (
+            <label className="flex items-start gap-2.5 text-[12px] text-mono" data-testid="stub-no-weeks-form">
+              <input type="checkbox" checked={!!editing.draft.noWeeks} onChange={e => set({ noWeeks: e.target.checked })}
+                className="mt-0.5 h-5 w-5 shrink-0 accent-[hsl(46_100%_58%)]" />
+              <span>
+                <span className="block font-bold">Don't average over the weeks</span>
+                <span className="block text-[11px] text-muted-foreground">For a bulk total. It counts for the employer and in the totals, not as the same amount every week.</span>
+              </span>
+            </label>
+          )}
           <div className="flex gap-2">
             <button type="button" onClick={() => setEditing(null)} className="pixel-button pick-off flex-1 py-1.5 text-[11px] font-bold text-mono">Cancel</button>
             <button type="button" onClick={save} data-testid="stub-save" className="pixel-button pick-on flex-1 py-1.5 text-[11px] font-bold text-mono">Save stub</button>
@@ -457,6 +481,20 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
               <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-mono" data-testid="stub-status">
                 <StubStatus use={uses.find(u => u.stub.id === s.id)} stubPay={stubPay} />
               </p>
+              {/* A bulk stub over many weeks: averaged over them, or not. */}
+              {uses.find(u => u.stub.id === s.id)?.status === 'counted' && multiWeek(s.start, s.end) && (
+                <div className="mt-1.5 space-y-1">
+                  <button type="button" onClick={() => setNoWeeks(s, !s.noWeeks)} aria-pressed={!!s.noWeeks} data-testid="stub-no-weeks"
+                    className={cn('pixel-button flex w-full items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono', s.noWeeks ? 'pick-on' : 'pick-off')}>
+                    {s.noWeeks && <Check size={13} aria-hidden />} {s.noWeeks ? 'Not averaged over weeks' : "Don't average over weeks"}
+                  </button>
+                  <p className="text-[11px] text-mono text-muted-foreground">
+                    {s.noWeeks
+                      ? `Counted for ${s.employer} and in the totals, in no one week.`
+                      : `Averaged: about ${claimMoney(s.gross / Math.max(1, (differenceInCalendarDays(parseISO(s.end), parseISO(s.start)) + 1) / 7))} a week.`}
+                  </p>
+                </div>
+              )}
               {/* Counted, so its work isn't on the calendar: put it there, from the days it lists. */}
               {uses.find(u => u.stub.id === s.id)?.status === 'counted' && (
                 s.days?.length ? (

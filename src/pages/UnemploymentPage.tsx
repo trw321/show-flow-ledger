@@ -192,7 +192,10 @@ export default function UnemploymentPage() {
   // Each employer (or week) with its gross, one a line: "Odeum: $19,880.00".
   const copyBoth = () => {
     const lines = view === 'weeks'
-      ? weeks.map(w => `Week ending ${claimDay(w.weekEnding, false)}: ${claimMoney(w.gross)}`)
+      ? [
+        ...weeks.map(w => `Week ending ${claimDay(w.weekEnding, false)}: ${claimMoney(w.gross)}`),
+        ...summary.unsplit.map(u => `Not split by week, ${u.employer} ${claimDay(u.start, false)} to ${claimDay(u.end, false)}: ${claimMoney(u.gross)}`),
+      ]
       : employers.map(e => `${claimNameOf(e)}: ${claimMoney(e.gross)}`);
     return copyText(lines.join('\n'), `Copied ${lines.length} line${lines.length === 1 ? '' : 's'}`);
   };
@@ -205,7 +208,9 @@ export default function UnemploymentPage() {
       return w.lines.length === 0
         ? [{ ...base, Employer: 'No work', Hours: 0, Gross: 0 }]
         : w.lines.map(l => ({ ...base, Employer: l.fromStub ? `${l.employer} (from pay stub)` : l.perStub ? `${l.employer} (per pay stub)` : l.employer, Hours: l.hours, Gross: l.gross }));
-    });
+    }).concat(summary.unsplit.map(u => ({
+      'Week ending': 'Not split by week', From: u.start, Through: u.end, 'Days worked': 0, Employer: `${u.employer} (pay stub, not averaged)`, Hours: u.hours, Gross: u.gross,
+    })));
     const employerRows = employers.map(e => ({
       Employer: claimNameOf(e),
       'On the calendar as': e.info?.claimName ? e.name : '',
@@ -422,6 +427,24 @@ export default function UnemploymentPage() {
                   </li>
                 ))}
               </ul>
+              {/* Bulk stubs not averaged: in the totals and under their employer, in no week. */}
+              {summary.unsplit.length > 0 && (
+                <div className="neon-well space-y-1.5 p-3" data-testid="claim-unsplit">
+                  <p className={LABEL}>Not split by week</p>
+                  <ul className="space-y-1">
+                    {summary.unsplit.map(u => (
+                      <li key={u.stubId} className="flex items-baseline justify-between gap-2 text-[12px] text-mono">
+                        <span className="min-w-0">
+                          <span className="neon-soft block truncate font-bold" style={{ color: colourOf(u.employer) }}>{u.employer}</span>
+                          <span className="block text-[11px] text-muted-foreground">{claimDay(u.start, false)} to {claimDay(u.end, false)} · {u.hours} h</span>
+                        </span>
+                        <span className="neon-title shrink-0 font-bold">{claimMoney(u.gross)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-[11px] text-mono text-muted-foreground">In the totals and under the employer, but in no one week.</p>
+                </div>
+              )}
               </>
             ) : summary.employers.length === 0 ? (
               <p className="neon-well p-4 text-center text-sm text-mono text-muted-foreground">No work in these dates.</p>
@@ -429,6 +452,8 @@ export default function UnemploymentPage() {
               <ul className="space-y-2" data-testid="claim-employers">
                 {employers.map(e => (
                   <ClaimEmployerCard key={e.name} employer={e} colour={colourOf(e.name)} onCopy={copyAmount} knownEmployers={knownEmployers} weeks={weeksOf(e.name)}
+                    unsplit={summary.unsplit.filter(u => u.employer === e.name).reduce((sum, u) => sum + u.gross, 0)}
+                    linkChoices={[...new Set([...summary.employers.map(x => x.name), ...knownEmployers])].filter(n => n.toLowerCase() !== e.name.toLowerCase() && !(e.linked ?? []).some(l => l.toLowerCase() === n.toLowerCase()))}
                     longest={summary.longest?.byStretch === e.name ? 'stretch' : summary.longest?.byDays === e.name ? 'days' : undefined}
                     shifts={data.jobs.filter(j => j.status !== 'cancelled' && isClaimDay(j.date) && j.date >= range.from && j.date <= range.through
                       && claimEmployerOf(j, data.employers) === e.name)} />

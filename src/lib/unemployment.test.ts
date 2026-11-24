@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Employer, Job } from './store';
 import { EMPTY_PROFILE } from './payerProfile';
-import { claimSummary, cleanStubs, employersAsText, howLongText, isUnclearEmployer, readAmount, sameStub, sortEmployers, sortWeeks, stubDays, stubShifts, suggestEmployer, weekEndingFor, weekRun, weeksAsText, yearsMonths, type ClaimStub } from './unemployment';
+import { claimSummary, cleanClaimEmployers, cleanStubs, employersAsText, howLongText, isUnclearEmployer, readAmount, sameStub, sortEmployers, sortWeeks, stubDays, stubShifts, suggestEmployer, weekEndingFor, weekRun, weeksAsText, yearsMonths, type ClaimStub } from './unemployment';
 
 const job = (id: string, date: string, client: string, extra: Partial<Job> = {}): Job => ({
   id, name: 'TEST ' + id, client, date, startTime: '8:00 AM', endTime: '4:00 PM', hoursWorked: 8,
@@ -358,5 +358,65 @@ describe('a stub onto the calendar', () => {
     const s = claimSummary(jobs, [], EMPTY_PROFILE, '2026-10-01', '2026-11-30', 6, [stub]);
     expect(s.stubs[0].status).toBe('calendar');
     expect(s.weeks.filter(w => w.fromStub)).toEqual([]);
+  });
+});
+
+describe('a bulk pay stub, not averaged over its weeks', () => {
+  const bulk = (extra: Partial<ClaimStub> = {}): ClaimStub => ({ id: 'b', employer: 'Odeum Labor Services', start: '2025-07-01', end: '2026-09-30', hours: 255.46, gross: 10287.91, createdAt: 'x', ...extra });
+
+  it('puts the same amount in every week when averaged, as before', () => {
+    const s = claimSummary([], [], EMPTY_PROFILE, '2025-07-01', '2026-09-30', 6, [bulk()]);
+    expect(s.weeks.filter(w => w.lines.length > 0).length).toBe(s.weeks.length);
+    expect(s.unsplit).toEqual([]);
+  });
+
+  it('counts it under its employer and in the totals, in no week, when asked', () => {
+    const s = claimSummary([job('a', '2026-03-03', 'Island')], [], EMPTY_PROFILE, '2025-07-01', '2026-09-30', 6, [bulk({ noWeeks: true })]);
+    expect(s.weeks.flatMap(w => w.lines).map(l => l.employer)).toEqual(['Island']);
+    expect(s.unsplit).toEqual([{ stubId: 'b', employer: 'Odeum Labor Services', start: '2025-07-01', end: '2026-09-30', hours: 255.46, gross: 10287.91 }]);
+    expect(s.employers.find(e => e.name === 'Odeum Labor Services')).toMatchObject({ gross: 10287.91, hours: 255.46, fromStub: true, days: 0 });
+    expect(s.gross).toBe(10687.91);
+    expect(s.hours).toBe(263.46);
+  });
+
+  it('counts only the part inside the dates', () => {
+    const s = claimSummary([], [], EMPTY_PROFILE, '2026-01-01', '2026-01-10', 6, [bulk({ start: '2026-01-01', end: '2026-01-20', hours: 20, gross: 2000, noWeeks: true })]);
+    expect(s.unsplit[0]).toMatchObject({ start: '2026-01-01', end: '2026-01-10', hours: 10, gross: 1000 });
+    expect(s.gross).toBe(1000);
+  });
+
+  it('keeps the choice when stored, and nothing else odd', () => {
+    expect(cleanStubs([{ ...bulk(), noWeeks: true }, { ...bulk(), id: 'c', noWeeks: 'yes' }]).map(x => !!x.noWeeks)).toEqual([true, false]);
+  });
+});
+
+describe('linking one employer to another', () => {
+  it('counts a misspelled or renamed employer under the one it is linked to', () => {
+    const jobs = [job('a', '2026-03-03', 'Odeum'), job('b', '2026-03-04', 'Odium'), job('c', '2026-03-10', 'Odeum Live')];
+    const info = cleanClaimEmployers({ Odium: { linkTo: 'Odeum' }, 'odeum live': { linkTo: 'Odeum' } });
+    const s = claimSummary(jobs, [], EMPTY_PROFILE, '2026-03-01', '2026-03-14', 6, [], info);
+    expect(s.employers).toHaveLength(1);
+    expect(s.employers[0]).toMatchObject({ name: 'Odeum', days: 3, hours: 24, gross: 1200, linked: ['Odeum Live', 'Odium'] });
+    expect(s.weeks[0].lines).toEqual([{ employer: 'Odeum', hours: 16, gross: 800 }]);
+  });
+
+  it('links a pay stub typed by hand the same way', () => {
+    const stubs: ClaimStub[] = [{ id: 's', employer: 'Rock Force', start: '2026-03-08', end: '2026-03-14', hours: 5, gross: 250, createdAt: 'x' }];
+    const s = claimSummary([job('a', '2026-03-03', 'RockForce Operations LLC')], [], EMPTY_PROFILE, '2026-03-01', '2026-03-14', 6, stubs,
+      cleanClaimEmployers({ 'rock force': { linkTo: 'RockForce Operations LLC' } }));
+    expect(s.employers.map(e => e.name)).toEqual(['RockForce Operations LLC']);
+    expect(s.employers[0]).toMatchObject({ gross: 650, linked: ['Rock Force'] });
+  });
+
+  it('follows a chain of renames, and never loops', () => {
+    const jobs = [job('a', '2026-03-03', 'A'), job('b', '2026-03-04', 'B'), job('c', '2026-03-05', 'C')];
+    const chain = claimSummary(jobs, [], EMPTY_PROFILE, '2026-03-01', '2026-03-07', 6, [], cleanClaimEmployers({ a: { linkTo: 'B' }, b: { linkTo: 'C' } }));
+    expect(chain.employers.map(e => e.name)).toEqual(['C']);
+    const loop = claimSummary(jobs, [], EMPTY_PROFILE, '2026-03-01', '2026-03-07', 6, [], cleanClaimEmployers({ a: { linkTo: 'B' }, b: { linkTo: 'A' } }));
+    expect(loop.gross).toBe(1200);
+  });
+
+  it('keeps a link when stored, but not one to itself', () => {
+    expect(cleanClaimEmployers({ Odium: { linkTo: ' Odeum ' }, Odeum: { linkTo: 'odeum' } })).toEqual({ odium: { linkTo: 'Odeum' } });
   });
 });

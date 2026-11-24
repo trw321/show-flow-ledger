@@ -76,6 +76,8 @@ export interface ClaimEmployer {
   datesSet?: boolean;
   /** Pay stubs that cover shifts on the calendar, not counted: what they say, beside the estimate for those shifts. */
   stubSays?: { gross: number; hours: number; estimate: number; stubs: number };
+  /** Other names linked to it (renamed, or typed another way): their work is counted here. */
+  linked?: string[];
 }
 
 /**
@@ -91,6 +93,12 @@ export interface ClaimEmployerInfo {
   note?: string;
   firstDay?: string;
   lastDay?: string;
+  /**
+   * The same employer under another name (it was renamed, or typed another
+   * way): everything under this name counts under that one on the claim.
+   * The calendar's shifts and the stubs themselves are left as they are.
+   */
+  linkTo?: string;
 }
 
 /** The key an employer's claim details are kept under. */
@@ -116,7 +124,24 @@ export interface ClaimStub {
   days?: { date: string; hours: number }[];
   /** Its straight-time rate, when printed. */
   rate?: number;
+  /**
+   * Not averaged over its weeks: a bulk total (a year's earnings, say) that,
+   * spread evenly, would put the same made-up amount in every week. It counts
+   * under its employer and in the totals, in no one week.
+   */
+  noWeeks?: boolean;
   createdAt: string;
+}
+
+/** A stub counted without being averaged over its weeks (see ClaimStub.noWeeks). */
+export interface ClaimUnsplit {
+  stubId: string;
+  employer: string;
+  /** The part of its pay period inside the claim's dates. */
+  start: string;
+  end: string;
+  hours: number;
+  gross: number;
 }
 
 /**
@@ -156,6 +181,8 @@ export interface ClaimSummary {
   gross: number;
   /** The pay stubs with pay periods in the range, and whether each was counted. */
   stubs: StubUse[];
+  /** Stubs counted in the totals and under their employer, not in any week. */
+  unsplit: ClaimUnsplit[];
 }
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
@@ -193,6 +220,7 @@ export function cleanClaimEmployers(raw: unknown): Record<string, ClaimEmployerI
       claimName: text(v.claimName), address: text(v.address), phone: text(v.phone), note: text(v.note),
       firstDay: isClaimDay(v.firstDay) ? v.firstDay : undefined,
       lastDay: isClaimDay(v.lastDay) ? v.lastDay : undefined,
+      linkTo: text(v.linkTo) && claimEmployerKey(text(v.linkTo)!) !== claimEmployerKey(key) ? text(v.linkTo) : undefined,
     };
     if (info.firstDay && info.lastDay && info.lastDay < info.firstDay) [info.firstDay, info.lastDay] = [info.lastDay, info.firstDay];
     const kept = Object.fromEntries(Object.entries(info).filter(([, x]) => x !== undefined)) as ClaimEmployerInfo;
@@ -257,6 +285,7 @@ export function cleanStubs(raw: unknown): ClaimStub[] {
       id: r.id, employer, start, end, hours: h, gross: g, createdAt: typeof r.createdAt === 'string' ? r.createdAt : '',
       ...(stubDays(r.days, start, end) ? { days: stubDays(r.days, start, end) } : {}),
       ...(Number(r.rate) > 0 ? { rate: Number(r.rate) } : {}),
+      ...(r.noWeeks === true ? { noWeeks: true } : {}),
     });
   }
   return out;
@@ -313,7 +342,7 @@ function employerOf(job: Job, employers: Employer[]): { name: string; paidBy?: s
   return { name, paidBy: paidBy && paidBy.toLowerCase() !== name.toLowerCase() ? paidBy : undefined };
 }
 
-const EMPTY: ClaimSummary = { weeks: [], employers: [], hours: 0, gross: 0, stubs: [] };
+const EMPTY: ClaimSummary = { weeks: [], employers: [], hours: 0, gross: 0, stubs: [], unsplit: [] };
 
 /**
  * How long you worked for an employer, first day to last, both counted, in
@@ -375,6 +404,22 @@ export function claimSummary(
 
   const byEmployer = new Map<string, Omit<ClaimEmployer, 'spanDays'> & { worked: Set<string> }>();
   const weekDays = new Map<string, Set<string>>();
+  // A name linked to another (renamed, or typed another way) counts as that
+  // one. Followed a few steps, so a chain of renames ends up in one place.
+  const linkedInto = new Map<string, Set<string>>();
+  const linkedName = (own: string): string => {
+    let name = own;
+    for (let i = 0; i < 5; i++) {
+      const to = info[claimEmployerKey(name)]?.linkTo;
+      if (!to || claimEmployerKey(to) === claimEmployerKey(name)) break;
+      name = to;
+    }
+    if (name !== own) {
+      const k = name.toLowerCase();
+      linkedInto.set(k, (linkedInto.get(k) ?? new Set<string>()).add(own));
+    }
+    return name;
+  };
   for (const job of jobs) {
     if (job.status === 'cancelled' || !isClaimDay(job.date) || job.date < from || job.date > through) continue;
     const week = weeks.get(weekEndingFor(job.date, weekEnd));
@@ -383,7 +428,9 @@ export function claimSummary(
     const hours = job.pto ? 0 : netHoursWorked(job);
     // Nothing worked or paid: a plan, not work.
     if (gross <= 0 && hours <= 0) continue;
-    const { name, paidBy } = employerOf(job, employers);
+    const own = employerOf(job, employers);
+    const name = linkedName(own.name);
+    const paidBy = own.paidBy && own.paidBy.toLowerCase() !== name.toLowerCase() ? own.paidBy : undefined;
 
     // One line an employer a week, however its name was typed ("Odeum", "odeum").
     let line = week.lines.find(l => !l.fromStub && l.employer.toLowerCase() === name.toLowerCase());
@@ -411,14 +458,15 @@ export function claimSummary(
   const calendarNames = [...new Set(jobs.filter(j => j.status !== 'cancelled' && j.client?.trim()).map(j => employerOf(j, employers).name))];
   const stubEmployer = (typed: string): string => {
     const { name } = employerOf({ client: typed } as Job, employers);
-    if (calendarNames.some(n => n.toLowerCase() === name.toLowerCase())) return name;
+    if (calendarNames.some(n => n.toLowerCase() === name.toLowerCase())) return linkedName(name);
     let best: { name: string; score: number } | undefined;
     for (const n of calendarNames) {
       const score = nameSimilarity(name, n);
       if (score >= AUTO_MATCH_THRESHOLD && (!best || score > best.score)) best = { name: n, score };
     }
-    return best?.name ?? name;
+    return linkedName(best?.name ?? name);
   };
+  const unsplit: ClaimUnsplit[] = [];
 
   const stubUses: StubUse[] = [];
   /** Stubs already counted, by employer: a later one on the same days isn't. */
@@ -500,6 +548,20 @@ export function claimSummary(
     const total = differenceInCalendarDays(parseISO(stub.end), parseISO(stub.start)) + 1;
     const first = stub.start < from ? from : stub.start;
     const last = stub.end > through ? through : stub.end;
+    if (stub.noWeeks) {
+      // Not averaged: the part of it inside the dates, under its employer and in no week.
+      const share = (differenceInCalendarDays(parseISO(last), parseISO(first)) + 1) / total;
+      const piece = { stubId: stub.id, employer: name, start: first, end: last, hours: stub.hours * share, gross: stub.gross * share };
+      unsplit.push(piece);
+      const e = byEmployer.get(id) ?? { name, firstDay: first, lastDay: last, days: 0, hours: 0, gross: 0, worked: new Set<string>() };
+      if (first < e.firstDay) e.firstDay = first;
+      if (last > e.lastDay) e.lastDay = last;
+      e.hours += piece.hours;
+      e.gross += piece.gross;
+      e.fromStub = true;
+      byEmployer.set(id, e);
+      continue;
+    }
     const daysIn = new Map<string, number>();
     for (let d = first; d <= last; d = iso(addDays(parseISO(d), 1))) {
       const ending = weekEndingFor(d, weekEnd);
@@ -563,6 +625,7 @@ export function claimSummary(
         hours: roundHours(e.hours),
         gross: cents(e.gross),
         ...(e.stubSays ? { stubSays: { gross: cents(e.stubSays.gross), hours: roundHours(e.stubSays.hours), estimate: cents(e.stubSays.estimate), stubs: e.stubSays.stubs } } : {}),
+        ...(linkedInto.has(e.name.toLowerCase()) ? { linked: [...linkedInto.get(e.name.toLowerCase())!].sort() } : {}),
       };
     })
     .sort((a, b) => b.lastDay.localeCompare(a.lastDay) || a.name.localeCompare(b.name));
@@ -575,13 +638,16 @@ export function claimSummary(
   const longest = employerList.length > 0
     ? { byStretch: best(e => [e.spanDays, e.days, e.hours])!, byDays: best(e => [e.days, e.hours, e.spanDays])! }
     : undefined;
+  const unsplitList = unsplit.map(u => ({ ...u, employer: spelling(u.employer), hours: roundHours(u.hours), gross: cents(u.gross) }));
   return {
     weeks: weekList,
     employers: employerList,
     longest,
-    hours: roundHours(weekList.reduce((s, w) => s + w.hours, 0)),
-    gross: cents(weekList.reduce((s, w) => s + w.gross, 0)),
+    // Every week, and what isn't in any one week.
+    hours: roundHours(weekList.reduce((s, w) => s + w.hours, 0) + unsplitList.reduce((s, u) => s + u.hours, 0)),
+    gross: cents(weekList.reduce((s, w) => s + w.gross, 0) + unsplitList.reduce((s, u) => s + u.gross, 0)),
     stubs: stubUses,
+    unsplit: unsplitList,
   };
 }
 

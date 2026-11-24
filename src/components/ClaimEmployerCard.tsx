@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { ChevronDown, Copy, Pencil } from 'lucide-react';
+import { ChevronDown, Copy, Link2, Pencil, Unlink } from 'lucide-react';
+import { nameSimilarity } from '@/lib/employerMatch';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import DateWheels from '@/components/DateWheels';
@@ -41,7 +42,7 @@ export interface EmployerWeek {
  * Tap the box (its name or its figures) to see its weeks: each week you
  * worked for them, with the hours and gross, ready to copy.
  */
-export default function ClaimEmployerCard({ employer: e, colour, longest, shifts, weeks, knownEmployers, onCopy }: {
+export default function ClaimEmployerCard({ employer: e, colour, longest, shifts, weeks, knownEmployers, onCopy, unsplit = 0, linkChoices = [] }: {
   employer: ClaimEmployer;
   colour: string;
   /** Its badge, when it's the one worked for longest. */
@@ -52,6 +53,10 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
   onCopy: (amount: number) => void;
   /** Its weeks with work, most recent first. */
   weeks: EmployerWeek[];
+  /** Its gross from bulk stubs not averaged over weeks: in no week. */
+  unsplit?: number;
+  /** The employers it can be linked to: the same one under another name. */
+  linkChoices?: string[];
 }) {
   const [open, setOpen] = useState(false);
   const { updateJob } = useData();
@@ -59,6 +64,11 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
   const key = claimEmployerKey(e.name);
   const [draft, setDraft] = useState<ClaimEmployerInfo | null>(null);
   const [who, setWho] = useState('');
+  /** Picking the employer this one is the same as. */
+  const [linking, setLinking] = useState(false);
+  const [linkTarget, setLinkTarget] = useState('');
+  // The likeliest first: the names most like this one.
+  const choices = [...linkChoices].sort((a, b) => nameSimilarity(e.name, b) - nameSimilarity(e.name, a) || a.localeCompare(b));
   const unclear = isUnclearEmployer(e.name);
   const guess = unclear ? shifts.map(j => suggestEmployer(j, knownEmployers)).find(Boolean) : undefined;
   const thisYear = Number(localToday().slice(0, 4));
@@ -71,6 +81,27 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
     setClaimEmployers(next);
     setDraft(null);
     toast.success(`Saved ${clean.claimName || e.name}`);
+  };
+
+  // The same employer under another name: everything under this one counts
+  // there on the claim. The shifts and stubs themselves aren't changed.
+  const link = () => {
+    const to = linkTarget.trim();
+    if (!to) return;
+    const before = prefs.claimEmployers;
+    setClaimEmployers({ ...before, [key]: { ...(before[key] ?? {}), linkTo: to } });
+    setLinking(false);
+    setLinkTarget('');
+    toast.success(`${e.name} now counts under ${to}`, { action: { label: 'Undo', onClick: () => setClaimEmployers(before) } });
+  };
+  const unlink = (name: string) => {
+    const before = prefs.claimEmployers;
+    const k = claimEmployerKey(name);
+    const { linkTo: _, ...rest } = before[k] ?? {};
+    const next = { ...before };
+    if (Object.keys(rest).length) next[k] = rest; else delete next[k];
+    setClaimEmployers(next);
+    toast.success(`${name} is its own employer again`, { action: { label: 'Undo', onClick: () => setClaimEmployers(before) } });
   };
 
   // Who an unnamed employer's shifts were for: set on the shifts themselves.
@@ -108,6 +139,18 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
         {e.datesSet && <span className={cn(TAG, 'border-border text-muted-foreground')}>Days set by you</span>}
       </p>
       {e.paidBy && <p className="text-[11px] text-mono text-muted-foreground">Paid by {e.paidBy}</p>}
+      {/* Other names counted here: each can be unlinked. */}
+      {e.linked && e.linked.length > 0 && (
+        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-mono text-muted-foreground" data-testid="employer-linked">
+          <span>Also counts:</span>
+          {e.linked.map(n => (
+            <button key={n} type="button" onClick={() => unlink(n)} aria-label={`Unlink ${n}`}
+              className="inline-flex items-center gap-1 border border-[hsl(188_95%_62%/0.5)] px-1.5 py-0.5 text-[hsl(188_90%_70%)]">
+              {n} <Unlink size={11} aria-hidden />
+            </button>
+          ))}
+        </div>
+      )}
       {(e.info?.address || e.info?.phone) && (
         <p className="mt-1 text-[11px] text-mono">{[e.info.address, e.info.phone].filter(Boolean).join(' · ')}</p>
       )}
@@ -194,6 +237,12 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
                   ))}
                 </ul>
               )}
+              {unsplit > 0 && (
+                <p className="mt-1 flex justify-between gap-2 border-t border-[hsl(312_95%_68%/0.15)] pt-1 text-[12px] text-mono" data-testid="employer-unsplit">
+                  <span className="text-muted-foreground">Not split by week (pay stub)</span>
+                  <span className="neon-title font-bold">{claimMoney(unsplit)}</span>
+                </p>
+              )}
             </div>
           )}
           <div className="mt-2 flex gap-2">
@@ -201,6 +250,12 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
               className="pixel-button pick-off flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono">
               <Pencil size={12} aria-hidden /> Edit
             </button>
+            {linkChoices.length > 0 && (
+              <button type="button" onClick={() => setLinking(l => !l)} aria-expanded={linking} data-testid="employer-link"
+                className={cn('pixel-button flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono', linking ? 'pick-on' : 'pick-off')}>
+                <Link2 size={12} aria-hidden /> Link to…
+              </button>
+            )}
             {(e.info?.address || e.info?.phone) && (
               <button type="button" onClick={() => void copyText([claimNameOf(e), e.info?.address, e.info?.phone].filter(Boolean).join('\n'))}
                 className="pixel-button pick-off flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono">
@@ -208,6 +263,24 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
               </button>
             )}
           </div>
+          {/* The same employer under another name: picked, and this one counts there. */}
+          {linking && (
+            <div className="mt-2 space-y-2 border-t border-[hsl(312_95%_68%/0.3)] pt-2.5" data-testid="employer-link-form">
+              <p className="text-[11px] text-mono text-muted-foreground">
+                The same employer under another name (renamed, or typed another way)? Pick it, and {e.name} counts under it. Its shifts and stubs aren't changed.
+              </p>
+              <select value={linkTarget} onChange={ev => setLinkTarget(ev.target.value)} data-testid="employer-link-choice" aria-label={`Link ${e.name} to`}
+                className="w-full border border-[hsl(188_95%_62%/0.5)] bg-background p-2 text-base text-mono text-foreground">
+                <option value="">Pick the employer…</option>
+                {choices.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => { setLinking(false); setLinkTarget(''); }} className="pixel-button pick-off flex-1 py-1.5 text-[11px] font-bold text-mono">Cancel</button>
+                <button type="button" onClick={link} disabled={!linkTarget} data-testid="employer-link-save"
+                  className="pixel-button pick-on flex-1 py-1.5 text-[11px] font-bold text-mono disabled:opacity-40">Link</button>
+              </div>
+            </div>
+          )}
         </>
       ) : (
         <div className="mt-2 space-y-2.5 border-t border-[hsl(312_95%_68%/0.3)] pt-2.5" data-testid="employer-form">
