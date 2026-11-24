@@ -146,6 +146,7 @@ export default function UnemploymentPage() {
           hours: Math.round((cur.hours + l.hours) * 1000) / 1000,
           gross: Math.round((cur.gross + l.gross) * 100) / 100,
           fromStub: cur.fromStub || !!l.fromStub || !!l.perStub,
+          ...(l.stubSays != null ? { stubSays: Math.round(((cur.stubSays ?? 0) + l.stubSays) * 100) / 100 } : {}),
         });
         by.set(l.employer, weeksFor);
       }
@@ -400,12 +401,18 @@ export default function UnemploymentPage() {
                     ) : (
                       <ul className="mt-1 space-y-0.5">
                         {w.lines.map(l => (
-                          <li key={l.employer + (l.fromStub ? ' stub' : '')} className="flex items-baseline justify-between gap-2 text-[12px] text-mono">
+                          <li key={l.employer + (l.fromStub ? ' stub' : '')} className="flex flex-wrap items-baseline justify-between gap-x-2 text-[12px] text-mono">
                             <span className="flex min-w-0 items-center gap-1.5">
                               <span className="neon-soft truncate font-bold" style={{ color: colourOf(l.employer) }}>{l.employer}</span>
                               {(l.fromStub || l.perStub) && <span className="font-8bit shrink-0 border border-[hsl(46_100%_58%)] px-1 text-[6px] uppercase leading-relaxed text-[hsl(46_100%_58%)]" data-testid="stub-tag" title={l.perStub ? "Its pay stub's figures" : 'From a pay stub'}>Stub</span>}
                             </span>
                             <span className="shrink-0 text-muted-foreground">{l.hours} h · {claimMoney(l.gross)}</span>
+                            {/* A pay stub for these shifts, beside the estimate that's counted. */}
+                            {l.stubSays != null && (
+                              <span className="basis-full text-right text-[11px] text-[hsl(46_100%_58%)]" data-testid="stub-says">
+                                pay stub says {claimMoney(l.stubSays)} · estimate counted
+                              </span>
+                            )}
                           </li>
                         ))}
                         {w.pto > 0 && <li className="text-[11px] text-mono text-muted-foreground">Includes {claimMoney(w.pto)} paid time off</li>}

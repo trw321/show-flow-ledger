@@ -186,8 +186,37 @@ describe('pay stubs on a claim', () => {
   it('leaves the calendar\'s shifts as they are, the stub beside them, unless asked', () => {
     const s = claimSummary([job('a', '2026-03-03', 'Odeum')], [], EMPTY_PROFILE, '2026-03-01', '2026-03-14', 6, [stub('s1', 'Odeum', '2026-03-01', '2026-03-14', 80, 4000)]);
     expect(s.gross).toBe(400);
-    expect(s.weeks[0].lines).toEqual([{ employer: 'Odeum', hours: 8, gross: 400 }]);
+    // What the stub says is shown beside it, not counted.
+    expect(s.weeks[0].lines).toEqual([{ employer: 'Odeum', hours: 8, gross: 400, stubSays: 4000 }]);
+    expect(s.employers[0]).toMatchObject({ gross: 400, stubSays: { gross: 4000, hours: 80, estimate: 400, stubs: 1 } });
     expect(s.stubs[0]).toMatchObject({ status: 'calendar', used: false, shifts: 1, estimate: 400 });
+  });
+
+  it('shows what a stub says week by week, by its shifts, under their employer', () => {
+    const s = claimSummary([job('a', '2026-03-03', 'BLACKPOINT PRODUCTION INC.'), job('b', '2026-03-10', 'BLACKPOINT PRODUCTION INC.', { hoursWorked: 24 })], [], EMPTY_PROFILE, '2026-03-01', '2026-03-14', 6,
+      [stub('s1', 'Blackpoint', '2026-03-01', '2026-03-14', 30, 1200)]);
+    // Counted as estimated; the stub shared over the weeks as its shifts are.
+    expect(s.gross).toBe(s.weeks[0].lines[0].gross + s.weeks[1].lines[0].gross);
+    const [w1, w2] = s.weeks.map(w => w.lines[0]);
+    expect(w1.employer).toBe('BLACKPOINT PRODUCTION INC.');
+    expect(w1.stubSays! + w2.stubSays!).toBeCloseTo(1200, 2);
+    expect(w2.stubSays!).toBeGreaterThan(w1.stubSays!);
+    expect(s.employers).toHaveLength(1);
+    expect(s.employers[0].stubSays).toMatchObject({ gross: 1200, hours: 30, stubs: 1 });
+  });
+
+  it("puts a stub under the calendar's employer however it was typed", () => {
+    const s = claimSummary([job('a', '2026-03-03', 'ISLAND CREATIVE MANAGEMENT LLC')], [], EMPTY_PROFILE, '2026-03-01', '2026-03-28', 6,
+      [stub('s1', 'Island Creative', '2026-03-15', '2026-03-21', 10, 700), stub('s2', 'RockForce Operations LLC', '2026-03-22', '2026-03-28', 1, 45)]);
+    expect(s.employers.map(e => e.name)).toEqual(['RockForce Operations LLC', 'ISLAND CREATIVE MANAGEMENT LLC']);
+    expect(s.employers[1]).toMatchObject({ gross: 1100, hours: 18, fromStub: true });
+    expect(s.weeks[2].lines).toEqual([{ employer: 'ISLAND CREATIVE MANAGEMENT LLC', hours: 10, gross: 700, fromStub: true }]);
+  });
+
+  it("says nothing beside the line once the stub's pay is used", () => {
+    const s = claimSummary([job('a', '2026-03-03', 'Odeum')], [], EMPTY_PROFILE, '2026-03-01', '2026-03-07', 6, [stub('s1', 'Odeum', '2026-03-01', '2026-03-07', 10, 900)], {}, true);
+    expect(s.weeks[0].lines[0].stubSays).toBeUndefined();
+    expect(s.employers[0].stubSays).toBeUndefined();
   });
 
   it("uses a stub's actual figures for the shifts the calendar has, when asked", () => {

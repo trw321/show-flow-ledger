@@ -2,7 +2,7 @@ import { addDays, addMonths, differenceInCalendarDays, differenceInMonths, forma
 import type { Employer, Job } from './store';
 import type { PayerProfile } from './payerProfile';
 import { jobPayBreakdown, netHoursWorked } from './payCalc';
-import { resolveEmployer } from './employerMatch';
+import { AUTO_MATCH_THRESHOLD, nameSimilarity, resolveEmployer } from './employerMatch';
 import { roundHours } from './hoursFormat';
 
 /**
@@ -28,6 +28,12 @@ export interface ClaimLine {
   fromStub?: boolean;
   /** Its shifts are on the calendar, and a pay stub's figures for them stand in for the estimate. */
   perStub?: boolean;
+  /**
+   * A pay stub covers these shifts and says this gross for them (its share
+   * of the week), shown beside the estimate. Not counted: the estimate is,
+   * unless "use the stub's pay" is on.
+   */
+  stubSays?: number;
 }
 
 export interface ClaimWeek {
@@ -68,6 +74,8 @@ export interface ClaimEmployer {
   info?: ClaimEmployerInfo;
   /** Its first or last day is one you set, not the calendar's. */
   datesSet?: boolean;
+  /** Pay stubs that cover shifts on the calendar, not counted: what they say, beside the estimate for those shifts. */
+  stubSays?: { gross: number; hours: number; estimate: number; stubs: number };
 }
 
 /**
@@ -398,12 +406,26 @@ export function claimSummary(
     byEmployer.set(id, e);
   }
 
+  // The employers the calendar knows, as it spells them: a stub typed another
+  // way ("Blackpoint" for "BLACKPOINT PRODUCTION INC.") goes under theirs.
+  const calendarNames = [...new Set(jobs.filter(j => j.status !== 'cancelled' && j.client?.trim()).map(j => employerOf(j, employers).name))];
+  const stubEmployer = (typed: string): string => {
+    const { name } = employerOf({ client: typed } as Job, employers);
+    if (calendarNames.some(n => n.toLowerCase() === name.toLowerCase())) return name;
+    let best: { name: string; score: number } | undefined;
+    for (const n of calendarNames) {
+      const score = nameSimilarity(name, n);
+      if (score >= AUTO_MATCH_THRESHOLD && (!best || score > best.score)) best = { name: n, score };
+    }
+    return best?.name ?? name;
+  };
+
   const stubUses: StubUse[] = [];
   /** Stubs already counted, by employer: a later one on the same days isn't. */
   const countedStubs = new Map<string, ClaimStub[]>();
   for (const stub of stubs) {
     if (!isClaimDay(stub.start) || !isClaimDay(stub.end) || stub.end < from || stub.start > through) continue;
-    const { name } = employerOf({ client: stub.employer } as Job, employers);
+    const name = stubEmployer(stub.employer);
     const id = name.toLowerCase();
     // The calendar first: its shifts for this employer in the stub's pay period.
     const shifts = jobs.filter(j => j.status !== 'cancelled' && isClaimDay(j.date) && j.date >= stub.start && j.date <= stub.end
@@ -414,16 +436,37 @@ export function claimSummary(
       const estimate = worked.reduce((t, x) => t + x.gross, 0);
       const workedHours = worked.reduce((t, x) => t + x.hours, 0);
       stubUses.push({ stub, status: 'calendar', used: false, shifts: worked.length, estimate: cents(estimate) });
-      if (!useStubPay) continue;
-      // The stub's figures in place of the estimate, week by week as the
-      // shifts fall (the part of them inside the dates).
-      const perWeek = new Map<string, { gross: number; hours: number }>();
+      // Its shifts week by week (the part of them inside the dates).
+      const perWeek = new Map<string, { gross: number; hours: number; n: number }>();
       for (const x of worked) {
         if (x.date < from || x.date > through) continue;
         const k = weekEndingFor(x.date, weekEnd);
-        const cur = perWeek.get(k) ?? { gross: 0, hours: 0 };
-        perWeek.set(k, { gross: cur.gross + x.gross, hours: cur.hours + x.hours });
+        const cur = perWeek.get(k) ?? { gross: 0, hours: 0, n: 0 };
+        perWeek.set(k, { gross: cur.gross + x.gross, hours: cur.hours + x.hours, n: cur.n + 1 });
       }
+      if (!useStubPay) {
+        // Not counted, but shown under its employer: what the stub says for
+        // each week, by the week's share of its shifts, beside the estimate.
+        const share = (w: { gross: number; hours: number; n: number }) =>
+          estimate > 0 ? w.gross / estimate : workedHours > 0 ? w.hours / workedHours : w.n / worked.length;
+        const said = { gross: 0, hours: 0, estimate: 0 };
+        for (const [ending, w] of perWeek) {
+          const line = weeks.get(ending)?.lines.find(l => !l.fromStub && l.employer.toLowerCase() === id);
+          if (!line) continue;
+          line.stubSays = (line.stubSays ?? 0) + stub.gross * share(w);
+          said.gross += stub.gross * share(w);
+          said.hours += stub.hours * share(w);
+          said.estimate += w.gross;
+        }
+        const e = byEmployer.get(id);
+        if (e && perWeek.size > 0) {
+          const cur = e.stubSays ?? { gross: 0, hours: 0, estimate: 0, stubs: 0 };
+          e.stubSays = { gross: cur.gross + said.gross, hours: cur.hours + said.hours, estimate: cur.estimate + said.estimate, stubs: cur.stubs + 1 };
+        }
+        continue;
+      }
+      // The stub's figures in place of the estimate, week by week as the
+      // shifts fall.
       const e = byEmployer.get(id);
       for (const [ending, est] of perWeek) {
         const week = weeks.get(ending);
@@ -496,7 +539,10 @@ export function claimSummary(
     gross: cents(w.gross),
     pto: cents(w.pto),
     fromStub: w.lines.some(l => l.fromStub),
-    lines: w.lines.map(l => ({ ...l, employer: spelling(l.employer), hours: roundHours(l.hours), gross: cents(l.gross) })),
+    lines: w.lines.map(l => ({
+      ...l, employer: spelling(l.employer), hours: roundHours(l.hours), gross: cents(l.gross),
+      ...(l.stubSays != null ? { stubSays: cents(l.stubSays) } : {}),
+    })),
   }));
   // The most recent employer first: the order claim forms ask in.
   const employerList = [...byEmployer.values()]
@@ -516,6 +562,7 @@ export function claimSummary(
         spanDays: differenceInCalendarDays(parseISO(lastDay), parseISO(firstDay)) + 1,
         hours: roundHours(e.hours),
         gross: cents(e.gross),
+        ...(e.stubSays ? { stubSays: { gross: cents(e.stubSays.gross), hours: roundHours(e.stubSays.hours), estimate: cents(e.stubSays.estimate), stubs: e.stubSays.stubs } } : {}),
       };
     })
     .sort((a, b) => b.lastDay.localeCompare(a.lastDay) || a.name.localeCompare(b.name));

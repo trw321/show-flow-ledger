@@ -25,6 +25,8 @@ export interface EmployerWeek {
   hours: number;
   gross: number;
   fromStub: boolean;
+  /** A pay stub covering its shifts says this, not counted (see ClaimLine.stubSays). */
+  stubSays?: number;
 }
 
 /**
@@ -148,6 +150,16 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
             <dt className={LABEL}>How long</dt><dd className="text-right" data-testid="how-long">{howLongText(e.firstDay, e.lastDay)}</dd>
             <dt className={LABEL}>Days worked</dt><dd className="text-right">{e.days}{e.fromStub ? ' + pay stubs' : ''}</dd>
             <dt className={LABEL}>Hours</dt><dd className="text-right">{e.hours}</dd>
+            {/* Pay stubs for shifts on the calendar: what they say, beside the estimate that's counted. */}
+            {e.stubSays && (
+              <>
+                <dt className={LABEL}>{e.stubSays.stubs === 1 ? 'Pay stub says' : 'Pay stubs say'}</dt>
+                <dd className="text-right text-[hsl(46_100%_58%)]" data-testid="employer-stub-says">
+                  {claimMoney(e.stubSays.gross)}{e.stubSays.hours > 0 ? ` · ${e.stubSays.hours} h` : ''}
+                  <span className="block text-[11px] text-muted-foreground">calendar estimate {claimMoney(e.stubSays.estimate)} is counted</span>
+                </dd>
+              </>
+            )}
           </dl>
 
           {/* Its weeks, opened by a tap on the box. */}
@@ -168,13 +180,16 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
               ) : (
                 <ul className="divide-y divide-[hsl(312_95%_68%/0.15)]">
                   {weeks.map(w => (
-                    <li key={w.weekEnding} className="flex items-baseline justify-between gap-2 py-1 text-[12px] text-mono">
+                    <li key={w.weekEnding} className="flex flex-wrap items-baseline justify-between gap-x-2 py-1 text-[12px] text-mono">
                       <span className="min-w-0 truncate">{claimDay(w.weekEnding)}</span>
                       <span className="flex shrink-0 items-center gap-1.5">
                         {w.fromStub && <span className="font-8bit border border-[hsl(46_100%_58%)] px-1 text-[6px] uppercase leading-relaxed text-[hsl(46_100%_58%)]">Stub</span>}
                         <span className="text-muted-foreground">{w.hours} h ·</span>
                         <span className="neon-title font-bold">{claimMoney(w.gross)}</span>
                       </span>
+                      {w.stubSays != null && (
+                        <span className="basis-full text-right text-[11px] text-[hsl(46_100%_58%)]">pay stub says {claimMoney(w.stubSays)}</span>
+                      )}
                     </li>
                   ))}
                 </ul>
