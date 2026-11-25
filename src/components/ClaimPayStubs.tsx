@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { CalendarPlus, Camera, Check, ChevronDown, ChevronRight, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import DateWheels from '@/components/DateWheels';
 import StubEditor from '@/components/StubEditor';
+import ClaimStubForm, { type StubDraft } from '@/components/ClaimStubForm';
+import { multiWeek, periodText } from '@/lib/stubPeriod';
 import { aiFetch } from '@/lib/aiSwitch';
 import { readFileAsDataUrl, resizeImageForStorage } from '@/lib/imageResize';
 import { isPdf, pdfPageImages } from '@/lib/pdfImage';
@@ -26,14 +26,6 @@ const iso = (d: Date) => format(d, 'yyyy-MM-dd');
 /** A PDF's pages read, at most: each is one read. */
 const MAX_PDF_PAGES = 10;
 
-interface Draft { employer: string; start: string; end: string; hours: string; gross: string; noWeeks?: boolean; paidOn?: string }
-
-/** A pay period longer than a week: one that would be averaged over several. */
-const multiWeek = (start: string, end: string) => {
-  const days = differenceInCalendarDays(parseISO(end), parseISO(start)) + 1;
-  return Number.isFinite(days) && days > 7;
-};
-
 /** One paycheck the reader found in a photo, before you've confirmed it. */
 interface Found {
   key: string;
@@ -53,13 +45,6 @@ interface Found {
   weeks?: StubWeek[];
   /** The pay date read off it. */
   paidOn?: string;
-}
-
-/** "Mar 1 – Mar 14, 2026", or "Dec 28, 2025 – Jan 10, 2026" across a year. */
-function periodText(start: string, end: string) {
-  return start.slice(0, 4) === end.slice(0, 4)
-    ? `${format(parseISO(start), 'MMM d')} – ${claimDay(end, false)}`
-    : `${claimDay(start, false)} – ${claimDay(end, false)}`;
 }
 
 /** What a stub came to on the claim, in a tag and a few words. */
@@ -139,7 +124,7 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
     setClaimStubs(stubs.map(x => (x.id === s.id ? (on ? { ...x, useEstimate: true } : (({ useEstimate: _, ...rest }) => rest)(x)) : x)));
     toast.success(on ? `${s.employer}: the calendar's estimate counts` : `${s.employer}: the stub's ${claimMoney(s.gross)} counts`);
   };
-  const [editing, setEditing] = useState<{ id?: string; draft: Draft } | null>(null);
+  const [editing, setEditing] = useState<{ id?: string; draft: StubDraft } | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
   /** Which page of a PDF is being read, when it has more than one. */
@@ -149,7 +134,6 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
   const [found, setFound] = useState<Found[] | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const sectionRef = useRef<HTMLElement>(null);
-  const thisYear = Number(localToday().slice(0, 4));
 
   // A week's "+": the form, set to that week, in view.
   useEffect(() => {
@@ -167,43 +151,6 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
   };
   const edit = (s: ClaimStub) =>
     setEditing({ id: s.id, draft: { employer: s.employer, start: s.start, end: s.end, hours: s.hours ? String(s.hours) : '', gross: s.gross ? s.gross.toFixed(2) : '', noWeeks: !!s.noWeeks, paidOn: s.paidOn ?? '' } });
-  const set = (patch: Partial<Draft>) => setEditing(cur => cur && { ...cur, draft: { ...cur.draft, ...patch } });
-  /** The pay period as a week, or two, ending on the day it ends. */
-  const spanWeeks = (weeks: 1 | 2) =>
-    setEditing(cur => cur && { ...cur, draft: { ...cur.draft, start: iso(addDays(parseISO(cur.draft.end), 1 - weeks * 7)) } });
-
-  const save = () => {
-    if (!editing) return;
-    const d = editing.draft;
-    const employer = d.employer.trim();
-    const hours = d.hours.trim() ? readAmount(d.hours) : 0;
-    const gross = d.gross.trim() ? readAmount(d.gross) : 0;
-    if (!employer) { toast.error('Who paid it? Put in the employer.'); return; }
-    if (d.end < d.start) { toast.error('The pay period ends before it starts.'); return; }
-    if (!Number.isFinite(hours) || hours < 0 || !Number.isFinite(gross) || gross < 0) { toast.error('Hours and gross need to be numbers.'); return; }
-    if (hours === 0 && gross === 0) { toast.error('Put in the hours or the gross from the stub.'); return; }
-    // The same employer and pay period again: that's a copy, not another stub.
-    const copy = sameStub(stubs, { employer, start: d.start, end: d.end, paidOn: d.paidOn && isClaimDay(d.paidOn) ? d.paidOn : undefined }, editing.id);
-    if (copy) { toast.error(`You already have a ${copy.employer} stub for ${periodText(copy.start, copy.end)}. Edit that one.`); return; }
-    const before = stubs.find(s => s.id === editing.id);
-    const stub: ClaimStub = {
-      id: before?.id ?? crypto.randomUUID(),
-      employer, start: d.start, end: d.end, hours, gross: Math.round(gross * 100) / 100,
-      createdAt: before?.createdAt ?? new Date().toISOString(),
-      ...(d.noWeeks && multiWeek(d.start, d.end) ? { noWeeks: true } : {}),
-      ...(d.paidOn && isClaimDay(d.paidOn) ? { paidOn: d.paidOn } : {}),
-      ...(before?.useEstimate ? { useEstimate: true } : {}),
-      ...(before?.weeks && before.start === d.start && before.end === d.end ? { weeks: before.weeks } : {}),
-      // Kept through an edit: its own pay for the calendar's shifts, its rate, and its days if the period is the same.
-      ...(before?.usePay ? { usePay: true } : {}),
-      ...(before?.rate ? { rate: before.rate } : {}),
-      ...(before?.days && before.start === d.start && before.end === d.end ? { days: before.days } : {}),
-    };
-    setClaimStubs(before ? stubs.map(s => (s.id === before.id ? stub : s)) : [...stubs, stub]);
-    toast.success(before ? 'Pay stub saved' : 'Pay stub added');
-    setEditing(null);
-  };
-
   /** A bulk stub: averaged over its weeks, or counted for its employer in no one week. */
   const setNoWeeks = (s: ClaimStub, on: boolean) => {
     setClaimStubs(stubs.map(x => (x.id === s.id ? (on ? { ...x, noWeeks: true } : (({ noWeeks: _, ...rest }) => rest)(x)) : x)));
@@ -430,68 +377,7 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
       )}
 
       {editing && (
-        <div className="space-y-3 border-t border-[hsl(312_95%_68%/0.3)] pt-3" data-testid="stub-form">
-          <label className="block space-y-1">
-            <span className={LABEL}>Employer</span>
-            {employerNames.length > 0 && (
-              <select value={employerNames.includes(editing.draft.employer) ? editing.draft.employer : ''} onChange={e => e.target.value && set({ employer: e.target.value })}
-                aria-label="Pick the employer" data-testid="stub-employer-pick"
-                className="w-full border border-[hsl(188_95%_62%/0.5)] bg-background p-2 text-base text-mono text-foreground">
-                <option value="">Pick an employer, or type one below…</option>
-                {[...employerNames].sort((a, b) => a.localeCompare(b)).map(n => <option key={n} value={n}>{n}</option>)}
-              </select>
-            )}
-            <Input value={editing.draft.employer} list="claim-stub-employers" placeholder="Who the stub is from"
-              onChange={e => set({ employer: e.target.value })} className="text-mono" data-testid="stub-employer" />
-            <datalist id="claim-stub-employers">{employerNames.map(n => <option key={n} value={n} />)}</datalist>
-          </label>
-          <DateWheels label="Pay period from" value={editing.draft.start} firstYear={thisYear - 6} lastYear={thisYear}
-            onChange={start => set({ start })} testId="stub-start" />
-          <DateWheels label="Pay period through" value={editing.draft.end} firstYear={thisYear - 6} lastYear={thisYear}
-            onChange={end => set({ end })} testId="stub-end" />
-          {/* A stub for one week, or one that spans two, ending on the through date. */}
-          <div className="grid grid-cols-2 gap-2">
-            {([1, 2] as const).map(w => (
-              <button key={w} type="button" onClick={() => spanWeeks(w)} data-testid={`stub-span-${w}`}
-                className="pixel-button pick-off py-1.5 text-[11px] font-bold text-mono">
-                {w === 1 ? '1 week' : '2 weeks'}
-              </button>
-            ))}
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <label className="block space-y-1">
-              <span className={LABEL}>Hours</span>
-              <Input value={editing.draft.hours} inputMode="decimal" placeholder="40" onChange={e => set({ hours: e.target.value })}
-                className="text-mono" data-testid="stub-hours" />
-            </label>
-            <label className="block space-y-1">
-              <span className={LABEL}>Gross</span>
-              <Input value={editing.draft.gross} inputMode="decimal" placeholder="2000.00" onChange={e => set({ gross: e.target.value })}
-                className="text-mono" data-testid="stub-gross" />
-            </label>
-          </div>
-          {/* When it was paid: a different thing from the days worked. */}
-          <label className="block space-y-1">
-            <span className={LABEL}>Paid on · optional</span>
-            <input type="date" value={editing.draft.paidOn ?? ''} onChange={e => set({ paidOn: e.target.value })} data-testid="stub-paid-on"
-              className="w-full border border-[hsl(188_95%_62%/0.5)] bg-background p-2 text-base text-mono text-foreground" />
-          </label>
-          {/* A bulk total over many weeks: averaged, or counted in no one week. */}
-          {multiWeek(editing.draft.start, editing.draft.end) && (
-            <label className="flex items-start gap-2.5 text-[12px] text-mono" data-testid="stub-no-weeks-form">
-              <input type="checkbox" checked={!!editing.draft.noWeeks} onChange={e => set({ noWeeks: e.target.checked })}
-                className="mt-0.5 h-5 w-5 shrink-0 accent-[hsl(46_100%_58%)]" />
-              <span>
-                <span className="block font-bold">Don't average over the weeks</span>
-                <span className="block text-[11px] text-muted-foreground">For a bulk total. It counts for the employer and in the totals, not as the same amount every week.</span>
-              </span>
-            </label>
-          )}
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setEditing(null)} className="pixel-button pick-off flex-1 py-1.5 text-[11px] font-bold text-mono">Cancel</button>
-            <button type="button" onClick={save} data-testid="stub-save" className="pixel-button pick-on flex-1 py-1.5 text-[11px] font-bold text-mono">Save stub</button>
-          </div>
-        </div>
+        <ClaimStubForm key={JSON.stringify(editing)} initial={editing.draft} id={editing.id} employerNames={employerNames} onDone={() => setEditing(null)} />
       )}
 
       {listed.length > 0 && (

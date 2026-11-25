@@ -321,7 +321,7 @@ export default function UnemploymentPage() {
         )}
 
         {/* Pay stubs, for work that isn't on the calendar. */}
-        <ClaimPayStubs uses={summary.stubs} weekEnd={range.weekEnd} colourOf={colourOf} employerNames={knownEmployers} request={stubRequest} />
+        <ClaimPayStubs uses={summary.stubs} weekEnd={range.weekEnd} colourOf={colourOf} employerNames={[...knownEmployers, ...summary.employers.map(e => e.name)]} request={stubRequest} />
 
         {/* The proof behind a week's line: its pay stubs, tapped. */}
         <ClaimStubProof open={!!proof} onClose={() => setProof(null)} week={proof?.week ?? null} line={proof?.line ?? null}
@@ -499,7 +499,7 @@ export default function UnemploymentPage() {
             ) : (
               <ul className="space-y-2" data-testid="claim-employers">
                 {employers.map(e => (
-                  <ClaimEmployerCard key={e.name} employer={e} colour={colourOf(e.name)} onCopy={copyAmount} knownEmployers={knownEmployers} weeks={weeksOf(e.name)}
+                  <ClaimEmployerCard key={e.name} employer={e} colour={colourOf(e.name)} onCopy={copyAmount} knownEmployers={knownEmployers} weeks={weeksOf(e.name)} weekEnd={range.weekEnd}
                     unsplit={summary.unsplit.filter(u => u.employer === e.name).reduce((sum, u) => sum + u.gross, 0)}
                     linkChoices={[...new Set([...summary.employers.map(x => x.name), ...knownEmployers])].filter(n => n.toLowerCase() !== e.name.toLowerCase() && !(e.linked ?? []).some(l => l.toLowerCase() === n.toLowerCase()))}
                     longest={summary.longest?.byStretch === e.name ? 'stretch' : summary.longest?.byDays === e.name ? 'days' : undefined}

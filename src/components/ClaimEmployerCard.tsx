@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { ChevronDown, Copy, Link2, Pencil, Unlink } from 'lucide-react';
+import { addDays, format, parseISO } from 'date-fns';
+import { ChevronDown, Copy, Link2, Pencil, Receipt, Unlink } from 'lucide-react';
 import { nameSimilarity } from '@/lib/employerMatch';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import DateWheels from '@/components/DateWheels';
+import ClaimStubForm from '@/components/ClaimStubForm';
 import type { Job } from '@/lib/store';
 import { useData } from '@/lib/DataContext';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
@@ -12,8 +14,8 @@ import { localToday } from '@/lib/today';
 import { roundHours } from '@/lib/hoursFormat';
 import { netHoursWorked } from '@/lib/payCalc';
 import {
-  claimDay, claimEmployerKey, claimMoney, claimNameOf, howLongText, isUnclearEmployer, suggestEmployer,
-  type ClaimEmployer, type ClaimEmployerInfo,
+  claimDay, claimEmployerKey, claimMoney, claimNameOf, howLongText, isClaimDay, isUnclearEmployer, suggestEmployer, weekEndingFor,
+  type ClaimEmployer, type ClaimEmployerInfo, type WeekEnd,
 } from '@/lib/unemployment';
 import { cn } from '@/lib/utils';
 
@@ -41,8 +43,12 @@ export interface EmployerWeek {
  *
  * Tap the box (its name or its figures) to see its weeks: each week you
  * worked for them, with the hours and gross, ready to copy.
+ *
+ * Its Pay stub button opens the pay stub form right on the box, with this
+ * employer picked in its list (another can be picked) and the week of its
+ * last day to start from.
  */
-export default function ClaimEmployerCard({ employer: e, colour, longest, shifts, weeks, knownEmployers, onCopy, unsplit = 0, linkChoices = [] }: {
+export default function ClaimEmployerCard({ employer: e, colour, longest, shifts, weeks, knownEmployers, onCopy, unsplit = 0, linkChoices = [], weekEnd = 6 }: {
   employer: ClaimEmployer;
   colour: string;
   /** Its badge, when it's the one worked for longest. */
@@ -57,6 +63,8 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
   unsplit?: number;
   /** The employers it can be linked to: the same one under another name. */
   linkChoices?: string[];
+  /** The claim's week end: a new pay stub starts on the week of its last day. */
+  weekEnd?: WeekEnd;
 }) {
   const [open, setOpen] = useState(false);
   const { updateJob } = useData();
@@ -67,6 +75,10 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
   /** Picking the employer this one is the same as. */
   const [linking, setLinking] = useState(false);
   const [linkTarget, setLinkTarget] = useState('');
+  /** A pay stub being added on the box. */
+  const [addingStub, setAddingStub] = useState(false);
+  const stubWeekEnd = weekEndingFor(isClaimDay(e.lastDay) ? e.lastDay : localToday(), weekEnd);
+  const stubStart = format(addDays(parseISO(stubWeekEnd), -6), 'yyyy-MM-dd');
   // The likeliest first: the names most like this one.
   const choices = [...linkChoices].sort((a, b) => nameSimilarity(e.name, b) - nameSimilarity(e.name, a) || a.localeCompare(b));
   const unclear = isUnclearEmployer(e.name);
@@ -245,24 +257,35 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
               )}
             </div>
           )}
-          <div className="mt-2 flex gap-2">
+          <div className="mt-2 flex flex-wrap gap-2">
+            {!unclear && (
+              <button type="button" onClick={() => { setAddingStub(a => !a); setLinking(false); }} aria-expanded={addingStub} data-testid="employer-add-stub"
+                className={cn('pixel-button flex min-w-[5.5rem] flex-1 items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono', addingStub ? 'pick-on' : 'pick-off')}>
+                <Receipt size={12} aria-hidden /> Pay stub
+              </button>
+            )}
             <button type="button" onClick={() => setDraft({ ...(e.info ?? {}) })} data-testid="employer-edit"
-              className="pixel-button pick-off flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono">
+              className="pixel-button pick-off flex min-w-[5.5rem] flex-1 items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono">
               <Pencil size={12} aria-hidden /> Edit
             </button>
             {linkChoices.length > 0 && (
-              <button type="button" onClick={() => setLinking(l => !l)} aria-expanded={linking} data-testid="employer-link"
-                className={cn('pixel-button flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono', linking ? 'pick-on' : 'pick-off')}>
+              <button type="button" onClick={() => { setLinking(l => !l); setAddingStub(false); }} aria-expanded={linking} data-testid="employer-link"
+                className={cn('pixel-button flex min-w-[5.5rem] flex-1 items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono', linking ? 'pick-on' : 'pick-off')}>
                 <Link2 size={12} aria-hidden /> Link to…
               </button>
             )}
             {(e.info?.address || e.info?.phone) && (
               <button type="button" onClick={() => void copyText([claimNameOf(e), e.info?.address, e.info?.phone].filter(Boolean).join('\n'))}
-                className="pixel-button pick-off flex flex-1 items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono">
+                className="pixel-button pick-off flex min-w-[5.5rem] flex-1 items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono">
                 <Copy size={12} aria-hidden /> Copy details
               </button>
             )}
           </div>
+          {/* A pay stub for this employer, typed in right here. */}
+          {addingStub && (
+            <ClaimStubForm initial={{ employer: e.name, start: stubStart, end: stubWeekEnd, hours: '', gross: '' }}
+              employerNames={[e.name, ...(e.linked ?? []), ...linkChoices]} onDone={() => setAddingStub(false)} className="mt-2" />
+          )}
           {/* The same employer under another name: picked, and this one counts there. */}
           {linking && (
             <div className="mt-2 space-y-2 border-t border-[hsl(312_95%_68%/0.3)] pt-2.5" data-testid="employer-link-form">
