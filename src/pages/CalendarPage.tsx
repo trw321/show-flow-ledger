@@ -26,7 +26,7 @@ import { payDueDate, payTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from
 import { employerCovers, paidShiftIds, periodNet, periodPayments, projectPeriods, shiftsPaidBy, type PayPeriod, type ProjectPeriod } from '@/lib/payPeriods';
 import { explainPay } from '@/lib/payExplain';
 import PayEstimateCard from '@/components/PayEstimateCard';
-import PaymentProof, { SourceTag, WhoPaid } from '@/components/PaymentProof';
+import PaymentProof, { ProofOpen, SourceTag, WhoPaid } from '@/components/PaymentProof';
 import { PROOF_LABELS, proofFromMatch, proofKindOf, type ProofKind } from '@/lib/paymentProof';
 import CalendarKey from '@/components/CalendarKey';
 import ConferenceList from '@/components/ConferenceList';
@@ -398,7 +398,30 @@ function PayIcon({ income, className }: { income: Income; className?: string }) 
   return <Icon size={12} aria-label={label} className={cn('shrink-0', className)} />;
 }
 
-function StubMark({ job, paidByHand }: { job: Job; paidByHand?: boolean }) {
+/** A payment's icon that opens its proof: the stub, check or deposit itself. */
+function PayIconButton({ income, className }: { income: Income; className?: string }) {
+  const [open, setOpen] = useState(false);
+  const { label } = paymentIcon(income);
+  return (
+    <>
+      <button type="button" onClick={e => { e.stopPropagation(); setOpen(true); }} aria-label={`See the proof: ${label}`} data-testid="pay-icon"
+        className="-m-1 shrink-0 p-1 active:opacity-70">
+        <PayIcon income={income} className={className} />
+      </button>
+      <ProofOpen income={income} open={open} onClose={() => setOpen(false)} />
+    </>
+  );
+}
+
+function StubMark({ job, paidByHand, openProof = false }: { job: Job; paidByHand?: boolean; openProof?: boolean }) {
+  const { data } = useData();
+  const [open, setOpen] = useState(false);
+  // The payment this mark is about: the one with this photo, else one paid on this shift.
+  const payment = openProof
+    ? (job.payStub ? data.income.find(i => i.proofRef === job.payStub) : undefined)
+      ?? data.income.find(i => i.jobId === job.id && i.status === 'paid' && !!i.proofRef)
+      ?? data.income.find(i => i.jobId === job.id && i.status === 'paid')
+    : undefined;
   const mark = job.payStub
     ? job.payStubKind === 'check'
       ? { Icon: Banknote, label: 'Cheque photographed' }
@@ -411,7 +434,16 @@ function StubMark({ job, paidByHand }: { job: Job; paidByHand?: boolean }) {
   // as a real stub, which made "nothing here" and "a stub is here" look alike
   // at six pixels — the one thing the mark exists to tell apart.
   if (!mark) return null;
-  return <mark.Icon size={12} aria-label={mark.label} className="shrink-0 text-muted-foreground" />;
+  if (!payment) return <mark.Icon size={12} aria-label={mark.label} className="shrink-0 text-muted-foreground" />;
+  return (
+    <>
+      <button type="button" onClick={e => { e.stopPropagation(); setOpen(true); }} aria-label={`${mark.label}: see the proof`} data-testid="stub-mark"
+        className="-m-1 shrink-0 p-1 text-muted-foreground active:opacity-70">
+        <mark.Icon size={12} aria-hidden />
+      </button>
+      <ProofOpen income={payment} open={open} onClose={() => setOpen(false)} />
+    </>
+  );
 }
 
 function calcHours(start: string, end: string): number {
@@ -4194,7 +4226,7 @@ export default function CalendarPage() {
                               {netHoursWorked(job) > 0 ? `${roundHours(netHoursWorked(job))}h` : isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
                               {job.startTime && !job.endTime && <span className="text-warning"> · no end time</span>}
                               {effectiveHoursWorked(job) > 0 && (
-                                <StubMark job={job} paidByHand={paidByHandJobIds.has(job.id)} />
+                                <StubMark job={job} paidByHand={paidByHandJobIds.has(job.id)} openProof />
                               )}
                             </span>
                           </div>
@@ -4245,7 +4277,7 @@ export default function CalendarPage() {
             return (
               <div key={i.id} className="border-t border-border pt-2 space-y-1.5">
                 <div className="flex items-center gap-2">
-                  <PayIcon income={i} className="text-muted-foreground" />
+                  <PayIconButton income={i} className="text-muted-foreground" />
                   <p className="min-w-0 flex-1 truncate text-xs font-medium">{i.client || i.description}</p>
                   <span className="shrink-0 text-xs text-mono font-bold text-dot-paid">${i.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   <span className="shrink-0 text-[10px] text-mono text-muted-foreground">{showDay(i.date)}</span>

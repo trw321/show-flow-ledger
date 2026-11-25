@@ -55,20 +55,45 @@ export function WhoPaid({ employer, payer, className }: { employer?: string; pay
   );
 }
 
-export function SourceTag({ income, className }: { income: Income; className?: string }) {
+export function SourceTag({ income, className, openable = true }: { income: Income; className?: string; openable?: boolean }) {
+  const [open, setOpen] = useState(false);
   const kind = proofKindOf(income);
   const Icon = KIND_ICON[kind];
-  return (
-    <span
-      className={cn(
-        'inline-flex shrink-0 items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold text-mono uppercase tracking-wide',
-        isDocumented(kind) ? 'bg-foreground/90 text-background' : 'border border-current text-muted-foreground',
-        className,
-      )}
-    >
+  const look = cn(
+    'inline-flex shrink-0 items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold text-mono uppercase tracking-wide',
+    isDocumented(kind) ? 'bg-foreground/90 text-background' : 'border border-current text-muted-foreground',
+    className,
+  );
+  const inside = (
+    <>
       <Icon size={11} aria-hidden />
       {PROOF_LABELS[kind]}
       {income.proofRef && <Camera size={11} aria-label="with photo" />}
+    </>
+  );
+  if (!openable) return <span className={look}>{inside}</span>;
+  // A tap shows its proof: the stub, check or deposit itself, and why it's this one's.
+  return (
+    <>
+      <button type="button" onClick={e => { e.stopPropagation(); setOpen(true); }} className={cn(look, 'active:opacity-70')}
+        aria-label={`See the proof: ${PROOF_LABELS[kind]}, ${money(income.amount)}`} data-testid="source-tag">
+        {inside}
+      </button>
+      <ProofOpen income={income} open={open} onClose={() => setOpen(false)} />
+    </>
+  );
+}
+
+/**
+ * The proof, opened from something inside a row that opens a shift of its
+ * own: a tap inside the proof stays inside it. (React carries clicks out of
+ * a pop-up to whatever it was opened from.)
+ */
+export function ProofOpen({ income, open, onClose }: { income: Income | null | undefined; open: boolean; onClose: () => void }) {
+  if (!open || !income) return null;
+  return (
+    <span className="contents" onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
+      <PaymentProof income={income} onClose={onClose} />
     </span>
   );
 }
