@@ -44,9 +44,25 @@ export function endAfterStart(startMinutes: number, endTime?: string): number {
   return startMinutes + forward(end);
 }
 
-/** A call's clock span in hours. 0 when either time is missing or unreadable. */
+/**
+ * The end saved at the start's own time of day ("4:00 PM to 4:00 PM"): a
+ * placeholder end, not a 24-hour call. Read as a span it was 24 hours, and a
+ * Jun 4 shift counted a whole day's pay on the unemployment claim.
+ */
+export function sameClockTime(startTime?: string, endTime?: string): boolean {
+  const s = clockMinutes(startTime);
+  const e = endAfterStart(s, endTime);
+  return !Number.isNaN(e) && e - s === 24 * 60;
+}
+
+/**
+ * A call's clock span in hours. 0 when either time is missing or unreadable,
+ * or when the end is the start's own time (see sameClockTime): its hours are
+ * whatever is put in.
+ */
 export function clockSpanHours(startTime?: string, endTime?: string): number {
   const s = clockMinutes(startTime);
   const e = endAfterStart(s, endTime);
-  return Number.isNaN(e) ? 0 : (e - s) / 60;
+  if (Number.isNaN(e) || e - s === 24 * 60) return 0;
+  return (e - s) / 60;
 }

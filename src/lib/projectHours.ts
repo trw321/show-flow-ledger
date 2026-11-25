@@ -1,6 +1,7 @@
 import type { Job, Employer } from './store';
 import type { PayerProfile } from './payerProfile';
-import { jobHoursBreakdown, netHoursWorked, isOverdueUpcoming } from './payCalc';
+import { jobHoursBreakdown, netHoursWorked } from './payCalc';
+import { needsHours } from './useNeedsHours';
 
 /**
  * A project's hours in one place: how many were worked, what they were paid
@@ -49,7 +50,8 @@ export function projectHours(
   const byDay = new Map<string, number>();
   const needDays = new Set<string>();
   for (const job of jobs) {
-    if (isOverdueUpcoming(job)) needDays.add(job.date);
+    // The same test as Log hours: an end saved at the start time needs them too.
+    if (needsHours(job)) needDays.add(job.date);
     const worked = netHoursWorked(job);
     if (worked <= 0) continue;
     const t = jobHoursBreakdown(job, allJobs, employers, payer);

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { isToday, isPast, differenceInCalendarDays } from 'date-fns';
 import { effectiveHoursWorked } from '@/lib/payCalc';
+import { sameClockTime } from '@/lib/clock';
 import type { Job } from '@/lib/store';
 
 // A shift counts as "needs hours" once its date has arrived and no hours
@@ -15,6 +16,8 @@ export function needsHours(job: Job): boolean {
   // Planned hours waiting to be confirmed need a tap just as much as no hours
   // at all do, and "completed" does not excuse them.
   if (job.hoursPlanned) return true;
+  // An end at the start's own time is a placeholder: no hours yet, whatever its status says.
+  if (!job.hoursWorked && sameClockTime(job.startTime, job.endTime)) return true;
   return effectiveHoursWorked(job) === 0 && job.status !== 'completed';
 }
 

@@ -63,6 +63,7 @@ import { EMPLOYER_COLOURS, employerColours, employerId } from '@/lib/employerCol
 import { ptoBalance } from '@/lib/pto';
 import { aiFetch } from '@/lib/aiSwitch';
 import { roundHours } from '@/lib/hoursFormat';
+import { sameClockTime } from '@/lib/clock';
 
 /** The money's colours, in the order they're worked out (see moneyTone), and what the key prints. */
 export const SHIFT_STATES = [
@@ -453,6 +454,8 @@ function calcHours(start: string, end: string): number {
   if (isNaN(s)) return 0;
   let e = resolveEndMins(s, end);
   if (isNaN(e)) return 0;
+  // The end at the start's own time is a placeholder, not 24 hours: see sameClockTime.
+  if (e === s) return 0;
   if (e <= s) e += 24 * 60;
   return Math.max(0, (e - s) / 60);
 }
@@ -1636,6 +1639,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
               <p className="text-[10px] text-warning">Can't read that yet. Try 8a-6p, or 8-12, 1-6 for calls.</p>
             ) : !timeline && startTime && endTime && calcHours(startTime, endTime) > 0 ? (
               <p className="text-[10px] text-mono text-muted-foreground">{startTime} → {endTime} = <span className="text-accent font-semibold">{roundHours(calcHours(startTime, endTime))}h</span></p>
+            ) : !timeline && startTime && endTime && sameClockTime(startTime, endTime) ? (
+              <p className="text-[10px] text-mono text-warning" data-testid="same-start-end">{startTime} → {endTime}: the end is the start. Put in the real end, or the hours.</p>
             ) : !timeline && startTime && !endTime ? (
               <p className="text-[10px] text-mono text-muted-foreground">Starts {startTime}. Add the end after a dash.</p>
             ) : (
@@ -4317,6 +4322,7 @@ export default function CalendarPage() {
                             <span className="flex items-center gap-1.5 text-[11px] text-mono text-muted-foreground">
                               {hours > 0 ? `${roundHours(hours)}h` : isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
                               {calls.some(c => c.startTime && !c.endTime) && <span className="text-warning"> · no end time</span>}
+                              {calls.some(c => !c.hoursWorked && sameClockTime(c.startTime, c.endTime)) && <span className="text-warning" data-testid="row-same-start-end"> · end is the start</span>}
                               {calls.filter(c => effectiveHoursWorked(c) > 0).map(c => (
                                 <StubMark key={c.id} job={c} paidByHand={paidByHandJobIds.has(c.id)} openProof />
                               ))}

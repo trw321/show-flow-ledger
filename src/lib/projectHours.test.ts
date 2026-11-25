@@ -87,3 +87,10 @@ describe('a project\'s hours', () => {
     expect(h.days).toBe(2);
   });
 });
+
+describe('a project day saved with its end at its start', () => {
+  it('has no hours, and is a day that still needs them', () => {
+    const run = [shift('1', '2026-10-05'), shift('2', '2026-10-06', { hoursWorked: undefined, startTime: '04:00 PM', endTime: '04:00 PM' })];
+    expect(hoursOf(run)).toMatchObject({ worked: 10, days: 1, needHours: 1 });
+  });
+});
