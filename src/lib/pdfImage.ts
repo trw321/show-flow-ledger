@@ -19,7 +19,16 @@ async function renderPages(file: File, max: number): Promise<{ canvases: HTMLCan
   pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 
   const buffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  // Its decoders and fonts, served from public/pdfjs (copied there before dev
+  // and build). Without them a scanned stub, whose text is JBIG2 images,
+  // draws as a blank page.
+  const base = `${import.meta.env.BASE_URL ?? '/'}pdfjs/`;
+  const pdf = await pdfjsLib.getDocument({
+    data: buffer,
+    wasmUrl: `${base}wasm/`,
+    standardFontDataUrl: `${base}standard_fonts/`,
+    iccUrl: `${base}iccs/`,
+  }).promise;
   const canvases: HTMLCanvasElement[] = [];
   for (let i = 1; i <= Math.min(pdf.numPages, max); i++) {
     const page = await pdf.getPage(i);

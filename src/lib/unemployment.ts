@@ -260,13 +260,23 @@ export function readAmount(text: string): number {
 }
 
 /**
+ * Two stubs for the same days that are two paychecks: paid on different
+ * days (a check for the week, then another for the same week's overtime or
+ * a correction). Without both pay dates there's no telling, and the same
+ * days are taken as the same paycheck.
+ */
+export const otherCheck = (a: Partial<Pick<ClaimStub, 'paidOn'>>, b: Partial<Pick<ClaimStub, 'paidOn'>>) =>
+  !!a.paidOn && !!b.paidOn && a.paidOn !== b.paidOn;
+
+/**
  * The stub already kept for the same employer and the same pay period, if
  * there is one: adding it again would only be a copy.
  */
-export function sameStub(list: ClaimStub[], stub: Pick<ClaimStub, 'employer' | 'start' | 'end'>, except?: string): ClaimStub | undefined {
+export function sameStub(list: ClaimStub[], stub: Pick<ClaimStub, 'employer' | 'start' | 'end'> & Partial<Pick<ClaimStub, 'paidOn'>>, except?: string): ClaimStub | undefined {
   const key = claimEmployerKey(stub.employer);
-  return list.find(o => o.id !== except && claimEmployerKey(o.employer) === key && o.start === stub.start && o.end === stub.end);
+  return list.find(o => o.id !== except && claimEmployerKey(o.employer) === key && o.start === stub.start && o.end === stub.end && !otherCheck(o, stub));
 }
+
 
 /** Employers' claim details as stored, made safe to read: text trimmed, days only if real. */
 export function cleanClaimEmployers(raw: unknown): Record<string, ClaimEmployerInfo> {
@@ -671,7 +681,22 @@ export function claimSummary(
     // A shift another stub's pay already stands for isn't paid twice.
     const worked = workedAll.filter(x => !paidByStub.has(x.job.id));
     if (workedAll.length > 0 && worked.length === 0) {
-      stubUses.push({ stub, status: 'overlap', matchedWith: paidByStub.get(workedAll[0].job.id), used: false, shifts: 0, estimate: 0 });
+      const first = paidByStub.get(workedAll[0].job.id)!;
+      if (!otherCheck(first, stub) || stub.useEstimate) {
+        stubUses.push({ stub, status: 'overlap', matchedWith: first, used: false, shifts: 0, estimate: 0 });
+        continue;
+      }
+      // Another paycheck for the same shifts, paid another day: its pay is
+      // added to theirs (their estimates are already out).
+      const e = byEmployer.get(id) ?? { name, firstDay: workedAll[0].date, lastDay: workedAll[workedAll.length - 1].date, days: 0, hours: 0, gross: 0, worked: new Set<string>() };
+      const { out, by } = placeStub(stub, workedAll);
+      for (const [ending, v] of out) {
+        addToWeek(stub, name, ending, v.gross, v.hours, 'pays');
+        e.gross += v.gross;
+        e.hours += v.hours;
+      }
+      byEmployer.set(id, e);
+      stubUses.push({ stub, status: 'calendar', used: false, shifts: workedAll.length, estimate: 0, usesPay: true, placedBy: by });
       continue;
     }
     if (worked.length > 0) {
@@ -753,8 +778,8 @@ export function claimSummary(
     }
     // Already counted: the same pay period again, or some of its days.
     const before = countedStubs.get(id) ?? [];
-    const same = before.find(o => o.start === stub.start && o.end === stub.end);
-    const overlapping = same ?? before.find(o => o.start <= stub.end && stub.start <= o.end);
+    const same = before.find(o => o.start === stub.start && o.end === stub.end && !otherCheck(o, stub));
+    const overlapping = same ?? before.find(o => o.start <= stub.end && stub.start <= o.end && !otherCheck(o, stub));
     if (overlapping) {
       stubUses.push({ stub, status: same ? 'duplicate' : 'overlap', matchedWith: overlapping, used: false, shifts: 0, estimate: 0 });
       continue;

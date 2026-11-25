@@ -27,7 +27,13 @@ serve(async (req) => {
     // The model doesn't know what year it is, and left to itself it read a
     // check dated "10/23/26" as 2023-10-23. Every document type gets told.
     const today = new Date().toISOString().split("T")[0];
-    const datesNote = `\n\nDATES. Today is ${today}. Documents you are shown are recent: dated within the last few months, never more than a few days in the future. A two-digit year belongs to this century: "10/23/26" is ${today.slice(0, 2)}26-10-23, never 2023. Read slashed or dashed US dates month first ("10/23/26" is October 23). When no year is printed, use the year that puts the date closest before today. Never use a year earlier than the one printed.`;
+    // Pay stubs for an unemployment claim go back a year and a half: "recent"
+    // turned a printed "10/06/25" into 2026. Their years are read as printed.
+    const datesNote = isPaystubs
+      ? `
+
+DATES. Today is ${today}. These pay stubs can be up to two years old: read every year exactly as printed, and never change a printed year to make a date more recent. A two-digit year belongs to this century: "10/06/25" is 2025-10-06 and "05/18/26" is 2026-05-18. Read slashed or dashed US dates month first. When no year is printed, use the year that puts the date closest before today.`
+      : `\n\nDATES. Today is ${today}. Documents you are shown are recent: dated within the last few months, never more than a few days in the future. A two-digit year belongs to this century: "10/23/26" is ${today.slice(0, 2)}26-10-23, never 2023. Read slashed or dashed US dates month first ("10/23/26" is October 23). When no year is printed, use the year that puts the date closest before today. Never use a year earlier than the one printed.`;
 
     const basePrompt = isPaystubs
       ? `You read pay stubs for an AV/entertainment technician who is filing for unemployment and needs, for every paycheck, who paid, the pay period, the hours and the gross pay.
@@ -35,12 +41,12 @@ serve(async (req) => {
 The image may hold MANY paychecks: a payroll website's list of pay statements, a screenshot of several stubs, an earnings history table with one row per pay period, or a single stub. Return one entry per paycheck / pay period you can see. Read every row; do not stop at the first.
 
 For each one:
-- employer: the paying company or payroll agency as printed on that row or stub. When the page belongs to one employer (its name in the header, a single company's payroll portal), use that name for every row.
-- payPeriodStart / payPeriodEnd: the pay period it covers (YYYY-MM-DD each): the days the work was done, not the check or pay date. If only a period end or "week ending" is printed, put it in payPeriodEnd and null in payPeriodStart. Null for both when no period is printed; never work one out from the check date.
-- checkDate: the check / pay / deposit date, if printed (YYYY-MM-DD).
-- totalHours: total hours paid for that paycheck, if shown.
-- grossPay: gross earnings for that paycheck, before deductions.
-- netPay: take-home pay for that paycheck, if shown.
+- employer: the company that paid, as printed at the top of the stub, in its letterhead or its footer ("Hughston Engineering, Inc."). Never the employee's own name or address, and never the payroll service that printed it ("Powered by Intuit Payroll", ADP, Paychex, Gusto) unless no other company is named. When the page belongs to one employer (its name in the header, a single company's payroll portal), use that name for every row.
+- payPeriodStart / payPeriodEnd: THE MOST IMPORTANT FIELDS. The pay period it covers (YYYY-MM-DD each): the days the work was done, not the check or pay date. It is usually printed in the stub's header: "Pay Period: 05/18/26 - 05/24/26" is 2026-05-18 to 2026-05-24; also "Period Beginning / Period Ending", "Period: 10/06/25 to 10/12/25", "Week Ending 05/24/26". If only a period end or "week ending" is printed, put it in payPeriodEnd and null in payPeriodStart. Null for both when no period is printed; never work one out from the check date.
+- checkDate: the pay date, printed as "Pay Date", "Check Date", "Pay Day", "Deposit Date" or "Advice Date" (YYYY-MM-DD). It is a different date from the pay period: keep them apart.
+- totalHours: the hours paid on this paycheck, from the Qty / Hours / Units column of its earnings section ("Earnings and Hours", "Earnings"). Use that column's total: the unlabelled figure under the column on the earnings total row (for example "11:00" under "10:00" and "1:00"); without a total row, add the column's hour rows. A quantity written like a clock time is hours and minutes: "10:00" is 10 hours, "7:30" is 7.5, "0:45" is 0.75, "11:00" is 11. Never take a rate, an amount or a YTD figure as hours.
+- grossPay: the gross pay for THIS paycheck: the "Current" (this period) column of the earnings section, at its total, the figure on the same row as the hours total (for example 601.78 on the row with 11:00). It includes every earnings row (regular, overtime, vacation, holiday). Never the YTD / year-to-date column, never net pay, never taxes, and never "Non-taxable company items" (H&W, pension, training fund), which aren't pay to the employee.
+- netPay: "Net Pay" in the Current column (not YTD), if shown.
 - hourlyRate: its straight-time hourly rate, if printed.
 - hoursBreakdown: only if that paycheck itemizes hours by date (e.g. "10/27 10 ST, 11/3 12.5 OT"): one entry per date and hour type, with date (YYYY-MM-DD), hours and type (ST, OT or DT). Never spread a total over dates or assume 8-hour days: null when no dates are printed beside hours.
 - weekBreakdown: only if that paycheck prints its hours or earnings week by week (a two-week stub with "Week 1 01/25-01/31 9.00 hrs $559.74" and "Week 2 ...", "W/E 01/31: 9.00", or an earnings line per week): one entry per week with start (its first day, YYYY-MM-DD, or null), end (its last day, YYYY-MM-DD), hours and gross for that week (null when not printed). These are the weeks the work was done, which the person needs for an unemployment claim. Never split a total into weeks yourself: null when no per-week figures are printed.
@@ -48,7 +54,8 @@ For each one:
 Rules:
 - One entry per paycheck. Its earnings lines (Regular, Overtime, Vacation...) are parts of it, never entries of their own.
 - Skip year-to-date (YTD) columns and any totals row that adds several paychecks together.
-- Never list the same paycheck twice, even if it shows twice on the page.
+- Never list the same paycheck twice, even if it shows twice on the page. But two different checks can cover the same pay period (different check numbers or pay dates): list each of them.
+- Read the dates exactly as printed, month first ("05/18/26" is May 18, 2026), and keep each check's own dates; never copy one check's dates onto another.
 - Use null for anything not legible or not shown. Do not guess or estimate.`
       : isPaystub
       ? `You are a pay stub parser for an AV/entertainment industry technician. Analyze the uploaded pay stub or check-stub image and extract its full structured breakdown — this is used to verify calculated pay against what was actually paid, so accuracy on the dollar figures matters more than completeness of any narrative text.
@@ -96,7 +103,7 @@ If you can't determine the date, use today's date. Return ONLY valid JSON.`
     const systemPrompt = basePrompt + datesNote;
 
     const userPrompt = isPaystubs
-      ? "List every paycheck / pay period in this image: employer, pay period start and end (the days worked), check date (when it was paid), total hours, gross pay and net pay for each, and its week-by-week hours and earnings when it prints them. Skip year-to-date figures and totals rows."
+      ? "List every paycheck / pay period in this image: employer, pay period start and end (the days worked: the most important), pay date, total hours (the Qty column's total, H:MM read as hours), gross pay (the Current column's earnings total, on the same row as the hours total) and net pay for each, and its day-by-day or week-by-week hours and earnings when it prints them. Skip year-to-date figures and rows that add several paychecks together."
       : isPaystub
       ? "Extract the full structured breakdown from this pay stub image: employer, pay period, hours, rate, gross, dues, tax, vacation, and net pay."
       : isTimesheet

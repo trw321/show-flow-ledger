@@ -551,3 +551,37 @@ describe('Coast to Coast, believed', () => {
     expect(s.stubs[0]).toMatchObject({ status: 'calendar', usesPay: true, check: { hours: 11, farOff: true } });
   });
 });
+
+describe('two checks for the same pay period', () => {
+  // Hughston: checks 68998 and 69167 both for Oct 6–12, 2025, paid Oct 8 and Oct 16.
+  const check = (id: string, gross: number, hours: number, paidOn?: string): ClaimStub =>
+    ({ id, employer: 'Hughston Engineering, Inc.', start: '2025-10-06', end: '2025-10-12', hours, gross, createdAt: 'x', ...(paidOn ? { paidOn } : {}) });
+
+  it('counts both when they were paid on different days', () => {
+    const s = claimSummary([], [], EMPTY_PROFILE, '2025-10-01', '2025-10-31', 6, [check('a', 661.95, 11, '2025-10-08'), check('b', 1985.86, 31, '2025-10-16')]);
+    expect(s.stubs.map(u => u.status)).toEqual(['counted', 'counted']);
+    expect(s.gross).toBe(2647.81);
+    expect(s.hours).toBe(42);
+  });
+
+  it('takes the same days and the same pay date, or no pay dates, as one paycheck', () => {
+    const same = claimSummary([], [], EMPTY_PROFILE, '2025-10-01', '2025-10-31', 6, [check('a', 661.95, 11, '2025-10-08'), check('b', 661.95, 11, '2025-10-08')]);
+    expect(same.stubs.map(u => u.status)).toEqual(['counted', 'duplicate']);
+    const undated = claimSummary([], [], EMPTY_PROFILE, '2025-10-01', '2025-10-31', 6, [check('a', 661.95, 11), check('b', 1985.86, 31)]);
+    expect(undated.stubs.map(u => u.status)).toEqual(['counted', 'duplicate']);
+  });
+
+  it('knows another check for the same days is not one already kept', () => {
+    const kept = [check('a', 661.95, 11, '2025-10-08')];
+    expect(sameStub(kept, { employer: 'Hughston Engineering, Inc.', start: '2025-10-06', end: '2025-10-12', paidOn: '2025-10-16' })).toBeUndefined();
+    expect(sameStub(kept, { employer: 'Hughston Engineering, Inc.', start: '2025-10-06', end: '2025-10-12', paidOn: '2025-10-08' })?.id).toBe('a');
+    expect(sameStub(kept, { employer: 'Hughston Engineering, Inc.', start: '2025-10-06', end: '2025-10-12' })?.id).toBe('a');
+  });
+
+  it('adds a second check to the calendar shifts the first already pays', () => {
+    const shift = job('s', '2025-10-08', 'Hughston Engineering, Inc.', { hourlyRate: 55.72 });
+    const s = claimSummary([shift], [], EMPTY_PROFILE, '2025-10-01', '2025-10-31', 6, [check('a', 661.95, 11, '2025-10-08'), check('b', 1985.86, 31, '2025-10-16')]);
+    expect(s.stubs.map(u => [u.status, u.usesPay])).toEqual([['calendar', true], ['calendar', true]]);
+    expect(s.gross).toBe(2647.81);
+  });
+});

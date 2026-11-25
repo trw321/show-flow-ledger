@@ -183,7 +183,7 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
     if (!Number.isFinite(hours) || hours < 0 || !Number.isFinite(gross) || gross < 0) { toast.error('Hours and gross need to be numbers.'); return; }
     if (hours === 0 && gross === 0) { toast.error('Put in the hours or the gross from the stub.'); return; }
     // The same employer and pay period again: that's a copy, not another stub.
-    const copy = sameStub(stubs, { employer, start: d.start, end: d.end }, editing.id);
+    const copy = sameStub(stubs, { employer, start: d.start, end: d.end, paidOn: d.paidOn && isClaimDay(d.paidOn) ? d.paidOn : undefined }, editing.id);
     if (copy) { toast.error(`You already have a ${copy.employer} stub for ${periodText(copy.start, copy.end)}. Edit that one.`); return; }
     const before = stubs.find(s => s.id === editing.id);
     const stub: ClaimStub = {
@@ -255,7 +255,8 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
         const employer = typeof r.employer === 'string' ? r.employer.trim() : '';
         const hours = Number(r.totalHours) > 0 ? Math.round(Number(r.totalHours) * 1000) / 1000 : 0;
         const gross = Number(r.grossPay) > 0 ? Math.round(Number(r.grossPay) * 100) / 100 : 0;
-        const already = employer && a && b ? sameStub(stubs, { employer, start: a, end: b }) : undefined;
+        const paidOnRead = isClaimDay(r.checkDate) ? r.checkDate : undefined;
+        const already = employer && a && b ? sameStub(stubs, { employer, start: a, end: b, paidOn: paidOnRead }) : undefined;
         const complete = !!employer && !!a && !!b && (hours > 0 || gross > 0);
         const days = a && b ? stubDays(r.hoursBreakdown, a, b) : undefined;
         const rate = Number(r.hourlyRate) > 0 ? Number(r.hourlyRate) : undefined;
@@ -317,7 +318,7 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
     let list = stubs;
     let added = 0;
     for (const f of found) {
-      if (!f.keep || !f.employer || !f.start || !f.end || sameStub(list, { employer: f.employer, start: f.start, end: f.end })) continue;
+      if (!f.keep || !f.employer || !f.start || !f.end || sameStub(list, { employer: f.employer, start: f.start, end: f.end, paidOn: f.paidOn })) continue;
       list = [...list, {
         id: crypto.randomUUID(), employer: f.employer, start: f.start, end: f.end, hours: f.hours, gross: f.gross, createdAt: now,
         ...(f.days ? { days: f.days } : {}), ...(f.rate ? { rate: f.rate } : {}),
