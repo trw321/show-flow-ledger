@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isCallback, sameProject, projectSiblingsToRelabel, projectKeys, projectOf } from './projectGrouping';
+import { isCallback, sameProject, projectSiblingsToRelabel, projectKeys, projectOf, splitShifts } from './projectGrouping';
 import type { Employer, Job } from './store';
 
 const job = (extra: Partial<Job>): Job => ({
@@ -196,5 +196,33 @@ describe('projectKeys: one answer for every screen', () => {
       job({ id: 'b', name: 'Palace Hotel', date: '2026-10-25' }),
     ];
     expect(projectOf(jobs[1], jobs).map(j => j.id).sort()).toEqual(['a', 'b']);
+  });
+});
+
+describe('splitShifts: a split day is one shift', () => {
+  // Aug 12: OAR at the Masonic, a morning call and a night load-out, logged
+  // with and without the year on the job number.
+  const am = job({ id: 'am', name: 'OAR', client: 'LIVE NATION / MASONIC', date: '2026-08-12', jobNumber: '2026-2626', startTime: '09:00 AM' });
+  const pm = job({ id: 'pm', name: 'OAR', client: 'LIVE NATION / MASONIC', date: '2026-08-12', jobNumber: '2626', startTime: '10:30 PM' });
+  const ids = (groups: Job[][]) => groups.map(g => g.map(j => j.id));
+
+  it('puts both calls of the day in one shift', () => {
+    expect(ids(splitShifts([am, pm]))).toEqual([['am', 'pm']]);
+  });
+
+  it('keeps other days and other jobs apart, in order', () => {
+    const before = job({ id: 'before', name: 'OAR', client: 'LIVE NATION / MASONIC', date: '2026-08-11', jobNumber: '2026-2626' });
+    const other = job({ id: 'other', name: 'Gala', date: '2026-08-12', jobNumber: '2026-3001' });
+    expect(ids(splitShifts([before, am, other, pm]))).toEqual([['before'], ['am', 'pm'], ['other']]);
+  });
+
+  it('never makes a cancelled call or PTO half of a split', () => {
+    expect(ids(splitShifts([am, { ...pm, status: 'cancelled' }]))).toEqual([['am'], ['pm']]);
+    expect(ids(splitShifts([{ ...am, pto: true }, pm]))).toEqual([['am'], ['pm']]);
+  });
+
+  it('survives a stored date that is not one', () => {
+    const bad = job({ id: 'bad', name: 'OAR', date: 'Nov 5' });
+    expect(ids(splitShifts([bad, { ...bad, id: 'bad2' }]))).toEqual([['bad', 'bad2']]);
   });
 });

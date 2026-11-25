@@ -486,11 +486,9 @@ export function jobPayBreakdown(
     return { gross: r.totalPay + r.duesAmount + r.taxAmount, net: r.totalPay, dues: r.duesAmount, tax: r.taxAmount, vacation: 0, retirementMatch: 0 };
   }
 
-  const { dayResult, share, employer, rates } = shiftDay(job, allJobs, employers, payer, opts, hours, rate);
-  // This shift's portion of the day, by hours.
-  const totalPay = dayResult.totalPay * share;
-  const duesAmount = dayResult.duesAmount * share;
-  const taxAmount = dayResult.taxAmount * share;
+  const { dayResult, employer, rates } = shiftDay(job, allJobs, employers, payer, opts, hours, rate);
+  // This shift's part of its day.
+  const { totalPay, duesAmount, taxAmount } = dayResult;
   const weeklyBonus = employer ? calculateWeeklyOvertimeBonus(job, allJobs, employer) : 0;
   // totalPay already has dues+tax deducted — add them back to get gross-before-deductions.
   const gross = totalPay + duesAmount + taxAmount + weeklyBonus;
@@ -514,8 +512,8 @@ export function jobPayBreakdown(
 }
 
 /**
- * A shift's hours by what they were paid at: its share of its day, the same
- * share its pay is. PTO is paid, not worked, so it is counted on its own.
+ * A shift's hours by what they were paid at: its part of its day, cut the same
+ * way its pay is. PTO is paid, not worked, so it is counted on its own.
  * Under a weekly overtime rule, the hours past the week's threshold move from
  * straight time to overtime, as the pay does.
  */
@@ -531,28 +529,41 @@ export function jobHoursBreakdown(
   if (job.pto) return { ...none, pto: netHoursWorked(job) };
   const rate = job.hourlyRate
     ?? (job.dayRate ? job.dayRate / (job.dayRateHours ?? 10) : 0);
-  const { dayResult, share, employer } = shiftDay(job, allJobs, employers, payer, {}, hours, rate);
-  const t = dayResult.tierHours;
-  const out = {
-    straight: t.straight * share,
-    overtime: t.overtime * share,
-    double: t.double * share,
-    night: t.night * share,
-    minimum: t.minimum * share,
-    premiumDay: t.premiumDay * share,
-    pto: 0,
-  };
+  const { dayResult, employer } = shiftDay(job, allJobs, employers, payer, {}, hours, rate);
+  const out = { ...dayResult.tierHours, pto: 0 };
   const weekly = Math.min(out.straight, employer ? weeklyOvertimeHours(job, allJobs, employer) : 0);
   out.straight -= weekly;
   out.overtime += weekly;
   return out;
 }
 
+/** What a shift is paid out of its day: its pay, its deductions, its hours by tier. */
+type DayCut = { totalPay: number; duesAmount: number; taxAmount: number; tierHours: TierHours };
+
+/** The part of a day that a later call added on top of the calls before it. */
+function dayCutMinus(through: DayCut, before: DayCut): DayCut {
+  const t = through.tierHours;
+  const b = before.tierHours;
+  return {
+    totalPay: through.totalPay - before.totalPay,
+    duesAmount: through.duesAmount - before.duesAmount,
+    taxAmount: through.taxAmount - before.taxAmount,
+    tierHours: {
+      straight: t.straight - b.straight,
+      overtime: t.overtime - b.overtime,
+      double: t.double - b.double,
+      night: t.night - b.night,
+      minimum: t.minimum - b.minimum,
+      premiumDay: t.premiumDay - b.premiumDay,
+    },
+  };
+}
+
 /**
  * The day a shift is part of, paid: on a split day both calls climb one
- * ladder, and this shift's share of it is by hours. jobPayBreakdown and
- * jobHoursBreakdown both start here, so a shift's hours and its pay are
- * always cut the same way.
+ * ladder, and each call is paid what it adds to the day in the order they
+ * were worked. jobPayBreakdown and jobHoursBreakdown both start here, so a
+ * shift's hours and its pay are always cut the same way.
  */
 function shiftDay(
   job: Job,
@@ -562,13 +573,11 @@ function shiftDay(
   opts: { asWorked?: boolean },
   hours: number,
   rate: number,
-) {
+): { dayResult: DayCut; employer: Employer | undefined; rates: ReturnType<typeof ratesForShift> } {
   // A split day is ONE day. Both halves share the same overtime ladder, so the
   // evening call carries on from where the morning left off — five hours and
   // five hours is a ten-hour day with two of them at time and a half, not two
-  // five-hour days at straight time. Pay is worked out for the whole day and
-  // this shift takes its share by hours, which is also what keeps the parts
-  // adding up to the day.
+  // five-hour days at straight time.
   const dayShifts = allJobs.filter(
     other =>
       other.date === job.date &&
@@ -576,25 +585,57 @@ function shiftDay(
       !other.pto &&
       effectiveHoursWorked(other) > 0,
   );
-  const isSplitDay = dayShifts.length > 1;
+  const isSplitDay = dayShifts.length > 1 && dayShifts.some(j => j.id === job.id);
   const employer = resolveEmployer(job.client, employers);
+  const rates = ratesForShift(job, employer, payer);
+  if (!isSplitDay) return { dayResult: priceDay([job], false), employer, rates };
+
+  // Each call is paid what it adds to the day, in the order they were worked:
+  // the day up to and including it, less the day before it. The morning is
+  // paid as the morning, and the overtime and the night premium land on the
+  // call that worked them. Cut by hours instead, a night call's premium was
+  // spread over the morning, so neither call showed what it earned. The
+  // parts still add up to the day.
+  const ordered = dayShifts
+    .map(j => (j.id === job.id ? job : j))
+    .sort((a, b) => compareCalls(a, b) || a.id.localeCompare(b.id));
+  const at = ordered.findIndex(j => j.id === job.id);
+  const through = priceDay(ordered.slice(0, at + 1), true);
+  return { dayResult: at === 0 ? through : dayCutMinus(through, priceDay(ordered.slice(0, at), true)), employer, rates };
+
+  /** The calls given, priced as one day. `split` says the day is a split, even when only its first call is given. */
+  function priceDay(sides: Job[], split: boolean): DayCut {
+    return priceSides(job, sides, split, allJobs, employer, payer, opts, hours, rate, rates);
+  }
+}
+
+/** shiftDay's day, priced over the calls given. */
+function priceSides(
+  job: Job,
+  calls: Job[],
+  isSplitDay: boolean,
+  allJobs: Job[],
+  employer: Employer | undefined,
+  payer: PayerProfile,
+  opts: { asWorked?: boolean },
+  hours: number,
+  rate: number,
+  rates: ReturnType<typeof ratesForShift>,
+): DayCut {
+  const dayShifts = calls;
   // Each side of a split carries its own minimum call — usually four hours a
   // side on union work, five under some contracts (see splitSideMinimum) — so
   // a short morning bills its minimum rather than the hours stood there. The
   // working hours on both sides climb one ladder; what a short side is owed
   // beyond them is minimum padding, never worked, paid flat at straight time.
   const sideMinimum = (j: Job) => (opts.asWorked ? 0 : splitSideMinimum(j, employer, payer));
-  const billable = (j: Job) => Math.max(effectiveHoursWorked(j), sideMinimum(j));
   // Each side of a split is its own call, so each breaks the hour on its own:
   // 11:30 PM to 12:15 AM is an hour on that side, whatever the other side was.
   const rounds = !opts.asWorked && breaksTheHour(job, employer);
   const split = isSplitDay ? splitDayHours(dayShifts, rounds) : null;
   const dayHours = split ? split.clocked : hours;
-  const billableDay = isSplitDay ? dayShifts.reduce((sum, j) => sum + billable(j), 0) : hours;
-  const share = isSplitDay && billableDay > 0 ? billable(job) / billableDay : 1;
   // Dues follow the local, tax follows you, and only what is left is the
-  // employer's to say. See payerProfile for why.
-  const rates = ratesForShift(job, employer, payer);
+  // employer's to say (rates, from shiftDay). See payerProfile for why.
   const dayMult = dayMultiplierFor(job, employer, allJobs);
   const dayMealMinutes = isSplitDay
     ? dayShifts.reduce((sum, j) => sum + offClockMealMinutes(j), 0)
@@ -635,7 +676,7 @@ function shiftDay(
     unionDuesPercent: rates.unionDuesPercent,
     estimatedTaxPercent: rates.estimatedTaxPercent,
   });
-  return { dayResult, share, employer, rates };
+  return dayResult;
 }
 
 /** Net pay only — see jobPayBreakdown for gross+net together. */

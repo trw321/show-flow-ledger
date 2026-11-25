@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react';
-import { isCallback, sameProject, projectKeysFor, projectOf as projectDays } from '@/lib/projectGrouping';
+import { isCallback, sameProject, projectKeysFor, projectOf as projectDays, splitShifts } from '@/lib/projectGrouping';
 import { projectSiblingsToRelabel } from '@/lib/projectGrouping';
 import StubEditor from '@/components/StubEditor';
 import MoneyRain from '@/components/MoneyRain';
@@ -38,7 +38,7 @@ import { ratesForShift, type PayerProfile } from '@/lib/payerProfile';
 import { contractFor, contractsWorked, shiftContract } from '@/lib/contracts';
 import { alreadyRecorded } from '@/lib/paymentRepeats';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
-import { calculateDayPay, dayInARow, dayMultiplierFor, dayPremiumLabel, compositeWeekendMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross, jobPayBreakdown, compareCalls } from '@/lib/payCalc';
+import { calculateDayPay, dayInARow, dayMultiplierFor, dayPremiumLabel, compositeWeekendMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross, jobPayBreakdown, jobHoursBreakdown, nightLeftAtEnd, compareCalls } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { breakTheHourLabel, breaksTheHour, isLocal16Shift } from '@/lib/local16';
 import { callMinimum, contractRuleFor, earlyCallHours, earlyCallWords, isEarlyCall, shiftPremiums, splitSideMinimum } from '@/lib/premiums';
@@ -1036,7 +1036,10 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
       dtThresholdHours: employer?.dailyDoubletimeThresholdHours,
       otMultiplier: employer?.overtimeMultiplier,
       dtMultiplier: employer?.doubletimeMultiplier,
-      nightHours, nightMultiplier: employer?.nightPremiumMultiplier, roundUpToWholeHours: breaksTheHour(job, employer), unionDuesPercent: previewRates.unionDuesPercent, estimatedTaxPercent: previewRates.estimatedTaxPercent, dayPremiumLabel: dayPremiumLabel({ ...job, compositeTeam }, employer, data.jobs),
+      // A broken hour falls at the end of the call, so a call that ends in the
+      // night pays its rounded part hour at the night rate, as jobPayBreakdown does.
+      nightHours, nightLeftAtEnd: nightHours > 0 && startTime && endTime ? nightLeftAtEnd(startTime, endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour) : 0,
+      nightMultiplier: employer?.nightPremiumMultiplier, roundUpToWholeHours: breaksTheHour(job, employer), unionDuesPercent: previewRates.unionDuesPercent, estimatedTaxPercent: previewRates.estimatedTaxPercent, dayPremiumLabel: dayPremiumLabel({ ...job, compositeTeam }, employer, data.jobs),
       premiums: shiftPremiums({ ...job, startTime, endTime }, data.jobs, employer, prefs.payer),
     })
     : null;
@@ -1047,6 +1050,21 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   const vacationPercent = previewRates.vacationPercent ?? 0;
   const vacationAmount = payPreview && vacationPercent > 0 ? payPreview.totalPay * (vacationPercent / 100) : 0;
   const payPreviewTotal = (payPreview?.totalPay ?? 0) + vacationAmount;
+  // On a split day this call is one part of a day the calls share: priced
+  // alone it would start the overtime ladder over, so it shows what the app
+  // pays it everywhere else, with the times, hours and rate on the form.
+  const splitCallPay = useMemo(() => {
+    const live: Job = {
+      ...job, startTime, endTime,
+      hoursWorked: Number.isFinite(enteredHours) ? enteredHours : job.hoursWorked,
+      hourlyRate: rate > 0 ? rate : job.hourlyRate,
+    };
+    const jobs = data.jobs.map(j => (j.id === job.id ? live : j));
+    const calls = jobs.filter(o => o.date === job.date && (o.client ?? '') === (job.client ?? '') && !o.pto && effectiveHoursWorked(o) > 0);
+    if (job.pto || calls.length < 2 || !calls.some(o => o.id === job.id)) return null;
+    const pay = jobPayBreakdown(live, jobs, data.employers, prefs.payer);
+    return pay.gross > 0 ? { gross: pay.gross, hours: jobHoursBreakdown(live, jobs, data.employers, prefs.payer) } : null;
+  }, [job, startTime, endTime, enteredHours, rate, data.jobs, data.employers, prefs.payer]);
 
   const stubMatch = useMemo(
     () => (stubParsed ? matchStubToShifts(stubParsed, data.jobs) : null),
@@ -2064,7 +2082,27 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             ? <div className="flex justify-between"><span className="text-muted-foreground text-xs">Day rate</span><span className="font-medium text-xs text-mono">${job.dayRate} · covers {job.dayRateHours ?? 10}h</span></div>
             : rate > 0 && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Rate</span><span className="font-medium text-xs text-mono">${rate}/hr</span></div>}
         </div>
-        {payPreview && (
+        {splitCallPay ? (
+          <div className="rounded-md border border-success/30 bg-success/5 p-3 space-y-1.5" data-testid="split-call-pay">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Worked {roundHours(actualHours)}h · this call, gross</span>
+              <span className="font-bold text-sm text-mono text-success">${splitCallPay.gross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+            <div className="pt-1 space-y-0.5 border-t border-border/40 mt-1">
+              {([
+                [splitCallPay.hours.straight, 'straight'],
+                [splitCallPay.hours.overtime, 'overtime'],
+                [splitCallPay.hours.double, 'double time'],
+                [splitCallPay.hours.night, 'night premium'],
+                [splitCallPay.hours.premiumDay, '6th/7th day premium'],
+                [splitCallPay.hours.minimum, 'minimum padding'],
+              ] as const).filter(([h]) => h > 0.005).map(([h, label]) => (
+                <p key={label} className="text-[10px] text-mono text-muted-foreground">{roundHours(h)}h {label}</p>
+              ))}
+              <p className="text-[10px] text-mono text-muted-foreground">Split day: both calls are one day, worked in order, so overtime and night pay land on the call that worked them.</p>
+            </div>
+          </div>
+        ) : payPreview && (
           <div className={cn("rounded-md border p-3 space-y-1.5", minimumApplied ? "border-accent/40 bg-accent/5" : "border-success/30 bg-success/5")}>
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">{minimumApplied ? `Worked ${roundHours(actualHours)}h — paid for ${roundHours(billableHours)}h minimum` : mealDeductionHours > 0 ? `Worked ${roundHours(actualHours)}h — ${offClockMealMins}min meal = ${roundHours(paidHours)}h paid` : `Worked ${roundHours(actualHours)}h`}</span>
@@ -2961,7 +2999,8 @@ export default function CalendarPage() {
       const worked = jobs.filter(j => netHoursWorked(j) > 0);
       rows.push({
         from, to,
-        shifts: worked.length,
+        // A split day's calls are one shift.
+        shifts: splitShifts(worked).length,
         hours: worked.reduce((s, j) => s + netHoursWorked(j), 0),
         estimate: worked.reduce((s, j) => s + jobPayBreakdown(j, data.jobs, data.employers, prefs.payer)[payView], 0),
         paid: data.income.filter(i => i.status === 'paid' && workDateFor(i) >= from && workDateFor(i) <= to).reduce((s, i) => s + i.amount, 0),
@@ -3612,13 +3651,29 @@ export default function CalendarPage() {
                 {selectedJobs.map(job => (
                   <PremiumHoursBanner key={'premium-' + job.id} job={job} allJobs={data.jobs} employer={resolveEmployer(job.client, data.employers)} payer={prefs.payer} onTap={() => setSelectedJobId(job.id)} />
                 ))}
-                {selectedJobs.map(job => {
-                  const hours = netHoursWorked(job);
-                  const earned = shownPay(job);
-                  const paid = paidJobIds.has(job.id);
-                  const overdue = isOverdueUpcoming(job);
+                {/* A split day is one shift worked in two calls: one card, its
+                    calls inside it, each a tap from its own details. */}
+                {splitShifts(selectedJobs).map(calls => {
+                  const job = calls[0];
+                  const split = calls.length > 1;
+                  const hours = calls.reduce((s, c) => s + netHoursWorked(c), 0);
+                  const earned = calls.reduce((s, c) => s + shownPay(c), 0);
+                  const paid = calls.every(c => paidJobIds.has(c.id));
+                  const overdue = calls.some(c => isOverdueUpcoming(c));
+                  const money = (n: number) => '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                  const stubButton = (c: Job) => (
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); setOpenStubFor(c.id); setSelectedJobId(c.id); }}
+                      className="ml-auto flex items-center gap-1 text-[10px] text-mono uppercase tracking-wider opacity-80 hover:opacity-100"
+                      aria-label={c.payStub ? 'Replace the pay stub photo' : 'Add a pay stub photo'}
+                    >
+                      <StubMark job={c} paidByHand={paidByHandJobIds.has(c.id)} />
+                      {!c.payStub && <span>+ stub</span>}
+                    </button>
+                  );
                   return (
-                    <div key={job.id} onClick={() => setSelectedJobId(job.id)} className={cn("rounded-md border p-3 space-y-1 cursor-pointer hover:opacity-90 transition-opacity", paid ? "bg-success/20 text-success border-success/30" : overdue ? "bg-warning/20 text-warning border-warning/30" : statusColors[job.status])}>
+                    <div key={job.id} onClick={() => setSelectedJobId(job.id)} data-testid={split ? 'split-shift' : undefined} className={cn("rounded-md border p-3 space-y-1 cursor-pointer hover:opacity-90 transition-opacity", paid ? "bg-success/20 text-success border-success/30" : overdue ? "bg-warning/20 text-warning border-warning/30" : statusColors[job.status])}>
                       <div className="flex items-start justify-between">
                         <div><p className="font-medium text-sm flex items-center gap-1.5"><CallbackMark job={job} allJobs={data.jobs} employers={data.employers} />{job.needsReview && <Flag size={12} className="text-warning shrink-0" aria-label="Flagged to check later" />}{job.name}{job.role && <span className="opacity-70 font-normal">· {job.role}</span>}{job.pto && <span className="text-[10px] text-mono font-bold border border-current px-1">PTO</span>}<SplitMark job={job} allJobs={data.jobs} /></p><p className="text-xs opacity-70">{job.client}</p></div>
                         <span className="text-[10px] text-mono uppercase font-medium opacity-70">{paid ? 'Paid' : overdue ? 'Needs Hours' : job.status}</span>
@@ -3628,21 +3683,36 @@ export default function CalendarPage() {
                         const rule = breakTheHourLabel(job, resolveEmployer(job.client, data.employers));
                         return rule && <p><span className="inline-block border border-current px-1.5 py-0.5 text-[10px] font-bold text-mono uppercase tracking-wider">{rule}</span></p>;
                       })()}
-                      <div className="flex items-center gap-3 text-xs text-mono">
-                        {job.startTime && <span>{job.startTime}{job.endTime ? ` – ${job.endTime}` : ''}</span>}
-                        {hours > 0 && <span>{roundHours(hours)}h</span>}
-                        {earned > 0 && <span className="font-semibold">{paid && <span className="font-normal opacity-70">exp. </span>}${earned.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
-                        {job.hoursPlanned && <span className="text-[10px] text-mono uppercase tracking-wider text-accent">planned</span>}
-                        <button
-                          type="button"
-                          onClick={e => { e.stopPropagation(); setOpenStubFor(job.id); setSelectedJobId(job.id); }}
-                          className="ml-auto flex items-center gap-1 text-[10px] text-mono uppercase tracking-wider opacity-80 hover:opacity-100"
-                          aria-label={job.payStub ? 'Replace the pay stub photo' : 'Add a pay stub photo'}
-                        >
-                          <StubMark job={job} paidByHand={paidByHandJobIds.has(job.id)} />
-                          {!job.payStub && <span>+ stub</span>}
-                        </button>
-                      </div>
+                      {split ? (
+                        <div className="space-y-1 text-xs text-mono" data-testid="split-calls">
+                          <p className="text-[10px] uppercase tracking-wider font-bold">Split shift · {calls.length} calls</p>
+                          {calls.map(c => (
+                            <div key={c.id} role="button" tabIndex={0} data-testid="split-call"
+                              onClick={e => { e.stopPropagation(); setSelectedJobId(c.id); }}
+                              onKeyDown={e => { if (e.key === 'Enter') { e.stopPropagation(); setSelectedJobId(c.id); } }}
+                              className="flex items-center gap-3 border-l-2 border-current/40 pl-2 py-0.5">
+                              {c.startTime ? <span>{c.startTime}{c.endTime ? ` – ${c.endTime}` : ''}</span> : <span className="opacity-60">No call time</span>}
+                              {netHoursWorked(c) > 0 && <span>{roundHours(netHoursWorked(c))}h</span>}
+                              {shownPay(c) > 0 && <span>{money(shownPay(c))}</span>}
+                              {c.hoursPlanned && <span className="text-[10px] uppercase tracking-wider text-accent">planned</span>}
+                              {stubButton(c)}
+                            </div>
+                          ))}
+                          <div className="flex items-center gap-3 border-t border-current/20 pt-1">
+                            <span className="opacity-70">Day</span>
+                            {hours > 0 && <span>{roundHours(hours)}h</span>}
+                            {earned > 0 && <span className="font-semibold">{paid && <span className="font-normal opacity-70">exp. </span>}{money(earned)}</span>}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3 text-xs text-mono">
+                          {job.startTime && <span>{job.startTime}{job.endTime ? ` – ${job.endTime}` : ''}</span>}
+                          {hours > 0 && <span>{roundHours(hours)}h</span>}
+                          {earned > 0 && <span className="font-semibold">{paid && <span className="font-normal opacity-70">exp. </span>}{money(earned)}</span>}
+                          {job.hoursPlanned && <span className="text-[10px] text-mono uppercase tracking-wider text-accent">planned</span>}
+                          {stubButton(job)}
+                        </div>
+                      )}
                       {/* What actually came in for the project, beside what it was
                           expected to pay, and what each payment was: a check, a
                           stub, a deposit, or only marked paid. */}
@@ -3674,13 +3744,13 @@ export default function CalendarPage() {
                           </div>
                         );
                       })()}
-                      {job.startTime && !job.endTime && (
+                      {calls.some(c => c.startTime && !c.endTime) && (
                         <p className="text-[10px] text-warning font-medium">⚠ No end time set — tap to add it</p>
                       )}
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-[10px] opacity-40 text-mono">Tap for details →</p>
+                        <p className="text-[10px] opacity-40 text-mono">{split ? 'Tap a call for details →' : 'Tap for details →'}</p>
                         {/* Pay for the day's project, without opening it. */}
-                        {job.date <= localToday() && effectiveHoursWorked(job) > 0 && (() => {
+                        {job.date <= localToday() && calls.some(c => effectiveHoursWorked(c) > 0) && (() => {
                           const recorded = incomeByProject.get(projectGroupKey(job)) ?? [];
                           if (paid) {
                             return (
@@ -3842,11 +3912,15 @@ export default function CalendarPage() {
                   </DialogDescription>
                 </DialogHeader>
                 <ul className="divide-y divide-border/60 border border-border">
-                  {days.map(job => {
-                    const pay = shownPay(job);
+                  {splitShifts(days).map(calls => {
+                    const job = calls[0];
+                    const split = calls.length > 1;
+                    const pay = calls.reduce((sum, c) => sum + shownPay(c), 0);
+                    const callTimes = (c: Job) => (c.startTime ? `${c.startTime}${c.endTime ? ` – ${c.endTime}` : ''}` : 'No call time');
                     return (
                       <li key={job.id}>
-                        <button type="button" data-testid="project-day" onClick={() => { setProjectShown(null); openShift(job); }}
+                        {/* A split day opens on the day, where both calls are. */}
+                        <button type="button" data-testid="project-day" onClick={() => { setProjectShown(null); if (split) { setSelectedDate(job.date); setSelectedJobId(null); } else openShift(job); }}
                           className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-secondary/40 active:bg-secondary/60">
                           <span className="min-w-0 flex-1">
                             <span className="flex items-center gap-1.5 text-sm font-medium">
@@ -3855,10 +3929,10 @@ export default function CalendarPage() {
                               <SplitMark job={job} allJobs={data.jobs} />
                             </span>
                             <span className="block truncate text-[11px] text-muted-foreground">
-                              {job.startTime ? `${job.startTime}${job.endTime ? ` – ${job.endTime}` : ''}` : 'No call time'}{job.role ? ` · ${job.role}` : ''}
+                              {split ? `Split · ${calls.map(callTimes).join(' & ')}` : callTimes(job)}{job.role ? ` · ${job.role}` : ''}
                             </span>
                           </span>
-                          <span className={cn('shrink-0 text-sm text-mono font-semibold', moneyTone([job], paidJobIds, latePayIds))}>
+                          <span className={cn('shrink-0 text-sm text-mono font-semibold', moneyTone(calls, paidJobIds, latePayIds))}>
                             {pay > 0 ? `$${Math.round(pay).toLocaleString()}` : isOverdueUpcoming(job) ? 'needs hours' : statusLabel[job.status]}
                           </span>
                           <ChevronRight size={16} className="shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -4225,24 +4299,32 @@ export default function CalendarPage() {
                     {isGroup && expanded && (
                       <div className="border-t border-primary/20 divide-y divide-primary/10">
                         <ProjectHoursSummary hours={projectHours(jobs, data.jobs, data.employers, prefs.payer, paidJobIds)} className="px-3 py-2 pl-6" />
-                        {daysShown.map(job => (
+                        {/* One row a day: a split day's calls are one shift,
+                            and tapping it opens the day with both calls. */}
+                        {splitShifts(daysShown).map(calls => {
+                          const job = calls[0];
+                          const split = calls.length > 1;
+                          const hours = calls.reduce((s, c) => s + netHoursWorked(c), 0);
+                          return (
                           <Fragment key={job.id}>
                           {newPeriodAt.has(job.id) && <p className="period-cut px-3 py-1">✂ new pay period</p>}
                           <div
-                            onClick={() => openJob(job)}
+                            onClick={() => (split ? (setSelectedDate(job.date), setSelectedJobId(null)) : openJob(job))}
+                            data-testid={split ? 'project-split-day' : undefined}
                             className="px-3 py-2 pl-6 flex items-center justify-between gap-2 cursor-pointer hover:bg-primary/10 active:bg-primary/15 transition-colors"
                           >
-                            <span className="text-xs text-mono flex items-center gap-1.5"><CallbackMark job={job} allJobs={data.jobs} employers={data.employers} />{showDay(job.date, 'EEE, MMM d')}<SplitMark job={job} allJobs={data.jobs} />{sixthSeventhDayDates[job.date] && <PremiumTag day={sixthSeventhDayDates[job.date].day} pays={sixthSeventhDayDates[job.date].pays} />}</span>
+                            <span className="text-xs text-mono flex items-center gap-1.5"><CallbackMark job={job} allJobs={data.jobs} employers={data.employers} />{showDay(job.date, 'EEE, MMM d')}<SplitMark job={job} allJobs={data.jobs} />{split && <span className="text-[10px] text-muted-foreground">split · {calls.length} calls</span>}{sixthSeventhDayDates[job.date] && <PremiumTag day={sixthSeventhDayDates[job.date].day} pays={sixthSeventhDayDates[job.date].pays} />}</span>
                             <span className="flex items-center gap-1.5 text-[11px] text-mono text-muted-foreground">
-                              {netHoursWorked(job) > 0 ? `${roundHours(netHoursWorked(job))}h` : isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
-                              {job.startTime && !job.endTime && <span className="text-warning"> · no end time</span>}
-                              {effectiveHoursWorked(job) > 0 && (
-                                <StubMark job={job} paidByHand={paidByHandJobIds.has(job.id)} openProof />
-                              )}
+                              {hours > 0 ? `${roundHours(hours)}h` : isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
+                              {calls.some(c => c.startTime && !c.endTime) && <span className="text-warning"> · no end time</span>}
+                              {calls.filter(c => effectiveHoursWorked(c) > 0).map(c => (
+                                <StubMark key={c.id} job={c} paidByHand={paidByHandJobIds.has(c.id)} openProof />
+                              ))}
                             </span>
                           </div>
                           </Fragment>
-                        ))}
+                          );
+                        })}
                         {/* Why the card can or can't say where the pay periods
                             fall, and the way to fix it: with the days, not on
                             every card. */}

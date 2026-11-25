@@ -173,6 +173,34 @@ describe('a split day is one day for overtime', () => {
     const only = half('a', 10);
     expect(jobPayBreakdown(only, [only], [], EMPTY_PROFILE).gross).toBe(8 * 50 + 2 * 75);
   });
+
+  it('pays each call what it worked: the overtime on the later call', async () => {
+    const { jobPayBreakdown, jobHoursBreakdown } = await import('./payCalc');
+    // Listed night first, to show the order worked decides, not the list.
+    const day = [{ ...half('b', 5), startTime: '06:00 PM', endTime: '11:00 PM' }, { ...half('a', 5), startTime: '08:00 AM', endTime: '01:00 PM' }];
+    const [night, morning] = day.map(j => jobPayBreakdown(j, day, [], EMPTY_PROFILE).gross);
+    expect(morning).toBe(5 * 50);
+    expect(night).toBe(3 * 50 + 2 * 75);
+    expect(jobHoursBreakdown(day[0], day, [], EMPTY_PROFILE)).toMatchObject({ straight: 3, overtime: 2 });
+    expect(jobHoursBreakdown(day[1], day, [], EMPTY_PROFILE)).toMatchObject({ straight: 5, overtime: 0 });
+  });
+
+  it('puts the night premium on the night call (OAR, Aug 12)', async () => {
+    const { jobPayBreakdown } = await import('./payCalc');
+    // 9 AM to 2 PM, then a 10:30 PM to 3 AM load-out at $41.60. Local 16
+    // breaks the hour, so the load-out is 5h: 1.5 before midnight, and 3.5
+    // after it at double, the broken half hour falling at the end of the call.
+    // Cut by hours, the load-out showed $266.02 and the morning $295.58.
+    const oar = (id: string, startTime: string, endTime: string, hoursWorked: number): Job => ({
+      id, name: 'OAR', client: 'LIVE NATION / MASONIC', date: '2026-08-12', jobNumber: '2026-2626', local: '16',
+      status: 'completed', startTime, endTime, hoursWorked, hourlyRate: 41.6, has6th7thDayRule: false,
+    } as Job);
+    const day = [oar('am', '09:00 AM', '2p', 5), oar('pm', '10:30 PM', '3am', 4.5)];
+    const [am, pm] = day.map(j => jobPayBreakdown(j, day, [], EMPTY_PROFILE).gross);
+    expect(am).toBeCloseTo(5 * 41.6, 2);
+    expect(pm).toBeCloseTo(1.5 * 41.6 + 3.5 * 83.2, 2);
+    expect(am + pm).toBeCloseTo(561.6, 2);
+  });
 });
 
 describe('each side of a split keeps its own minimum call', () => {

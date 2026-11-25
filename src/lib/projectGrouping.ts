@@ -25,6 +25,24 @@ export function sameProject(a: Job, b: Job): boolean {
 }
 
 /**
+ * Shifts gathered so a split day reads as one shift: every call on the same
+ * date for the same project together, each group where its first call was.
+ * The calls stay separate records, because the pay rules price each side of a
+ * split on its own; this is only how they are shown and counted. A cancelled
+ * call or PTO is never half of a split, so it stays on its own.
+ */
+export function splitShifts(jobs: Job[]): Job[][] {
+  const worked = (j: Job) => j.status !== 'cancelled' && !j.pto;
+  const groups: Job[][] = [];
+  for (const job of jobs) {
+    const day = worked(job) && groups.find(g => worked(g[0]) && g[0].date === job.date && sameProject(g[0], job));
+    if (day) day.push(job);
+    else groups.push([job]);
+  }
+  return groups;
+}
+
+/**
  * The other shifts on this project that still name the employer being changed
  * away from. Shifts already on a different employer are left alone — someone
  * set those deliberately.
