@@ -27,6 +27,8 @@ import { employerCovers, paidShiftIds, periodNet, periodPayments, projectPeriods
 import { explainPay } from '@/lib/payExplain';
 import PayEstimateCard from '@/components/PayEstimateCard';
 import PaymentProof, { ProofOpen, SourceTag, WhoPaid } from '@/components/PaymentProof';
+import { ProjectHoursSummary } from '@/components/ProjectHoursSummary';
+import { projectHours } from '@/lib/projectHours';
 import { PROOF_LABELS, proofFromMatch, proofKindOf, type ProofKind } from '@/lib/paymentProof';
 import CalendarKey from '@/components/CalendarKey';
 import ConferenceList from '@/components/ConferenceList';
@@ -1093,6 +1095,10 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   // Money that came in: a "Mark paid" tap is your word at the estimate, not money, so it's counted apart.
   const projectMoneyIn = samePaymentGroups(projectPayments.filter(i => i.status === 'paid' && proofKindOf(i) !== 'marked')).reduce((sum, g) => sum + g.first.amount, 0);
   const projectMarked = projectPayments.filter(i => proofKindOf(i) === 'marked').length;
+  const wholeProjectHours = useMemo(
+    () => (project.length > 1 ? projectHours(project, data.jobs, data.employers, prefs.payer, paidIds) : null),
+    [project, data.jobs, data.employers, prefs.payer, paidIds],
+  );
   const projectSpan = (() => {
     // Real days only: a stored "Aug 20" on one of the project's shifts used to
     // take the whole shift view down when it was opened.
@@ -1306,7 +1312,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           {/* Never cut off: the date is the one thing here that has to read
               whole. The year only shows when it isn't this year. */}
           <p className="min-w-0 flex-1 flex items-baseline gap-1.5" data-testid="shift-date">
-            <span className="text-xl font-bold leading-none text-foreground whitespace-nowrap">{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}</span>
+            <span className="text-xl font-bold leading-none text-foreground whitespace-nowrap">{showDay(job.date, 'EEE, MMM d')}</span>
             {job.date.slice(0, 4) !== localToday().slice(0, 4) && (
               <span className="text-xs text-mono text-muted-foreground shrink-0">{job.date.slice(0, 4)}</span>
             )}
@@ -1334,7 +1340,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this shift?</AlertDialogTitle>
             <AlertDialogDescription>
-              "{job.name}" on {format(new Date(job.date + 'T12:00:00'), 'MMM d, yyyy')} will be permanently deleted. This cannot be undone.
+              "{job.name}" on {showDay(job.date, 'MMM d, yyyy')} will be permanently deleted. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1365,7 +1371,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             {/* This day first: it's the day that was tapped. */}
             {dayPay.worked && (
               <div className="space-y-0.5" data-testid="this-day-pay">
-                <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground">This day · {format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}</p>
+                <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground">This day · {showDay(job.date, 'EEE, MMM d')}</p>
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-lg font-bold text-mono">{moneyText(dayPay.amount)}</span>
                   <span className={cn('text-[11px] font-bold text-mono uppercase', dayPay.paid ? 'text-dot-paid' : 'text-dot-pending')}>
@@ -1379,6 +1385,10 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                     : <> · {PROOF_LABELS[proofKindOf(dayPay.paidBy)].toLowerCase()} {moneyText(dayPay.paidBy.amount)}, {showDay(dayPay.paidBy.date)}</>) : null}
                 </p>
               </div>
+            )}
+
+            {wholeProjectHours && (
+              <ProjectHoursSummary hours={wholeProjectHours} title="Whole project hours" className="border-t border-border/50 pt-2" />
             )}
 
             {projectPayments.length > 0 && (
@@ -4214,6 +4224,7 @@ export default function CalendarPage() {
                     </div>
                     {isGroup && expanded && (
                       <div className="border-t border-primary/20 divide-y divide-primary/10">
+                        <ProjectHoursSummary hours={projectHours(jobs, data.jobs, data.employers, prefs.payer, paidJobIds)} className="px-3 py-2 pl-6" />
                         {daysShown.map(job => (
                           <Fragment key={job.id}>
                           {newPeriodAt.has(job.id) && <p className="period-cut px-3 py-1">✂ new pay period</p>}
@@ -4221,7 +4232,7 @@ export default function CalendarPage() {
                             onClick={() => openJob(job)}
                             className="px-3 py-2 pl-6 flex items-center justify-between gap-2 cursor-pointer hover:bg-primary/10 active:bg-primary/15 transition-colors"
                           >
-                            <span className="text-xs text-mono flex items-center gap-1.5"><CallbackMark job={job} allJobs={data.jobs} employers={data.employers} />{format(new Date(job.date + 'T12:00:00'), 'EEE, MMM d')}<SplitMark job={job} allJobs={data.jobs} />{sixthSeventhDayDates[job.date] && <PremiumTag day={sixthSeventhDayDates[job.date].day} pays={sixthSeventhDayDates[job.date].pays} />}</span>
+                            <span className="text-xs text-mono flex items-center gap-1.5"><CallbackMark job={job} allJobs={data.jobs} employers={data.employers} />{showDay(job.date, 'EEE, MMM d')}<SplitMark job={job} allJobs={data.jobs} />{sixthSeventhDayDates[job.date] && <PremiumTag day={sixthSeventhDayDates[job.date].day} pays={sixthSeventhDayDates[job.date].pays} />}</span>
                             <span className="flex items-center gap-1.5 text-[11px] text-mono text-muted-foreground">
                               {netHoursWorked(job) > 0 ? `${roundHours(netHoursWorked(job))}h` : isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
                               {job.startTime && !job.endTime && <span className="text-warning"> · no end time</span>}

@@ -85,6 +85,22 @@ export interface OvertimeOptions {
 }
 
 /**
+ * A day's paid hours by what they were paid at. straight + overtime + double
+ * + night are the hours worked (part hours paid whole, under union rules);
+ * minimum is paid but never worked: a minimum call's padding, or the hours
+ * owed after a meal. premiumDay is how many of the worked ones fell on a 6th
+ * or 7th day, so at that day's rate or better, whatever tier they're in.
+ */
+export interface TierHours {
+  straight: number;
+  overtime: number;
+  double: number;
+  night: number;
+  minimum: number;
+  premiumDay: number;
+}
+
+/**
  * Calculate the pay for a single day's work, applying:
  * - Minimum hours (e.g. 5-hour minimum)
  * - Daily overtime (default 8-12hrs = 1.5x, 12+ = 2x) — only when overtimeOptions.rule is
@@ -113,7 +129,7 @@ export function calculateDayPay(
     offClockMinutesTotal?: number;
   },
   overtimeOptions?: OvertimeOptions
-): { billableHours: number; totalPay: number; breakdown: string[]; duesAmount: number; taxAmount: number; nightHours: number } {
+): { billableHours: number; totalPay: number; breakdown: string[]; duesAmount: number; taxAmount: number; nightHours: number; tierHours: TierHours } {
   const otRule = overtimeOptions?.rule ?? 'daily';
   const otThreshold = overtimeOptions?.otThresholdHours ?? 8;
   const dtThreshold = overtimeOptions?.dtThresholdHours ?? 12;
@@ -175,6 +191,8 @@ export function calculateDayPay(
   const ladderHours = workedHours - nightHours;
 
   let pay = 0;
+  // Which hours were paid at what: the same cuts the pay below is made on.
+  const tierHours: TierHours = { straight: 0, overtime: 0, double: 0, night: 0, minimum: 0, premiumDay: 0 };
 
   const dayRate = overtimeOptions?.dayRate ?? 0;
   if (dayRate > 0) {
@@ -188,15 +206,19 @@ export function calculateDayPay(
     const over = Math.max(0, workedHours - covers);
     const otPay = over * hourlyEquivalent * otMultiplier * Math.max(1, dayMultiplier);
     pay = dayRate * Math.max(1, dayMultiplier) + otPay;
+    tierHours.straight = workedHours - over;
+    tierHours.overtime = over;
     breakdown.push(`Day rate (covers ${roundHours(covers)}h) = $${(dayRate * Math.max(1, dayMultiplier)).toFixed(2)}`);
     if (over > 0) {
       breakdown.push(`${roundHours(over)}h past the day rate × $${(hourlyEquivalent * otMultiplier).toFixed(2)} = $${otPay.toFixed(2)}`);
     }
   } else if (otRule !== 'daily') {
     pay = ladderHours * effectiveRate;
+    tierHours.straight = ladderHours;
     if (ladderHours > 0) breakdown.push(`${roundHours(ladderHours)}h × $${effectiveRate.toFixed(2)} = $${pay.toFixed(2)}`);
   } else if (ladderHours <= otThreshold) {
     pay = ladderHours * effectiveRate;
+    tierHours.straight = ladderHours;
     if (ladderHours > 0) breakdown.push(`${roundHours(ladderHours)}h × $${effectiveRate.toFixed(2)} = $${pay.toFixed(2)}`);
   } else if (ladderHours <= dtThreshold) {
     const straightPay = otThreshold * effectiveRate;
@@ -204,6 +226,8 @@ export function calculateDayPay(
     const otRate = tierRate(otMultiplier);
     const otPay = otHours * otRate;
     pay = straightPay + otPay;
+    tierHours.straight = otThreshold;
+    tierHours.overtime = otHours;
     breakdown.push(`${roundHours(otThreshold)}h straight × ${effectiveRate.toFixed(2)} = ${straightPay.toFixed(2)}`);
     breakdown.push(`${roundHours(otHours)}h OT × ${otRate.toFixed(2)} = ${otPay.toFixed(2)}`);
   } else {
@@ -215,6 +239,9 @@ export function calculateDayPay(
     const dtRate = tierRate(dtMultiplier);
     const dtPay = dtHours * dtRate;
     pay = straightPay + otPay + dtPay;
+    tierHours.straight = otThreshold;
+    tierHours.overtime = otHours;
+    tierHours.double = dtHours;
     breakdown.push(`${roundHours(otThreshold)}h straight × ${effectiveRate.toFixed(2)} = ${straightPay.toFixed(2)}`);
     breakdown.push(`${roundHours(otHours)}h OT × ${otRate.toFixed(2)} = ${otPay.toFixed(2)}`);
     breakdown.push(`${roundHours(dtHours)}h DT × ${dtRate.toFixed(2)} = ${dtPay.toFixed(2)}`);
@@ -256,6 +283,7 @@ export function calculateDayPay(
   if (paddingHours > 0 && !(overtimeOptions?.dayRate && overtimeOptions.dayRate > 0)) {
     const padPay = paddingHours * effectiveRate;
     pay += padPay;
+    tierHours.minimum += paddingHours;
     breakdown.push(`${roundHours(paddingHours)}h minimum-call padding × $${effectiveRate.toFixed(2)} = $${padPay.toFixed(2)}`);
   }
 
@@ -266,6 +294,7 @@ export function calculateDayPay(
     const nightRate = tierRate(nightMultiplier);
     const nightPay = nightHours * nightRate;
     pay += nightPay;
+    tierHours.night = nightHours;
     breakdown.push(`${roundHours(nightHours)}h after midnight × ${nightRate.toFixed(2)} = ${nightPay.toFixed(2)}`);
   }
 
@@ -273,6 +302,7 @@ export function calculateDayPay(
   if (postMealPadding > 0) {
     const padPay = postMealPadding * rate;
     pay += padPay;
+    tierHours.minimum += postMealPadding;
     breakdown.push(`${roundHours(postMealPadding)}h post-meal minimum × ${rate.toFixed(2)} = ${padPay.toFixed(2)}`);
   }
 
@@ -303,10 +333,12 @@ export function calculateDayPay(
   }
 
   if (dayMultiplier > 1) {
+    // Every hour of a 6th or 7th day is at its rate or better, straight ones included.
+    tierHours.premiumDay = tierHours.straight + tierHours.overtime + tierHours.double + tierHours.night;
     breakdown.unshift(`Day multiplier: ${dayMultiplier}× (${overtimeOptions?.dayPremiumLabel ?? (dayMultiplier === 1.5 ? '6th day' : '7th day')})`);
   }
 
-  return { billableHours: billableHours + (overtimeOptions?.minimumPaddingHours ?? 0), totalPay: pay, breakdown, duesAmount, taxAmount, nightHours };
+  return { billableHours: billableHours + (overtimeOptions?.minimumPaddingHours ?? 0), totalPay: pay, breakdown, duesAmount, taxAmount, nightHours, tierHours };
 }
 
 /**
@@ -454,6 +486,83 @@ export function jobPayBreakdown(
     return { gross: r.totalPay + r.duesAmount + r.taxAmount, net: r.totalPay, dues: r.duesAmount, tax: r.taxAmount, vacation: 0, retirementMatch: 0 };
   }
 
+  const { dayResult, share, employer, rates } = shiftDay(job, allJobs, employers, payer, opts, hours, rate);
+  // This shift's portion of the day, by hours.
+  const totalPay = dayResult.totalPay * share;
+  const duesAmount = dayResult.duesAmount * share;
+  const taxAmount = dayResult.taxAmount * share;
+  const weeklyBonus = employer ? calculateWeeklyOvertimeBonus(job, allJobs, employer) : 0;
+  // totalPay already has dues+tax deducted — add them back to get gross-before-deductions.
+  const gross = totalPay + duesAmount + taxAmount + weeklyBonus;
+  const netBeforeVacation = totalPay + weeklyBonus;
+  const vacationPercent = rates.vacationPercent ?? 0;
+  // Vacation is a percentage of GROSS — 8% of what the work earned, before
+  // dues and tax come off it. Taking it off the net understated it by however
+  // much had already been deducted, which for 3.5% dues plus any tax is not a
+  // rounding difference.
+  const vacation = vacationPercent > 0 ? gross * (vacationPercent / 100) : 0;
+  const net = netBeforeVacation + vacation;
+  // A retirement match is owed to the plan, not to you, so it is reported
+  // beside the pay rather than inside it — a missing one should be visible
+  // without ever being counted as take-home.
+  const retirementMatch = employer?.retirementMatchPercent
+    ? gross * (employer.retirementMatchPercent / 100)
+    : 0;
+  // Deductions come back out individually so a pay stub can be reconciled
+  // line by line, not just on the totals.
+  return { gross, net, dues: duesAmount, tax: taxAmount, vacation, retirementMatch };
+}
+
+/**
+ * A shift's hours by what they were paid at: its share of its day, the same
+ * share its pay is. PTO is paid, not worked, so it is counted on its own.
+ * Under a weekly overtime rule, the hours past the week's threshold move from
+ * straight time to overtime, as the pay does.
+ */
+export function jobHoursBreakdown(
+  job: Job,
+  allJobs: Job[],
+  employers: Employer[] = [],
+  payer: PayerProfile = EMPTY_PROFILE,
+): TierHours & { pto: number } {
+  const none = { straight: 0, overtime: 0, double: 0, night: 0, minimum: 0, premiumDay: 0, pto: 0 };
+  const hours = effectiveHoursWorked(job);
+  if (!hours) return none;
+  if (job.pto) return { ...none, pto: netHoursWorked(job) };
+  const rate = job.hourlyRate
+    ?? (job.dayRate ? job.dayRate / (job.dayRateHours ?? 10) : 0);
+  const { dayResult, share, employer } = shiftDay(job, allJobs, employers, payer, {}, hours, rate);
+  const t = dayResult.tierHours;
+  const out = {
+    straight: t.straight * share,
+    overtime: t.overtime * share,
+    double: t.double * share,
+    night: t.night * share,
+    minimum: t.minimum * share,
+    premiumDay: t.premiumDay * share,
+    pto: 0,
+  };
+  const weekly = Math.min(out.straight, employer ? weeklyOvertimeHours(job, allJobs, employer) : 0);
+  out.straight -= weekly;
+  out.overtime += weekly;
+  return out;
+}
+
+/**
+ * The day a shift is part of, paid: on a split day both calls climb one
+ * ladder, and this shift's share of it is by hours. jobPayBreakdown and
+ * jobHoursBreakdown both start here, so a shift's hours and its pay are
+ * always cut the same way.
+ */
+function shiftDay(
+  job: Job,
+  allJobs: Job[],
+  employers: Employer[],
+  payer: PayerProfile,
+  opts: { asWorked?: boolean },
+  hours: number,
+  rate: number,
+) {
   // A split day is ONE day. Both halves share the same overtime ladder, so the
   // evening call carries on from where the morning left off — five hours and
   // five hours is a ten-hour day with two of them at time and a half, not two
@@ -526,30 +635,7 @@ export function jobPayBreakdown(
     unionDuesPercent: rates.unionDuesPercent,
     estimatedTaxPercent: rates.estimatedTaxPercent,
   });
-  // This shift's portion of the day, by hours.
-  const totalPay = dayResult.totalPay * share;
-  const duesAmount = dayResult.duesAmount * share;
-  const taxAmount = dayResult.taxAmount * share;
-  const weeklyBonus = employer ? calculateWeeklyOvertimeBonus(job, allJobs, employer) : 0;
-  // totalPay already has dues+tax deducted — add them back to get gross-before-deductions.
-  const gross = totalPay + duesAmount + taxAmount + weeklyBonus;
-  const netBeforeVacation = totalPay + weeklyBonus;
-  const vacationPercent = rates.vacationPercent ?? 0;
-  // Vacation is a percentage of GROSS — 8% of what the work earned, before
-  // dues and tax come off it. Taking it off the net understated it by however
-  // much had already been deducted, which for 3.5% dues plus any tax is not a
-  // rounding difference.
-  const vacation = vacationPercent > 0 ? gross * (vacationPercent / 100) : 0;
-  const net = netBeforeVacation + vacation;
-  // A retirement match is owed to the plan, not to you, so it is reported
-  // beside the pay rather than inside it — a missing one should be visible
-  // without ever being counted as take-home.
-  const retirementMatch = employer?.retirementMatchPercent
-    ? gross * (employer.retirementMatchPercent / 100)
-    : 0;
-  // Deductions come back out individually so a pay stub can be reconciled
-  // line by line, not just on the totals.
-  return { gross, net, dues: duesAmount, tax: taxAmount, vacation, retirementMatch };
+  return { dayResult, share, employer, rates };
 }
 
 /** Net pay only — see jobPayBreakdown for gross+net together. */
@@ -800,20 +886,27 @@ export function dayPremiumLabel(job: Job, employer: Employer | undefined, allJob
  */
 export function calculateWeeklyOvertimeBonus(job: Job, allJobs: Job[], employer: Employer): number {
   if (employer.overtimeRule !== 'weekly') return 0;
-  const hours = effectiveHoursWorked(job);
-  if (hours <= 0) return 0;
   const rate = job.hourlyRate ?? employer.defaultHourlyRate ?? 0;
   if (rate <= 0) return 0;
-
-  const threshold = employer.weeklyOvertimeThresholdHours ?? 40;
+  const otHoursForThisJob = weeklyOvertimeHours(job, allJobs, employer);
+  if (otHoursForThisJob <= 0) return 0;
   const otMultiplier = employer.overtimeMultiplier ?? 1.5;
+  return otHoursForThisJob * rate * (otMultiplier - 1);
+}
+
+/** This shift's hours past a weekly overtime threshold: see calculateWeeklyOvertimeBonus. */
+export function weeklyOvertimeHours(job: Job, allJobs: Job[], employer: Employer): number {
+  if (employer.overtimeRule !== 'weekly') return 0;
+  const hours = effectiveHoursWorked(job);
+  if (hours <= 0) return 0;
+  const threshold = employer.weeklyOvertimeThresholdHours ?? 40;
 
   const jobDate = startOfDay(parseISO(job.date));
   const weekStart = startOfWeek(jobDate, { weekStartsOn: 0 });
   const weekEnd = endOfWeek(jobDate, { weekStartsOn: 0 });
 
   const weekJobs = allJobs
-    .filter(j => j.client.toLowerCase() === job.client.toLowerCase() && effectiveHoursWorked(j) > 0)
+    .filter(j => (j.client ?? '').toLowerCase() === (job.client ?? '').toLowerCase() && effectiveHoursWorked(j) > 0)
     .filter(j => {
       const d = startOfDay(parseISO(j.date));
       return d >= weekStart && d <= weekEnd;
@@ -827,10 +920,7 @@ export function calculateWeeklyOvertimeBonus(job: Job, allJobs: Job[], employer:
   }
 
   const cumulativeAfter = cumulativeBefore + hours;
-  const otHoursForThisJob = Math.max(0, Math.min(hours, cumulativeAfter - threshold));
-  if (otHoursForThisJob <= 0) return 0;
-
-  return otHoursForThisJob * rate * (otMultiplier - 1);
+  return Math.max(0, Math.min(hours, cumulativeAfter - threshold));
 }
 
 /**
