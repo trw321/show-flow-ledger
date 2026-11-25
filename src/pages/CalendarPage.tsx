@@ -3,6 +3,7 @@ import { isCallback, sameProject, projectKeysFor, projectOf as projectDays, spli
 import { projectSiblingsToRelabel } from '@/lib/projectGrouping';
 import StubEditor from '@/components/StubEditor';
 import MoneyRain from '@/components/MoneyRain';
+import NightBurst from '@/components/NightBurst';
 import LiveWorkPay from '@/components/LiveWorkPay';
 import PreampSheet, { PreampGroup } from '@/components/PreampSheet';
 import { useNavigate } from 'react-router-dom';
@@ -323,6 +324,11 @@ function PremiumHoursBanner({ job, allJobs, employer, payer, onTap }: { job: Job
   const night = !early && (employer?.nightPremiumEnabled ?? true) && job.startTime && job.endTime
     ? resolveConfirmedNightHours(calculateNightHours(job.startTime, job.endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour), job.nightPremiumConfirmed, job.nightPremiumActualHours)
     : 0;
+  // Night hours arrive with a pop of moons, z's and money, and again on a tap.
+  const isNight = !early && night > 0;
+  const [bannerEl, setBannerEl] = useState<HTMLElement | null>(null);
+  const [burst, setBurst] = useState(0);
+  useEffect(() => { if (isNight) setBurst(b => b + 1); }, [isNight]);
   if (!early && night <= 0) return null;
   const rule = contractRuleFor(job, employer, payer)?.earlyCall;
   const premium = early ? earlyCallHours(job, rule, breaksTheHour(job, employer)) : night;
@@ -341,7 +347,14 @@ function PremiumHoursBanner({ job, allJobs, employer, payer, onTap }: { job: Job
       <p className="text-xs font-semibold leading-snug">{line}</p>
     </>
   );
-  return onTap ? <button type="button" onClick={onTap} className={cls} data-testid="premium-hours">{body}</button> : <div className={cls} data-testid="premium-hours">{body}</div>;
+  return (
+    <>
+      {onTap
+        ? <button ref={setBannerEl} type="button" onClick={() => { if (isNight) setBurst(b => b + 1); onTap(); }} className={cls} data-testid="premium-hours">{body}</button>
+        : <div ref={setBannerEl} className={cls} data-testid="premium-hours" onClick={isNight ? () => setBurst(b => b + 1) : undefined}>{body}</div>}
+      {isNight && <NightBurst from={bannerEl} burst={burst} />}
+    </>
+  );
 }
 
 /** The small one: on a card, or a day in a list. */
