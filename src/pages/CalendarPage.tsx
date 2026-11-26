@@ -293,6 +293,9 @@ const ordinal = (n: number) => {
 interface PremiumDay { day: number; pays: number; who: string }
 const premiumClass = (p: { day: number }) => (p.day >= 7 ? 'premium-7' : 'premium-6');
 
+/** The headings that fold a section away under the calendar, all one look: neon pink, glowing a little. */
+const FOLD_HEADING = 'flex items-center gap-1.5 text-left text-[12px] font-body font-semibold uppercase tracking-widest text-[hsl(312_95%_75%)] neon-soft';
+
 /** The big one: the top of a 6th or 7th day. Only money that is really owed gets the money. */
 function PremiumDayBanner({ day, pays, who, onSetUp }: PremiumDay & { onSetUp?: () => void }) {
   const face = pays >= 2 ? '🤑' : pays > 1 ? '💰' : '🔥';
@@ -4070,10 +4073,9 @@ export default function CalendarPage() {
           <div className="mt-4 flex flex-col gap-2" data-testid="month-projects">
             {/* Folds under its heading; the count shows either way. */}
             <h2 className="self-start">
-              <button type="button" onClick={toggleProjects} aria-expanded={projectsOpen} data-testid="month-projects-toggle"
-                className="flex items-center gap-1 text-[9px] font-body uppercase tracking-widest text-muted-foreground/70">
+              <button type="button" onClick={toggleProjects} aria-expanded={projectsOpen} data-testid="month-projects-toggle" className={FOLD_HEADING}>
                 Projects this month · {Object.keys(loggedGroups).length}
-                <ChevronDown size={12} className={cn('shrink-0 transition-transform', projectsOpen && 'rotate-180')} aria-hidden />
+                <ChevronDown size={14} className={cn('shrink-0 transition-transform', projectsOpen && 'rotate-180')} aria-hidden />
               </button>
             </h2>
             {projectsOpen && <div className="flex flex-col gap-2.5">
@@ -4407,13 +4409,14 @@ export default function CalendarPage() {
       )}
 
       {unlinkedPayments.length > 0 && (
-        <div className="pixel-panel mt-4 p-3 space-y-2" data-testid="unlinked-payments">
-          {/* Folds under its heading; the count shows either way. */}
-          <button type="button" onClick={toggleUnlinked} aria-expanded={unlinkedOpen} data-testid="unlinked-payments-toggle"
-            className="flex w-full items-center justify-between gap-2 text-left text-[10px] text-mono uppercase tracking-widest text-warning">
-            <span>Payments with no shift · {unlinkedPayments.length}</span>
-            <ChevronDown size={14} className={cn('shrink-0 transition-transform', unlinkedOpen && 'rotate-180')} aria-hidden />
-          </button>
+        <div className="mt-4 flex flex-col gap-2" data-testid="unlinked-payments">
+          {/* Folds under its heading, the same as the month's projects; the count shows either way. */}
+          <h2 className="self-start">
+            <button type="button" onClick={toggleUnlinked} aria-expanded={unlinkedOpen} data-testid="unlinked-payments-toggle" className={FOLD_HEADING}>
+              Payments with no shift · {unlinkedPayments.length}
+              <ChevronDown size={14} className={cn('shrink-0 transition-transform', unlinkedOpen && 'rotate-180')} aria-hidden />
+            </button>
+          </h2>
           {unlinkedOpen && <p className="text-[11px] text-muted-foreground">Money that came in but isn't tied to a shift yet. Link it to the project it paid. A payment is never a shift of its own: if the work isn't on the calendar, add the shift on the day you worked, then link this to it.</p>}
           {unlinkedOpen && unlinkedPayments.map(i => {
             const options = linkSuggestions.get(i.id) ?? [];
