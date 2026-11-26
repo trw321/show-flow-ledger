@@ -4,7 +4,7 @@ import { readAmount, weekEndingFor, type WeekEnd } from './unemployment';
 /**
  * A pay list pasted from a payroll site: a date and an amount on each line,
  * the way Gusto, ADP and the like list past paychecks, and the pay period
- * when the line has one. Read here, on the phone, with no AI: each line it
+ * and hours when the line has them. Read here, on the phone, with no AI: each line it
  * can't read is kept and shown, so nothing is dropped without being seen.
  */
 
@@ -18,6 +18,8 @@ export interface PayListRow {
   period?: { start: string; end: string };
   /** The line has a pay period and no pay date of its own. */
   noPayDate?: boolean;
+  /** The hours it paid for, when the line says ("37 hrs", "8h", "Hours: 9.5"). */
+  hours?: number;
   /** More amounts on the same line, not counted. */
   others: number[];
   /** No year was written: the most recent one that isn't in the future. */
@@ -86,6 +88,9 @@ function findDates(line: string): DateHit[] {
 /** Between two dates, a "to": "-", "–", "to", "thru", "through". */
 const RANGE = /^\s*(?:-|–|—|to|thru|through)\s*$/i;
 
+/** Hours on a line: "37 hrs", "8h", "5.5 hours", or "Hours: 9.5". Never money: "$8 h" isn't hours. */
+const HOURS = /(?<![\w.,$])(\d{1,3}(?:\.\d{1,2})?)\s*(?:hrs?|hours?|h)\b\.?|\b(?:hrs?|hours?)\s*:?\s*(\d{1,3}(?:\.\d{1,2})?)(?![\d.,])/gi;
+
 /** Money on a piece of a line: "$1,400.00", "$595", or a figure with cents ("595.00"). */
 function amountsIn(text: string): number[] {
   const dollars = text.match(/\$\s?\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\$\s?\d+(?:\.\d{1,2})?/g);
@@ -129,6 +134,13 @@ export function readPayList(text: string, today: string): PayList {
     // The dates' own digits aren't money.
     let rest = line;
     for (const h of hits) rest = rest.slice(0, h.at) + ' '.repeat(h.text.length) + rest.slice(h.at + h.text.length);
+    // Nor are its hours ("37 hrs"): the first one counts, and none is read as money.
+    let hours: number | undefined;
+    for (const m of rest.matchAll(HOURS)) {
+      const n = Number(m[1] ?? m[2]);
+      if (hours === undefined && n > 0) hours = n;
+      rest = rest.slice(0, m.index!) + ' '.repeat(m[0].length) + rest.slice(m.index! + m[0].length);
+    }
     const fields = rest.split('\t');
     let column = -1;
     const all: number[] = [];
@@ -142,6 +154,7 @@ export function readPayList(text: string, today: string): PayList {
       line: line.trim().replace(/\s+/g, ' '), date, amount: all[0], others: all.slice(1), column, tabbed: fields.length > 1,
       ...(period ? { period } : {}),
       ...(period && !ownDay ? { noPayDate: true } : {}),
+      ...(hours !== undefined ? { hours } : {}),
       ...(yearAssumed ? { yearAssumed: true } : {}),
     });
   }
@@ -169,6 +182,8 @@ export interface PayListWeek {
   start: string;
   weekEnding: string;
   total: number;
+  /** The hours in it, when its lines have them (shared by days, as the pay is). */
+  hours?: number;
   /** The paydays in it. */
   dates: string[];
   /** Some of it is placed by a pay period on its line, not by its pay date. */
@@ -182,11 +197,13 @@ export interface PayListWeek {
  * longer (as a pay stub is on the claim). A line without one counts in the
  * week it came, or, for a payroll that pays a week behind, the week before.
  */
-export function payListWeeks(rows: Pick<PayListRow, 'date' | 'amount' | 'period'>[], weekEnd: WeekEnd, weekBefore = false): PayListWeek[] {
+export function payListWeeks(rows: Pick<PayListRow, 'date' | 'amount' | 'period' | 'hours'>[], weekEnd: WeekEnd, weekBefore = false): PayListWeek[] {
   const weeks = new Map<string, PayListWeek>();
-  const add = (weekEnding: string, amount: number, payday: string, byPeriod: boolean) => {
+  const round = (n: number) => Math.round(n * 100) / 100;
+  const add = (weekEnding: string, amount: number, hours: number | undefined, payday: string, byPeriod: boolean) => {
     const w = weeks.get(weekEnding) ?? { start: format(addDays(parseISO(weekEnding), -6), 'yyyy-MM-dd'), weekEnding, total: 0, dates: [], byPeriod: false };
-    w.total = Math.round((w.total + amount) * 100) / 100;
+    w.total = round(w.total + amount);
+    if (hours !== undefined) w.hours = round((w.hours ?? 0) + hours);
     if (!w.dates.includes(payday)) w.dates.push(payday);
     w.byPeriod = w.byPeriod || byPeriod;
     weeks.set(weekEnding, w);
@@ -201,14 +218,14 @@ export function payListWeeks(rows: Pick<PayListRow, 'date' | 'amount' | 'period'
       const total = [...days.values()].reduce((s, n) => s + n, 0);
       if (total <= 7) {
         // Most days, and on a tie the later week: the one the period ends in.
-        add([...days].sort((a, b) => b[1] - a[1] || b[0].localeCompare(a[0]))[0][0], r.amount, r.date, true);
+        add([...days].sort((a, b) => b[1] - a[1] || b[0].localeCompare(a[0]))[0][0], r.amount, r.hours, r.date, true);
       } else {
-        for (const [k, n] of days) add(k, Math.round(((r.amount * n) / total) * 100) / 100, r.date, true);
+        for (const [k, n] of days) add(k, round((r.amount * n) / total), r.hours === undefined ? undefined : round((r.hours * n) / total), r.date, true);
       }
       continue;
     }
     const day = weekBefore ? format(addDays(parseISO(r.date), -7), 'yyyy-MM-dd') : r.date;
-    add(weekEndingFor(day, weekEnd), r.amount, r.date, false);
+    add(weekEndingFor(day, weekEnd), r.amount, r.hours, r.date, false);
   }
   return [...weeks.values()].sort((a, b) => a.weekEnding.localeCompare(b.weekEnding));
 }

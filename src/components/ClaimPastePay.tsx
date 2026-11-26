@@ -45,11 +45,16 @@ export default function ClaimPastePay({ weekEnd, employerNames, colourOf, from, 
     setKeep(list.rows.map(r => !r.repeat));
   };
 
-  const kept = useMemo(() => (read ? read.rows.filter((_, i) => keep[i]) : []), [read, keep]);
+  const perHour = readAmount(rate);
+  // Each kept line with its hours: as written on it, or worked out from the rate.
+  const kept = useMemo(() => {
+    const byRate = (gross: number) => (perHour > 0 ? Math.round((gross / perHour) * 100) / 100 : 0);
+    return read ? read.rows.filter((_, i) => keep[i]).map(r => ({ ...r, hours: r.hours ?? byRate(r.amount) })) : [];
+  }, [read, keep, perHour]);
   const weeks = useMemo(() => payListWeeks(kept, weekEnd, weekBefore), [kept, weekEnd, weekBefore]);
   const total = kept.reduce((sum, r) => sum + r.amount, 0);
-  const perHour = readAmount(rate);
-  const hoursFor = (gross: number) => (perHour > 0 ? Math.round((gross / perHour) * 100) / 100 : 0);
+  /** Some kept line has no hours of its own: the rate is what gives it some. */
+  const needsRate = !!read && read.rows.some((r, i) => keep[i] && r.hours === undefined);
   const name = employer.trim();
   const already = (w: { start: string; weekEnding: string }) => (name ? sameStub(prefs.claimStubs, { employer: name, start: w.start, end: w.weekEnding }) : undefined);
   const periodKept = (r: { period?: { start: string; end: string } }) => (name && r.period ? sameStub(prefs.claimStubs, { employer: name, start: r.period.start, end: r.period.end }) : undefined);
@@ -59,17 +64,18 @@ export default function ClaimPastePay({ weekEnd, employerNames, colourOf, from, 
   // payments for one period make one), and a stub a week for the lines
   // without one, as they're counted above.
   const units = useMemo(() => {
-    const byPeriod = new Map<string, { start: string; end: string; gross: number; paidOn?: string }>();
+    const byPeriod = new Map<string, { start: string; end: string; gross: number; hours: number; paidOn?: string }>();
     for (const r of kept) {
       if (!r.period) continue;
       const k = `${r.period.start}|${r.period.end}`;
-      const cur = byPeriod.get(k) ?? { start: r.period.start, end: r.period.end, gross: 0, ...(r.noPayDate ? {} : { paidOn: r.date }) };
+      const cur = byPeriod.get(k) ?? { start: r.period.start, end: r.period.end, gross: 0, hours: 0, ...(r.noPayDate ? {} : { paidOn: r.date }) };
       cur.gross = Math.round((cur.gross + r.amount) * 100) / 100;
+      cur.hours = Math.round((cur.hours + r.hours) * 100) / 100;
       byPeriod.set(k, cur);
     }
     // A week's stub keeps its pay date when it has one payday.
     const weekly = payListWeeks(kept.filter(r => !r.period), weekEnd, weekBefore)
-      .map(w => ({ start: w.start, end: w.weekEnding, gross: w.total, ...(w.dates.length === 1 ? { paidOn: w.dates[0] } : {}) }));
+      .map(w => ({ start: w.start, end: w.weekEnding, gross: w.total, hours: w.hours ?? 0, ...(w.dates.length === 1 ? { paidOn: w.dates[0] } : {}) }));
     return [...byPeriod.values(), ...weekly];
   }, [kept, weekEnd, weekBefore]);
   const adding = units.filter(u => !(name && sameStub(prefs.claimStubs, { employer: name, start: u.start, end: u.end })));
@@ -81,7 +87,7 @@ export default function ClaimPastePay({ weekEnd, employerNames, colourOf, from, 
     const now = new Date().toISOString();
     const added = adding.map(u => ({
       id: crypto.randomUUID(), employer: name, start: u.start, end: u.end,
-      hours: hoursFor(u.gross), gross: u.gross, createdAt: now, ...(perHour > 0 ? { rate: perHour } : {}), ...(u.paidOn ? { paidOn: u.paidOn } : {}),
+      hours: u.hours, gross: u.gross, createdAt: now, ...(perHour > 0 ? { rate: perHour } : {}), ...(u.paidOn ? { paidOn: u.paidOn } : {}),
     }));
     setClaimStubs([...prefs.claimStubs, ...added]);
     toast.success(added.length ? `Added ${added.length} pay stub${added.length === 1 ? '' : 's'} for ${name}, ${claimMoney(added.reduce((s, x) => s + x.gross, 0))}` : 'Those are already on the claim');
@@ -95,14 +101,14 @@ export default function ClaimPastePay({ weekEnd, employerNames, colourOf, from, 
       <div>
         <p className={LABEL}>Paste a pay list</p>
         <p className="mt-0.5 text-[11px] text-mono text-muted-foreground">
-          From a payroll site (Gusto, ADP…): a date and an amount on each line. You see it week by week before anything is added.
+          From a payroll site (Gusto, ADP…): a date and an amount on each line, and its hours if you add them ("8 hrs"). You see it week by week before anything is added.
         </p>
       </div>
 
       {!read && (
         <>
           <textarea value={text} onChange={e => setText(e.target.value)} rows={4} data-testid="paste-text"
-            placeholder={'Jun 3, 2026    $595.00\nMay 26, 2026   $280.00'}
+            placeholder={'Jun 3, 2026    $595.00   8 hrs\nMay 26, 2026   $280.00'}
             className="w-full resize-y border border-[hsl(188_95%_62%/0.5)] bg-background/60 p-2 text-[12px] text-mono text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-[hsl(188_95%_62%)]" />
           <button type="button" onClick={readIt} disabled={!text.trim()} data-testid="paste-read"
             className="pixel-button pick-off flex w-full items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono disabled:opacity-40">
@@ -132,6 +138,9 @@ export default function ClaimPastePay({ weekEnd, employerNames, colourOf, from, 
                       <span className="font-bold">{claimDay(r.date)}</span>
                       <span className="neon-title shrink-0 font-bold">{claimMoney(r.amount)}</span>
                     </div>
+                    {r.hours !== undefined && (
+                      <p className="text-[11px] text-muted-foreground" data-testid="paste-hours">{r.hours} h</p>
+                    )}
                     {r.period && (
                       <p className="text-[11px] text-[hsl(188_90%_70%)]" data-testid="paste-period">
                         Worked {claimDay(r.period.start, false).replace(/, \d{4}$/, '')} – {claimDay(r.period.end, false)}
@@ -172,7 +181,7 @@ export default function ClaimPastePay({ weekEnd, employerNames, colourOf, from, 
           </label>
           <label className="block space-y-1">
             <span className={LABEL}>Hourly rate · optional</span>
-            <Input value={rate} inputMode="decimal" placeholder="35.00 (works out the hours)" onChange={e => setRate(e.target.value)}
+            <Input value={rate} inputMode="decimal" placeholder={needsRate ? '35.00 (works out hours for lines without them)' : 'Not needed: every line has its hours'} onChange={e => setRate(e.target.value)}
               className="text-mono" data-testid="paste-rate" />
           </label>
           {undated > 0 && (
@@ -213,7 +222,7 @@ export default function ClaimPastePay({ weekEnd, employerNames, colourOf, from, 
                     </div>
                     <p className="text-[11px] text-muted-foreground">
                       {w.dates.length} payment{w.dates.length === 1 ? '' : 's'} ({w.dates.map(d => claimDay(d, false).replace(/, \d{4}$/, '')).join(', ')})
-                      {perHour > 0 && ` · ${hoursFor(w.total)} h`}
+                      {!!w.hours && ` · ${w.hours} h`}
                       {w.byPeriod && ' · by pay period'}
                     </p>
                     {(have || outside) && (

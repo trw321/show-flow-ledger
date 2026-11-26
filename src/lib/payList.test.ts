@@ -130,3 +130,38 @@ describe('a pay list with pay periods on its lines', () => {
     expect(payListWeeks(two, 6).map(w => [w.weekEnding, w.total])).toEqual([['2026-08-01', 500], ['2026-08-08', 500]]);
   });
 });
+
+describe('a pay list with hours on its lines', () => {
+  it('reads the hours however they are written, and never as money', () => {
+    const { rows, skipped } = readPayList([
+      'Paid 09/11/2026  Worked 08/23/2026 to 09/05/2026  $2,497.74  37 hrs',
+      'Jun 3, 2026\t$595.00\t8h',
+      'Jun 10, 2026 $280.00 5.5 hours',
+      'Jun 17, 2026 Hours: 9.5 $400.00',
+      // No dollar sign anywhere: "12.00 hrs" still isn't the amount.
+      'Jun 24, 2026 12.00 hrs 350.00',
+      'Jul 1, 2026 $100.00',
+    ].join('\n'), TODAY);
+    expect(skipped).toEqual([]);
+    expect(rows.map(r => `${r.date} ${r.amount} ${r.hours}`)).toEqual([
+      '2026-09-11 2497.74 37', '2026-06-03 595 8', '2026-06-10 280 5.5', '2026-06-17 400 9.5', '2026-06-24 350 12', '2026-07-01 100 undefined',
+    ]);
+    expect(rows[0].period).toEqual({ start: '2026-08-23', end: '2026-09-05' });
+    expect(rows.every(r => r.others.length === 0)).toBe(true);
+  });
+
+  it('does not take money for hours', () => {
+    const { rows } = readPayList('Jun 3, 2026 $8 h', TODAY);
+    expect(rows[0]).toMatchObject({ amount: 8 });
+    expect(rows[0].hours).toBeUndefined();
+  });
+
+  it('adds hours up by week and shares a two-week period\'s hours by its days, as its pay', () => {
+    const two = readPayList('Aug 12, 2026 Jul 26, 2026 - Aug 8, 2026 $1,000.00 30 hrs', TODAY).rows;
+    expect(payListWeeks(two, 6).map(w => [w.weekEnding, w.total, w.hours])).toEqual([['2026-08-01', 500, 15], ['2026-08-08', 500, 15]]);
+    const week = payListWeeks([{ date: '2026-06-01', amount: 100, hours: 2 }, { date: '2026-06-03', amount: 50, hours: 1.5 }], 6);
+    expect(week[0].hours).toBe(3.5);
+    // A week with no hours on its lines has none, rather than zero.
+    expect(payListWeeks([{ date: '2026-06-01', amount: 100 }], 6)[0].hours).toBeUndefined();
+  });
+});
