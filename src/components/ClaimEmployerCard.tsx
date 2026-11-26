@@ -19,6 +19,7 @@ import {
   claimDay, claimEmployerKey, claimMoney, claimNameOf, howLongText, isClaimDay, isUnclearEmployer, suggestEmployer, weekEndingFor,
   type ClaimEmployer, type ClaimEmployerInfo, type WeekEnd,
 } from '@/lib/unemployment';
+import { openShiftAndReturn } from '@/lib/returnSpot';
 import { cn } from '@/lib/utils';
 
 const LABEL = 'font-8bit text-[7px] uppercase leading-relaxed text-[hsl(188_95%_72%)]';
@@ -50,7 +51,9 @@ export interface EmployerWeek {
  * employer picked in its list (another can be picked) and the week of its
  * last day to start from.
  */
-export default function ClaimEmployerCard({ employer: e, colour, longest, shifts, weeks, knownEmployers, onCopy, unsplit = 0, linkChoices = [], weekEnd = 6, focus = 0 }: {
+export default function ClaimEmployerCard({ employer: e, colour, longest, shifts, weeks, knownEmployers, onCopy, unsplit = 0, linkChoices = [], weekEnd = 6, focus = 0, startOpen = false }: {
+  /** Open from the start: coming back from one of its shifts. */
+  startOpen?: boolean;
   /** Goes up when the employer is picked in the page's box: the box opens and comes into view. */
   focus?: number;
   employer: ClaimEmployer;
@@ -70,7 +73,7 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
   /** The claim's week end: a new pay stub starts on the week of its last day. */
   weekEnd?: WeekEnd;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(startOpen);
   const { updateJob } = useData();
   const { prefs, setClaimEmployers } = useUserPrefs();
   const key = claimEmployerKey(e.name);
@@ -289,7 +292,7 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
                       const hours = calls.reduce((sum, c) => sum + netHoursWorked(c), 0);
                       return (
                         <li key={j.id}>
-                          <button type="button" onClick={() => navigate(`/?job=${j.id}`)} data-testid="employer-shift"
+                          <button type="button" onClick={() => openShiftAndReturn(navigate, j.id, { path: '/benefits/unemployment', employer: e.name })} data-testid="employer-shift"
                             className="flex w-full items-baseline justify-between gap-2 py-1.5 text-left text-[12px] text-mono active:opacity-70">
                             <span className="min-w-0 truncate">
                               <span className="font-bold text-[hsl(188_90%_70%)]">{claimDay(j.date, false)}</span>

@@ -33,13 +33,13 @@ export default function PickList({ value, onChange, onPick, options, placeholder
     return true;
   });
   const typed = value.trim().toLowerCase();
-  // Names that start with what's typed first, then a word in them that does, then the rest that hold it.
+  // The name typed in full first, then names that start with it, then a word in them that does, then the rest that hold it.
   const rank = (n: string) => {
     const l = n.toLowerCase();
-    return l.startsWith(typed) ? 0 : l.split(/[\s/.,&-]+/).some(w => w.startsWith(typed)) ? 1 : 2;
+    return l === typed ? -1 : l.startsWith(typed) ? 0 : l.split(/[\s/.,&-]+/).some(w => w.startsWith(typed)) ? 1 : 2;
   };
   const shown = all || !typed ? names
-    : names.filter(n => n.toLowerCase().includes(typed) && n.toLowerCase() !== typed).sort((a, b) => rank(a) - rank(b));
+    : names.filter(n => n.toLowerCase().includes(typed)).sort((a, b) => rank(a) - rank(b));
   // Near the bottom of the screen the list would sit under the tab bar: bring it up, once, as it opens.
   const listRef = useRef<HTMLUListElement>(null);
   const showing = open && shown.length > 0;

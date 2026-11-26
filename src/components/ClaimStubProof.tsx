@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { claimDay, claimMoney, OPEN_STUB_LIST_EVENT, weekEndingFor, type ClaimLine, type ClaimStub, type ClaimWeek, type StubUse, type WeekEnd } from '@/lib/unemployment';
+import { openShiftAndReturn } from '@/lib/returnSpot';
 import { cn } from '@/lib/utils';
 
 const LABEL = 'font-8bit text-[7px] uppercase leading-relaxed text-[hsl(188_95%_72%)]';
@@ -115,7 +116,7 @@ export default function ClaimStubProof({ open, onClose, week, line, uses, claimW
                   <ul className="divide-y divide-[hsl(188_95%_62%/0.15)] text-[12px] text-mono">
                     {use.covered.map(c => (
                       <li key={c.jobId} className="flex items-baseline justify-between gap-2 py-1">
-                        <button type="button" onClick={() => { onClose(); navigate(`/?job=${c.jobId}`); }} className="flex min-w-0 items-center gap-0.5 text-left text-[hsl(188_90%_70%)]">
+                        <button type="button" onClick={() => { onClose(); openShiftAndReturn(navigate, c.jobId, { path: '/benefits/unemployment' }); }} className="flex min-w-0 items-center gap-0.5 text-left text-[hsl(188_90%_70%)]">
                           <span className="truncate">{claimDay(c.date)} · {c.hours} h</span><ChevronRight size={13} className="shrink-0" aria-hidden />
                         </button>
                         <span className="shrink-0 text-muted-foreground">est. {claimMoney(c.estimate)} · stub {claimMoney(c.share)}</span>

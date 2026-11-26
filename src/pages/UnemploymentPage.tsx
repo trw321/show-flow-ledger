@@ -19,6 +19,7 @@ import { localToday } from '@/lib/today';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { EMPLOYER_COLOURS, employerColours, employerId } from '@/lib/employerColours';
 import { WEEKDAYS, claimDay, claimEmployerOf, claimMoney, claimNameOf, claimSummary, howLongText, isClaimDay, sortEmployers, sortWeeks, weekRun, type ClaimLine, type ClaimSort, type ClaimWeek, type WeekEnd } from '@/lib/unemployment';
+import { clearSpot, peekSpot } from '@/lib/returnSpot';
 import { cn } from '@/lib/utils';
 
 /** "1 day", "3 days". */
@@ -123,6 +124,14 @@ export default function UnemploymentPage() {
   /** The "go to an employer" box, and the employer last picked in it. */
   const [jump, setJump] = useState('');
   const [focus, setFocus] = useState<{ name: string; n: number } | null>(null);
+  // Back from a shift opened here: the same place on the page, its employer's box open again.
+  const [backFrom] = useState(() => peekSpot('/benefits/unemployment'));
+  useEffect(() => {
+    if (!backFrom) return;
+    clearSpot();
+    const t = window.setTimeout(() => window.scrollTo(0, backFrom.scrollY), 80);
+    return () => window.clearTimeout(t);
+  }, [backFrom]);
   /** A week's line whose pay stubs are being looked at. */
   const [proof, setProof] = useState<{ week: ClaimWeek; line: ClaimLine } | null>(null);
   const [sort, setSort] = useState<ClaimSort>(loadSort);
@@ -507,7 +516,7 @@ export default function UnemploymentPage() {
               <ul className="space-y-2" data-testid="claim-employers">
                 {employers.map(e => (
                   <ClaimEmployerCard key={e.name} employer={e} colour={colourOf(e.name)} onCopy={copyAmount} knownEmployers={knownEmployers} weeks={weeksOf(e.name)} weekEnd={range.weekEnd}
-                    focus={focus?.name === e.name ? focus.n : 0}
+                    focus={focus?.name === e.name ? focus.n : 0} startOpen={backFrom?.employer === e.name}
                     unsplit={summary.unsplit.filter(u => u.employer === e.name).reduce((sum, u) => sum + u.gross, 0)}
                     linkChoices={[...new Set([...summary.employers.map(x => x.name), ...knownEmployers])].filter(n => n.toLowerCase() !== e.name.toLowerCase() && !(e.linked ?? []).some(l => l.toLowerCase() === n.toLowerCase()))}
                     longest={summary.longest?.byStretch === e.name ? 'stretch' : summary.longest?.byDays === e.name ? 'days' : undefined}

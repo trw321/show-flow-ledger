@@ -16,6 +16,7 @@ import {
   claimDay, claimMoney, isClaimDay, OPEN_STUB_LIST_EVENT, readAmount, sameStub, stubDays, stubShifts, stubWeeks, weekEndingFor,
   type ClaimStub, type StubUse, type StubWeek, type WeekEnd,
 } from '@/lib/unemployment';
+import { openShiftAndReturn } from '@/lib/returnSpot';
 import { cn } from '@/lib/utils';
 
 const LABEL = 'font-8bit text-[7px] uppercase leading-relaxed text-[hsl(188_95%_72%)]';
@@ -458,7 +459,7 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
                       {use.covered.map(c => (
                         <li key={c.jobId} className="space-y-0.5 py-1.5 text-[12px] text-mono" data-testid="stub-covered-shift">
                           <div className="flex items-baseline justify-between gap-2">
-                            <button type="button" onClick={() => navigate(`/?job=${c.jobId}`)} className="flex min-w-0 items-center gap-0.5 text-left font-bold text-[hsl(188_90%_70%)]"
+                            <button type="button" onClick={() => openShiftAndReturn(navigate, c.jobId, { path: '/benefits/unemployment' })} className="flex min-w-0 items-center gap-0.5 text-left font-bold text-[hsl(188_90%_70%)]"
                               aria-label={`Open the shift on ${claimDay(c.date, false)}`}>
                               <span className="truncate">{claimDay(c.date)} · {c.hours} h</span><ChevronRight size={13} className="shrink-0" aria-hidden />
                             </button>

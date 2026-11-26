@@ -8,7 +8,8 @@ import LiveWorkPay from '@/components/LiveWorkPay';
 import PreampSheet, { PreampGroup } from '@/components/PreampSheet';
 import { useNavigate } from 'react-router-dom';
 import { useNeedsHours } from '@/lib/useNeedsHours';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
+import type { ReturnState } from '@/lib/returnSpot';
 import { useData } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
 import { Button } from '@/components/ui/button';
@@ -2597,6 +2598,9 @@ export default function CalendarPage() {
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [expandedGroupKey, setExpandedGroupKey] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  /** The page a shift was opened from, when it was: closing the shift goes back to it. */
+  const returnTo = useRef<string | null>(null);
   const [addingEventDate, setAddingEventDate] = useState<string | null>(null);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickAddShiftOpen, setQuickAddShiftOpen] = useState(false);
@@ -2615,9 +2619,11 @@ export default function CalendarPage() {
     if (job) {
       setSelectedDate(job.date);
       setSelectedJobId(job.id);
+      // Opened from another page (the unemployment claim): closing it goes back there.
+      returnTo.current = (location.state as ReturnState | null)?.returnTo ?? null;
     }
     setSearchParams(prev => { prev.delete('job'); return prev; }, { replace: true });
-  }, [searchParams, data.jobs, authReady, setSearchParams]);
+  }, [searchParams, data.jobs, authReady, setSearchParams, location.state]);
 
   // Shifts whose only evidence is somebody saying so.
   const paidByHandJobIds = useMemo(() => {
@@ -3136,7 +3142,11 @@ export default function CalendarPage() {
   const selectedJob = selectedJobId ? data.jobs.find(j => j.id === selectedJobId) ?? null : null;
   const selectedEvents = selectedDate ? (eventsByDate[selectedDate] || []) : [];
   const selectedConferences = selectedDate ? (conferenceOn.get(selectedDate) ?? []) : [];
-  const closeDialog = () => { setSelectedDate(null); setSelectedJobId(null); setAddingEventDate(null); setEditingEventId(null); };
+  const closeDialog = () => {
+    setSelectedDate(null); setSelectedJobId(null); setAddingEventDate(null); setEditingEventId(null);
+    // A shift opened from another page: back to that page, where it was left.
+    if (returnTo.current) { returnTo.current = null; navigate(-1); }
+  };
 
   // Swipe left = tomorrow, right = yesterday — jumps straight into that day's
   // job if there's exactly one, otherwise falls back to the day's job list.
@@ -3893,7 +3903,8 @@ export default function CalendarPage() {
               job={selectedJob}
               openStubOnMount={openStubFor === selectedJob.id}
               onStubOpened={() => setOpenStubFor(null)}
-              onBack={() => setSelectedJobId(null)}
+              // Back goes where the shift came from: the day, or the page that opened it.
+              onBack={() => (returnTo.current ? closeDialog() : setSelectedJobId(null))}
               onSave={(updates) => { updateJob(selectedJob.id, updates); setSelectedJobId(null); toast.success('Job updated'); }}
               onDuplicated={(count) => { closeDialog(); toast.success(`Created ${count} shift${count !== 1 ? 's' : ''}`); }}
               onDelete={async () => { await deleteJob(selectedJob.id); closeDialog(); toast.success('Shift deleted'); }}
