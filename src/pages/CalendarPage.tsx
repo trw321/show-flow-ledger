@@ -21,7 +21,7 @@ import {
   AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
 import { callText, explicitCalls, parseDayTimeline, withGapOnClock, COMPOSITE_LUNCH_AFTER_HOURS, MEAL_PENALTY_AFTER_HOURS, type DayTimeline } from '@/lib/dayTimeline';
-import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle, Flame, PenLine, Banknote, Wallet, Flag, Undo2, Rocket, Timer, Orbit, Presentation, ClipboardCheck } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Save, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle, Flame, PenLine, Banknote, Wallet, Flag, Undo2, Rocket, Timer, Orbit, Presentation, ClipboardCheck } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO, isValid, differenceInCalendarDays } from 'date-fns';
 import type { Employer, Job, CalendarEvent, Income, Invoice } from '@/lib/store';
 import { matchPaymentToProject, betterProject, rankedProjectsFor, projectOf, type FoundPayment, type ProjectMatch } from '@/lib/paymentMatch';
@@ -2549,6 +2549,23 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           <Button size="sm" className="flex-1" disabled={!hasChanges} onClick={() => { handleSave(); setEditing(false); }}>Save</Button>
         </div>
         </>
+        )}
+        {/* A long shift puts its Save buttons a long scroll away. Once
+            anything's changed, a neon Save floats at the bottom of the screen
+            wherever you are on the shift. It saves everything, as both of the
+            others do. Sticky inside this tall column, so it rides the
+            pop-out's own scroll and rests here at the very end. */}
+        {hasChanges && (
+          <div className="pointer-events-none sticky bottom-3 z-20 flex justify-end" data-testid="save-bubble-row">
+            <button
+              type="button"
+              onClick={() => { handleSave(); setEditing(false); }}
+              className="pointer-events-auto flex items-center gap-1.5 rounded-full border-2 border-[hsl(312_100%_80%)] bg-[hsl(312_95%_62%)] px-5 py-3 font-mono text-sm font-bold uppercase tracking-wider text-[hsl(312_70%_8%)] shadow-[0_0_14px_hsl(312_100%_65%/0.8),0_0_30px_hsl(188_100%_55%/0.35)] transition-transform active:scale-95"
+              data-testid="save-bubble"
+            >
+              <Save size={16} strokeWidth={2.5} /> Save
+            </button>
+          </div>
         )}
       </div>
     </>
