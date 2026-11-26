@@ -1,7 +1,7 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { usePanZoom } from '@/lib/usePanZoom';
 import { toast } from 'sonner';
-import { Loader2, Mail, MapPin, Pencil, Phone, Plus, Share2, Trash2 } from 'lucide-react';
+import { Loader2, Mail, MapPin, Pencil, Phone, Share2, Trash2 } from 'lucide-react';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,7 @@ import { findPlace } from '@/lib/geocode';
 // The real map is a big library, so it loads when the Network tab does.
 const NetworkGeoMap = lazy(() => import('@/components/NetworkGeoMap'));
 import { cn } from '@/lib/utils';
+import { ForestScene, NetworkCritter } from '@/components/NetworkCritter';
 
 type Draft = Omit<NetworkContact, 'id' | 'createdAt'>;
 const EMPTY: Draft = { name: '', emoji: '🙂', company: '', role: '', phone: '', email: '', notes: '', city: '', region: '', country: '' };
@@ -93,14 +94,23 @@ export default function NetworkPage() {
         </div>
       }
       description={`${contacts.length} ${contacts.length === 1 ? 'person' : 'people'} · ${companies.length} ${companies.length === 1 ? 'company' : 'companies'}`}
-      action={<Button size="sm" onClick={() => setEditing({ draft: { ...EMPTY } })}><Plus size={14} /> Add a person</Button>}
+      action={(
+        // The one way to add someone: a little antlered critter with a +.
+        <button type="button" onClick={() => setEditing({ draft: { ...EMPTY } })} aria-label="Add a person" title="Add a person"
+          className="critter-button -ml-1 rounded-full p-1 transition-transform active:scale-90" data-testid="add-person">
+          <NetworkCritter />
+        </button>
+      )}
     >
       <div className="max-w-lg mx-auto space-y-4">
         {contacts.length === 0 ? (
-          <div className="pixel-panel p-4 text-center space-y-2">
-            <p className="text-sm font-medium">Start your map</p>
-            <p className="text-xs text-muted-foreground">Add the people you work with. Each one shows up around their company, with you in the middle. Tap anyone to call or email them.</p>
-            <Button size="sm" onClick={() => setEditing({ draft: { ...EMPTY } })}><Plus size={14} /> Add a person</Button>
+          // Nobody yet: a forest at night, and the way in is the critter up top.
+          <div className="pixel-panel relative min-h-[250px] overflow-hidden" data-testid="network-empty">
+            <ForestScene />
+            <div className="relative z-10 space-y-2 p-4 text-center">
+              <p className="neon-heading text-[hsl(140_85%_75%)]">Start your map</p>
+              <p className="text-xs text-[hsl(140_35%_88%)] [text-shadow:0_1px_4px_rgb(0_0_0/0.9)]">Tap the critter up top to add the people you work with. Each one shows up around their company, with you in the middle. Tap anyone to call or email them.</p>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2" role="tablist">

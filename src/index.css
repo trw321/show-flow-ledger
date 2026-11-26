@@ -344,6 +344,21 @@
     text-shadow: 0 0 6px color-mix(in srgb, currentColor 60%, transparent);
   }
 
+  /* Network's add-a-person critter: it glows, and every few seconds gives a
+     little wiggle. The fireflies in the empty forest blink. */
+  .critter { transform-origin: 40% 85%; filter: drop-shadow(0 0 6px rgb(111 245 196 / 0.55)); animation: critter-idle 6s ease-in-out infinite; }
+  @keyframes critter-idle {
+    0%, 12%, 100% { transform: rotate(0); }
+    3% { transform: rotate(-9deg); }
+    7% { transform: rotate(7deg); }
+    10% { transform: rotate(-3deg); }
+  }
+  .firefly { animation: firefly 2.4s ease-in-out infinite; filter: drop-shadow(0 0 3px #fff27a); }
+  @keyframes firefly { 0%, 100% { opacity: 0.15; } 50% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) {
+    .critter, .firefly { animation: none; }
+  }
+
   /* The calendar key: a tiny game menu. Steps, not easing, so it pops like one. */
   .font-8bit { font-family: 'Press Start 2P', var(--font-mono), monospace; }
   .key-8bit {
