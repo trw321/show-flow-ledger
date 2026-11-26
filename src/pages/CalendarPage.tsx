@@ -39,10 +39,10 @@ import { ratesForShift, type PayerProfile } from '@/lib/payerProfile';
 import { contractFor, contractsWorked, shiftContract } from '@/lib/contracts';
 import { alreadyRecorded } from '@/lib/paymentRepeats';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
-import { calculateDayPay, dayInARow, dayMultiplierFor, dayPremiumLabel, compositeWeekendMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross, jobPayBreakdown, jobHoursBreakdown, nightLeftAtEnd, compareCalls } from '@/lib/payCalc';
+import { calculateDayPay, dayInARow, dayMultiplierFor, dayPremiumLabel, compositeWeekendMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross, jobPayBreakdown, jobHoursBreakdown, nightLeftAtEnd, nightWindowEnd, compareCalls } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { breakTheHourLabel, breaksTheHour, isLocal16Shift } from '@/lib/local16';
-import { callMinimum, contractRuleFor, earlyCallHours, earlyCallWords, isEarlyCall, shiftPremiums, splitSideMinimum } from '@/lib/premiums';
+import { callMinimum, isEarlyCall, premiumEndWords, premiumStartHours, premiumWindow, shiftPremiums, splitSideMinimum } from '@/lib/premiums';
 import CallPremiums from '@/components/CallPremiums';
 import { useSwipe } from '@/lib/useSwipe';
 import { cn } from '@/lib/utils';
@@ -321,8 +321,10 @@ function PremiumDayBanner({ day, pays, who, onSetUp }: PremiumDay & { onSetUp?: 
  */
 function PremiumHoursBanner({ job, allJobs, employer, payer, onTap }: { job: Job; allJobs: Job[]; employer?: Employer; payer: PayerProfile; onTap?: () => void }) {
   const early = isEarlyCall(job);
-  const night = !early && (employer?.nightPremiumEnabled ?? true) && job.startTime && job.endTime
-    ? resolveConfirmedNightHours(calculateNightHours(job.startTime, job.endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour), job.nightPremiumConfirmed, job.nightPremiumActualHours)
+  // Night and early morning are one premium, stopping where the contract says.
+  const window = premiumWindow(job, employer, payer);
+  const night = !early && window.endHour !== null && (employer?.nightPremiumEnabled ?? true) && job.startTime && job.endTime
+    ? resolveConfirmedNightHours(calculateNightHours(job.startTime, job.endTime, employer?.nightPremiumStartHour ?? 0, window.endHour), job.nightPremiumConfirmed, job.nightPremiumActualHours)
     : 0;
   // Night hours arrive with a pop of moons, z's and money, and again on a tap.
   const isNight = !early && night > 0;
@@ -330,17 +332,17 @@ function PremiumHoursBanner({ job, allJobs, employer, payer, onTap }: { job: Job
   const [burst, setBurst] = useState(0);
   useEffect(() => { if (isNight) setBurst(b => b + 1); }, [isNight]);
   if (!early && night <= 0) return null;
-  const rule = contractRuleFor(job, employer, payer)?.earlyCall;
-  const premium = early ? earlyCallHours(job, rule, breaksTheHour(job, employer)) : night;
+  const premium = early ? (window.endHour === null ? 0 : premiumStartHours(job, window.endHour, breaksTheHour(job, employer))) : night;
   const multiplier = employer?.nightPremiumMultiplier ?? 2;
   const title = early ? `🌅 EARLY CALL · ${job.startTime}` : `🌙 NIGHT HOURS · past midnight`;
-  const line = early
-    ? rule === undefined ? 'Premium hours: tap to say how long they run under this contract'
-      : rule === 'none' ? 'No premium under this contract'
-      : !job.endTime ? `Premium at ${multiplier}× ${earlyCallWords(rule)}`
-      : `${Math.round(premium * 100) / 100}h at ${multiplier}× · ${earlyCallWords(rule)}`
-    : `${Math.round(premium * 100) / 100}h worked after midnight at ${multiplier}×`;
-  const cls = cn('block w-full rounded-lg border px-3 py-2 text-center', early && rule === undefined ? 'border-warning/60 bg-warning/15' : 'border-primary/50 bg-primary/15');
+  // Until the contract says how long premium runs, the least is counted: say so, and ask.
+  const unset = window.set ? '' : ` · counted ${premiumEndWords(window.endHour)}, the least: tap to set this contract's`;
+  const line = window.endHour === null ? 'No premium under this contract'
+    : early
+      ? !job.endTime ? `Premium at ${multiplier}× ${premiumEndWords(window.endHour)}${unset}`
+        : `${Math.round(premium * 100) / 100}h at ${multiplier}× · ${premiumEndWords(window.endHour)}${unset}`
+      : `${Math.round(premium * 100) / 100}h worked after midnight at ${multiplier}×${unset}`;
+  const cls = cn('block w-full rounded-lg border px-3 py-2 text-center', !window.set ? 'border-warning/60 bg-warning/15' : 'border-primary/50 bg-primary/15');
   const body = (
     <>
       <p className="text-sm font-black tracking-tight">{title}</p>
@@ -879,8 +881,10 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     await updateJobDirect(job.id, updates);
     if (role && (role.hourlyRate || role.dayRate)) toast.success(`${role.name} — rate set`);
   };
-  const rawNightHours = ((employer?.nightPremiumEnabled ?? true) && startTime && endTime)
-    ? calculateNightHours(startTime, endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour)
+  // Night hours stop where this call's contract says premium hours do.
+  const nightEnd = nightWindowEnd(job, employer, prefs.payer);
+  const rawNightHours = ((employer?.nightPremiumEnabled ?? true) && startTime && endTime && nightEnd !== null)
+    ? calculateNightHours(startTime, endTime, employer?.nightPremiumStartHour ?? 0, nightEnd)
     : 0;
   const parsedNightActualHours = nightPremiumActualHours.trim() === '' ? undefined : parseFloat(nightPremiumActualHours);
   const validNightActualHours = parsedNightActualHours !== undefined && !isNaN(parsedNightActualHours)
@@ -1054,7 +1058,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
       dtMultiplier: employer?.doubletimeMultiplier,
       // A broken hour falls at the end of the call, so a call that ends in the
       // night pays its rounded part hour at the night rate, as jobPayBreakdown does.
-      nightHours, nightLeftAtEnd: nightHours > 0 && startTime && endTime ? nightLeftAtEnd(startTime, endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour) : 0,
+      nightHours, nightLeftAtEnd: nightHours > 0 && startTime && endTime && nightEnd !== null ? nightLeftAtEnd(startTime, endTime, employer?.nightPremiumStartHour ?? 0, nightEnd) : 0,
       nightMultiplier: employer?.nightPremiumMultiplier, roundUpToWholeHours: breaksTheHour(job, employer), unionDuesPercent: previewRates.unionDuesPercent, estimatedTaxPercent: previewRates.estimatedTaxPercent, dayPremiumLabel: dayPremiumLabel({ ...job, compositeTeam }, employer, data.jobs),
       premiums: shiftPremiums({ ...job, startTime, endTime }, data.jobs, employer, prefs.payer),
     })

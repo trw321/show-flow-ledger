@@ -1,7 +1,7 @@
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import type { Job, Expense, Income, Employer } from './store';
-import { calculateDayPay, dayMultiplierFor, offClockMealMinutes, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming } from './payCalc';
+import { calculateDayPay, dayMultiplierFor, offClockMealMinutes, calculateWeeklyOvertimeBonus, calculateNightHours, nightWindowEnd, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming } from './payCalc';
 import { resolveEmployer } from './employerMatch';
 import { withholdsNothing } from './payerProfile';
 
@@ -18,8 +18,11 @@ function jobPayDetails(job: Job, allJobs: Job[], employers: Employer[]): JobPayD
   const rate = job.hourlyRate ?? 0;
   const employer = resolveEmployer(job.client, employers);
   const dayMult = dayMultiplierFor(job, employer, allJobs);
-  const rawNightHours = ((employer?.nightPremiumEnabled ?? true) && job.startTime && job.endTime)
-    ? calculateNightHours(job.startTime, job.endTime, employer?.nightPremiumStartHour ?? 0, employer?.nightPremiumEndHour)
+  // The export has no contract answers, so premium stops where the employer
+  // says, or at 7 AM, the least (see premiumWindow).
+  const nightEnd = nightWindowEnd(job, employer);
+  const rawNightHours = ((employer?.nightPremiumEnabled ?? true) && job.startTime && job.endTime && nightEnd !== null)
+    ? calculateNightHours(job.startTime, job.endTime, employer?.nightPremiumStartHour ?? 0, nightEnd)
     : 0;
   const nightHours = resolveConfirmedNightHours(rawNightHours, job.nightPremiumConfirmed, job.nightPremiumActualHours);
   const { totalPay, duesAmount, taxAmount, nightHours: premiumHours } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock, offClockMinutesTotal: offClockMealMinutes(job) }, {

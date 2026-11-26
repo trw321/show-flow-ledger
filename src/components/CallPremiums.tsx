@@ -1,9 +1,10 @@
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { shiftContract } from '@/lib/contracts';
+import { calculateNightHours } from '@/lib/payCalc';
 import type { ContractRule } from '@/lib/payerProfile';
 import {
   contractRuleFor, EARLY_CALL_BEFORE_HOUR, EARLY_CALL_UNTIL_HOUR, FORCED_CALL_REST_HOURS,
-  forcedCallFor, HEAD_CALL_MINIMUM_HOURS, headCallIn, isEarlyCall, isUnionShift, splitSideMinimum, withContractRule,
+  forcedCallFor, HEAD_CALL_MINIMUM_HOURS, headCallIn, isEarlyCall, isUnionShift, premiumEndWords, premiumWindow, splitSideMinimum, withContractRule,
 } from '@/lib/premiums';
 import type { Employer, Job } from '@/lib/store';
 import { showDay as day } from '@/lib/today';
@@ -12,7 +13,7 @@ import { cn } from '@/lib/utils';
 const EARLY_CHOICES: { value: NonNullable<ContractRule['earlyCall']>; label: string }[] = [
   { value: 'until7', label: 'Until 7 AM' },
   { value: 'until8', label: `Until ${EARLY_CALL_UNTIL_HOUR} AM` },
-  { value: 'allDay', label: 'All day' },
+  { value: 'allDay', label: 'To the end of the call' },
   { value: 'none', label: 'No premium' },
 ];
 
@@ -32,6 +33,10 @@ export default function CallPremiums({ job, allJobs, employer }: { job: Job; all
   const save = (change: Partial<ContractRule>) => under && setPayer(withContractRule(prefs.payer, under, change));
 
   const early = isEarlyCall(job);
+  // Night and early morning are one premium: a call past midnight asks the same question.
+  const window = premiumWindow(job, employer, prefs.payer);
+  const nightCall = !early && (employer?.nightPremiumEnabled ?? true) && !!job.startTime && !!job.endTime
+    && calculateNightHours(job.startTime, job.endTime, employer?.nightPremiumStartHour ?? 0) > 0;
   const forcedOn = rule?.forcedCall ?? isUnionShift(job, employer);
   const rest = rule?.restHours ?? FORCED_CALL_REST_HOURS;
   const forced = forcedCallFor(job, allJobs, rest);
@@ -39,7 +44,7 @@ export default function CallPremiums({ job, allJobs, employer }: { job: Job; all
   const split = allJobs.some(o => o.id !== job.id && o.date === job.date && o.client === job.client && !o.pto && o.status !== 'cancelled');
   // A head call, by what the offer says: 8 hours unless the shift says otherwise.
   const head = !split && isUnionShift(job, employer) ? headCallIn(job) : undefined;
-  if (!early && !forced && !split && !head) return null;
+  if (!early && !nightCall && !forced && !split && !head) return null;
   const sideMinimum = splitSideMinimum({ ...job, minimumHours: undefined }, employer, prefs.payer);
 
   return (
@@ -72,13 +77,13 @@ export default function CallPremiums({ job, allJobs, employer }: { job: Job; all
           </div>
         </div>
       )}
-      {early && (
+      {(early || nightCall) && (
         <div className={cn('rounded-md border px-2.5 py-2 text-[11px] leading-tight', rule?.earlyCall ? 'border-primary/40 bg-primary/10' : 'border-warning/50 bg-warning/10')} data-testid="early-call">
-          <span className="font-medium">Early call · starts before {EARLY_CALL_BEFORE_HOUR} AM</span>
+          <span className="font-medium">{early ? `Early call · starts before ${EARLY_CALL_BEFORE_HOUR} AM` : 'Night hours · past midnight'} · premium hours</span>
           <span className="block text-[10px] text-muted-foreground mt-0.5">
             {rule?.earlyCall
-              ? `Saved for every shift under ${under}.`
-              : `How long does the premium run under ${under}? Pick one and every shift under it follows. Nothing is counted until you do.`}
+              ? `Premium ${premiumEndWords(window.endHour)}, saved for every shift under ${under}.`
+              : `How long do premium hours run under ${under}? Night and early morning are the same. Pick one and every shift under it follows. Until you do, they're counted ${premiumEndWords(window.endHour)}, the least.`}
           </span>
           <div className="mt-1.5 grid grid-cols-2 gap-1.5">
             {EARLY_CHOICES.map(c => (

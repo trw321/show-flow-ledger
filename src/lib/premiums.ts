@@ -75,6 +75,9 @@ export function isEarlyCall(job: Pick<Job, 'startTime' | 'endTime'>): boolean {
   return !Number.isNaN(start) && start < EARLY_CALL_BEFORE_HOUR * 60;
 }
 
+/** Premium hours stop here when the contract hasn't said: the earliest any of them stop. */
+export const LEAST_PREMIUM_END_HOUR = 7;
+
 /** When an "until" early-call premium stops, by the contract's choice. */
 export const earlyCallUntilHour = (rule?: ContractRule['earlyCall']) => (rule === 'until7' ? 7 : EARLY_CALL_UNTIL_HOUR);
 
@@ -89,14 +92,41 @@ export const earlyCallWords = (rule?: ContractRule['earlyCall']) =>
  * 8 is two hours of it, 6:30 to 8:30.
  */
 export function earlyCallHours(job: Pick<Job, 'startTime' | 'endTime'>, rule?: ContractRule['earlyCall'], breaksHour = false): number {
+  if (rule !== 'allDay' && rule !== 'until7' && rule !== 'until8') return 0;
+  return premiumStartHours(job, rule === 'allDay' ? undefined : earlyCallUntilHour(rule), breaksHour);
+}
+
+/** earlyCallHours by the hour premium stops: undefined runs to the end of the call. */
+export function premiumStartHours(job: Pick<Job, 'startTime' | 'endTime'>, untilHour: number | undefined, breaksHour: boolean): number {
   const span = callSpan(job);
   if (!span || span.start >= EARLY_CALL_BEFORE_HOUR * 60) return 0;
   const length = (span.end - span.start) / 60;
-  if (rule === 'allDay') return length;
-  if (rule !== 'until7' && rule !== 'until8') return 0;
-  const raw = Math.max(0, Math.min(span.end, earlyCallUntilHour(rule) * 60) - span.start) / 60;
+  if (untilHour === undefined) return length;
+  const raw = Math.max(0, Math.min(span.end, untilHour * 60) - span.start) / 60;
   return breaksHour ? Math.min(Math.ceil(raw - 1e-9), Math.ceil(length - 1e-9)) : raw;
 }
+
+/**
+ * Premium hours, night and early morning alike: from midnight until 7 AM,
+ * until 8 AM, or to the end of the call, as the call's contract says (or
+ * none). `endHour` is when they stop: an hour of the morning, undefined for
+ * the end of the call, null for none.
+ *
+ * Until the contract has been answered they're counted until the employer's
+ * own end hour, or 7 AM, the least of them, so an estimate never comes out
+ * above the pay, and the shift asks (`set` false).
+ */
+export function premiumWindow(job: Job, employer?: Employer, payer?: PayerProfile): { endHour: number | undefined | null; set: boolean } {
+  const saved = contractRuleFor(job, employer, payer)?.earlyCall;
+  if (saved === 'none') return { endHour: null, set: true };
+  if (saved === 'allDay') return { endHour: undefined, set: true };
+  if (saved === 'until7' || saved === 'until8') return { endHour: earlyCallUntilHour(saved), set: true };
+  return { endHour: employer?.nightPremiumEndHour ?? LEAST_PREMIUM_END_HOUR, set: false };
+}
+
+/** "until 7 AM", "to the end of the call": when premium hours stop, in words. */
+export const premiumEndWords = (endHour: number | undefined | null) =>
+  endHour === null ? 'no premium' : endHour === undefined ? 'to the end of the call' : `until ${endHour} AM`;
 
 /** A split day's side with no minimum of its own gets this on union work. */
 export const SPLIT_SIDE_MINIMUM_HOURS = 4;
@@ -201,12 +231,15 @@ export function shiftPremiums(job: Job, allJobs: Job[], employer?: Employer, pay
   if (job.pto) return [];
   const rule = contractRuleFor(job, employer, payer);
   const out: StartPremium[] = [];
-  const early = earlyCallHours(job, rule?.earlyCall, breaksTheHour(job, employer));
+  // A call that starts after midnight is premium hours, as the contract says,
+  // or the least of them until it has.
+  const window = premiumWindow(job, employer, payer);
+  const early = window.endHour === null ? 0 : premiumStartHours(job, window.endHour, breaksTheHour(job, employer));
   if (early > 0) {
     out.push({
       hours: early,
       multiplier: employer?.nightPremiumMultiplier ?? 2,
-      label: `early call, premium ${earlyCallWords(rule?.earlyCall)}`,
+      label: `early call, premium ${premiumEndWords(window.endHour)}${window.set ? '' : ' (contract not set)'}`,
     });
   }
   if (rule?.forcedCall ?? isUnionShift(job, employer)) {

@@ -6,7 +6,7 @@ import { resolveEmployer } from './employerMatch';
 import { contractFor } from './contracts';
 import { localToday } from './today';
 import { breaksTheHour, isLocal16Shift } from './local16';
-import { callMinimum, shiftPremiums, splitSideMinimum, type StartPremium } from './premiums';
+import { callMinimum, premiumWindow, shiftPremiums, splitSideMinimum, type StartPremium } from './premiums';
 import { clockSpanHours, endAfterStart } from './clock';
 import { roundHours } from './hoursFormat';
 
@@ -646,8 +646,8 @@ function priceSides(
   const sides = isSplitDay ? dayShifts : [job];
   // A broken hour falls at the end of its call: on a split, the last call's
   // part hour is already rounded per side, so its night share is added here.
-  const lastNight = shiftNight(lastCall(sides), employer);
-  const dayNightHours = sides.reduce((sum, j) => sum + shiftNight(j, employer).hours, 0)
+  const lastNight = shiftNight(lastCall(sides), employer, payer);
+  const dayNightHours = sides.reduce((sum, j) => sum + shiftNight(j, employer, payer).hours, 0)
     + (split && lastNight.hours > 0 ? Math.min(split.lastBroken, lastNight.leftAtEnd) : 0);
   const dayNightLeft = split ? 0 : lastNight.leftAtEnd;
 
@@ -741,14 +741,26 @@ export function nightLeftAtEnd(
   return Math.max(0, (windowEnd - e) / 60);
 }
 
+/**
+ * When a call's night hours stop: the premium window its contract sets (see
+ * premiumWindow), as an hour of the morning, undefined for the end of the
+ * call, or null for no premium at all.
+ */
+export function nightWindowEnd(job: Job, employer?: Employer, payer?: PayerProfile): number | undefined | null {
+  return premiumWindow(job, employer, payer).endHour;
+}
+
 /** One shift's night hours, after the worked-or-padding confirmation, and how much night is left when it ends. */
-function shiftNight(job: Job, employer?: Employer): { hours: number; leftAtEnd: number } {
+function shiftNight(job: Job, employer?: Employer, payer?: PayerProfile): { hours: number; leftAtEnd: number } {
   if (!(employer?.nightPremiumEnabled ?? true) || !job.startTime || !job.endTime) return { hours: 0, leftAtEnd: 0 };
+  // Night and early morning are one premium: it stops where the contract says.
+  const end = nightWindowEnd(job, employer, payer);
+  if (end === null) return { hours: 0, leftAtEnd: 0 };
   const start = employer?.nightPremiumStartHour ?? 0;
-  const raw = calculateNightHours(job.startTime, job.endTime, start, employer?.nightPremiumEndHour);
+  const raw = calculateNightHours(job.startTime, job.endTime, start, end);
   const hours = resolveConfirmedNightHours(raw, job.nightPremiumConfirmed, job.nightPremiumActualHours);
   // Hours confirmed as padding rather than worked earn no broken hour either.
-  return { hours, leftAtEnd: hours > 0 ? nightLeftAtEnd(job.startTime, job.endTime, start, employer?.nightPremiumEndHour) : 0 };
+  return { hours, leftAtEnd: hours > 0 ? nightLeftAtEnd(job.startTime, job.endTime, start, end) : 0 };
 }
 
 /** The day's first call: the one that starts earliest. */
@@ -1036,8 +1048,8 @@ export function calculateExpectedPay(
     const isSplit = sides.length > 1;
     const rounds = !!overtimeOptions.roundUpToWholeHours;
     const split = isSplit ? splitDayHours(sides, rounds) : null;
-    const lastNight = shiftNight(lastCall(sides), employer);
-    const nightHours = sides.reduce((sum, j) => sum + shiftNight(j, employer).hours, 0)
+    const lastNight = shiftNight(lastCall(sides), employer, payer);
+    const nightHours = sides.reduce((sum, j) => sum + shiftNight(j, employer, payer).hours, 0)
       + (split && lastNight.hours > 0 ? Math.min(split.lastBroken, lastNight.leftAtEnd) : 0);
     const nightLeft = split ? 0 : lastNight.leftAtEnd;
     const dayMinimum = isSplit ? 0 : callMinimum({ ...sides[0], minimumHours: sides[0].minimumHours ?? referenceJob.minimumHours }, employer);

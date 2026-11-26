@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { jobPayBreakdown } from './payCalc';
+import { jobHoursBreakdown, jobPayBreakdown } from './payCalc';
 import { EMPTY_PROFILE, type PayerProfile } from './payerProfile';
-import { callMinimum, earlyCallHours, forcedCallFor, headCallIn, isEarlyCall, shiftPremiums, withContractRule } from './premiums';
+import { callMinimum, earlyCallHours, forcedCallFor, headCallIn, isEarlyCall, shiftPremiums, withContractRule, type StartPremium } from './premiums';
 import type { Employer, Job } from './store';
 
 const shift = (id: string, over: Partial<Job> = {}): Job => ({
@@ -15,6 +15,45 @@ const withEarly = (rule: 'until8' | 'allDay' | 'none'): PayerProfile =>
 
 const gross = (job: Job, all: Job[] = [job], payer: PayerProfile = EMPTY_PROFILE, employers: Employer[] = []) =>
   jobPayBreakdown(job, all, employers, payer).gross;
+
+/** A call's forced-call premium alone, leaving out any early-call one. */
+const forcedOnly = (premiums: StartPremium[]) => premiums.filter(p => p.label.startsWith('forced'));
+
+describe('premium hours: night and early morning are one', () => {
+  // The owner's rules, 2026-11-25: full hours counted from the call's start,
+  // the rounded part at the end; a call that starts after midnight is premium
+  // too; premium stops at 7 AM, 8 AM or the end of the call by contract, and
+  // the least until the contract says; minimum padding is straight time.
+  const call = (startTime: string, endTime: string, hoursWorked: number, over: Partial<Job> = {}) =>
+    shift('c', { startTime, endTime, hoursWorked, local: '16', ...over });
+  const r = 50, d = 100;
+
+  it('pays midnight to 3:30 AM as premium until 4', () => {
+    expect(gross(call('12:00 AM', '3:30 AM', 3.5))).toBeCloseTo(4 * d);
+  });
+
+  it('pays a 1 AM start as premium', () => {
+    expect(gross(call('1:00 AM', '5:00 AM', 4))).toBeCloseTo(4 * d);
+  });
+
+  it('stops at 3:30 when 10:30 PM to 3:30 AM is already whole hours', () => {
+    expect(gross(call('10:30 PM', '3:30 AM', 5))).toBeCloseTo(1.5 * r + 3.5 * d);
+  });
+
+  it('pays minimum padding at straight time', () => {
+    // 2h worked from 1 AM against a 4h minimum: 2 premium, 2 padding.
+    expect(gross(call('1:00 AM', '3:00 AM', 2, { minimumHours: 4 }))).toBeCloseTo(2 * d + 2 * r);
+  });
+
+  it('stops a night past midnight where the contract says, and at 7 AM until it says', () => {
+    const night = (payer: PayerProfile = EMPTY_PROFILE) =>
+      jobHoursBreakdown(call('10:00 PM', '10:00 AM', 12), [call('10:00 PM', '10:00 AM', 12)], [], payer).night;
+    expect(night()).toBe(7);
+    expect(night(withEarly('until8'))).toBe(8);
+    expect(night(withEarly('allDay'))).toBe(10);
+    expect(night(withEarly('none'))).toBe(0);
+  });
+});
 
 describe('an early call', () => {
   it('is a call that starts between midnight and 7 AM', () => {
@@ -43,15 +82,18 @@ describe('an early call', () => {
     expect(gross(job, [job], withEarly('allDay'))).toBeCloseTo(800);
   });
 
-  it('counts nothing until the contract is answered, and nothing when it has none', () => {
+  it('counts the least until the contract is answered, and nothing when it has none', () => {
     const job = shift('a', { startTime: '5:00 AM', endTime: '1:00 PM', hoursWorked: 8 });
-    expect(gross(job)).toBeCloseTo(400);
+    // Unanswered: premium until 7 AM, the earliest any contract stops it, so
+    // the estimate is never above the pay. 5 to 7 AM lifted to 2× adds 2 × $50.
+    expect(gross(job)).toBeCloseTo(500);
     expect(gross(job, [job], withEarly('none'))).toBeCloseTo(400);
   });
 
   it('follows the contract, not the employer', () => {
+    // Another contract's "to the end of the call" doesn't reach it: it gets the least.
     const other = shift('b', { startTime: '5:00 AM', endTime: '1:00 PM', hoursWorked: 8, contract: '2025-2027 BASIC LTE ENTRTNMENT' });
-    expect(gross(other, [other], withEarly('allDay'))).toBeCloseTo(400);
+    expect(gross(other, [other], withEarly('allDay'))).toBeCloseTo(500);
   });
 });
 
@@ -104,21 +146,22 @@ describe('a forced call', () => {
     const job = shift('a', { client: 'odeum', jobNumber: undefined, contract: undefined, startTime: '6:00 AM', endTime: '2:00 PM', hoursWorked: 8 });
     const told = withContractRule(EMPTY_PROFILE, 'odeum', { forcedCall: true });
     expect(forcedCallFor(job, [lastNight, job])).toBeNull();
-    expect(shiftPremiums(job, [lastNight, job], undefined, told)).toEqual([]);
+    expect(forcedOnly(shiftPremiums(job, [lastNight, job], undefined, told))).toEqual([]);
   });
 
   it('is union work only, unless a contract says otherwise', () => {
     const odeum = (id: string, over: Partial<Job>) => shift(id, { client: 'odeum', jobNumber: undefined, contract: undefined, ...over });
     const before = odeum('n', { date: '2026-10-01', startTime: '4:00 PM', endTime: '12:00 AM', hoursWorked: 8 });
     const job = odeum('a', { startTime: '6:00 AM', endTime: '2:00 PM', hoursWorked: 8 });
-    expect(shiftPremiums(job, [before, job])).toEqual([]);
+    expect(forcedOnly(shiftPremiums(job, [before, job]))).toEqual([]);
     const told = withContractRule(EMPTY_PROFILE, 'odeum', { forcedCall: true });
-    expect(shiftPremiums(job, [before, job], undefined, told)).toHaveLength(1);
+    expect(forcedOnly(shiftPremiums(job, [before, job], undefined, told))).toHaveLength(1);
   });
 
   it('can be turned off for a contract that has none', () => {
     const job = shift('a', { startTime: '6:00 AM', endTime: '2:00 PM', hoursWorked: 8 });
-    const off = withContractRule(EMPTY_PROFILE, '2023-2028 basic entertainment', { forcedCall: false });
+    // No early premium either, so only the forced call is being looked at.
+    const off = withContractRule(EMPTY_PROFILE, '2023-2028 basic entertainment', { forcedCall: false, earlyCall: 'none' });
     expect(gross(job, [lastNight, job], off)).toBeCloseTo(400);
   });
 
