@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
+import ClaimExcelPicker from '@/components/ClaimExcelPicker';
+import { EMPLOYER_COLUMNS, STUB_COLUMNS, WEEK_COLUMNS, shapeSheet, type ClaimExcelPicks, type ClaimRow } from '@/lib/claimExcel';
 import { ArrowLeft, Check, ChevronDown, Copy, Download, Plus } from 'lucide-react';
 import { format, parseISO, subMonths } from 'date-fns';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
@@ -222,16 +224,19 @@ export default function UnemploymentPage() {
   // One gross, tapped.
   const copyAmount = (n: number) => void copyText(plain(n), `Copied ${claimMoney(n)}`);
 
-  const download = () => {
-    const weekRows = weeks.flatMap(w => {
+  // The Excel download, cut to the sheets, columns and employers picked (see ClaimExcelPicker).
+  const [excelOpen, setExcelOpen] = useState(false);
+  const download = (picks: ClaimExcelPicks) => {
+    const weekRows: ClaimRow[] = weeks.flatMap((w): ClaimRow[] => {
       const base = { 'Week ending': w.weekEnding, From: w.start, Through: w.end, 'Days worked': w.days };
       return w.lines.length === 0
         ? [{ ...base, Employer: 'No work', Hours: 0, Gross: 0 }]
-        : w.lines.map(l => ({ ...base, Employer: l.fromStub ? `${l.employer} (from pay stub)` : l.perStub ? `${l.employer} (per pay stub)` : l.employer, Hours: l.hours, Gross: l.gross }));
+        : w.lines.map(l => ({ ...base, Employer: l.fromStub ? `${l.employer} (from pay stub)` : l.perStub ? `${l.employer} (per pay stub)` : l.employer, Hours: l.hours, Gross: l.gross, __employer: l.employer }));
     }).concat(summary.unsplit.map(u => ({
-      'Week ending': 'Not split by week', From: u.start, Through: u.end, 'Days worked': 0, Employer: `${u.employer} (pay stub, not averaged)`, Hours: u.hours, Gross: u.gross,
+      'Week ending': 'Not split by week', From: u.start, Through: u.end, 'Days worked': 0, Employer: `${u.employer} (pay stub, not averaged)`, Hours: u.hours, Gross: u.gross, __employer: u.employer,
     })));
-    const employerRows = employers.map(e => ({
+    const employerRows: ClaimRow[] = employers.map(e => ({
+      __employer: e.name,
       Employer: claimNameOf(e),
       'On the calendar as': e.info?.claimName ? e.name : '',
       Address: e.info?.address ?? '', Phone: e.info?.phone ?? '', Note: e.info?.note ?? '',
@@ -239,18 +244,24 @@ export default function UnemploymentPage() {
       'Paid by': e.paidBy ?? '', 'First day': e.firstDay, 'Last day': e.lastDay, 'How long': howLongText(e.firstDay, e.lastDay),
       'Days worked': e.days, Hours: e.hours, Gross: e.gross, 'From pay stubs': e.fromStub ? 'Yes' : '',
     }));
-    const stubRows = prefs.claimStubs.map(st => {
+    const stubRows: ClaimRow[] = prefs.claimStubs.map(st => {
       const use = summary.stubs.find(u => u.stub.id === st.id);
       return {
+        __employer: st.employer,
         Employer: st.employer, From: st.start, Through: st.end, Hours: st.hours, Gross: st.gross,
         Counted: !use ? 'No: outside your dates' : use.used ? 'Yes: nothing on the calendar for it' : use.usesPay ? `Yes: believed, placed by the calendar's ${use.shifts} shift(s)${use.check?.farOff ? ' (far from the calendar: check it)' : ''}` : use.status === 'calendar' ? `No: the calendar's ${use.shifts} shift(s) count instead` : 'No: another stub covers the same days',
       };
     });
     const book = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(weekRows), 'Weeks');
-    XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(employerRows), 'Employers');
-    if (stubRows.length > 0) XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(stubRows), 'Pay stubs');
+    const add = (rows: Record<string, string | number>[], name: string) => {
+      if (rows.length > 0) XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(rows), name);
+    };
+    if (picks.sheets.includes('weeks')) add(shapeSheet(weekRows, WEEK_COLUMNS, picks.weekColumns, picks.leaveOut), 'Weeks');
+    if (picks.sheets.includes('employers')) add(shapeSheet(employerRows, EMPLOYER_COLUMNS, picks.employerColumns, picks.leaveOut), 'Employers');
+    if (picks.sheets.includes('stubs')) add(shapeSheet(stubRows, STUB_COLUMNS, [...STUB_COLUMNS], picks.leaveOut), 'Pay stubs');
+    if (book.SheetNames.length === 0) { toast.error('Nothing to put in it: pick a sheet, a column and an employer.'); return; }
     XLSX.writeFile(book, `unemployment-claim-${range.from}-to-${range.through}.xlsx`);
+    toast.success(`Saved the Excel: ${book.SheetNames.join(', ')}`);
   };
 
   return (
@@ -405,10 +416,18 @@ export default function UnemploymentPage() {
             <ClaimCopyPicker view={view} employers={employers} weeks={weeks} weeksOf={weeksOf} extra={unsplitLines}
               onCopy={(text, n) => void copyText(text, `Copied ${n} ${view === 'weeks' ? 'week' : 'employer'}${n === 1 ? '' : 's'}`)}
               trailing={(
-                <button type="button" onClick={download} className="pixel-button pick-off flex shrink-0 items-center justify-center gap-1.5 px-2.5 py-1.5 text-[11px] font-bold text-mono">
+                <button type="button" onClick={() => setExcelOpen(o => !o)} aria-expanded={excelOpen} data-testid="excel-open"
+                  className={cn('pixel-button flex shrink-0 items-center justify-center gap-1.5 px-2.5 py-1.5 text-[11px] font-bold text-mono', excelOpen ? 'pick-on' : 'pick-off')}>
                   <Download size={13} aria-hidden /> Excel
                 </button>
               )} />
+            {/* Excel, with the sheets, columns and employers picked first. */}
+            {excelOpen && (
+              <ClaimExcelPicker
+                employers={summary.employers.map(e => ({ name: e.name, shown: claimNameOf(e) }))}
+                hasStubs={prefs.claimStubs.length > 0}
+                onDownload={download} />
+            )}
 
             {/* Straight to one employer: its box opens and comes into view. */}
             {view === 'employers' && employers.length > 1 && (
