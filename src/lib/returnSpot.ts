@@ -47,7 +47,16 @@ export function clearSpot(): void {
 
 /** Open a shift on the calendar from a page, coming back to the same place on it when the shift is closed. */
 export function openShiftAndReturn(navigate: NavigateFunction, jobId: string, spot: Omit<ReturnSpot, 'scrollY'>): void {
+  openAndReturn(navigate, `/?job=${encodeURIComponent(jobId)}`, spot);
+}
+
+/** Open a whole day on the calendar (a split day's every call), coming back the same way. */
+export function openDayAndReturn(navigate: NavigateFunction, date: string, spot: Omit<ReturnSpot, 'scrollY'>): void {
+  openAndReturn(navigate, `/?day=${encodeURIComponent(date)}`, spot);
+}
+
+function openAndReturn(navigate: NavigateFunction, to: string, spot: Omit<ReturnSpot, 'scrollY'>): void {
   rememberSpot({ ...spot, scrollY: window.scrollY });
   const state: ReturnState = { returnTo: spot.path };
-  navigate(`/?job=${jobId}`, { state });
+  navigate(to, { state });
 }

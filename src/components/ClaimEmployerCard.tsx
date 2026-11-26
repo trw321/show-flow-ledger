@@ -19,7 +19,7 @@ import {
   claimDay, claimEmployerKey, claimMoney, claimNameOf, howLongText, isClaimDay, isUnclearEmployer, suggestEmployer, weekEndingFor,
   type ClaimEmployer, type ClaimEmployerInfo, type WeekEnd,
 } from '@/lib/unemployment';
-import { openShiftAndReturn } from '@/lib/returnSpot';
+import { openDayAndReturn, openShiftAndReturn } from '@/lib/returnSpot';
 import { cn } from '@/lib/utils';
 
 const LABEL = 'font-8bit text-[7px] uppercase leading-relaxed text-[hsl(188_95%_72%)]';
@@ -292,7 +292,10 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
                       const hours = calls.reduce((sum, c) => sum + netHoursWorked(c), 0);
                       return (
                         <li key={j.id}>
-                          <button type="button" onClick={() => openShiftAndReturn(navigate, j.id, { path: '/benefits/unemployment', employer: e.name })} data-testid="employer-shift"
+                          <button type="button" onClick={() => (calls.length > 1
+                            // A split day opens on the day, with every call on it.
+                            ? openDayAndReturn(navigate, j.date, { path: '/benefits/unemployment', employer: e.name })
+                            : openShiftAndReturn(navigate, j.id, { path: '/benefits/unemployment', employer: e.name }))} data-testid="employer-shift"
                             className="flex w-full items-baseline justify-between gap-2 py-1.5 text-left text-[12px] text-mono active:opacity-70">
                             <span className="min-w-0 truncate">
                               <span className="font-bold text-[hsl(188_90%_70%)]">{claimDay(j.date, false)}</span>

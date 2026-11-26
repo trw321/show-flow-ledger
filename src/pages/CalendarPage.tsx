@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { callText, explicitCalls, parseDayTimeline, withGapOnClock, COMPOSITE_LUNCH_AFTER_HOURS, MEAL_PENALTY_AFTER_HOURS, type DayTimeline } from '@/lib/dayTimeline';
 import { ChevronLeft, ChevronRight, ChevronDown, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle, Flame, PenLine, Banknote, Wallet, Flag, Undo2, Rocket, Timer, Orbit, Presentation, ClipboardCheck } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO, differenceInCalendarDays } from 'date-fns';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO, isValid, differenceInCalendarDays } from 'date-fns';
 import type { Employer, Job, CalendarEvent, Income, Invoice } from '@/lib/store';
 import { matchPaymentToProject, betterProject, rankedProjectsFor, projectOf, type FoundPayment, type ProjectMatch } from '@/lib/paymentMatch';
 import { payDueDate, payTimingTier, PAY_TIMING_LABELS, type PayTimingTier } from '@/lib/payTiming';
@@ -2616,17 +2616,20 @@ export default function CalendarPage() {
   // shift's detail view instead of making the user hunt for it on the grid.
   useEffect(() => {
     const jobId = searchParams.get('job');
+    // ?day=YYYY-MM-DD: the whole day, every call on it, as a split day is.
+    const day = searchParams.get('day');
     // Until the ledger has loaded every link looks broken, and clearing it
     // then would throw away a perfectly good one.
-    if (!jobId || !authReady) return;
-    const job = data.jobs.find(j => j.id === jobId);
-    if (job) {
-      setSelectedDate(job.date);
-      setSelectedJobId(job.id);
+    if ((!jobId && !day) || !authReady) return;
+    const job = jobId ? data.jobs.find(j => j.id === jobId) : undefined;
+    const dayOk = !!day && /^\d{4}-\d{2}-\d{2}$/.test(day) && isValid(parseISO(day));
+    if (job || dayOk) {
+      setSelectedDate(job ? job.date : day);
+      setSelectedJobId(job ? job.id : null);
       // Opened from another page (the unemployment claim): closing it goes back there.
       returnTo.current = (location.state as ReturnState | null)?.returnTo ?? null;
     }
-    setSearchParams(prev => { prev.delete('job'); return prev; }, { replace: true });
+    setSearchParams(prev => { prev.delete('job'); prev.delete('day'); return prev; }, { replace: true });
   }, [searchParams, data.jobs, authReady, setSearchParams, location.state]);
 
   // Shifts whose only evidence is somebody saying so.
