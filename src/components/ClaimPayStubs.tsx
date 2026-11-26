@@ -13,7 +13,7 @@ import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { useData } from '@/lib/DataContext';
 import { localToday } from '@/lib/today';
 import {
-  claimDay, claimMoney, isClaimDay, readAmount, sameStub, stubDays, stubShifts, stubWeeks, weekEndingFor,
+  claimDay, claimMoney, isClaimDay, OPEN_STUB_LIST_EVENT, readAmount, sameStub, stubDays, stubShifts, stubWeeks, weekEndingFor,
   type ClaimStub, type StubUse, type StubWeek, type WeekEnd,
 } from '@/lib/unemployment';
 import { cn } from '@/lib/utils';
@@ -25,6 +25,7 @@ const CYAN = 'border-[hsl(188_95%_62%)] text-[hsl(188_95%_72%)]';
 const iso = (d: Date) => format(d, 'yyyy-MM-dd');
 /** A PDF's pages read, at most: each is one read. */
 const MAX_PDF_PAGES = 10;
+const STUB_LIST_OPEN_KEY = 'show-flow-claim-stubs-open';
 
 /** One paycheck the reader found in a photo, before you've confirmed it. */
 interface Found {
@@ -134,6 +135,19 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
   const [found, setFound] = useState<Found[] | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const sectionRef = useRef<HTMLElement>(null);
+  /** The list of stubs, folded or open: remembered on this phone. */
+  const [listOpen, setListOpen] = useState(() => {
+    try { return localStorage.getItem(STUB_LIST_OPEN_KEY) === '1'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(STUB_LIST_OPEN_KEY, listOpen ? '1' : '0'); } catch { /* only a convenience */ }
+  }, [listOpen]);
+  // Asked for from elsewhere (a stub's "show in the list"): open it.
+  useEffect(() => {
+    const open = () => setListOpen(true);
+    window.addEventListener(OPEN_STUB_LIST_EVENT, open);
+    return () => window.removeEventListener(OPEN_STUB_LIST_EVENT, open);
+  }, []);
 
   // A week's "+": the form, set to that week, in view.
   useEffect(() => {
@@ -150,7 +164,7 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
     setEditing({ draft: { employer: '', start: iso(addDays(parseISO(lastWeek), -6)), end: lastWeek, hours: '', gross: '' } });
   };
   const edit = (s: ClaimStub) =>
-    setEditing({ id: s.id, draft: { employer: s.employer, start: s.start, end: s.end, hours: s.hours ? String(s.hours) : '', gross: s.gross ? s.gross.toFixed(2) : '', noWeeks: !!s.noWeeks, paidOn: s.paidOn ?? '' } });
+    setEditing({ id: s.id, draft: { employer: s.employer, start: s.start, end: s.end, hours: s.hours ? String(s.hours) : '', gross: s.gross ? s.gross.toFixed(2) : '', noWeeks: !!s.noWeeks, paidOn: s.paidOn ?? '', note: s.note ?? '' } });
   /** A bulk stub: averaged over its weeks, or counted for its employer in no one week. */
   const setNoWeeks = (s: ClaimStub, on: boolean) => {
     setClaimStubs(stubs.map(x => (x.id === s.id ? (on ? { ...x, noWeeks: true } : (({ noWeeks: _, ...rest }) => rest)(x)) : x)));
@@ -302,10 +316,17 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
   return (
     <section ref={sectionRef} className="neon-well space-y-2.5 p-3" data-testid="claim-stubs">
       <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <p className={LABEL}>Pay stubs{stubs.length > 0 ? ` · ${stubs.length}` : ''}</p>
-          <p className="mt-0.5 text-[11px] text-mono text-muted-foreground">For work that isn't on the calendar.</p>
-        </div>
+        {/* The list folds away under its heading; the count shows either way. */}
+        <button type="button" onClick={() => setListOpen(o => !o)} disabled={listed.length === 0} aria-expanded={listOpen}
+          data-testid="stub-list-toggle" className="min-w-0 text-left">
+          <p className={cn(LABEL, 'flex items-center gap-1')}>
+            Pay stubs{stubs.length > 0 ? ` · ${stubs.length}` : ''}
+            {listed.length > 0 && <ChevronDown size={13} className={cn('shrink-0 transition-transform', listOpen && 'rotate-180')} aria-hidden />}
+          </p>
+          <p className="mt-0.5 text-[11px] text-mono text-muted-foreground">
+            {listed.length > 0 && !listOpen ? 'For work that isn\'t on the calendar. Tap to see them.' : 'For work that isn\'t on the calendar.'}
+          </p>
+        </button>
         <div className="flex shrink-0 gap-1.5">
           <button type="button" onClick={() => fileRef.current?.click()} data-testid="stub-photo" disabled={reading}
             className="pixel-button pick-off flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold text-mono">
@@ -380,7 +401,7 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
         <ClaimStubForm key={JSON.stringify(editing)} initial={editing.draft} id={editing.id} employerNames={employerNames} onDone={() => setEditing(null)} />
       )}
 
-      {listed.length > 0 && (
+      {listed.length > 0 && listOpen && (
         <ul className="divide-y divide-[hsl(312_95%_68%/0.2)] border-t border-[hsl(312_95%_68%/0.3)]" data-testid="stub-list">
           {listed.map(s => (
             <li key={s.id} id={`claim-stub-${s.id}`} className="py-2 transition-colors">
@@ -395,6 +416,7 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
                   <button type="button" onClick={() => remove(s)} aria-label={`Remove the ${s.employer} stub`} className="p-1 hover:text-dot-late"><Trash2 size={13} /></button>
                 </span>
               </div>
+              {s.note && <p className="text-[11px] text-mono text-muted-foreground" data-testid="stub-note-shown">“{s.note}”</p>}
               <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-mono" data-testid="stub-status">
                 <StubStatus use={uses.find(u => u.stub.id === s.id)} />
               </p>

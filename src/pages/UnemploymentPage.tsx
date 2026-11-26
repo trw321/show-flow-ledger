@@ -11,6 +11,8 @@ import ClaimPayStubs from '@/components/ClaimPayStubs';
 import ClaimPastePay from '@/components/ClaimPastePay';
 import ClaimStubProof from '@/components/ClaimStubProof';
 import ClaimEmployerCard, { type EmployerWeek } from '@/components/ClaimEmployerCard';
+import ClaimCopyPicker from '@/components/ClaimCopyPicker';
+import PickList from '@/components/PickList';
 import { useData } from '@/lib/DataContext';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { localToday } from '@/lib/today';
@@ -116,7 +118,11 @@ export default function UnemploymentPage() {
     setDatesOpen(false);
     toast.success('Dates saved');
   };
-  const [view, setView] = useState<'weeks' | 'employers'>('weeks');
+  // By employer first: that's what the claim form asks for.
+  const [view, setView] = useState<'weeks' | 'employers'>('employers');
+  /** The "go to an employer" box, and the employer last picked in it. */
+  const [jump, setJump] = useState('');
+  const [focus, setFocus] = useState<{ name: string; n: number } | null>(null);
   /** A week's line whose pay stubs are being looked at. */
   const [proof, setProof] = useState<{ week: ClaimWeek; line: ClaimLine } | null>(null);
   const [sort, setSort] = useState<ClaimSort>(loadSort);
@@ -202,16 +208,8 @@ export default function UnemploymentPage() {
       toast.error("Couldn't copy here. Try the Excel download.");
     }
   };
-  // Each employer (or week) with its gross, one a line: "Odeum: $19,880.00".
-  const copyBoth = () => {
-    const lines = view === 'weeks'
-      ? [
-        ...weeks.map(w => `Week ending ${claimDay(w.weekEnding, false)}: ${claimMoney(w.gross)}`),
-        ...summary.unsplit.map(u => `Not split by week, ${u.employer} ${claimDay(u.start, false)} to ${claimDay(u.end, false)}: ${claimMoney(u.gross)}`),
-      ]
-      : employers.map(e => `${claimNameOf(e)}: ${claimMoney(e.gross)}`);
-    return copyText(lines.join('\n'), `Copied ${lines.length} line${lines.length === 1 ? '' : 's'}`);
-  };
+  // Bulk stubs in no week, after the weeks when the weeks are copied.
+  const unsplitLines = summary.unsplit.map(u => `Not split by week, ${u.employer} ${claimDay(u.start, false)} to ${claimDay(u.end, false)}: ${claimMoney(u.gross)}`);
   // One gross, tapped.
   const copyAmount = (n: number) => void copyText(plain(n), `Copied ${claimMoney(n)}`);
 
@@ -394,15 +392,24 @@ export default function UnemploymentPage() {
               ))}
             </div>
 
-            {/* Copy each employer (or week) with its gross, one a line. */}
-            <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => void copyBoth()} data-testid="copy-both" className="pixel-button pick-off flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono">
-                <Copy size={13} aria-hidden /> {view === 'weeks' ? 'Week' : 'Name'} + gross
-              </button>
-              <button type="button" onClick={download} className="pixel-button pick-off flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono">
-                <Download size={13} aria-hidden /> Excel
-              </button>
-            </div>
+            {/* Copy each employer (or week), one a line, with what you pick in it; or all of it as Excel. */}
+            <ClaimCopyPicker view={view} employers={employers} weeks={weeks} weeksOf={weeksOf} extra={unsplitLines}
+              onCopy={(text, n) => void copyText(text, `Copied ${n} ${view === 'weeks' ? 'week' : 'employer'}${n === 1 ? '' : 's'}`)}
+              trailing={(
+                <button type="button" onClick={download} className="pixel-button pick-off flex shrink-0 items-center justify-center gap-1.5 px-2.5 py-1.5 text-[11px] font-bold text-mono">
+                  <Download size={13} aria-hidden /> Excel
+                </button>
+              )} />
+
+            {/* Straight to one employer: its box opens and comes into view. */}
+            {view === 'employers' && employers.length > 1 && (
+              <PickList value={jump} onChange={setJump} options={employers.map(e => claimNameOf(e))} placeholder="Go to an employer…" testId="employer-jump"
+                onPick={name => {
+                  const e = employers.find(x => claimNameOf(x) === name || x.name === name);
+                  if (e) setFocus({ name: e.name, n: Date.now() });
+                  setJump('');
+                }} />
+            )}
 
             {view === 'weeks' ? (
               <>
@@ -500,6 +507,7 @@ export default function UnemploymentPage() {
               <ul className="space-y-2" data-testid="claim-employers">
                 {employers.map(e => (
                   <ClaimEmployerCard key={e.name} employer={e} colour={colourOf(e.name)} onCopy={copyAmount} knownEmployers={knownEmployers} weeks={weeksOf(e.name)} weekEnd={range.weekEnd}
+                    focus={focus?.name === e.name ? focus.n : 0}
                     unsplit={summary.unsplit.filter(u => u.employer === e.name).reduce((sum, u) => sum + u.gross, 0)}
                     linkChoices={[...new Set([...summary.employers.map(x => x.name), ...knownEmployers])].filter(n => n.toLowerCase() !== e.name.toLowerCase() && !(e.linked ?? []).some(l => l.toLowerCase() === n.toLowerCase()))}
                     longest={summary.longest?.byStretch === e.name ? 'stretch' : summary.longest?.byDays === e.name ? 'days' : undefined}

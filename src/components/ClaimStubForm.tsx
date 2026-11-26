@@ -1,8 +1,9 @@
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
-import { ChevronDown } from 'lucide-react';
+import PickList from '@/components/PickList';
 import { addDays, format, parseISO } from 'date-fns';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import DateWheels from '@/components/DateWheels';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { localToday } from '@/lib/today';
@@ -13,33 +14,36 @@ import { cn } from '@/lib/utils';
 const LABEL = 'font-8bit text-[7px] uppercase leading-relaxed text-[hsl(188_95%_72%)]';
 const iso = (d: Date) => format(d, 'yyyy-MM-dd');
 
-export interface StubDraft { employer: string; start: string; end: string; hours: string; gross: string; noWeeks?: boolean; paidOn?: string }
+export interface StubDraft { employer: string; start: string; end: string; hours: string; gross: string; noWeeks?: boolean; paidOn?: string; note?: string }
 
 /**
- * A pay stub typed in: who paid it (picked from the list, or typed), the pay
- * period, its hours and gross, when it was paid, and for a long period
- * whether it's averaged over its weeks. Used in the Pay stubs list and on an
- * employer's box, where it starts with that employer picked. The same
- * employer and pay period twice is refused: that's a copy, not another stub.
+ * A pay stub typed in: who paid it (typed, with the names you've worked for
+ * offered as you go), the pay period, its hours and gross, when it was paid,
+ * a note, and for a long period whether it's averaged over its weeks. Used in
+ * the Pay stubs list and on an employer's box, where the employer is already
+ * that box's (`employerSet`), shown once with a Change. The same employer and
+ * pay period twice is refused: that's a copy, not another stub.
  */
-export default function ClaimStubForm({ initial, id, employerNames, onDone, className }: {
+export default function ClaimStubForm({ initial, id, employerNames, onDone, className, employerSet }: {
   initial: StubDraft;
   /** The stub being changed; none for a new one. */
   id?: string;
   employerNames: string[];
   onDone: () => void;
   className?: string;
+  /** Opened on an employer's box: that employer, not asked again unless changed. */
+  employerSet?: boolean;
 }) {
   const { prefs, setClaimStubs } = useUserPrefs();
   const stubs = prefs.claimStubs;
   const [draft, setDraft] = useState<StubDraft>(initial);
-  const listId = useId();
+  const [changingEmployer, setChangingEmployer] = useState(!employerSet || !initial.employer.trim());
   const thisYear = Number(localToday().slice(0, 4));
   const set = (patch: Partial<StubDraft>) => setDraft(cur => ({ ...cur, ...patch }));
   /** The pay period as a week, or two, ending on the day it ends. */
   const spanWeeks = (weeks: 1 | 2) => setDraft(cur => ({ ...cur, start: iso(addDays(parseISO(cur.end), 1 - weeks * 7)) }));
-  // Who a stub can be from: never "Unknown" or "No employer named".
-  const names = [...new Set(employerNames.map(n => n.trim()).filter(n => n && !isUnclearEmployer(n)))].sort((a, b) => a.localeCompare(b));
+  // Who a stub can be from: never "Unknown" or "No employer named", each name once.
+  const names = employerNames.map(n => n.trim()).filter(n => n && !isUnclearEmployer(n)).sort((a, b) => a.localeCompare(b));
 
   const save = () => {
     const d = draft;
@@ -60,6 +64,7 @@ export default function ClaimStubForm({ initial, id, employerNames, onDone, clas
       createdAt: before?.createdAt ?? new Date().toISOString(),
       ...(d.noWeeks && multiWeek(d.start, d.end) ? { noWeeks: true } : {}),
       ...(d.paidOn && isClaimDay(d.paidOn) ? { paidOn: d.paidOn } : {}),
+      ...(d.note?.trim() ? { note: d.note.trim() } : {}),
       ...(before?.useEstimate ? { useEstimate: true } : {}),
       ...(before?.weeks && before.start === d.start && before.end === d.end ? { weeks: before.weeks } : {}),
       // Kept through an edit: its own pay for the calendar's shifts, its rate, and its days if the period is the same.
@@ -74,24 +79,19 @@ export default function ClaimStubForm({ initial, id, employerNames, onDone, clas
 
   return (
     <div className={cn('space-y-3 border-t border-[hsl(312_95%_68%/0.3)] pt-3', className)} data-testid="stub-form">
-      <label className="block space-y-1">
+      {/* One employer field: typed, or picked from the names as you type. */}
+      <div className="space-y-1">
         <span className={LABEL}>Employer</span>
-        {/* Drawn, not the phone's own: Safari draws its own as a white box. */}
-        {names.length > 0 && (
-          <span className="relative block">
-            <select value={names.includes(draft.employer) ? draft.employer : ''} onChange={e => e.target.value && set({ employer: e.target.value })}
-              aria-label="Pick the employer" data-testid="stub-employer-pick"
-              className="w-full appearance-none border border-[hsl(188_95%_62%/0.5)] bg-background p-2 pr-8 text-base text-mono text-foreground [color-scheme:dark]">
-              <option value="">Pick an employer, or type one below…</option>
-              {names.map(n => <option key={n} value={n}>{n}</option>)}
-            </select>
-            <ChevronDown size={16} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[hsl(188_90%_70%)]" aria-hidden />
-          </span>
+        {changingEmployer ? (
+          <PickList value={draft.employer} onChange={employer => set({ employer })} options={names}
+            placeholder="Type or pick who it's from" testId="stub-employer" />
+        ) : (
+          <p className="flex items-baseline justify-between gap-2 text-[13px] text-mono" data-testid="stub-employer-set">
+            <span className="min-w-0 truncate font-bold">{draft.employer}</span>
+            <button type="button" onClick={() => setChangingEmployer(true)} className="shrink-0 text-[11px] text-[hsl(188_90%_70%)] underline">Change</button>
+          </p>
         )}
-        <Input value={draft.employer} list={listId} placeholder="Who the stub is from"
-          onChange={e => set({ employer: e.target.value })} className="text-mono" data-testid="stub-employer" />
-        <datalist id={listId}>{names.map(n => <option key={n} value={n} />)}</datalist>
-      </label>
+      </div>
       <DateWheels label="Pay period from" value={draft.start} firstYear={thisYear - 6} lastYear={thisYear}
         onChange={start => set({ start })} testId="stub-start" />
       <DateWheels label="Pay period through" value={draft.end} firstYear={thisYear - 6} lastYear={thisYear}
@@ -122,6 +122,12 @@ export default function ClaimStubForm({ initial, id, employerNames, onDone, clas
         <span className={LABEL}>Paid on · optional</span>
         <input type="date" value={draft.paidOn ?? ''} onChange={e => set({ paidOn: e.target.value })} data-testid="stub-paid-on"
           className="w-full border border-[hsl(188_95%_62%/0.5)] bg-background p-2 text-base text-mono text-foreground" />
+      </label>
+      {/* Anything to remember about it: never counted. */}
+      <label className="block space-y-1">
+        <span className={LABEL}>Note · optional</span>
+        <Textarea value={draft.note ?? ''} rows={2} placeholder="Check number, what it was for…" onChange={e => set({ note: e.target.value })}
+          className="text-mono text-[13px]" data-testid="stub-note" />
       </label>
       {/* A bulk total over many weeks: averaged, or counted in no one week. */}
       {multiWeek(draft.start, draft.end) && (

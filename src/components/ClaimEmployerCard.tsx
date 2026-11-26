@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { addDays, format, parseISO } from 'date-fns';
-import { ChevronDown, Copy, Link2, Pencil, Receipt, Unlink } from 'lucide-react';
+import { ChevronDown, ChevronRight, Copy, Link2, Pencil, Plus, Unlink } from 'lucide-react';
 import { nameSimilarity } from '@/lib/employerMatch';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,7 +13,8 @@ import { useData } from '@/lib/DataContext';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { localToday } from '@/lib/today';
 import { roundHours } from '@/lib/hoursFormat';
-import { netHoursWorked } from '@/lib/payCalc';
+import { compareCalls, netHoursWorked } from '@/lib/payCalc';
+import { splitShifts } from '@/lib/projectGrouping';
 import {
   claimDay, claimEmployerKey, claimMoney, claimNameOf, howLongText, isClaimDay, isUnclearEmployer, suggestEmployer, weekEndingFor,
   type ClaimEmployer, type ClaimEmployerInfo, type WeekEnd,
@@ -48,7 +50,9 @@ export interface EmployerWeek {
  * employer picked in its list (another can be picked) and the week of its
  * last day to start from.
  */
-export default function ClaimEmployerCard({ employer: e, colour, longest, shifts, weeks, knownEmployers, onCopy, unsplit = 0, linkChoices = [], weekEnd = 6 }: {
+export default function ClaimEmployerCard({ employer: e, colour, longest, shifts, weeks, knownEmployers, onCopy, unsplit = 0, linkChoices = [], weekEnd = 6, focus = 0 }: {
+  /** Goes up when the employer is picked in the page's box: the box opens and comes into view. */
+  focus?: number;
   employer: ClaimEmployer;
   colour: string;
   /** Its badge, when it's the one worked for longest. */
@@ -84,6 +88,16 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
   const unclear = isUnclearEmployer(e.name);
   const guess = unclear ? shifts.map(j => suggestEmployer(j, knownEmployers)).find(Boolean) : undefined;
   const thisYear = Number(localToday().slice(0, 4));
+  const navigate = useNavigate();
+  // Its shifts, newest first, a split day's calls as one.
+  const shiftDays = splitShifts([...shifts].sort((a, b) => b.date.localeCompare(a.date) || compareCalls(a, b)));
+  // Picked in the page's employer box: open, and in view.
+  const boxRef = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (!focus) return;
+    setOpen(true);
+    boxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [focus]);
 
   const save = () => {
     if (!draft) return;
@@ -130,7 +144,7 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
   };
 
   return (
-    <li className={cn('neon-well p-3', unclear && 'shadow-[inset_0_0_0_1px_hsl(var(--dot-overdue))]')} data-testid="claim-employer">
+    <li ref={boxRef} className={cn('neon-well scroll-mt-20 p-3', unclear && 'shadow-[inset_0_0_0_1px_hsl(var(--dot-overdue))]')} data-testid="claim-employer">
       <div className="flex items-baseline justify-between gap-2">
         <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} data-testid="employer-toggle"
           aria-label={`${claimNameOf(e)}: ${open ? 'hide' : 'show'} week by week`}
@@ -138,10 +152,20 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
           <span className="neon-soft truncate text-base font-bold text-mono" style={{ color: colour }}>{claimNameOf(e)}</span>
           <ChevronDown size={15} className={cn('shrink-0 text-[hsl(188_90%_70%)] transition-transform', open && 'rotate-180')} aria-hidden />
         </button>
-        <button type="button" onClick={() => onCopy(e.gross)} aria-label={`Copy ${claimMoney(e.gross)}`} data-testid="copy-amount"
-          className="neon-title flex shrink-0 items-center gap-1 text-base font-bold text-mono active:opacity-70">
-          {claimMoney(e.gross)} <Copy size={11} className="text-[hsl(188_90%_70%)]" aria-hidden />
-        </button>
+        <span className="flex shrink-0 items-center gap-2">
+          <button type="button" onClick={() => onCopy(e.gross)} aria-label={`Copy ${claimMoney(e.gross)}`} data-testid="copy-amount"
+            className="neon-title flex items-center gap-1 text-base font-bold text-mono active:opacity-70">
+            {claimMoney(e.gross)} <Copy size={11} className="text-[hsl(188_90%_70%)]" aria-hidden />
+          </button>
+          {/* Add a pay stub for this employer, right here on its box. */}
+          <button type="button" onClick={() => { setAddingStub(a => !a); setLinking(false); }} aria-expanded={addingStub}
+            aria-label={`Add a pay stub for ${claimNameOf(e)}`} data-testid="employer-add-stub"
+            className={cn('flex h-7 w-7 items-center justify-center border', addingStub
+              ? 'border-[hsl(312_95%_68%)] bg-[hsl(312_95%_68%/0.2)] text-[hsl(312_95%_80%)]'
+              : 'border-[hsl(312_95%_68%/0.6)] text-[hsl(312_95%_75%)]')}>
+            <Plus size={15} aria-hidden />
+          </button>
+        </span>
       </div>
       {e.info?.claimName && <p className="text-[11px] text-mono text-muted-foreground">On the calendar as {e.name}</p>}
       <p className="mt-1 flex flex-wrap items-center gap-1.5">
@@ -255,15 +279,36 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
                   <span className="neon-title font-bold">{claimMoney(unsplit)}</span>
                 </p>
               )}
+              {/* Its shifts, newest first, each a tap from its card on the calendar. A split day is one. */}
+              {shiftDays.length > 0 && (
+                <div className="mt-2 border-t border-[hsl(312_95%_68%/0.3)] pt-2" data-testid="employer-shifts">
+                  <p className={cn(LABEL, 'mb-1')}>Shifts · {shiftDays.length}</p>
+                  <ul className="divide-y divide-[hsl(312_95%_68%/0.15)]">
+                    {shiftDays.map(calls => {
+                      const j = calls[0];
+                      const hours = calls.reduce((sum, c) => sum + netHoursWorked(c), 0);
+                      return (
+                        <li key={j.id}>
+                          <button type="button" onClick={() => navigate(`/?job=${j.id}`)} data-testid="employer-shift"
+                            className="flex w-full items-baseline justify-between gap-2 py-1.5 text-left text-[12px] text-mono active:opacity-70">
+                            <span className="min-w-0 truncate">
+                              <span className="font-bold text-[hsl(188_90%_70%)]">{claimDay(j.date, false)}</span>
+                              {j.name && <span className="text-muted-foreground"> · {j.name}</span>}
+                              {calls.length > 1 && <span className="text-muted-foreground"> · split</span>}
+                            </span>
+                            <span className="flex shrink-0 items-center gap-0.5 text-muted-foreground">
+                              {hours > 0 ? `${roundHours(hours)} h` : 'no hours'} <ChevronRight size={13} aria-hidden />
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
           <div className="mt-2 flex flex-wrap gap-2">
-            {!unclear && (
-              <button type="button" onClick={() => { setAddingStub(a => !a); setLinking(false); }} aria-expanded={addingStub} data-testid="employer-add-stub"
-                className={cn('pixel-button flex min-w-[5.5rem] flex-1 items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono', addingStub ? 'pick-on' : 'pick-off')}>
-                <Receipt size={12} aria-hidden /> Pay stub
-              </button>
-            )}
             <button type="button" onClick={() => setDraft({ ...(e.info ?? {}) })} data-testid="employer-edit"
               className="pixel-button pick-off flex min-w-[5.5rem] flex-1 items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold text-mono">
               <Pencil size={12} aria-hidden /> Edit
@@ -283,8 +328,9 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
           </div>
           {/* A pay stub for this employer, typed in right here. */}
           {addingStub && (
-            <ClaimStubForm initial={{ employer: e.name, start: stubStart, end: stubWeekEnd, hours: '', gross: '' }}
-              employerNames={[e.name, ...(e.linked ?? []), ...linkChoices]} onDone={() => setAddingStub(false)} className="mt-2" />
+            // This box's employer, already in: asked only when the app couldn't name it.
+            <ClaimStubForm initial={{ employer: unclear ? '' : e.name, start: stubStart, end: stubWeekEnd, hours: '', gross: '' }} employerSet={!unclear}
+              employerNames={[e.name, ...(e.linked ?? []), ...linkChoices, ...knownEmployers]} onDone={() => setAddingStub(false)} className="mt-2" />
           )}
           {/* The same employer under another name: picked, and this one counts there. */}
           {linking && (

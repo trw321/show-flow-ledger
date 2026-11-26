@@ -4,7 +4,7 @@ import { Check, ChevronRight, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
-import { claimDay, claimMoney, weekEndingFor, type ClaimLine, type ClaimStub, type ClaimWeek, type StubUse, type WeekEnd } from '@/lib/unemployment';
+import { claimDay, claimMoney, OPEN_STUB_LIST_EVENT, weekEndingFor, type ClaimLine, type ClaimStub, type ClaimWeek, type StubUse, type WeekEnd } from '@/lib/unemployment';
 import { cn } from '@/lib/utils';
 
 const LABEL = 'font-8bit text-[7px] uppercase leading-relaxed text-[hsl(188_95%_72%)]';
@@ -53,6 +53,8 @@ export default function ClaimStubProof({ open, onClose, week, line, uses, claimW
   };
   const showInList = (stub: ClaimStub) => {
     onClose();
+    // The list may be folded: open it first, so the row is there to show.
+    window.dispatchEvent(new Event(OPEN_STUB_LIST_EVENT));
     // After the dialog has gone: the stub's row in the list, flashed.
     setTimeout(() => {
       const row = document.getElementById(`claim-stub-${stub.id}`);

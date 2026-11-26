@@ -158,8 +158,13 @@ export interface ClaimStub {
   weeks?: StubWeek[];
   /** A day in the claim week you said it counts in, whole: its pay period crosses weeks and it wasn't split by its days. */
   week?: string;
+  /** Anything you wrote on it: what it was for, a check number. Never counted. */
+  note?: string;
   createdAt: string;
 }
+
+/** Sent on window to unfold the claim's list of pay stubs, so a stub's row can be shown in it. */
+export const OPEN_STUB_LIST_EVENT = 'show-flow:open-stub-list';
 
 /** One week of a stub, as it prints it: "Week ending 01/31 9.00 hrs $559.74". */
 export interface StubWeek {
