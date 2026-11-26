@@ -29,6 +29,7 @@ interface Draft {
 }
 
 const label = 'text-[10px] text-mono uppercase tracking-wider text-muted-foreground';
+const gold = (alpha = 1) => (alpha === 1 ? `hsl(${CONFERENCE_COLOUR})` : `hsl(${CONFERENCE_COLOUR} / ${alpha})`);
 // Drawn by the app, not the browser: Safari's own select is white, with the theme's light text on it.
 const selectClass = 'h-10 w-full appearance-none rounded-md border border-input bg-background pl-2 pr-7 text-sm text-foreground [color-scheme:dark]';
 const SelectArrow = () => <ChevronDown size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden />;
@@ -134,28 +135,30 @@ export default function ConferenceList({ open, onOpenChange, editId }: {
           <>
             <DialogHeader className="text-left">
               <DialogTitle className="flex items-center gap-2">
-                <Presentation size={18} style={{ color: `hsl(${CONFERENCE_COLOUR})` }} aria-hidden /> Conferences
+                <Presentation size={16} style={{ color: gold() }} aria-hidden /> Conferences
               </DialogTitle>
               <DialogDescription>
                 Shows that come round every year. Put in each year's dates when they're out. Until then the month it's usually in stands in, and Preamp reminds you to look the dates up.
               </DialogDescription>
             </DialogHeader>
-            <Button variant="outline" className="w-full" onClick={() => setEditing({ draft: draftFor(undefined, today) })} data-testid="conference-add">
-              <Plus size={14} /> Watch a conference
-            </Button>
+            <button type="button" onClick={() => setEditing({ draft: draftFor(undefined, today) })} data-testid="conference-add"
+              className="w-full flex items-center justify-center gap-1.5 rounded-md border py-2 text-xs font-semibold transition-colors"
+              style={{ color: gold(), borderColor: gold(0.5), backgroundColor: gold(0.1) }}>
+              <Plus size={13} /> Watch a conference
+            </button>
             {sorted.length === 0 ? (
               <p className="py-4 text-center text-sm text-muted-foreground">None yet. Add the ones you work every year.</p>
             ) : (
-              <ul className="divide-y divide-border/60 border border-border" data-testid="conference-rows">
+              <ul className="space-y-2" data-testid="conference-rows">
                 {sorted.map(({ c }) => {
                   const alert = alerts.get(c.id);
                   const link = safeLink(c.link);
                   return (
-                    <li key={c.id} className="flex items-stretch">
+                    <li key={c.id} className="flex items-stretch rounded-md border" style={{ borderColor: gold(0.4), backgroundColor: gold(0.06) }}>
                       <button type="button" onClick={() => setEditing({ id: c.id, draft: draftFor(c, today) })}
-                        className="min-w-0 flex-1 px-3 py-2.5 text-left hover:bg-secondary/40 active:bg-secondary/60">
+                        className="min-w-0 flex-1 px-3 py-2.5 text-left space-y-1 hover:opacity-90 active:opacity-80">
                         <p className="flex items-center gap-1.5 text-sm font-medium">
-                          <span className="truncate">{c.name}</span>
+                          <span className="truncate uppercase tracking-wide">{c.name}</span>
                           {alert && (
                             <span className={cn('shrink-0 border px-1 text-[9px] font-bold uppercase text-mono',
                               alert.kind === 'dates' ? 'border-warning/60 text-warning' : 'border-current')}
@@ -164,14 +167,14 @@ export default function ConferenceList({ open, onOpenChange, editId }: {
                             </span>
                           )}
                         </p>
-                        <p className="truncate text-[11px] text-muted-foreground">
-                          {c.where && <><MapPin size={10} className="mr-0.5 inline" aria-hidden />{c.where} · </>}
-                          {whenText(c, today)}
+                        <p className="truncate text-[11px] text-mono">
+                          {c.where && <span className="text-muted-foreground"><MapPin size={10} className="mr-0.5 inline" aria-hidden />{c.where} · </span>}
+                          <span style={{ color: gold() }}>{whenText(c, today)}</span>
                         </p>
                       </button>
                       {link && (
                         <a href={link} target="_blank" rel="noopener noreferrer" aria-label={`Open ${c.name}'s site`}
-                          className="flex w-11 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground">
+                          className="flex w-11 shrink-0 items-center justify-center border-l text-muted-foreground hover:text-foreground" style={{ borderColor: gold(0.25) }}>
                           <ExternalLink size={15} />
                         </a>
                       )}
