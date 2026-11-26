@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { useNeedsHours } from '@/lib/useNeedsHours';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import type { ReturnState } from '@/lib/returnSpot';
+import { useRememberedOpen } from '@/lib/useRememberedOpen';
 import { useData } from '@/lib/DataContext';
 import SpacePageWrapper from '@/components/SpacePageWrapper';
 import { Button } from '@/components/ui/button';
@@ -2598,6 +2599,9 @@ export default function CalendarPage() {
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [expandedGroupKey, setExpandedGroupKey] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
+  // The month's projects and the payments with no shift fold away under their headings, remembered on the phone.
+  const [projectsOpen, toggleProjects] = useRememberedOpen('show-flow-cal-projects-open');
+  const [unlinkedOpen, toggleUnlinked] = useRememberedOpen('show-flow-cal-unlinked-open');
   const location = useLocation();
   /** The page a shift was opened from, when it was: closing the shift goes back to it. */
   const returnTo = useRef<string | null>(null);
@@ -4060,9 +4064,16 @@ export default function CalendarPage() {
           loggedGroups[key].push(job);
         }
         return (
-          <div className="mt-4 flex flex-col gap-2">
-            <h2 className="text-[9px] font-body uppercase tracking-widest text-muted-foreground/50">Projects this month</h2>
-            <div className="flex flex-col gap-2.5">
+          <div className="mt-4 flex flex-col gap-2" data-testid="month-projects">
+            {/* Folds under its heading; the count shows either way. */}
+            <h2 className="self-start">
+              <button type="button" onClick={toggleProjects} aria-expanded={projectsOpen} data-testid="month-projects-toggle"
+                className="flex items-center gap-1 text-[9px] font-body uppercase tracking-widest text-muted-foreground/70">
+                Projects this month · {Object.keys(loggedGroups).length}
+                <ChevronDown size={12} className={cn('shrink-0 transition-transform', projectsOpen && 'rotate-180')} aria-hidden />
+              </button>
+            </h2>
+            {projectsOpen && <div className="flex flex-col gap-2.5">
               {Object.entries(loggedGroups).map(([key, jobs]) => {
                 const first = jobs[0];
                 const totalHours = jobs.reduce((s, j) => s + netHoursWorked(j), 0);
@@ -4378,7 +4389,7 @@ export default function CalendarPage() {
                   </div>
                 );
               })}
-            </div>
+            </div>}
           </div>
         );
       })()}
@@ -4393,10 +4404,15 @@ export default function CalendarPage() {
       )}
 
       {unlinkedPayments.length > 0 && (
-        <div className="pixel-panel mt-4 p-3 space-y-2">
-          <p className="text-[10px] text-mono uppercase tracking-widest text-warning">Payments with no shift · {unlinkedPayments.length}</p>
-          <p className="text-[11px] text-muted-foreground">Money that came in but isn't tied to a shift yet. Link it to the project it paid. A payment is never a shift of its own: if the work isn't on the calendar, add the shift on the day you worked, then link this to it.</p>
-          {unlinkedPayments.map(i => {
+        <div className="pixel-panel mt-4 p-3 space-y-2" data-testid="unlinked-payments">
+          {/* Folds under its heading; the count shows either way. */}
+          <button type="button" onClick={toggleUnlinked} aria-expanded={unlinkedOpen} data-testid="unlinked-payments-toggle"
+            className="flex w-full items-center justify-between gap-2 text-left text-[10px] text-mono uppercase tracking-widest text-warning">
+            <span>Payments with no shift · {unlinkedPayments.length}</span>
+            <ChevronDown size={14} className={cn('shrink-0 transition-transform', unlinkedOpen && 'rotate-180')} aria-hidden />
+          </button>
+          {unlinkedOpen && <p className="text-[11px] text-muted-foreground">Money that came in but isn't tied to a shift yet. Link it to the project it paid. A payment is never a shift of its own: if the work isn't on the calendar, add the shift on the day you worked, then link this to it.</p>}
+          {unlinkedOpen && unlinkedPayments.map(i => {
             const options = linkSuggestions.get(i.id) ?? [];
             const guess = options[0]?.match.level !== 'low' ? options[0] : undefined;
             // Only projects something points to: a 0% option is noise.
