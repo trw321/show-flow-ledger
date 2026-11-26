@@ -528,7 +528,38 @@ function addHoursToTime(start: string, hours: number): string {
 /** A meal being filled in: how long it is isn't known until it's tapped. */
 type MealEntry = { duration?: Job['mealDuration']; onClock: boolean };
 
-const MEAL_LENGTHS = [{ value: 0, label: 'MP' }, { value: 30, label: '30m' }, { value: 45, label: '45m' }, { value: 60, label: '1hr' }] as const;
+// No "MP" here: a meal penalty is a count of its own (MealPenaltyCounter), and a
+// length button for it was a second way to say the same thing.
+const MEAL_LENGTHS = [{ value: 30, label: '30m' }, { value: 45, label: '45m' }, { value: 60, label: '1hr' }] as const;
+
+/** The meal penalty counter's look: bright, so a penalty owed is never missed. */
+const MP_FUN = 'bg-gradient-to-r from-[hsl(28_96%_58%)] to-[hsl(330_92%_66%)] text-[hsl(330_60%_10%)] shadow-[0_0_12px_hsl(330_92%_66%/0.45)]';
+
+/**
+ * Meal penalties: a count that's nearly always 0, 1 or 2. One bright "MP +"
+ * pill; once there's one, the same pill counts up and down. 1 = an hour at
+ * the straight rate.
+ */
+function MealPenaltyCounter({ count, rate, onChange }: { count: number; rate: number; onChange: (count: number) => void }) {
+  if (count <= 0) {
+    return (
+      <button type="button" onClick={() => onChange(1)} aria-label="Add a meal penalty" data-testid="mp-add"
+        className={cn('flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-black text-mono active:scale-95 transition-transform', MP_FUN)}>
+        🍔 MP <Plus size={13} strokeWidth={3} />
+      </button>
+    );
+  }
+  return (
+    <div className={cn('flex items-center gap-1 rounded-full p-1', MP_FUN)} data-testid="mp-counter">
+      <button type="button" aria-label="One fewer meal penalty" onClick={() => onChange(Math.max(0, count - 1))}
+        className="h-8 w-8 rounded-full bg-black/25 text-lg font-black leading-none text-white active:scale-90 transition-transform">−</button>
+      <span className="min-w-[4.5rem] text-center text-xs font-black text-mono">🍔 MP × {count}</span>
+      <button type="button" aria-label="One more meal penalty" disabled={count >= 20} onClick={() => onChange(Math.min(20, count + 1))}
+        className="h-8 w-8 rounded-full bg-black/25 text-lg font-black leading-none text-white active:scale-90 transition-transform disabled:opacity-40">+</button>
+      {rate > 0 && <span className="px-2 text-[11px] font-black text-mono">+${(count * rate).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>}
+    </div>
+  );
+}
 
 /** One meal: how long, and whether it stayed on the clock. Tapping the length again clears it. */
 function MealChoice({ duration, onClock, onDuration, onOnClock }: {
@@ -539,7 +570,7 @@ function MealChoice({ duration, onClock, onDuration, onOnClock }: {
 }) {
   return (
     <>
-      <div className="grid grid-cols-4 gap-1.5">
+      <div className="grid grid-cols-3 gap-1.5">
         {MEAL_LENGTHS.map(({ value, label }) => {
           const active = duration === value;
           return (
@@ -625,9 +656,6 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   // run, so the rest of the project is offered rather than left behind.
   const [relabelProject, setRelabelProject] = useState(true);
   const [mealPenalties, setMealPenalties] = useState(job.mealPenalties?.toString() ?? '');
-  // Opt-in like a second meal: most days have none. A shift that has one
-  // always shows it, so a penalty is never hidden.
-  const [penaltyOpen, setPenaltyOpen] = useState(false);
   const [nightPremiumConfirmed, setNightPremiumConfirmed] = useState(job.nightPremiumConfirmed ?? true);
   const [nightPremiumActualHours, setNightPremiumActualHours] = useState(job.nightPremiumActualHours?.toString() ?? '');
   const [payStub, setPayStub] = useState(job.payStub ?? '');
@@ -691,7 +719,6 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     setMeal2Duration(job.meal2Duration ?? undefined);
     setMeal2OnClock(job.meal2OnClock ?? false);
     setSecondMealOpen(job.meal2Duration !== undefined || !!job.extraMeals?.length);
-    setPenaltyOpen(false);
     setExtraMeals(job.extraMeals ?? []);
     setCallTimeline(job.callTimeline ?? '');
     setGapsOnClock(job.callGapsOnClock ?? []);
@@ -1413,6 +1440,23 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             {isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
           </span>
         </div>
+        {/* Who you worked for and who pays you, side by side as soon as the
+            shift opens: on union work they're two companies, and the check
+            comes from the payroll one. */}
+        {(client.trim() || job.client) && (
+          <div className="grid grid-cols-2 gap-2 text-left" data-testid="shift-who">
+            <div className="min-w-0 rounded-md border border-border bg-secondary/20 px-2.5 py-1.5">
+              <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">Employer</p>
+              <p className="text-xs font-bold leading-snug break-words" data-testid="shift-employer">{client.trim() || job.client}</p>
+            </div>
+            <div className="min-w-0 rounded-md border border-[hsl(312_95%_75%/0.5)] bg-[hsl(312_95%_75%/0.08)] px-2.5 py-1.5">
+              <p className="text-[9px] font-semibold uppercase tracking-widest text-[hsl(312_95%_75%)]">Payroll</p>
+              <p className={cn('text-xs leading-snug break-words', payrollCompany.trim() ? 'font-bold' : 'text-muted-foreground')} data-testid="shift-payroll">
+                {payrollCompany.trim() || 'Not on file'}
+              </p>
+            </div>
+          </div>
+        )}
       </DialogHeader>
       <AlertDialog open={confirmingDelete} onOpenChange={setConfirmingDelete}>
         <AlertDialogContent>
@@ -1893,9 +1937,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
               </>
             )}
             </div>
-            {/* The things most days don't have, as two links in one row. */}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-0.5">
-              {!mealsFromTimeline && (
+            {/* The things most days don't have: another meal, and the meal penalty count. */}
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 pt-0.5">
+              {!mealsFromTimeline ? (
                 <button
                   type="button"
                   onClick={() => (secondMealOpen ? setExtraMeals(prev => [...prev, { onClock: false }]) : setSecondMealOpen(true))}
@@ -1903,16 +1947,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                 >
                   <Plus size={11} /> {secondMealOpen ? 'Add another meal' : 'Add a second meal'}
                 </button>
-              )}
-              {!(penaltyOpen || (parseFloat(mealPenalties) || 0) > 0) && (
-                <button
-                  type="button"
-                  onClick={() => setPenaltyOpen(true)}
-                  className="flex items-center gap-1 text-[11px] text-primary hover:underline"
-                >
-                  <Plus size={11} /> Add a meal penalty
-                </button>
-              )}
+              ) : <span />}
+              <MealPenaltyCounter count={parseFloat(mealPenalties) || 0} rate={rate} onChange={n => setMealPenalties(n > 0 ? String(n) : '')} />
             </div>
             {unfedComposite > 0 && (parseFloat(mealPenalties) || 0) !== unfedComposite && (
               <button
@@ -1925,53 +1961,6 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                   {roundHours(actualHours)}h with no lunch on a composite call — {unfedComposite} meal {unfedComposite === 1 ? 'penalty' : 'penalties'} owed past 4 hours. Tap to set.
                 </span>
               </button>
-            )}
-            {(penaltyOpen || (parseFloat(mealPenalties) || 0) > 0) && (
-            <div className="space-y-1.5 pt-1 border-t border-border/60">
-              <div className="flex items-center justify-between">
-                <label className="text-xs text-muted-foreground">Meal Penalties <span className="text-[10px]">· 1 = 1hr at straight rate</span></label>
-                <button
-                  type="button"
-                  onClick={() => { setMealPenalties(''); setPenaltyOpen(false); }}
-                  className="text-[11px] text-destructive hover:underline"
-                >
-                  Remove
-                </button>
-              </div>
-              {/* A vertical wheel for a number that is almost always 0, 1 or 2
-                  spent a whole column of the form on empty space. A row with
-                  the count in the middle is the same control in one line. */}
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  aria-label="One fewer meal penalty"
-                  disabled={(parseFloat(mealPenalties) || 0) <= 0}
-                  onClick={() => setMealPenalties(String(Math.max(0, (parseFloat(mealPenalties) || 0) - 1)))}
-                  className="pixel-button h-9 w-9 shrink-0 bg-card text-lg leading-none text-muted-foreground disabled:opacity-30"
-                >
-                  −
-                </button>
-                <span className={cn(
-                  'h-9 min-w-[3rem] px-3 flex items-center justify-center text-mono text-lg font-bold pixel-well',
-                  (parseFloat(mealPenalties) || 0) > 0 ? 'text-warning' : 'text-muted-foreground',
-                )}>
-                  {parseFloat(mealPenalties) || 0}
-                </span>
-                <button
-                  type="button"
-                  aria-label="One more meal penalty"
-                  onClick={() => setMealPenalties(String(Math.min(20, (parseFloat(mealPenalties) || 0) + 1)))}
-                  className="pixel-button h-9 w-9 shrink-0 bg-card text-lg leading-none text-muted-foreground"
-                >
-                  +
-                </button>
-                {(parseFloat(mealPenalties) || 0) > 0 && rate > 0 && (
-                  <span className="text-[11px] text-mono text-warning ml-auto">
-                    +${((parseFloat(mealPenalties) || 0) * rate).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                  </span>
-                )}
-              </div>
-            </div>
             )}
           </div>
 
@@ -2127,7 +2116,6 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             />
           )}
           {job.local && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Client</span><span className="font-medium text-xs">{job.local}</span></div>}
-          {(job.payrollCompany || payrollCompany) && <div className="flex justify-between"><span className="text-muted-foreground text-xs">Payroll company</span><span className="font-medium text-xs">{payrollCompany || job.payrollCompany}</span></div>}
           {shiftContract(job) ? (
             <div className="flex justify-between gap-3">
               <span className="text-muted-foreground text-xs shrink-0">Contract</span>
