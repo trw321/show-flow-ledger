@@ -21,7 +21,7 @@ import {
   AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
 import { callText, explicitCalls, parseDayTimeline, withGapOnClock, COMPOSITE_LUNCH_AFTER_HOURS, MEAL_PENALTY_AFTER_HOURS, type DayTimeline } from '@/lib/dayTimeline';
-import { ChevronLeft, ChevronRight, ChevronDown, Save, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle, Flame, PenLine, Banknote, Wallet, Flag, Undo2, Rocket, Timer, Orbit, Presentation, ClipboardCheck } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Repeat, Save, Star, ArrowLeft, Copy, X, Receipt, Pencil, Trash2, Phone, Download, Plus, MapPin, Check, Loader2, Zap, Eye, AlertTriangle, Flame, PenLine, Banknote, Wallet, Flag, Undo2, Rocket, Timer, Orbit, Presentation, ClipboardCheck } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast, isWithinInterval, parseISO, isValid, differenceInCalendarDays } from 'date-fns';
 import type { Employer, Job, CalendarEvent, Income, Invoice } from '@/lib/store';
 import { matchPaymentToProject, betterProject, rankedProjectsFor, projectOf, type FoundPayment, type ProjectMatch } from '@/lib/paymentMatch';
@@ -2654,6 +2654,7 @@ export default function CalendarPage() {
   // The month's projects and the payments with no shift fold away under their headings, remembered on the phone.
   const [projectsOpen, toggleProjects] = useRememberedOpen('show-flow-cal-projects-open');
   const [unlinkedOpen, toggleUnlinked] = useRememberedOpen('show-flow-cal-unlinked-open');
+  const [weeksOpen, toggleWeeks] = useRememberedOpen('show-flow-cal-weeks-open');
   const location = useLocation();
   /** The page a shift was opened from, when it was: closing the shift goes back to it. */
   const returnTo = useRef<string | null>(null);
@@ -3252,6 +3253,19 @@ export default function CalendarPage() {
           >
             <Orbit size={13} aria-hidden /> Cue
           </button>
+          {/* Every show and conference you watch, the ones that come round
+              again each year: beside Cue, in conference gold. */}
+          <button
+            type="button"
+            onClick={() => openConferences()}
+            aria-label={conferences.length > 0 ? `Again: all ${conferences.length} shows and conferences you watch` : 'Again: watch a show or conference'}
+            title="Shows and conferences you watch"
+            className="flex shrink-0 items-center gap-1 whitespace-nowrap border px-2 py-1.5 text-[11px] font-semibold transition-colors"
+            style={{ color: conferenceColour(), borderColor: conferenceColour(0.4), backgroundColor: conferenceColour(0.1) }}
+            data-testid="open-conferences"
+          >
+            <Repeat size={13} aria-hidden /> again!
+          </button>
         </div>
       }
     >
@@ -3373,18 +3387,6 @@ export default function CalendarPage() {
             </button>
           ))}
         </div>
-        {/* Every show and conference you watch, the ones that come round
-            again each year: up here with the calendar's other controls. */}
-        <button
-          type="button"
-          onClick={() => openConferences()}
-          className="shrink-0 rounded-lg border px-2 py-1 text-[10px] text-mono font-black transition-transform active:scale-95"
-          style={{ color: conferenceColour(), borderColor: conferenceColour(0.5), backgroundColor: conferenceColour(0.1) }}
-          aria-label={conferences.length > 0 ? `Again: all ${conferences.length} shows and conferences you watch` : 'Again: watch a show or conference'}
-          data-testid="open-conferences"
-        >
-          again!
-        </button>
         {viewMode === 'month' && <CalendarKey month={format(currentDate, 'MMMM')} employers={monthEmployers} plans={monthPlans} states={SHIFT_STATES} />}
       </div>
 
@@ -3649,10 +3651,15 @@ export default function CalendarPage() {
       {/* ── Week by week ──────────────────────────────────────────────────── */}
       {weekRows.some(w => w.shifts > 0) && (
         <div className="mt-4 rounded-md border border-border/40 bg-secondary/10 p-3" data-testid="week-by-week">
-          <p className="neon-heading text-[hsl(312_95%_75%)] mb-2">
-            Week by week · {format(currentDate, 'MMMM')} · est. {payView === 'gross' ? 'gross' : 'net'}
-          </p>
-          <div className="divide-y divide-border/30">
+          {/* Folds under its heading, like Projects this month; the phone remembers which way. */}
+          <h2>
+            <button type="button" onClick={toggleWeeks} aria-expanded={weeksOpen} data-testid="week-by-week-toggle"
+              className="neon-heading flex w-full items-center justify-between gap-2 text-left text-[hsl(312_95%_75%)]">
+              <span>Week by week · {format(currentDate, 'MMMM')} · est. {payView === 'gross' ? 'gross' : 'net'}</span>
+              <ChevronDown size={14} className={cn('shrink-0 transition-transform', weeksOpen && 'rotate-180')} aria-hidden />
+            </button>
+          </h2>
+          {weeksOpen && <div className="mt-2 divide-y divide-border/30">
             {weekRows.map(w => {
               const owed = Math.max(0, w.estimate - w.paid);
               return (
@@ -3677,7 +3684,7 @@ export default function CalendarPage() {
                 </div>
               );
             })}
-          </div>
+          </div>}
         </div>
       )}
 
