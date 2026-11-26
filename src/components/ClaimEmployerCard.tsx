@@ -22,8 +22,8 @@ import {
 import { openDayAndReturn, openShiftAndReturn } from '@/lib/returnSpot';
 import { cn } from '@/lib/utils';
 
-const LABEL = 'font-8bit text-[7px] uppercase leading-relaxed text-[hsl(188_95%_72%)]';
-const TAG = 'font-8bit shrink-0 border px-1.5 py-0.5 text-[7px] uppercase';
+const LABEL = 'neon-label text-[hsl(188_95%_72%)]';
+const TAG = 'shrink-0 border px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider';
 
 /** One week of work for one employer: its hours and gross, and whether a pay stub gave them. */
 export interface EmployerWeek {
@@ -265,7 +265,7 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
                     <li key={w.weekEnding} className="flex flex-wrap items-baseline justify-between gap-x-2 py-1 text-[12px] text-mono">
                       <span className="min-w-0 truncate">Week ending {claimDay(w.weekEnding, false)}</span>
                       <span className="flex shrink-0 items-center gap-1.5">
-                        {w.fromStub && <span className="font-8bit border border-[hsl(46_100%_58%)] px-1 text-[6px] uppercase leading-relaxed text-[hsl(46_100%_58%)]">Stub</span>}
+                        {w.fromStub && <span className="border border-[hsl(46_100%_58%)] px-1 font-mono text-[9px] font-bold uppercase leading-tight tracking-wider text-[hsl(46_100%_58%)]">Stub</span>}
                         <span className="text-muted-foreground">{w.hours} h ·</span>
                         <span className="neon-title font-bold">{claimMoney(w.gross)}</span>
                       </span>

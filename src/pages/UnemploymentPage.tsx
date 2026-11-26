@@ -26,7 +26,7 @@ import { cn } from '@/lib/utils';
 const daysText = (n: number) => `${n} day${n === 1 ? '' : 's'}`;
 
 /** A label in the arcade font, small, in the cyan of the calendar's lines. */
-const LABEL = 'font-8bit text-[7px] uppercase leading-relaxed text-[hsl(188_95%_72%)]';
+const LABEL = 'neon-label text-[hsl(188_95%_72%)]';
 
 /** A gross figure that copies itself when tapped, with a small copy mark to say so. */
 function GrossButton({ amount, onCopy, className }: { amount: number; onCopy: (n: number) => void; className?: string }) {
@@ -273,7 +273,7 @@ export default function UnemploymentPage() {
           <button type="button" onClick={openDates} aria-expanded={false} data-testid="claim-dates-summary"
             className="flex w-full items-center justify-between gap-3 border border-[hsl(312_95%_68%/0.5)] bg-[#0b0614]/70 p-3 text-left">
             <span className="min-w-0">
-              <span className="block font-8bit text-[8px] uppercase text-[hsl(312_95%_75%)]">Claim dates</span>
+              <span className="block neon-heading text-[hsl(312_95%_75%)]">Claim dates</span>
               <span className="mt-1 block text-[13px] font-bold text-mono text-foreground">{claimDay(range.from, false)} to {claimDay(range.through, false)}</span>
               <span className="block text-[11px] text-mono text-muted-foreground">
                 Weeks run {weekRun(range.weekEnd)} · <span className={saveState === 'saved' ? 'text-dot-paid' : ''}>{saveState === 'saved' ? '✓ Saved' : 'Saving…'}</span>
@@ -289,7 +289,7 @@ export default function UnemploymentPage() {
           {!backwards && prefs.claimRange && (
             <button type="button" onClick={() => setDatesOpen(false)} aria-expanded data-testid="claim-dates-fold"
               className="flex w-full items-center justify-between gap-2 text-left">
-              <span className="font-8bit text-[8px] uppercase text-[hsl(312_95%_75%)]">Claim dates</span>
+              <span className="neon-heading text-[hsl(312_95%_75%)]">Claim dates</span>
               <ChevronDown size={14} className="rotate-180 text-[hsl(188_90%_70%)]" aria-hidden />
             </button>
           )}
@@ -300,7 +300,7 @@ export default function UnemploymentPage() {
           {/* Most states count weeks Sunday to Saturday; some don't. */}
           <div className="flex items-center gap-3" data-testid="claim-week-end">
             <div className="min-w-0 flex-1">
-              <p className="font-8bit text-[8px] uppercase text-[hsl(312_95%_75%)]">Weeks end on</p>
+              <p className="neon-heading text-[hsl(312_95%_75%)]">Weeks end on</p>
               <p className="mt-1 text-[11px] text-mono text-muted-foreground">{weekRun(range.weekEnd)}</p>
             </div>
             <div className="w-24 shrink-0">
@@ -386,7 +386,7 @@ export default function UnemploymentPage() {
             <div className="flex gap-2" role="tablist" aria-label="Show">
               {(['weeks', 'employers'] as const).map(v => (
                 <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => setView(v)}
-                  className={cn('pixel-button font-8bit flex-1 py-2.5 text-[9px] uppercase', view === v ? 'pick-on' : 'pick-off')}>
+                  className={cn('pixel-button flex-1 py-2.5 font-mono text-xs font-bold uppercase tracking-widest', view === v ? 'pick-on' : 'pick-off')}>
                   {v === 'weeks' ? 'By week' : 'By employer'}
                 </button>
               ))}
@@ -469,7 +469,7 @@ export default function UnemploymentPage() {
                               {(l.fromStub || l.perStub) && (
                                 <button type="button" onClick={() => setProof({ week: w, line: l })} disabled={!l.stubs?.length} data-testid="stub-tag"
                                   aria-label={`See the pay stub behind ${l.employer}, week ending ${claimDay(w.weekEnding, false)}`}
-                                  className="font-8bit shrink-0 border border-[hsl(46_100%_58%)] px-1 py-0.5 text-[6px] uppercase leading-relaxed text-[hsl(46_100%_58%)] underline-offset-2 active:opacity-70">
+                                  className="shrink-0 border border-[hsl(46_100%_58%)] px-1 py-0.5 font-mono text-[9px] font-bold uppercase leading-tight tracking-wider text-[hsl(46_100%_58%)] underline-offset-2 active:opacity-70">
                                   Stub ›
                                 </button>
                               )}

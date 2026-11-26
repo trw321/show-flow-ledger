@@ -8,7 +8,7 @@ import { claimDay, claimMoney, OPEN_STUB_LIST_EVENT, weekEndingFor, type ClaimLi
 import { openShiftAndReturn } from '@/lib/returnSpot';
 import { cn } from '@/lib/utils';
 
-const LABEL = 'font-8bit text-[7px] uppercase leading-relaxed text-[hsl(188_95%_72%)]';
+const LABEL = 'neon-label text-[hsl(188_95%_72%)]';
 const iso = (d: Date) => format(d, 'yyyy-MM-dd');
 
 /** The claim weeks a stub's pay period touches, oldest first: the ones it could be put in. */

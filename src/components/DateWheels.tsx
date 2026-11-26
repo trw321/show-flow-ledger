@@ -205,7 +205,7 @@ export default function DateWheels({ label, value, onChange, firstYear, lastYear
 
   return (
     <div data-testid={testId}>
-      <p className="font-8bit mb-1 text-[8px] uppercase text-[hsl(312_95%_75%)]">{label}</p>
+      <p className="neon-heading mb-1 text-[hsl(312_95%_75%)]">{label}</p>
       <div className="flex gap-2">
         <Wheel label={`${label} month`} items={MONTHS} value={month} onChange={m => set(year, m, day)} testId={testId && `${testId}-month`}
           onPick={() => toggle('month')} picking={picking === 'month'} />

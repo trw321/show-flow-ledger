@@ -5,7 +5,7 @@ import { claimDay, claimMoney, claimNameOf, howLongText, type ClaimEmployer, typ
 const roundHours = (h: number) => Math.round(h * 100) / 100;
 import { cn } from '@/lib/utils';
 
-const LABEL = 'font-8bit text-[7px] uppercase leading-relaxed text-[hsl(188_95%_72%)]';
+const LABEL = 'neon-label text-[hsl(188_95%_72%)]';
 const PICKS_KEY = 'show-flow-claim-copy';
 
 /** One employer's weeks with work, for "week by week". */

@@ -72,7 +72,7 @@ const CertifyPanel = forwardRef<HTMLElement, { weekEnd: WeekEnd }>(function Cert
     <section ref={ref} className="space-y-3 border border-[hsl(188_95%_62%/0.5)] bg-[#0b0614]/70 p-3" data-testid="certify">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-8bit text-[8px] uppercase text-[hsl(188_95%_72%)]">Certify</p>
+          <p className="neon-heading text-[hsl(312_95%_75%)]">Certify</p>
           <p className="mt-1 text-[11px] text-muted-foreground">
             {on ? `Every ${schedule.every === 14 ? '2 weeks' : 'week'}` : 'A reminder when your update to the state is due'}
           </p>

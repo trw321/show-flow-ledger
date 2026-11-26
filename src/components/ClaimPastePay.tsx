@@ -8,8 +8,8 @@ import { payListWeeks, readPayList, type PayList } from '@/lib/payList';
 import { claimDay, claimMoney, readAmount, sameStub, type WeekEnd } from '@/lib/unemployment';
 import { cn } from '@/lib/utils';
 
-const LABEL = 'font-8bit text-[7px] uppercase leading-relaxed text-[hsl(188_95%_72%)]';
-const TAG = 'font-8bit shrink-0 border px-1.5 py-0.5 text-[7px] uppercase';
+const LABEL = 'neon-label text-[hsl(188_95%_72%)]';
+const TAG = 'shrink-0 border px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider';
 const GOLD = 'border-[hsl(46_100%_58%)] text-[hsl(46_100%_58%)]';
 
 /**

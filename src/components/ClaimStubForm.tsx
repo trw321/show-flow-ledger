@@ -11,7 +11,7 @@ import { isClaimDay, isUnclearEmployer, readAmount, sameStub, type ClaimStub } f
 import { multiWeek, periodText } from '@/lib/stubPeriod';
 import { cn } from '@/lib/utils';
 
-const LABEL = 'font-8bit text-[7px] uppercase leading-relaxed text-[hsl(188_95%_72%)]';
+const LABEL = 'neon-label text-[hsl(188_95%_72%)]';
 const iso = (d: Date) => format(d, 'yyyy-MM-dd');
 
 export interface StubDraft { employer: string; start: string; end: string; hours: string; gross: string; noWeeks?: boolean; paidOn?: string; note?: string }
