@@ -5,8 +5,10 @@ import { parseISO, differenceInCalendarDays, startOfDay, startOfWeek, endOfWeek 
 import { resolveEmployer } from './employerMatch';
 import { contractFor } from './contracts';
 import { localToday } from './today';
-import { breaksTheHour, isLocal16Shift } from './local16';
+import { billedHours, billingStepHours, isLocal16Shift } from './local16';
 import { callMinimum, premiumWindow, shiftPremiums, splitSideMinimum, type StartPremium } from './premiums';
+import { holidayTermsFor } from './bgca';
+import { callHolidayHours } from './holidays';
 import { clockSpanHours, endAfterStart } from './clock';
 import { roundHours } from './hoursFormat';
 
@@ -33,6 +35,23 @@ export interface OvertimeOptions {
    * actually pays on.
    */
   roundUpToWholeHours?: boolean;
+  /**
+   * How paid time is counted, in hours, for contracts that don't break the
+   * whole hour: any part of a step pays as the whole step, so 0.5 breaks the
+   * half hour (the Civic Auditorium). Wins over roundUpToWholeHours, which is
+   * a step of 1. Unset or 0 with it off pays to the minute.
+   */
+  billingStepHours?: number;
+  /**
+   * Worked hours that fell on a holiday whose contract pays extra on it, and
+   * that extra as a share of the straight rate: 0.5 adds half time on top of
+   * whatever each hour already pays, so 2× becomes 2.5×. Padding is never
+   * worked, so never holiday hours.
+   */
+  holidayHours?: number;
+  holidayExtra?: number;
+  /** The holiday, for the breakdown: "Thanksgiving". */
+  holidayName?: string;
   /**
    * How much of the night window is left when the shift ends — zero if it
    * ends outside it. The hour a shift's last minutes broke is worked time at
@@ -89,7 +108,8 @@ export interface OvertimeOptions {
  * + night are the hours worked (part hours paid whole, under union rules);
  * minimum is paid but never worked: a minimum call's padding, or the hours
  * owed after a meal. premiumDay is how many of the worked ones fell on a 6th
- * or 7th day, so at that day's rate or better, whatever tier they're in.
+ * or 7th day, so at that day's rate or better, whatever tier they're in, and
+ * holiday how many fell on a holiday that pays extra on top of their tier.
  */
 export interface TierHours {
   straight: number;
@@ -98,6 +118,7 @@ export interface TierHours {
   night: number;
   minimum: number;
   premiumDay: number;
+  holiday: number;
 }
 
 /**
@@ -148,8 +169,9 @@ export function calculateDayPay(
   // Round after the meal and the minimum call, because that is the number the
   // contract pays on — rounding earlier would round a figure nobody bills.
   // A hair under, so 8 hours that arithmetic made 8.0000001 stay 8.
-  const rounds = !!overtimeOptions?.roundUpToWholeHours;
-  const ceilHours = (h: number) => Math.ceil(h - 1e-9);
+  const step = overtimeOptions?.billingStepHours ?? (overtimeOptions?.roundUpToWholeHours ? 1 : 0);
+  const rounds = step > 0;
+  const ceilHours = (h: number) => billedHours(h, step);
   const billableHours = rounds ? ceilHours(laddered) : laddered;
   // A premium day (6th/7th of the same employer) lifts the whole day's rate; it
   // does NOT compound with the overtime ladder. A 6th day is 1.5× straight
@@ -192,7 +214,7 @@ export function calculateDayPay(
 
   let pay = 0;
   // Which hours were paid at what: the same cuts the pay below is made on.
-  const tierHours: TierHours = { straight: 0, overtime: 0, double: 0, night: 0, minimum: 0, premiumDay: 0 };
+  const tierHours: TierHours = { straight: 0, overtime: 0, double: 0, night: 0, minimum: 0, premiumDay: 0, holiday: 0 };
 
   const dayRate = overtimeOptions?.dayRate ?? 0;
   if (dayRate > 0) {
@@ -296,6 +318,20 @@ export function calculateDayPay(
     pay += nightPay;
     tierHours.night = nightHours;
     breakdown.push(`${roundHours(nightHours)}h after midnight × ${nightRate.toFixed(2)} = ${nightPay.toFixed(2)}`);
+  }
+
+  // A holiday adds a share of the straight rate to each hour worked on it, on
+  // top of whatever that hour is paid: half time on 2× is 2.5×. Only hours
+  // worked; padding was never worked. A day rate already covers the day.
+  const holidayExtra = overtimeOptions?.holidayExtra ?? 0;
+  const holidayHours = holidayExtra > 0 && !(dayRate > 0)
+    ? Math.max(0, Math.min(overtimeOptions?.holidayHours ?? 0, workedHours))
+    : 0;
+  if (holidayHours > 0) {
+    const holidayPay = holidayHours * rate * holidayExtra;
+    pay += holidayPay;
+    tierHours.holiday = holidayHours;
+    breakdown.push(`${roundHours(holidayHours)}h on ${overtimeOptions?.holidayName ?? 'a holiday'}: +${holidayExtra}× × $${rate.toFixed(2)} = +$${holidayPay.toFixed(2)}`);
   }
 
   const postMealPadding = overtimeOptions?.postMealPaddingHours ?? 0;
@@ -523,7 +559,7 @@ export function jobHoursBreakdown(
   employers: Employer[] = [],
   payer: PayerProfile = EMPTY_PROFILE,
 ): TierHours & { pto: number } {
-  const none = { straight: 0, overtime: 0, double: 0, night: 0, minimum: 0, premiumDay: 0, pto: 0 };
+  const none = { straight: 0, overtime: 0, double: 0, night: 0, minimum: 0, premiumDay: 0, holiday: 0, pto: 0 };
   const hours = effectiveHoursWorked(job);
   if (!hours) return none;
   if (job.pto) return { ...none, pto: netHoursWorked(job) };
@@ -555,6 +591,7 @@ function dayCutMinus(through: DayCut, before: DayCut): DayCut {
       night: t.night - b.night,
       minimum: t.minimum - b.minimum,
       premiumDay: t.premiumDay - b.premiumDay,
+      holiday: t.holiday - b.holiday,
     },
   };
 }
@@ -631,8 +668,9 @@ function priceSides(
   const sideMinimum = (j: Job) => (opts.asWorked ? 0 : splitSideMinimum(j, employer, payer));
   // Each side of a split is its own call, so each breaks the hour on its own:
   // 11:30 PM to 12:15 AM is an hour on that side, whatever the other side was.
-  const rounds = !opts.asWorked && breaksTheHour(job, employer);
-  const split = isSplitDay ? splitDayHours(dayShifts, rounds) : null;
+  // (Or the half hour, at the Civic Auditorium: see billingStepHours.)
+  const step = opts.asWorked ? 0 : billingStepHours(job, employer);
+  const split = isSplitDay ? splitDayHours(dayShifts, step) : null;
   const dayHours = split ? split.clocked : hours;
   // Dues follow the local, tax follows you, and only what is left is the
   // employer's to say (rates, from shiftDay). See payerProfile for why.
@@ -650,6 +688,7 @@ function priceSides(
   const dayNightHours = sides.reduce((sum, j) => sum + shiftNight(j, employer, payer).hours, 0)
     + (split && lastNight.hours > 0 ? Math.min(split.lastBroken, lastNight.leftAtEnd) : 0);
   const dayNightLeft = split ? 0 : lastNight.leftAtEnd;
+  const holiday = dayHoliday(sides, step);
 
   // On a split each side's minimum is settled as padding; applying the
   // shift's own minimum again here would floor the whole day at it.
@@ -659,7 +698,10 @@ function priceSides(
     otThresholdHours: employer?.dailyOvertimeThresholdHours,
     dtThresholdHours: employer?.dailyDoubletimeThresholdHours,
     otMultiplier: employer?.overtimeMultiplier,
-    roundUpToWholeHours: rounds,
+    billingStepHours: step,
+    holidayHours: holiday.hours,
+    holidayExtra: holiday.extra,
+    holidayName: holiday.name,
     postMealPaddingHours: opts.asWorked ? 0 : postMealPaddingHours(job, employer),
     // The shift's own day rate, if it has one — the employer's is only where a
     // new shift starts from. On a split day the whole day is one day rate.
@@ -668,7 +710,7 @@ function priceSides(
     dtMultiplier: employer?.doubletimeMultiplier,
     nightHours: dayNightHours,
     nightLeftAtEnd: dayNightLeft,
-    minimumPaddingHours: isSplitDay && !opts.asWorked ? splitMinimumPadding(dayShifts, sideMinimum, rounds) : 0,
+    minimumPaddingHours: isSplitDay && !opts.asWorked ? splitMinimumPadding(dayShifts, sideMinimum, step) : 0,
     nightMultiplier: employer?.nightPremiumMultiplier,
     dayPremiumLabel: dayPremiumLabel(job, employer, allJobs),
     // The day's first call is where an early or forced call starts.
@@ -786,14 +828,14 @@ function lastCall(sides: Job[]): Job {
  * worked. Each side carries its own minimum, but the hours that fill it were
  * never worked, so they are paid flat rather than climbing the day's ladder.
  */
-function splitMinimumPadding(sides: Job[], minimumOf: (j: Job) => number, rounds = false): number {
-  return sides.reduce((sum, j) => sum + Math.max(0, minimumOf(j) - sideWorkingHours(j, rounds)), 0);
+function splitMinimumPadding(sides: Job[], minimumOf: (j: Job) => number, step = 0): number {
+  return sides.reduce((sum, j) => sum + Math.max(0, minimumOf(j) - sideWorkingHours(j, step)), 0);
 }
 
-/** One side's working hours: after its meals, and rounded up when it breaks the hour. */
-function sideWorkingHours(j: Job, rounds: boolean): number {
+/** One side's working hours: after its meals, and rounded up by its step when it breaks the hour or half hour. */
+function sideWorkingHours(j: Job, step: number): number {
   const net = Math.max(0, effectiveHoursWorked(j) - offClockMealMinutes(j) / 60);
-  return rounds ? Math.ceil(net - 1e-9) : net;
+  return billedHours(net, step);
 }
 
 /**
@@ -802,12 +844,34 @@ function sideWorkingHours(j: Job, rounds: boolean): number {
  * (calculateDayPay takes them off again). And how much of the last call's
  * figure is its broken part hour, for the night premium.
  */
-function splitDayHours(sides: Job[], rounds: boolean): { clocked: number; lastBroken: number } {
-  const working = sides.reduce((sum, j) => sum + sideWorkingHours(j, rounds), 0);
+function splitDayHours(sides: Job[], step: number): { clocked: number; lastBroken: number } {
+  const working = sides.reduce((sum, j) => sum + sideWorkingHours(j, step), 0);
   const meals = sides.reduce((sum, j) => sum + offClockMealMinutes(j), 0) / 60;
   const last = lastCall(sides);
-  const lastBroken = sideWorkingHours(last, rounds) - sideWorkingHours(last, false);
+  const lastBroken = sideWorkingHours(last, step) - sideWorkingHours(last, 0);
   return { clocked: working + meals, lastBroken };
+}
+
+/**
+ * A day's hours on a holiday that pays extra under its calls' contract (only
+ * the Civic Auditorium's so far: see bgca.ts), each call's paid working hours
+ * counted on its own, and what the holiday adds as a share of the straight
+ * rate. Nothing for every other contract.
+ */
+export function dayHoliday(sides: Job[], step: number): { hours: number; extra: number; name?: string } {
+  let hours = 0;
+  let extra = 0;
+  let name: string | undefined;
+  for (const j of sides) {
+    const terms = holidayTermsFor(j);
+    if (!terms) continue;
+    const found = callHolidayHours(j, sideWorkingHours(j, step), terms.holidayOn);
+    if (found.hours <= 0) continue;
+    hours += found.hours;
+    extra = Math.max(extra, terms.extra);
+    name ??= found.name;
+  }
+  return { hours, extra, name };
 }
 
 /**
@@ -996,7 +1060,7 @@ export function calculateExpectedPay(
     otMultiplier: employer?.overtimeMultiplier ?? 1.5,
     dtMultiplier: employer?.doubletimeMultiplier ?? 2.0,
     nightMultiplier: employer?.nightPremiumMultiplier ?? 2.0,
-    roundUpToWholeHours: breaksTheHour(referenceJob, employer),
+    billingStepHours: billingStepHours(referenceJob, employer),
     unionDuesPercent: employer?.unionDuesPercent,
     // A 1099 employer withholds nothing, so nothing comes off what it sends;
     // neither does one whose W-4 says exempt.
@@ -1046,15 +1110,16 @@ export function calculateExpectedPay(
     // side's hour on its own, the same as the per-shift figure does, so the
     // two can never disagree about one day.
     const isSplit = sides.length > 1;
-    const rounds = !!overtimeOptions.roundUpToWholeHours;
-    const split = isSplit ? splitDayHours(sides, rounds) : null;
+    const step = overtimeOptions.billingStepHours ?? 0;
+    const split = isSplit ? splitDayHours(sides, step) : null;
+    const holiday = dayHoliday(sides, step);
     const lastNight = shiftNight(lastCall(sides), employer, payer);
     const nightHours = sides.reduce((sum, j) => sum + shiftNight(j, employer, payer).hours, 0)
       + (split && lastNight.hours > 0 ? Math.min(split.lastBroken, lastNight.leftAtEnd) : 0);
     const nightLeft = split ? 0 : lastNight.leftAtEnd;
     const dayMinimum = isSplit ? 0 : callMinimum({ ...sides[0], minimumHours: sides[0].minimumHours ?? referenceJob.minimumHours }, employer);
     const dayEntry = byDate.get(date);
-    const result = calculateDayPay(split ? split.clocked : hours, rate, dayMinimum, mealPenalties, dayMultiplier, { duration: mealDuration, onClock: mealOnClock, offClockMinutesTotal: offClockMealMinutes }, { ...overtimeOptions, nightHours, nightLeftAtEnd: nightLeft, minimumPaddingHours: isSplit ? splitMinimumPadding(sides, j => splitSideMinimum({ ...j, minimumHours: j.minimumHours ?? referenceJob.minimumHours }, employer, payer), rounds) : 0, postMealPaddingHours: postMealPadding, dayRate: dayEntry?.dayRate, dayRateHours: dayEntry?.dayRateHours, premiums: shiftPremiums({ ...firstCall(sides), date }, allJobs, employer, payer) });
+    const result = calculateDayPay(split ? split.clocked : hours, rate, dayMinimum, mealPenalties, dayMultiplier, { duration: mealDuration, onClock: mealOnClock, offClockMinutesTotal: offClockMealMinutes }, { ...overtimeOptions, nightHours, nightLeftAtEnd: nightLeft, minimumPaddingHours: isSplit ? splitMinimumPadding(sides, j => splitSideMinimum({ ...j, minimumHours: j.minimumHours ?? referenceJob.minimumHours }, employer, payer), step) : 0, holidayHours: holiday.hours, holidayExtra: holiday.extra, holidayName: holiday.name, postMealPaddingHours: postMealPadding, dayRate: dayEntry?.dayRate, dayRateHours: dayEntry?.dayRateHours, premiums: shiftPremiums({ ...firstCall(sides), date }, allJobs, employer, payer) });
     total += result.totalPay;
     details.push({ date, hours, pay: result.totalPay, breakdown: result.breakdown });
   }

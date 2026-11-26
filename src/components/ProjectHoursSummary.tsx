@@ -43,6 +43,9 @@ export function ProjectHoursSummary({ hours, title = 'Hours', className }: { hou
       {roundHours(hours.premiumDay) > 0 && (
         <p className="text-muted-foreground">{h(hours.premiumDay)} on a 6th or 7th day, at its rate or better</p>
       )}
+      {roundHours(hours.holiday) > 0 && (
+        <p className="text-muted-foreground">{h(hours.holiday)} on a holiday, with half time on top</p>
+      )}
       {roundHours(hours.paidFor) > 0 && roundHours(hours.owed) > 0 && (
         <p data-testid="project-hours-paid">
           <span className="text-dot-paid">{h(hours.paidFor)} paid</span>

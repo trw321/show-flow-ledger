@@ -23,6 +23,8 @@ export interface ProjectHours {
   minimum: number;
   /** Worked hours that fell on a 6th or 7th day. */
   premiumDay: number;
+  /** Worked hours that fell on a holiday paying extra on top. */
+  holiday: number;
   pto: number;
   /** Part hours paid as whole ones, under union rules. */
   roundedUp: number;
@@ -44,7 +46,7 @@ export function projectHours(
   paidIds?: Set<string>,
 ): ProjectHours {
   const out: ProjectHours = {
-    worked: 0, paid: 0, straight: 0, overtime: 0, double: 0, night: 0, minimum: 0, premiumDay: 0, pto: 0,
+    worked: 0, paid: 0, straight: 0, overtime: 0, double: 0, night: 0, minimum: 0, premiumDay: 0, holiday: 0, pto: 0,
     roundedUp: 0, days: 0, longest: null, paidFor: 0, owed: 0, needHours: 0,
   };
   const byDay = new Map<string, number>();
@@ -62,6 +64,7 @@ export function projectHours(
     out.night += t.night;
     out.minimum += t.minimum;
     out.premiumDay += t.premiumDay;
+    out.holiday += t.holiday;
     out.pto += t.pto;
     byDay.set(job.date, (byDay.get(job.date) ?? 0) + worked);
     if (paidIds) {

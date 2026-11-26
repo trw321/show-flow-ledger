@@ -41,9 +41,11 @@ import { ratesForShift, type PayerProfile } from '@/lib/payerProfile';
 import { contractFor, contractsWorked, shiftContract } from '@/lib/contracts';
 import { alreadyRecorded } from '@/lib/paymentRepeats';
 import { useUserPrefs } from '@/lib/UserPrefsContext';
-import { calculateDayPay, dayInARow, dayMultiplierFor, dayPremiumLabel, compositeWeekendMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross, jobPayBreakdown, jobHoursBreakdown, nightLeftAtEnd, nightWindowEnd, compareCalls } from '@/lib/payCalc';
+import { calculateDayPay, dayInARow, dayMultiplierFor, dayPremiumLabel, compositeWeekendMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross, jobPayBreakdown, jobHoursBreakdown, nightLeftAtEnd, nightWindowEnd, compareCalls, dayHoliday } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
-import { breakTheHourLabel, breaksTheHour, isLocal16Shift } from '@/lib/local16';
+import { billedHours, billingStepHours, breakTheHourLabel, isLocal16Shift } from '@/lib/local16';
+import { holidayTermsFor } from '@/lib/bgca';
+import { callHolidayHours } from '@/lib/holidays';
 import { callMinimum, isEarlyCall, premiumEndWords, premiumStartHours, premiumWindow, shiftPremiums, splitSideMinimum } from '@/lib/premiums';
 import CallPremiums from '@/components/CallPremiums';
 import { useSwipe } from '@/lib/useSwipe';
@@ -337,7 +339,7 @@ function PremiumHoursBanner({ job, allJobs, employer, payer, onTap }: { job: Job
   const [burst, setBurst] = useState(0);
   useEffect(() => { if (isNight) setBurst(b => b + 1); }, [isNight]);
   if (!early && night <= 0) return null;
-  const premium = early ? (window.endHour === null ? 0 : premiumStartHours(job, window.endHour, breaksTheHour(job, employer))) : night;
+  const premium = early ? (window.endHour === null ? 0 : premiumStartHours(job, window.endHour, billingStepHours(job, employer))) : night;
   const multiplier = employer?.nightPremiumMultiplier ?? 2;
   const title = early ? `🌅 EARLY CALL · ${job.startTime}` : `🌙 NIGHT HOURS · past midnight`;
   // Until the contract says how long premium runs, the least is counted: say so, and ask.
@@ -361,6 +363,32 @@ function PremiumHoursBanner({ job, allJobs, employer, payer, onTap }: { job: Job
         : <div ref={setBannerEl} className={cls} data-testid="premium-hours" onClick={isNight ? () => setBurst(b => b + 1) : undefined}>{body}</div>}
       {isNight && <NightBurst from={bannerEl} burst={burst} />}
     </>
+  );
+}
+
+/**
+ * A call with hours on a holiday that pays extra under its contract (the
+ * Civic Auditorium's: half time on top of every hour). Says so up top, like
+ * premium hours, with the same hours the pay is worked out on.
+ */
+function HolidayBanner({ job, employer }: { job: Job; employer?: Employer }) {
+  const terms = holidayTermsFor(job);
+  if (!terms) return null;
+  const step = billingStepHours(job, employer);
+  // Logged: exactly what the pay counts. Not yet: the call's clock times.
+  const found = effectiveHoursWorked(job) > 0
+    ? dayHoliday([job], step)
+    : callHolidayHours(job, billedHours(job.startTime && job.endTime ? calcHours(job.startTime, job.endTime) : 0, step), terms.holidayOn);
+  const name = found.name ?? (found.hours > 0 ? undefined : terms.holidayOn(job.date));
+  if (!name) return null;
+  const extra = terms.extra === 0.5 ? '½' : `${terms.extra}×`;
+  return (
+    <div className="block w-full rounded-lg border border-primary/50 bg-primary/15 px-3 py-2 text-center" data-testid="holiday-hours">
+      <p className="text-sm font-black tracking-tight">{name === 'Thanksgiving' ? '🦃' : '🎉'} {name.toUpperCase()} · HOLIDAY PAY</p>
+      <p className="text-xs font-semibold leading-snug">
+        {found.hours > 0 ? `${roundHours(found.hours)}h on the holiday` : 'On the holiday'} · {extra} straight time on top of every hour, so 2× pays {2 + terms.extra}×
+      </p>
+    </div>
   );
 }
 
@@ -1051,6 +1079,13 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   // Dues, vacation and withholding from whoever owns each — the local, the
   // employer's W-4 — exactly as every other pay figure takes them.
   const previewRates = ratesForShift(job, employer, prefs.payer);
+  // How the time is counted (the hour, or the half hour at the Civic
+  // Auditorium), and its hours on a holiday, as jobPayBreakdown counts them.
+  const previewStep = billingStepHours(job, employer);
+  const previewHolidayTerms = holidayTermsFor(job);
+  const previewHoliday = previewHolidayTerms
+    ? callHolidayHours({ date: job.date, startTime, endTime }, billedHours(paidHours, previewStep), previewHolidayTerms.holidayOn)
+    : { hours: 0, name: undefined };
   const payPreview = rate > 0 && billableHours > 0
     ? calculateDayPay(actualHours, rate, minHours, mealPenaltyUnits, dayMultiplierFor({ ...job, compositeTeam }, employer, data.jobs), { duration: mealDuration, onClock: mealOnClock, offClockMinutesTotal: offClockMealMins }, {
       // The employer's own overtime terms, as every other pay figure uses
@@ -1064,7 +1099,8 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
       // A broken hour falls at the end of the call, so a call that ends in the
       // night pays its rounded part hour at the night rate, as jobPayBreakdown does.
       nightHours, nightLeftAtEnd: nightHours > 0 && startTime && endTime && nightEnd !== null ? nightLeftAtEnd(startTime, endTime, employer?.nightPremiumStartHour ?? 0, nightEnd) : 0,
-      nightMultiplier: employer?.nightPremiumMultiplier, roundUpToWholeHours: breaksTheHour(job, employer), unionDuesPercent: previewRates.unionDuesPercent, estimatedTaxPercent: previewRates.estimatedTaxPercent, dayPremiumLabel: dayPremiumLabel({ ...job, compositeTeam }, employer, data.jobs),
+      nightMultiplier: employer?.nightPremiumMultiplier, billingStepHours: previewStep, unionDuesPercent: previewRates.unionDuesPercent,
+      holidayHours: previewHoliday.hours, holidayExtra: previewHolidayTerms?.extra, holidayName: previewHoliday.name, estimatedTaxPercent: previewRates.estimatedTaxPercent, dayPremiumLabel: dayPremiumLabel({ ...job, compositeTeam }, employer, data.jobs),
       premiums: shiftPremiums({ ...job, startTime, endTime }, data.jobs, employer, prefs.payer),
     })
     : null;
@@ -1403,6 +1439,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
         )}
         <PremiumHoursBanner job={{ ...job, startTime, endTime }} allJobs={data.jobs} employer={employer} payer={prefs.payer}
           onTap={() => document.querySelector('[data-testid=early-call]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} />
+        <HolidayBanner job={{ ...job, startTime, endTime }} employer={employer} />
 
         <MoneyRain active={payRain} />
         {proofFor && <PaymentProof income={proofFor} onClose={() => setProofFor(null)} />}
@@ -1772,7 +1809,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                 <p className="rounded-md border border-primary/40 bg-primary/10 px-2.5 py-2 text-[11px] leading-tight">
                   <span className="font-medium">{rule}</span>
                   <span className="block text-[10px] text-muted-foreground mt-0.5">
-                    Any part of an hour is paid as a whole hour on this shift{isLocal16Shift(job) ? ': every Local 16 call does' : ''}.
+                    {billingStepHours(job, employer) === 0.5
+                      ? 'Any part of a half hour is paid as a whole half hour on this shift: the Civic Auditorium contract does, not the whole hour.'
+                      : `Any part of an hour is paid as a whole hour on this shift${isLocal16Shift(job) ? ': every Local 16 call does' : ''}.`}
                   </span>
                 </p>
               );
@@ -2094,7 +2133,11 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
               <span className="text-muted-foreground text-xs shrink-0">Contract</span>
               <span className="text-right">
                 <span className="block font-medium text-xs">{shiftContract(job)}</span>
-                <span className="block text-[10px] text-muted-foreground">No terms saved for it yet. Pay uses {job.client}'s settings.</span>
+                <span className="block text-[10px] text-muted-foreground">
+                  {holidayTermsFor(job)
+                    ? 'Civic Auditorium terms: breaks the half hour, and holiday hours (Thanksgiving) get ½ straight time on top.'
+                    : `No terms saved for it yet. Pay uses ${job.client}'s settings.`}
+                </span>
               </span>
             </div>
           ) : contractFor(employer)?.perEmployer ? (
@@ -2122,6 +2165,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                 [splitCallPay.hours.double, 'double time'],
                 [splitCallPay.hours.night, 'night premium'],
                 [splitCallPay.hours.premiumDay, '6th/7th day premium'],
+                [splitCallPay.hours.holiday, 'holiday, ½ on top'],
                 [splitCallPay.hours.minimum, 'minimum padding'],
               ] as const).filter(([h]) => h > 0.005).map(([h, label]) => (
                 <p key={label} className="text-[10px] text-mono text-muted-foreground">{roundHours(h)}h {label}</p>
@@ -3692,6 +3736,9 @@ export default function CalendarPage() {
                 )}
                 {selectedJobs.map(job => (
                   <PremiumHoursBanner key={'premium-' + job.id} job={job} allJobs={data.jobs} employer={resolveEmployer(job.client, data.employers)} payer={prefs.payer} onTap={() => setSelectedJobId(job.id)} />
+                ))}
+                {selectedJobs.map(job => (
+                  <HolidayBanner key={'holiday-' + job.id} job={job} employer={resolveEmployer(job.client, data.employers)} />
                 ))}
                 {/* A split day is one shift worked in two calls: one card, its
                     calls inside it, each a tap from its own details. */}

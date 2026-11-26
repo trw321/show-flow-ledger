@@ -1,6 +1,6 @@
 import type { Employer, Job } from './store';
 import { resolveEmployer } from './employerMatch';
-import { breaksTheHour } from './local16';
+import { billedHours, billingStepHours } from './local16';
 import { jobPayBreakdown, netHoursWorked } from './payCalc';
 import { EMPTY_PROFILE, type PayerProfile } from './payerProfile';
 import type { RowStatus } from './stubComparison';
@@ -51,10 +51,10 @@ function statusOf(delta: number, estimated: number): RowStatus {
   return off <= Math.max(5, estimated * 0.02) ? 'close' : 'off';
 }
 
-/** Hours a shift is paid for: broken hours rounded up, and never under the minimum call. */
+/** Hours a shift is paid for: broken hours (or half hours) rounded up, and never under the minimum call. */
 function paidHours(job: Job, employers: Employer[]): number {
   const worked = netHoursWorked(job);
-  const rounded = breaksTheHour(job, resolveEmployer(job.client, employers)) ? Math.ceil(worked - 1e-9) : worked;
+  const rounded = billedHours(worked, billingStepHours(job, resolveEmployer(job.client, employers)));
   return Math.max(rounded, job.minimumHours ?? 0);
 }
 

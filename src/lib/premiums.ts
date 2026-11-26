@@ -1,7 +1,7 @@
 import type { Employer, Job } from './store';
 import type { ContractRule, PayerProfile } from './payerProfile';
 import { shiftContract } from './contracts';
-import { breaksTheHour, isLocal16Shift } from './local16';
+import { billedHours, billingStepHours, isLocal16Shift } from './local16';
 import { nameSimilarity, AUTO_MATCH_THRESHOLD } from './employerMatch';
 import { clockMinutes, endAfterStart } from './clock';
 import { roundHours } from './hoursFormat';
@@ -89,21 +89,26 @@ export const earlyCallWords = (rule?: ContractRule['earlyCall']) =>
  * Hours of an early call at the premium: until 7 or 8 AM, or the whole call.
  * Where the call breaks the hour, so do its premium hours: there's no such
  * thing as an hour and a half of premium, so a 6:30 start with premium until
- * 8 is two hours of it, 6:30 to 8:30.
+ * 8 is two hours of it, 6:30 to 8:30. Where it breaks the half hour, half
+ * hours are counted the same way.
  */
 export function earlyCallHours(job: Pick<Job, 'startTime' | 'endTime'>, rule?: ContractRule['earlyCall'], breaksHour = false): number {
   if (rule !== 'allDay' && rule !== 'until7' && rule !== 'until8') return 0;
-  return premiumStartHours(job, rule === 'allDay' ? undefined : earlyCallUntilHour(rule), breaksHour);
+  return premiumStartHours(job, rule === 'allDay' ? undefined : earlyCallUntilHour(rule), breaksHour ? 1 : 0);
 }
 
-/** earlyCallHours by the hour premium stops: undefined runs to the end of the call. */
-export function premiumStartHours(job: Pick<Job, 'startTime' | 'endTime'>, untilHour: number | undefined, breaksHour: boolean): number {
+/**
+ * earlyCallHours by the hour premium stops: undefined runs to the end of the
+ * call. `step` is how the call's time is paid (see billingStepHours): 1
+ * breaks the hour, 0.5 the half hour, 0 pays to the minute.
+ */
+export function premiumStartHours(job: Pick<Job, 'startTime' | 'endTime'>, untilHour: number | undefined, step: number): number {
   const span = callSpan(job);
   if (!span || span.start >= EARLY_CALL_BEFORE_HOUR * 60) return 0;
   const length = (span.end - span.start) / 60;
   if (untilHour === undefined) return length;
   const raw = Math.max(0, Math.min(span.end, untilHour * 60) - span.start) / 60;
-  return breaksHour ? Math.min(Math.ceil(raw - 1e-9), Math.ceil(length - 1e-9)) : raw;
+  return step > 0 ? Math.min(billedHours(raw, step), billedHours(length, step)) : raw;
 }
 
 /**
@@ -234,7 +239,7 @@ export function shiftPremiums(job: Job, allJobs: Job[], employer?: Employer, pay
   // A call that starts after midnight is premium hours, as the contract says,
   // or the least of them until it has.
   const window = premiumWindow(job, employer, payer);
-  const early = window.endHour === null ? 0 : premiumStartHours(job, window.endHour, breaksTheHour(job, employer));
+  const early = window.endHour === null ? 0 : premiumStartHours(job, window.endHour, billingStepHours(job, employer));
   if (early > 0) {
     out.push({
       hours: early,
