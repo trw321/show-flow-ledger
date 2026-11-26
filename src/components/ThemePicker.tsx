@@ -50,7 +50,7 @@ export default function ThemePicker() {
 
   return (
     <section>
-      <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/60 uppercase mb-3">
+      <p className="neon-heading text-[hsl(312_95%_75%)] mb-3">
         Colour
       </p>
       <div className="grid grid-cols-2 gap-2">
@@ -74,7 +74,7 @@ export default function ThemePicker() {
               />
               <span className="min-w-0">
                 <span className={cn('block text-xs font-bold truncate', active && 'text-primary')}>{name}</span>
-                <span className="block text-[9px] text-mono uppercase tracking-wider text-muted-foreground">
+                <span className="block neon-label text-[hsl(188_95%_72%)]">
                   {active ? 'In use' : 'Tap to use'}
                 </span>
               </span>

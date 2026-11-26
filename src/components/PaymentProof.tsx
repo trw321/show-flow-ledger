@@ -291,7 +291,7 @@ export default function PaymentProof({ income, onClose }: { income: Income; onCl
 
           {/* Why it's this project. */}
           <div className="space-y-1.5">
-            <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground">Why this project</p>
+            <p className="neon-label text-[hsl(188_95%_72%)]">Why this project</p>
             {why?.level ? (
               <>
                 <div className="flex items-center gap-2">
@@ -318,7 +318,7 @@ export default function PaymentProof({ income, onClose }: { income: Income; onCl
 
           {explanation && (
             <div className="space-y-1">
-              <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground">Estimate against what came in</p>
+              <p className="neon-label text-[hsl(188_95%_72%)]">Estimate against what came in</p>
               <PayEstimateCard explanation={explanation} covers={covers} />
             </div>
           )}
@@ -327,7 +327,7 @@ export default function PaymentProof({ income, onClose }: { income: Income; onCl
           {projectWorked.length > 0 && live.status === 'paid' && (
             <div className="space-y-1" data-testid="days-it-paid">
               <div className="flex items-baseline justify-between gap-2">
-                <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground">The days it paid</p>
+                <p className="neon-label text-[hsl(188_95%_72%)]">The days it paid</p>
                 <button type="button" onClick={() => setPickingDays(v => !v)} className="text-[10px] text-primary underline underline-offset-2">
                   {pickingDays ? 'Done' : 'Change'}
                 </button>

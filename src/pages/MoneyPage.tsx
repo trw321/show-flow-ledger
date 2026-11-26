@@ -643,9 +643,9 @@ export default function MoneyPage() {
           { label: 'Hours paid', value: String(round1(hoursPaid)), of: round1(hoursTotal) + 'h' },
           { label: 'Days paid', value: String(daysPaid), of: daysTotal + ' days' },
         ]).map(({ label, value, of }) => (
-          <div key={label} className="rounded-lg border border-border bg-card p-3">
-            <p className="text-[10px] text-muted-foreground text-mono uppercase tracking-wider">{label}</p>
-            <p className="text-2xl font-bold text-mono mt-1 leading-none">{value}</p>
+          <div key={label} className="neon-well p-3">
+            <p className="neon-label text-[hsl(188_95%_72%)]">{label}</p>
+            <p className="neon-title text-2xl font-bold text-mono mt-1 leading-none">{value}</p>
             <p className="text-[11px] text-mono text-muted-foreground mt-1 leading-none">of {of}</p>
           </div>
         ))}
@@ -725,7 +725,7 @@ export default function MoneyPage() {
         const dollars = (n: number) => '$' + Math.round(n).toLocaleString();
         return (
           <div className="pixel-panel mt-6 p-3 space-y-1.5">
-            <p className="text-[10px] text-mono uppercase tracking-widest text-muted-foreground">Tax · {taxYear.year} estimate</p>
+            <p className="neon-label text-[hsl(188_95%_72%)]">Tax · {taxYear.year} estimate</p>
             <div className="flex items-baseline justify-between gap-2">
               <span className="text-xs text-muted-foreground">Still to pay at tax time</span>
               <span className={cn('text-lg font-bold text-mono', owed > 1 ? 'text-dot-overdue' : 'text-dot-paid')}>
@@ -750,9 +750,9 @@ export default function MoneyPage() {
       {/* ── Every payment ──────────────────────────────────────────────────────
           Per project, pay is on the Calendar now. This is the plain record of
           every payment, linked or not, for looking back over the year. */}
-      <p className="mt-6 mb-3 text-[10px] font-body uppercase tracking-widest text-muted-foreground/60">Every payment</p>
+      <p className="mt-6 mb-3 neon-heading text-[hsl(312_95%_75%)]">Every payment</p>
       {sorted.length === 0 ? (
-        <div className="rounded-2xl border border-border/40 bg-secondary/10 p-8 text-center">
+        <div className="neon-well p-8 text-center">
           <DollarSign size={28} className="text-muted-foreground/30 mx-auto mb-3" />
           <p className="text-sm text-muted-foreground">no income recorded yet</p>
           <p className="text-xs text-muted-foreground/50 mt-1">use the quick add above or load a statement</p>

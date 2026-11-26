@@ -1495,7 +1495,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             {/* This day first: it's the day that was tapped. */}
             {dayPay.worked && (
               <div className="space-y-0.5" data-testid="this-day-pay">
-                <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground">This day · {showDay(job.date, 'EEE, MMM d')}</p>
+                <p className="neon-label text-[hsl(188_95%_72%)]">This day · {showDay(job.date, 'EEE, MMM d')}</p>
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-lg font-bold text-mono">{moneyText(dayPay.amount)}</span>
                   <span className={cn('text-[11px] font-bold text-mono uppercase', dayPay.paid ? 'text-dot-paid' : 'text-dot-pending')}>
@@ -1522,7 +1522,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                 <button type="button" onClick={() => setShowProjectPays(v => !v)} className="flex w-full items-start gap-1.5 text-left" aria-expanded={showProjectPays}>
                   {showProjectPays ? <ChevronDown size={14} className="mt-0.5 shrink-0 text-muted-foreground" /> : <ChevronRight size={14} className="mt-0.5 shrink-0 text-muted-foreground" />}
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[9px] text-mono uppercase tracking-widest text-muted-foreground">
+                    <span className="block neon-label text-[hsl(188_95%_72%)]">
                       {project.length > 1 ? `Whole project · ${projectSpan}` : 'Payments'}
                     </span>
                     <span className="block text-xs">
@@ -1601,7 +1601,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             ) : (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground">Add pay</p>
+                  <p className="neon-label text-[hsl(188_95%_72%)]">Add pay</p>
                   <button type="button" onClick={closePay} aria-label="Close add pay" className="p-1 text-muted-foreground hover:text-foreground"><X size={14} /></button>
                 </div>
 
@@ -1669,7 +1669,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                     {payMatch && (
                       <div className="border border-border p-2 space-y-1.5">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground truncate">
+                          <p className="neon-label text-[hsl(188_95%_72%)] truncate">
                             Matches {job.name}{job.jobNumber ? ` #${job.jobNumber}` : ''}
                           </p>
                           <span className={cn('shrink-0 text-[10px] text-mono font-bold uppercase', payMatch.level === 'high' ? 'text-dot-paid' : payMatch.level === 'medium' ? 'text-dot-overdue' : 'text-destructive')}>
@@ -1796,7 +1796,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
                   </div>
                   {oneMealFromTimeline && (
                     <div className="space-y-1.5">
-                      <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">
+                      <label className="neon-label text-[hsl(188_95%_72%)]">
                         🌭 One meal — {oneMealFromTimeline.minutes}min from the gap
                       </label>
                       <div className="grid grid-cols-2 gap-1.5">
@@ -2279,7 +2279,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
         {stubMatch && (
           <div className={cn("rounded-md border p-3 space-y-2", CONFIDENCE_STYLES[stubMatch.confidence].box)}>
             <div className="flex items-center justify-between gap-2">
-              <p className="text-[9px] text-mono font-bold tracking-widest uppercase text-muted-foreground/70">Covers</p>
+              <p className="neon-heading text-[hsl(312_95%_75%)]">Covers</p>
               <span className={cn("text-[9px] text-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full", CONFIDENCE_STYLES[stubMatch.confidence].pill)}>
                 {stubMatch.confidence} confidence
               </span>
@@ -2305,7 +2305,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
 
         {stubExplanation && (
           <div className="space-y-1">
-            <p className="text-[9px] text-mono font-bold tracking-widest uppercase text-muted-foreground/70">Estimate vs stub</p>
+            <p className="neon-heading text-[hsl(312_95%_75%)]">Estimate vs stub</p>
             <PayEstimateCard explanation={stubExplanation} covers={stubMatch?.jobs} />
           </div>
         )}
@@ -2314,7 +2314,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             this shows which line it is. */}
         {stubComparison && (
           <div className="rounded-md border border-border bg-secondary/10 p-3 space-y-2">
-            <p className="text-[9px] text-mono font-bold tracking-widest uppercase text-muted-foreground/70">Stub vs Calculated</p>
+            <p className="neon-heading text-[hsl(312_95%_75%)]">Stub vs Calculated</p>
             <div className="grid grid-cols-[1fr_auto_auto] gap-x-2 gap-y-1 items-baseline text-[11px] text-mono">
               <span className="text-[9px] uppercase tracking-wider text-muted-foreground/50" />
               <span className="text-[9px] uppercase tracking-wider text-muted-foreground/50 text-right">Stub</span>
@@ -2475,7 +2475,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
         {editing && (
         <>
         <div className="space-y-3">
-          <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/50 uppercase">Update Job</p>
+          <p className="neon-heading text-[hsl(312_95%_75%)]">Update Job</p>
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Employer</label>
             <Input value={client} onChange={e => setClient(e.target.value)} placeholder="e.g. Live Nation" className="h-9 text-sm" />
@@ -2523,7 +2523,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             </label>
             {!nightPremiumConfirmed && (
               <div className="pl-6 space-y-1">
-                <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">
+                <label className="neon-label text-[hsl(188_95%_72%)]">
                   Was any of it actually worked? (0 = none)
                 </label>
                 <div className="flex items-center gap-2">
@@ -3549,7 +3549,7 @@ export default function CalendarPage() {
           {(monthConfs.length > 0 || nextConference) && (
           <div className="mt-4" data-testid="month-conferences">
             <div className="flex items-center justify-between px-1 pb-1 border-b border-border/30">
-              <span className="flex items-center gap-1 text-[9px] text-mono uppercase tracking-widest text-muted-foreground/50">
+              <span className="flex items-center gap-1 neon-label text-[hsl(188_95%_72%)]">
                 <Presentation size={10} aria-hidden /> Conferences
               </span>
             </div>
@@ -3625,7 +3625,7 @@ export default function CalendarPage() {
             })}
           </div>
           <div className="mt-4 rounded-md border border-border/40 bg-secondary/10 p-3">
-            <p className="text-[9px] font-body uppercase tracking-widest text-muted-foreground/50 mb-2">{currentYear} Total</p>
+            <p className="neon-heading text-[hsl(312_95%_75%)] mb-2">{currentYear} Total</p>
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">{yearStats.totalJobs > 0 ? `${yearStats.totalJobs} job${yearStats.totalJobs !== 1 ? 's' : ''}` : 'No jobs yet'}</span>
               <div className="flex items-center gap-3">
@@ -3649,7 +3649,7 @@ export default function CalendarPage() {
       {/* ── Week by week ──────────────────────────────────────────────────── */}
       {weekRows.some(w => w.shifts > 0) && (
         <div className="mt-4 rounded-md border border-border/40 bg-secondary/10 p-3" data-testid="week-by-week">
-          <p className="text-[9px] font-body uppercase tracking-widest text-muted-foreground/50 mb-2">
+          <p className="neon-heading text-[hsl(312_95%_75%)] mb-2">
             Week by week · {format(currentDate, 'MMMM')} · est. {payView === 'gross' ? 'gross' : 'net'}
           </p>
           <div className="divide-y divide-border/30">
@@ -3685,7 +3685,7 @@ export default function CalendarPage() {
       <div className="mt-4 grid grid-cols-2 gap-2">
         {[monthYtdStats.month, monthYtdStats.ytd].map(period => (
           <div key={period.label} className="rounded-md border border-border/40 bg-secondary/10 p-3">
-            <p className="text-[9px] font-body uppercase tracking-widest text-muted-foreground/50 mb-2">{period.label}</p>
+            <p className="neon-heading text-[hsl(312_95%_75%)] mb-2">{period.label}</p>
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Hours</span>
@@ -3888,7 +3888,7 @@ export default function CalendarPage() {
 
                 {selectedConferences.length > 0 && (
                   <div className="pt-2 border-t border-border space-y-2" data-testid="day-conferences">
-                    <p className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Conferences</p>
+                    <p className="neon-label text-[hsl(188_95%_72%)]">Conferences</p>
                     {selectedConferences.map(c => {
                       const d = c.dates.find(x => x.start <= selectedDate! && x.end >= selectedDate!);
                       return (
@@ -3908,7 +3908,7 @@ export default function CalendarPage() {
                 {/* ── Personal events ─────────────────────────────────────── */}
                 {(selectedEvents.length > 0 || addingEventDate === selectedDate) && (
                   <div className="pt-2 border-t border-border space-y-2">
-                    <p className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Plans</p>
+                    <p className="neon-label text-[hsl(188_95%_72%)]">Plans</p>
                     {selectedEvents.map(ev => (
                       editingEventId === ev.id ? (
                         <EventForm

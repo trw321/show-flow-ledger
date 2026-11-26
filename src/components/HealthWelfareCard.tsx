@@ -69,7 +69,7 @@ export default function HealthWelfareCard({ collapsible = false }: { collapsible
       </div>
 
       <div className="space-y-2.5" data-testid="hw-periods">
-        <p className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Your months and the quarters they pay for</p>
+        <p className="neon-label text-[hsl(188_95%_72%)]">Your months and the quarters they pay for</p>
         {periods.map(({ p, running, gross }) => {
           const s = quarterStanding(gross);
           const percent = Math.min(100, (gross / LOCAL16_HW.quarterEarnings) * 100);
@@ -108,7 +108,7 @@ export default function HealthWelfareCard({ collapsible = false }: { collapsible
       </div>
 
       <div className="space-y-1">
-        <p className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">The plan in brief</p>
+        <p className="neon-label text-[hsl(188_95%_72%)]">The plan in brief</p>
         {LOCAL16_HW.summary.map(section => (
           <details key={section.title} className="text-[11px]">
             <summary className="cursor-pointer font-medium">{section.title}</summary>

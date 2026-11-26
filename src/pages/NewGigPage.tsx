@@ -150,7 +150,7 @@ function ShiftCard({
       {expanded && (
         <div className="border-t border-border px-3 pb-3 pt-3 flex flex-col gap-2">
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Employer</label>
+            <label className="neon-label text-[hsl(188_95%_72%)]">Employer</label>
             <EmployerCombobox
               value={job.client}
               onChange={v => onChange('client', v)}
@@ -176,7 +176,7 @@ function ShiftCard({
               { label: 'Steward', field: 'steward' as const, value: job.steward ?? '', type: 'text' },
             ].map(({ label, field, value, type, placeholder }) => (
               <div key={field} className="flex flex-col gap-1">
-                <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">
+                <label className="neon-label text-[hsl(188_95%_72%)]">
                   {label}
                 </label>
                 <Input
@@ -948,7 +948,7 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
 
               {/* Employer — full width, up top */}
               <div className="flex flex-col gap-1">
-               <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Employer</label>
+               <label className="neon-label text-[hsl(188_95%_72%)]">Employer</label>
                 <EmployerCombobox
                   value={manual.client}
                   onChange={v => handleManualChange('client', v)}
@@ -973,7 +973,7 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
 
                 {/* Left — calendar */}
                 <div className="flex flex-col gap-1 flex-shrink-0">
-                  <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">
+                  <label className="neon-label text-[hsl(188_95%_72%)]">
                     Days <span className="text-lime-400">*</span> <span className="normal-case tracking-normal">— tap one or more</span>
                   </label>
                   <div
@@ -1002,7 +1002,7 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
                 {/* Right — fields stacked */}
                 <div className="flex flex-col gap-2 flex-1 sm:pt-6">
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Call time <span className="inline-block w-1.5 h-1.5 rounded-full bg-lime-400 mb-0.5 ml-0.5" /></label>
+                    <label className="neon-label text-[hsl(188_95%_72%)]">Call time <span className="inline-block w-1.5 h-1.5 rounded-full bg-lime-400 mb-0.5 ml-0.5" /></label>
                     <Input
                       value={manual.startTime}
                       onChange={e => handleManualChange('startTime', e.target.value)}
@@ -1011,7 +1011,7 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
                     />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Rate ($/hr) <span className="inline-block w-1.5 h-1.5 rounded-full bg-lime-400 mb-0.5 ml-0.5" /></label>
+                    <label className="neon-label text-[hsl(188_95%_72%)]">Rate ($/hr) <span className="inline-block w-1.5 h-1.5 rounded-full bg-lime-400 mb-0.5 ml-0.5" /></label>
                     <Input
                       type="number"
                       step="0.01"
@@ -1023,7 +1023,7 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
                     {manual.dayRate && <p className="text-[10px] text-mono text-muted-foreground">${manual.dayRate} a day for this role</p>}
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Role</label>
+                    <label className="neon-label text-[hsl(188_95%_72%)]">Role</label>
                     <Input
                       value={manual.position}
                       onChange={e => handleManualChange('position', e.target.value)}
@@ -1032,7 +1032,7 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
                     />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Event name</label>
+                    <label className="neon-label text-[hsl(188_95%_72%)]">Event name</label>
                     <Input
                       value={manual.name}
                       onChange={e => handleManualChange('name', e.target.value)}
@@ -1041,7 +1041,7 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
                     />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Venue</label>
+                    <label className="neon-label text-[hsl(188_95%_72%)]">Venue</label>
                     <Input
                       value={manual.venue}
                       onChange={e => handleManualChange('venue', e.target.value)}
@@ -1050,7 +1050,7 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
                     />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Payroll co.</label>
+                    <label className="neon-label text-[hsl(188_95%_72%)]">Payroll co.</label>
                     <Input
                       value={manual.payrollCompany}
                       onChange={e => handleManualChange('payrollCompany', e.target.value)}
@@ -1059,7 +1059,7 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
                     />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Contract</label>
+                    <label className="neon-label text-[hsl(188_95%_72%)]">Contract</label>
                     <Input
                       value={manual.contract}
                       onChange={e => handleManualChange('contract', e.target.value)}
@@ -1247,7 +1247,7 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
                       which box was which. */}
                   <div className="grid grid-cols-2 gap-2">
                     <div className="flex flex-col gap-1 min-w-0">
-                      <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Employer</label>
+                      <label className="neon-label text-[hsl(188_95%_72%)]">Employer</label>
                       <EmployerCombobox
                         value={batchEdit.client}
                         onChange={v => setBatchEdit(b => ({ ...b, client: v }))}
@@ -1264,7 +1264,7 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
                       />
                     </div>
                     <div className="flex flex-col gap-1 min-w-0">
-                      <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Payroll co.</label>
+                      <label className="neon-label text-[hsl(188_95%_72%)]">Payroll co.</label>
                       <Input
                         placeholder={sharedSelected.payrollCompany === null ? 'varies' : ''}
                         value={batchEdit.payrollCompany}
@@ -1273,7 +1273,7 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
                       />
                     </div>
                     <div className="flex flex-col gap-1 min-w-0">
-                      <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Venue</label>
+                      <label className="neon-label text-[hsl(188_95%_72%)]">Venue</label>
                       <Input
                         placeholder={sharedSelected.venue === null ? 'varies' : ''}
                         value={batchEdit.venue}
@@ -1282,7 +1282,7 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
                       />
                     </div>
                     <div className="flex flex-col gap-1 min-w-0">
-                      <label className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Rate ($/hr)</label>
+                      <label className="neon-label text-[hsl(188_95%_72%)]">Rate ($/hr)</label>
                       <Input
                         type="number"
                         step="0.01"

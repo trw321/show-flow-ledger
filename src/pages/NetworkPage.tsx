@@ -171,7 +171,7 @@ export default function NetworkPage() {
           <div className="space-y-1">
             {markets.map(({ market, people }) => (
               <div key={market} className="space-y-1 pt-1">
-                <p className="flex items-center gap-1 text-[10px] text-mono uppercase tracking-wider text-muted-foreground">
+                <p className="flex items-center gap-1 neon-label text-[hsl(188_95%_72%)]">
                   <MapPin size={11} aria-hidden /> {market} · {people.length}
                 </p>
                 {people.map(c => (
@@ -241,7 +241,7 @@ export default function NetworkPage() {
             </DialogHeader>
             <div className="space-y-3">
               <div className="space-y-1">
-                <span className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Their emoji</span>
+                <span className="neon-label text-[hsl(188_95%_72%)]">Their emoji</span>
                 <div className="grid grid-cols-8 gap-1">
                   {CONTACT_EMOJIS.map(e => (
                     <button key={e} type="button" onClick={() => setEditing({ ...editing, draft: { ...editing.draft, emoji: e } })} aria-pressed={editing.draft.emoji === e}
@@ -264,14 +264,14 @@ export default function NetworkPage() {
                 ['country', 'Country', 'USA', 'text'],
               ] as const).map(([key, label, placeholder, type]) => (
                 <label key={key} className="block space-y-1">
-                  <span className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">{label}</span>
+                  <span className="neon-label text-[hsl(188_95%_72%)]">{label}</span>
                   <Input type={type} value={editing.draft[key] ?? ''} placeholder={placeholder} list={key === 'company' ? 'network-companies' : undefined}
                     onChange={e => setEditing({ ...editing, draft: { ...editing.draft, [key]: e.target.value } })} />
                 </label>
               ))}
               <datalist id="network-companies">{companies.map(c => <option key={c} value={c} />)}</datalist>
               <label className="block space-y-1">
-                <span className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Notes</span>
+                <span className="neon-label text-[hsl(188_95%_72%)]">Notes</span>
                 <Textarea value={editing.draft.notes ?? ''} placeholder="Where you met, what they hire for" rows={3}
                   onChange={e => setEditing({ ...editing, draft: { ...editing.draft, notes: e.target.value } })} />
               </label>

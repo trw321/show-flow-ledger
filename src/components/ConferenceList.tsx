@@ -28,7 +28,7 @@ interface Draft {
   notes: string;
 }
 
-const label = 'text-[10px] text-mono uppercase tracking-wider text-muted-foreground';
+const label = 'neon-label text-[hsl(188_95%_72%)]';
 const gold = (alpha = 1) => (alpha === 1 ? `hsl(${CONFERENCE_COLOUR})` : `hsl(${CONFERENCE_COLOUR} / ${alpha})`);
 // Drawn by the app, not the browser: Safari's own select is white, with the theme's light text on it.
 const selectClass = 'h-10 w-full appearance-none rounded-md border border-input bg-background pl-2 pr-7 text-sm text-foreground [color-scheme:dark]';

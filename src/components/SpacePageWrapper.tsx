@@ -30,7 +30,7 @@ export default function SpacePageWrapper({ title, description, action, children,
         <div className={cn('flex items-start justify-between gap-3', title ? 'mb-4 md:mb-6' : 'mb-2')}>
           <div className="min-w-0 flex-1">
             {typeof title === 'string'
-              ? <h1 className="text-xs text-mono uppercase tracking-widest text-foreground/60 font-medium">{title}</h1>
+              ? <h1 className="neon-title text-lg font-display tracking-wide leading-none">{title}</h1>
               : title}
             {description && <p className="text-[11px] text-muted-foreground font-body mt-0.5">{description}</p>}
             {action && <div className="mt-2 flex flex-wrap gap-2">{action}</div>}

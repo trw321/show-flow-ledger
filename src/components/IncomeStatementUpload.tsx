@@ -552,7 +552,7 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
 
                       <div className="mt-2 space-y-3">
                         <div className="min-w-0">
-                          <p className="mb-1 text-[9px] text-mono uppercase tracking-widest text-muted-foreground">Read from the photo · fix anything it got wrong</p>
+                          <p className="mb-1 neon-label text-[hsl(188_95%_72%)]">Read from the photo · fix anything it got wrong</p>
                           <dl className="space-y-1 text-[11px]">
                             <Read label="Paid by" value={txn.client} />
                             <div className="flex flex-wrap items-center gap-1.5">
@@ -592,7 +592,7 @@ export default function IncomeStatementUpload({ externalOpen, onExternalOpenChan
                           </dl>
                         </div>
                         <div className="min-w-0">
-                          <p className="mb-1 text-[9px] text-mono uppercase tracking-widest text-muted-foreground">Which project it paid · tap to pick</p>
+                          <p className="mb-1 neon-label text-[hsl(188_95%_72%)]">Which project it paid · tap to pick</p>
                           {(options[i] ?? []).length > 0 ? (
                             <div className="space-y-1.5">
                               {options[i].map((opt, k) => (

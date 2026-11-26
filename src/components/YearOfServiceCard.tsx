@@ -57,7 +57,7 @@ export default function YearOfServiceCard({ rule, collapsible = false }: { rule:
       <div className={open ? 'space-y-3' : 'hidden'} data-testid="yos-body">
       <div className="space-y-1">
         <div className="flex items-baseline justify-between">
-          <span className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Earnings</span>
+          <span className="neon-label text-[hsl(188_95%_72%)]">Earnings</span>
           <span className="text-sm font-bold text-mono">{money(earned.gross)} <span className="text-muted-foreground font-normal">of {money(rule.earnings)}</span></span>
         </div>
         <div className="h-2 w-full overflow-hidden rounded-full bg-secondary" aria-hidden>
@@ -71,7 +71,7 @@ export default function YearOfServiceCard({ rule, collapsible = false }: { rule:
 
       <div className="space-y-2">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-          <span className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Training</span>
+          <span className="neon-label text-[hsl(188_95%_72%)]">Training</span>
           <span className="text-xs text-mono font-bold">{finished} of {items.length} done · by Dec 31</span>
         </div>
         {rule.training.map(group => (

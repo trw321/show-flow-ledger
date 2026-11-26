@@ -313,7 +313,7 @@ export default function ExpensesPage() {
       </div>
 
       {data.expenses.length === 0 ? (
-        <div className="rounded-2xl border border-border/40 bg-secondary/10 p-8 text-center">
+        <div className="neon-well p-8 text-center">
           <Receipt size={28} className="text-muted-foreground/30 mx-auto mb-3" />
           <p className="text-sm text-muted-foreground">No expenses yet</p>
           <p className="text-xs text-muted-foreground/60 mt-1">Tap Add expense to scan a receipt or type one in.</p>

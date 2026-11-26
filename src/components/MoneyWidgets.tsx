@@ -55,10 +55,10 @@ export function PaySummaryTable({ rows, jobs, employers }: { rows: PeriodStat[];
   const years = Array.from({ length: 6 }, (_, i) => now.getFullYear() - 4 + i);
 
   return (
-    <div className="mb-6 rounded-md border border-border overflow-x-auto">
+    <div className="mb-6 neon-well overflow-x-auto">
       <table className="w-full text-xs">
         <thead>
-          <tr className="bg-foreground/5 text-muted-foreground text-[10px] uppercase tracking-wider">
+          <tr className="neon-label text-[hsl(188_95%_72%)]">
             <th className="text-left font-medium py-2 px-1.5">Period</th>
             <th className="text-right font-medium py-2 px-1.5">Gross</th>
             <th className="text-right font-medium py-2 px-1.5">Net</th>
@@ -123,7 +123,7 @@ export function HoursMeter({ jobs }: { jobs: Job[] }) {
   return (
     <div className="mb-6 rounded-md border border-border bg-background/30 p-3">
       <div className="flex items-baseline justify-between mb-2">
-        <p className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground">
+        <p className="neon-label text-[hsl(188_95%_72%)]">
           Hours a day · {format(new Date(), 'MMMM')}
         </p>
         <p className="text-[9px] text-mono text-muted-foreground/60">{worked} day{worked !== 1 ? 's' : ''} · longest {Math.round(peak)}h</p>

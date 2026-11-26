@@ -229,7 +229,7 @@ export default function EventIntake({ date, onCancel, onSaveMany }: Props) {
         <Input placeholder="What's the plan?" value={title} onChange={e => setTitle(e.target.value)} className="h-8 text-sm" />
 
         <div className="flex flex-col gap-1.5">
-          <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Repeats on <span className="opacity-60">— leave blank for a one-off</span></label>
+          <label className="neon-label text-[hsl(188_95%_72%)]">Repeats on <span className="opacity-60">— leave blank for a one-off</span></label>
           <div className="flex gap-1.5">
             {DAYS.map(d => (
               <button
@@ -252,11 +252,11 @@ export default function EventIntake({ date, onCancel, onSaveMany }: Props) {
 
         <div className="grid grid-cols-2 gap-2">
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">From</label>
+            <label className="neon-label text-[hsl(188_95%_72%)]">From</label>
             <Input type="date" value={rangeStart} onChange={e => setRangeStart(e.target.value)} className="h-8 text-xs" />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-body uppercase tracking-wider text-muted-foreground">Through</label>
+            <label className="neon-label text-[hsl(188_95%_72%)]">Through</label>
             <Input type="date" value={rangeEnd} onChange={e => setRangeEnd(e.target.value)} className="h-8 text-xs" />
           </div>
         </div>

@@ -19,7 +19,7 @@ import { Link } from 'react-router-dom';
  */
 
 const FIELD = 'h-9 text-sm text-mono';
-const LABEL = 'text-[10px] text-mono uppercase tracking-wider text-muted-foreground';
+const LABEL = 'neon-label text-[hsl(188_95%_72%)]';
 
 export default function TaxAndLocalsSettings() {
   const { prefs, setPayer } = useUserPrefs();
@@ -62,8 +62,8 @@ export default function TaxAndLocalsSettings() {
   return (
     <div className="space-y-6">
       {/* ── Your tax ──────────────────────────────────────────────────── */}
-      <details className="group rounded-xl border border-border bg-card px-3 py-2.5">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-[9px] text-mono font-bold tracking-widest text-muted-foreground/60 uppercase">
+      <details className="group neon-well px-3 py-2.5">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 neon-heading text-[hsl(312_95%_75%)]">
           Tax & year-end budget
           <span className="text-[10px] font-normal normal-case tracking-normal">{budgetYear} estimate</span>
         </summary>
@@ -241,7 +241,7 @@ export default function TaxAndLocalsSettings() {
       {/* ── Your locals ───────────────────────────────────────────────── */}
       <section>
         <div className="flex items-center justify-between mb-3">
-          <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/60 uppercase">
+          <p className="neon-heading text-[hsl(312_95%_75%)]">
             Your locals
           </p>
           <button

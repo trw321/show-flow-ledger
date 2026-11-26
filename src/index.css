@@ -190,11 +190,15 @@
   /* A panel with a lit top-left and a hard shadow below right, which is how
      a raised cell reads without a gradient or a blur anywhere near it. */
   .pixel-panel {
-    background: hsl(var(--card));
-    border: 1px solid hsl(var(--border));
+    /* The unemployment claim's look, app-wide: a dark well with a pink neon
+       tube round it and a cyan haze inside (the same as .neon-well below).
+       The border stays, clear, so nothing that sits in one moves. */
+    background: #0b0614;
+    border: 1px solid transparent;
     box-shadow:
-      inset 1px 1px 0 hsl(var(--base-h) 30% 50% / 0.22),
-      3px 3px 0 hsl(var(--base-h) 60% 6% / 0.55);
+      inset 0 0 0 1px hsl(312 95% 68% / 0.75),
+      0 0 8px hsl(312 100% 65% / 0.35),
+      inset 0 0 14px hsl(188 100% 55% / 0.18);
   }
 
   /* The same cell pressed in rather than raised — for wells, meters and

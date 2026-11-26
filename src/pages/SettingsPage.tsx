@@ -100,7 +100,7 @@ function AccountSection() {
 
   return (
     <section>
-      <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/60 uppercase mb-3">
+      <p className="neon-heading text-[hsl(312_95%_75%)] mb-3">
         Sync
       </p>
       {user ? (
@@ -172,7 +172,7 @@ function AccountSection() {
           </button>
         </div>
       ) : (
-        <div className="rounded-2xl border border-border bg-card p-4 space-y-2">
+        <div className="neon-well p-4 space-y-2">
           <div className="flex items-center gap-2">
             <CloudOff size={16} className="text-muted-foreground shrink-0" />
             <p className="text-sm font-semibold">Not backed up</p>
@@ -199,7 +199,7 @@ function AccountSection() {
           without an account and is unaffected by any of the above. */}
       <button
         onClick={() => navigate('/pattern-auth')}
-        className="mt-2 w-full flex items-center justify-between gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-left hover:border-primary/40 transition-colors"
+        className="mt-2 w-full flex items-center justify-between gap-2 neon-well px-4 py-2.5 text-left hover:border-primary/40 transition-colors"
       >
         <span>
           <span className="text-xs font-medium block">Pattern lock</span>
@@ -235,7 +235,7 @@ export default function SettingsPage() {
 
       {/* User profile */}
       <section>
-        <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/60 uppercase mb-3">
+        <p className="neon-heading text-[hsl(312_95%_75%)] mb-3">
           User
         </p>
         <div className="grid grid-cols-3 gap-3">
@@ -269,7 +269,7 @@ export default function SettingsPage() {
         )}
       </section>
 
-      <section className="flex items-center justify-between gap-4 rounded-xl border border-border bg-card px-4 py-3">
+      <section className="flex items-center justify-between gap-4 neon-well px-4 py-3">
         <div className="min-w-0">
           <p className="text-sm font-medium">AI-free mode</p>
           <p className="mt-0.5 text-[10px] text-muted-foreground">AI readers off. Manual entry and spreadsheet import still work.</p>
@@ -279,10 +279,10 @@ export default function SettingsPage() {
 
       {/* Each of Preamp's reminders, on or off. */}
       <section data-testid="reminder-settings">
-        <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/60 uppercase mb-3">
+        <p className="neon-heading text-[hsl(312_95%_75%)] mb-3">
           Reminders
         </p>
-        <div className="rounded-2xl border border-border overflow-hidden divide-y divide-border/50">
+        <div className="neon-well overflow-hidden divide-y divide-[hsl(312_95%_68%/0.25)]">
           {REMINDER_ORDER.map(kind => {
             const { label, description } = REMINDER_LABELS[kind];
             const on = reminderOn(prefs.reminders, kind);
@@ -310,10 +310,10 @@ export default function SettingsPage() {
 
       {/* Section toggles */}
       <section>
-        <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/60 uppercase mb-3">
+        <p className="neon-heading text-[hsl(312_95%_75%)] mb-3">
           Visible Sections
         </p>
-        <div className="rounded-2xl border border-border overflow-hidden divide-y divide-border/50">
+        <div className="neon-well overflow-hidden divide-y divide-[hsl(312_95%_68%/0.25)]">
           {TAB_ORDER.map(tab => {
             const { label, description } = TAB_LABELS[tab];
             const enabled = prefs.tabs[tab];
@@ -347,8 +347,8 @@ export default function SettingsPage() {
       </section>
 
       {/* What the presets do */}
-      <section className="rounded-2xl border border-border/40 bg-secondary/10 p-4 space-y-2">
-        <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/50 uppercase">
+      <section className="neon-well p-4 space-y-2">
+        <p className="neon-heading text-[hsl(312_95%_75%)]">
           Preset Differences
         </p>
         <div className="grid grid-cols-3 gap-3 text-[10px] text-muted-foreground">
@@ -373,7 +373,7 @@ export default function SettingsPage() {
       {/* Employers */}
       <section>
         <div className="flex items-center justify-between mb-3">
-          <p className="text-[9px] text-mono font-bold tracking-widest text-muted-foreground/60 uppercase">
+          <p className="neon-heading text-[hsl(312_95%_75%)]">
             Employers
           </p>
           {!addingEmployer && (
@@ -396,7 +396,7 @@ export default function SettingsPage() {
           )}
 
           {data.employers.length === 0 && !addingEmployer && (
-            <p className="text-xs text-muted-foreground rounded-xl border border-border/40 bg-secondary/10 p-4 text-center">
+            <p className="text-xs text-muted-foreground neon-well p-4 text-center">
               No saved employers yet — add one here, or quick-add from the employer field when logging a job.
             </p>
           )}
@@ -410,7 +410,7 @@ export default function SettingsPage() {
                 onCancel={() => setEditingEmployerId(null)}
               />
             ) : (
-              <div key={emp.id} className="flex items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 py-2.5">
+              <div key={emp.id} className="flex items-center justify-between gap-2 neon-well px-3 py-2.5">
                 <div className="min-w-0">
                   <p className="text-sm font-medium truncate">{emp.name}</p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">
@@ -475,14 +475,14 @@ export default function SettingsPage() {
       </section>
 
       {/* The contracts, to read and to see who is on them. */}
-      <details className="rounded-xl border border-border bg-card px-3 py-2.5 group">
-        <summary className="cursor-pointer list-none flex items-center justify-between gap-2 text-[9px] text-mono font-bold tracking-widest text-muted-foreground/60 uppercase">
+      <details className="neon-well px-3 py-2.5 group">
+        <summary className="cursor-pointer list-none flex items-center justify-between gap-2 neon-heading text-[hsl(312_95%_75%)]">
           Contracts
           <ChevronRight size={14} className="transition-transform group-open:rotate-90" />
         </summary>
         <div className="pt-3">
         {/* Built from the dispatches themselves: each shift keeps the one it was called under. */}
-        <div className="mb-3 rounded-xl border border-border bg-card px-3 py-2.5">
+        <div className="mb-3 neon-well px-3 py-2.5">
           <p className="text-sm font-medium">On your shifts</p>
           {contractsWorked(data.jobs).length === 0 ? (
             <p className="mt-1 text-[11px] text-muted-foreground">None yet. Each dispatch names its contract, and they collect here.</p>
@@ -505,7 +505,7 @@ export default function SettingsPage() {
           {CONTRACTS.map(c => {
             const on = data.employers.filter(e => e.contract === c.key);
             return (
-              <details key={c.key} className="rounded-xl border border-border bg-card px-3 py-2.5">
+              <details key={c.key} className="neon-well px-3 py-2.5">
                 <summary className="cursor-pointer text-sm font-medium">
                   {c.name} <span className="text-[11px] font-normal text-muted-foreground">{c.version}</span>
                 </summary>

@@ -29,7 +29,7 @@ import { roundHours } from '@/lib/hoursFormat';
 
 const money = (n: number) => '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const FIELD = 'h-9 text-sm';
-const LABEL = 'text-[10px] text-mono uppercase tracking-wider text-muted-foreground';
+const LABEL = 'neon-label text-[hsl(188_95%_72%)]';
 const sameClient = (a: string, b: string) => nameSimilarity(a, b) >= 0.82;
 
 type Draft = Omit<Invoice, 'id' | 'createdAt'>;
@@ -125,7 +125,7 @@ function InvoiceForm({ initial, onSave, onCancel }: {
       {/* What to bill: the client's shifts, and your crew's on them. */}
       {d.client.trim() && (
         <div className="pixel-panel space-y-1.5 p-2.5">
-          <p className="text-[10px] text-mono uppercase tracking-widest text-muted-foreground">Not billed yet · {d.client}</p>
+          <p className="neon-label text-[hsl(188_95%_72%)]">Not billed yet · {d.client}</p>
           {notAdded.length === 0 ? (
             <p className="text-[11px] text-muted-foreground">No worked shifts for {d.client} left to bill.</p>
           ) : (
@@ -290,14 +290,14 @@ export default function InvoicesPage() {
         <Collapsible open={fromOpen} onOpenChange={setFromOpen} className="pixel-panel mb-4 p-3">
           <CollapsibleTrigger className="flex w-full items-center gap-2 text-left">
             <ChevronRight size={14} className={cn('text-muted-foreground transition-transform', fromOpen && 'rotate-90')} />
-            <span className="flex-1 text-[10px] text-mono uppercase tracking-widest text-muted-foreground">Your details on invoices</span>
+            <span className="flex-1 neon-label text-[hsl(188_95%_72%)]">Your details on invoices</span>
             <span className="truncate text-[11px] text-muted-foreground">{prefs.invoiceFrom?.business ?? prefs.invoiceFrom?.name ?? 'not set'}</span>
           </CollapsibleTrigger>
           <CollapsibleContent><FromForm /></CollapsibleContent>
         </Collapsible>
 
         {invoices.length === 0 ? (
-          <div className="rounded-2xl border border-border/40 bg-secondary/10 p-8 text-center">
+          <div className="neon-well p-8 text-center">
             <FileText size={28} className="text-muted-foreground/30 mx-auto mb-3" />
             <p className="text-sm text-muted-foreground">No invoices yet</p>
             <p className="text-xs text-muted-foreground/60 mt-1">Tap New invoice, pick the client, and tick the shifts to bill.</p>

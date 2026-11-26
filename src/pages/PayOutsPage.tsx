@@ -128,15 +128,15 @@ export default function PayOutsPage() {
           Expenses, so every page is read the same way. */}
       <div className="grid grid-cols-3 gap-2 mb-4">
         <div className="pixel-panel p-3">
-          <p className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">This month</p>
+          <p className="neon-label text-[hsl(188_95%_72%)]">This month</p>
           <p className="text-xl font-bold text-mono mt-1 leading-none">${stats.monthTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
         </div>
         <div className="pixel-panel p-3">
-          <p className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">All time</p>
+          <p className="neon-label text-[hsl(188_95%_72%)]">All time</p>
           <p className="text-xl font-bold text-mono mt-1 leading-none">${stats.total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
         </div>
         <div className="pixel-panel p-3">
-          <p className="text-[10px] text-mono uppercase tracking-wider text-muted-foreground">Crew paid</p>
+          <p className="neon-label text-[hsl(188_95%_72%)]">Crew paid</p>
           <p className="text-xl font-bold text-mono mt-1 leading-none">{stats.workerCount}</p>
         </div>
       </div>
@@ -156,7 +156,7 @@ export default function PayOutsPage() {
 
       {/* Payout list */}
       {payouts.length === 0 ? (
-        <div className="rounded-2xl border border-border/40 bg-secondary/10 p-8 text-center">
+        <div className="neon-well p-8 text-center">
           <Wallet size={28} className="text-muted-foreground/30 mx-auto mb-3" />
           <p className="text-sm text-muted-foreground">No payments recorded yet</p>
           <p className="text-xs text-muted-foreground/60 mt-1">Tap Record a payment to log what you paid someone.</p>
@@ -168,7 +168,7 @@ export default function PayOutsPage() {
             return (
               <div key={month}>
                 <div className="flex items-center justify-between mb-2 px-1">
-                  <span className="text-[9px] text-mono uppercase tracking-widest text-muted-foreground/50">
+                  <span className="neon-label text-[hsl(188_95%_72%)]">
                     {format(parseISO(month + '-01'), 'MMMM yyyy')}
                   </span>
                   <span className="text-xs text-mono font-bold text-success">${monthTotal.toLocaleString()}</span>

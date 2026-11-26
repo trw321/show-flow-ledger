@@ -57,7 +57,7 @@ export default function BenefitsPage() {
         {/* The headline: are you covered, and are you on track for the next quarter. */}
         <div className="grid gap-2" data-testid="benefits-headline">
           <div className={cn('rounded-lg border-2 p-3', lastStanding.covered ? 'border-dot-paid bg-dot-paid/10' : 'border-warning bg-warning/10')}>
-            <p className="text-[10px] text-mono uppercase tracking-widest text-muted-foreground">Health &amp; welfare · coverage {last.coverageLabel}</p>
+            <p className="neon-label text-[hsl(188_95%_72%)]">Health &amp; welfare · coverage {last.coverageLabel}</p>
             <p className={cn('mt-1 text-2xl font-black leading-tight', lastStanding.covered ? 'text-dot-paid' : 'text-warning')}>
               {lastStanding.covered ? 'Covered' : 'Short'}
             </p>
@@ -67,7 +67,7 @@ export default function BenefitsPage() {
             </p>
           </div>
           <div className="rounded-lg border-2 border-primary/60 bg-primary/10 p-3">
-            <p className="text-[10px] text-mono uppercase tracking-widest text-muted-foreground">Next · coverage {now.coverageLabel}</p>
+            <p className="neon-label text-[hsl(188_95%_72%)]">Next · coverage {now.coverageLabel}</p>
             <p className="mt-1 text-2xl font-black leading-tight text-primary">
               {nowStanding.covered ? 'Already earned' : `${money(LOCAL16_HW.quarterEarnings - nowGross)} to go`}
             </p>

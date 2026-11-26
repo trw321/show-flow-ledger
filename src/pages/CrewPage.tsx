@@ -25,7 +25,7 @@ import { roundHours } from '@/lib/hoursFormat';
 const money = (n: number) => '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const shortDay = (iso: string) => format(parseISO(iso), 'EEE MMM d');
 const FIELD = 'h-9 text-sm';
-const LABEL = 'text-[10px] text-mono uppercase tracking-wider text-muted-foreground';
+const LABEL = 'neon-label text-[hsl(188_95%_72%)]';
 
 /** A shift's state, in the dot colours: paid, worked and owed, or still ahead. */
 function shiftTone(s: CrewShift): string {
@@ -462,7 +462,7 @@ export default function CrewPage() {
 
         {/* Everyone, with their shifts — like Expenses, by person. */}
         {crew.length === 0 ? (
-          <div className="rounded-2xl border border-border/40 bg-secondary/10 p-8 text-center">
+          <div className="neon-well p-8 text-center">
             <Users size={28} className="text-muted-foreground/30 mx-auto mb-3" />
             <p className="text-sm text-muted-foreground">No crew yet</p>
             <p className="text-xs text-muted-foreground/60 mt-1">Add the people who work for you, then book their days.</p>
