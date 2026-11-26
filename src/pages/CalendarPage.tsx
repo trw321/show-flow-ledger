@@ -3356,6 +3356,18 @@ export default function CalendarPage() {
             </button>
           ))}
         </div>
+        {/* Every show and conference you watch, the ones that come round
+            again each year: up here with the calendar's other controls. */}
+        <button
+          type="button"
+          onClick={() => openConferences()}
+          className="shrink-0 rounded-lg border px-2 py-1 text-[10px] text-mono font-black transition-transform active:scale-95"
+          style={{ color: conferenceColour(), borderColor: conferenceColour(0.5), backgroundColor: conferenceColour(0.1) }}
+          aria-label={conferences.length > 0 ? `Again: all ${conferences.length} shows and conferences you watch` : 'Again: watch a show or conference'}
+          data-testid="open-conferences"
+        >
+          again!
+        </button>
         {viewMode === 'month' && <CalendarKey month={format(currentDate, 'MMMM')} employers={monthEmployers} plans={monthPlans} states={SHIFT_STATES} />}
       </div>
 
@@ -3517,14 +3529,12 @@ export default function CalendarPage() {
             ))}
           </div>
 
+          {(monthConfs.length > 0 || nextConference) && (
           <div className="mt-4" data-testid="month-conferences">
             <div className="flex items-center justify-between px-1 pb-1 border-b border-border/30">
               <span className="flex items-center gap-1 text-[9px] text-mono uppercase tracking-widest text-muted-foreground/50">
                 <Presentation size={10} aria-hidden /> Conferences
               </span>
-              <button type="button" onClick={() => openConferences()} className="text-[10px] text-mono font-semibold" style={{ color: conferenceColour() }} data-testid="open-conferences">
-                {conferences.length > 0 ? `All ${conferences.length} →` : '+ Watch one'}
-              </button>
             </div>
             {monthConfs.map(({ conference: c, dates }) => (
               <button key={c.id} type="button" onClick={() => openConferences(c.id)} className="flex w-full items-center justify-between gap-2 px-1 py-1 text-left">
@@ -3541,6 +3551,7 @@ export default function CalendarPage() {
               </button>
             )}
           </div>
+          )}
         </>
       )}
 
