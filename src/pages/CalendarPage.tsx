@@ -3237,6 +3237,30 @@ export default function CalendarPage() {
   }, [data.jobs, weeks, jobsByDate, projectNameOf, projectKeyOf]);
   const employerColour = (name: string) => `hsl(${employerColourOf.get(employerId(name)) ?? EMPLOYER_COLOURS[0]})`;
 
+  // Each project's bars this month, and where its name goes: once, inside its
+  // widest bar (the first, if two tie), and only on a bar two days wide or
+  // more, so a one-day dash stays a dash and nothing crowds.
+  const monthSpans = weeks.map(spansFor);
+  const spanLabelAt = new Map<string, string>();
+  {
+    const widest = new Map<string, { at: string; width: number }>();
+    monthSpans.forEach(({ spans }, wi) => {
+      for (const s of spans) {
+        const width = s.to - s.from + 1;
+        const best = widest.get(s.key);
+        if (width >= 2 && (!best || width > best.width)) widest.set(s.key, { at: `${wi}:${s.from}`, width });
+      }
+    });
+    for (const [key, { at }] of widest) spanLabelAt.set(at, key);
+  }
+  // A project's own name for its bar: the name on its first shift, the
+  // employer's when it has none.
+  const projectTitleOf = (key: string) => {
+    const first = [...data.jobs].filter(j => (projectKeyOf.get(j.id) ?? j.id) === key && j.status !== 'cancelled')
+      .sort((a, b) => a.date.localeCompare(b.date))[0];
+    return first?.name?.trim() || projectNameOf.get(key) || '';
+  };
+
   // The month's employers, for the key: each one, its colour, and its days.
   const monthEmployers = useMemo(() => {
     const prefix = format(currentDate, 'yyyy-MM');
@@ -3502,7 +3526,7 @@ export default function CalendarPage() {
           <div className="neon-grid" data-testid="month-grid">
           {weeks.map((week, wi) => {
             // Each project's employer, once across its days in this row.
-            const { spans, levels } = spansFor(week);
+            const { spans, levels } = monthSpans[wi];
             // Top to bottom in every square: the 6th/7th-day banner (only in a
             // week that has one), the employer's name, the date, the money.
             // Every week keeps a row for names and one for money, so the
@@ -3513,16 +3537,18 @@ export default function CalendarPage() {
             // A faint line between weeks, and between days, so each square reads as one.
             <div key={wi} className="neon-week relative grid grid-cols-7">
                 {/* Each project: a bar in its employer's colour across its
-                    days, no words. Tapped, it lists the project's days. */}
+                    days, its name inside once (see spanLabelAt). Tapped, it
+                    lists the project's days. */}
                 {spans.map(span => {
                   const multi = span.to > span.from;
                   // A closed end stops short of the line between days; a
                   // one-day bar is a dash in the middle of its square.
                   const inset = (open: boolean) => (open ? 0 : multi ? 4 : 10);
                   const colour = employerColour(span.name);
+                  const title = spanLabelAt.get(`${wi}:${span.from}`) === span.key ? projectTitleOf(span.key) : '';
                   return (
                     <button key={span.key + span.from} type="button" data-testid="project-span"
-                      aria-label={`${span.name}: show this project's days`}
+                      aria-label={`${title || span.name}: show this project's days`}
                       onClick={() => setProjectShown(span.key)}
                       className="absolute z-[5] flex items-center"
                       style={{
@@ -3532,8 +3558,17 @@ export default function CalendarPage() {
                         top: 6 + banner + span.level * SPAN_ROW,
                         height: SPAN_ROW,
                       }}>
-                      <span className={cn('h-1 w-full', !span.openLeft && 'rounded-l-full', !span.openRight && 'rounded-r-full')}
-                        style={{ background: colour, boxShadow: `0 0 6px ${colour}` }} />
+                      {title ? (
+                        // The named bar: the same neon line, thick enough to hold its name.
+                        <span data-testid="project-span-name"
+                          className={cn('block h-[10px] w-full overflow-hidden whitespace-nowrap text-ellipsis px-1.5 text-center font-mono text-[7.5px] font-extrabold uppercase leading-[10px] tracking-wide text-[#10061c]', !span.openLeft && 'rounded-l-full', !span.openRight && 'rounded-r-full')}
+                          style={{ background: colour, boxShadow: `0 0 6px ${colour}` }}>
+                          {title}
+                        </span>
+                      ) : (
+                        <span className={cn('h-1 w-full', !span.openLeft && 'rounded-l-full', !span.openRight && 'rounded-r-full')}
+                          style={{ background: colour, boxShadow: `0 0 6px ${colour}` }} />
+                      )}
                     </button>
                   );
                 })}
