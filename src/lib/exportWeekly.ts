@@ -1,50 +1,21 @@
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import type { Job, Expense, Income, Employer } from './store';
-import { calculateDayPay, dayMultiplierFor, offClockMealMinutes, calculateWeeklyOvertimeBonus, calculateNightHours, nightWindowEnd, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming } from './payCalc';
+import { effectiveHoursWorked, isOverdueUpcoming, jobHoursBreakdown, jobPayBreakdown, netHoursWorked } from './payCalc';
 import { resolveEmployer } from './employerMatch';
-import { withholdsNothing } from './payerProfile';
+import { EMPTY_PROFILE, type PayerProfile } from './payerProfile';
 
-interface JobPayDetails {
-  grossPay: number;
-  duesAmount: number;
-  taxAmount: number;
-  premiumHours: number;
-}
-
-function jobPayDetails(job: Job, allJobs: Job[], employers: Employer[]): JobPayDetails {
-  const hours = effectiveHoursWorked(job);
-  if (!hours) return { grossPay: 0, duesAmount: 0, taxAmount: 0, premiumHours: 0 };
-  const rate = job.hourlyRate ?? 0;
-  const employer = resolveEmployer(job.client, employers);
-  const dayMult = dayMultiplierFor(job, employer, allJobs);
-  // The export has no contract answers, so premium stops where the employer
-  // says, or at 7 AM, the least (see premiumWindow).
-  const nightEnd = nightWindowEnd(job, employer);
-  const rawNightHours = ((employer?.nightPremiumEnabled ?? true) && job.startTime && job.endTime && nightEnd !== null)
-    ? calculateNightHours(job.startTime, job.endTime, employer?.nightPremiumStartHour ?? 0, nightEnd)
-    : 0;
-  const nightHours = resolveConfirmedNightHours(rawNightHours, job.nightPremiumConfirmed, job.nightPremiumActualHours);
-  const { totalPay, duesAmount, taxAmount, nightHours: premiumHours } = calculateDayPay(hours, rate, job.minimumHours ?? 0, job.mealPenalties ?? 0, dayMult, { duration: job.mealDuration, onClock: job.mealOnClock, offClockMinutesTotal: offClockMealMinutes(job) }, {
-    rule: employer?.overtimeRule ?? 'daily',
-    otThresholdHours: employer?.dailyOvertimeThresholdHours,
-    dtThresholdHours: employer?.dailyDoubletimeThresholdHours,
-    otMultiplier: employer?.overtimeMultiplier,
-    dtMultiplier: employer?.doubletimeMultiplier,
-    nightHours,
-    nightMultiplier: employer?.nightPremiumMultiplier,
-    unionDuesPercent: employer?.unionDuesPercent,
-    estimatedTaxPercent: withholdsNothing(employer) ? 0 : employer?.estimatedTaxPercent,
-  });
-  const weeklyBonus = employer ? calculateWeeklyOvertimeBonus(job, allJobs, employer) : 0;
-  const gross = totalPay + weeklyBonus;
-  const vacationPercent = employer?.vacationPercent ?? 0;
-  return {
-    grossPay: gross + (vacationPercent > 0 ? gross * (vacationPercent / 100) : 0),
-    duesAmount,
-    taxAmount,
-    premiumHours,
-  };
+/**
+ * A shift's figures for the spreadsheet: exactly what the app shows for it,
+ * from the same calculation (jobPayBreakdown, jobHoursBreakdown). The export
+ * used to keep its own older copy of the pay math, which left out breaking
+ * the hour, early-call and holiday premiums, split days, day rates and your
+ * locals' dues, and came out under the app. It must never have its own again.
+ */
+function jobFigures(job: Job, allJobs: Job[], employers: Employer[], payer: PayerProfile) {
+  const pay = jobPayBreakdown(job, allJobs, employers, payer);
+  const hours = jobHoursBreakdown(job, allJobs, employers, payer);
+  return { ...pay, nightHours: hours.night };
 }
 
 function downloadXLSX(rows: Record<string, string | number | undefined | null>[], fileName: string) {
@@ -59,7 +30,8 @@ function downloadXLSX(rows: Record<string, string | number | undefined | null>[]
   XLSX.writeFile(workbook, fileName);
 }
 
-export function exportWeeklyToExcel(jobs: Job[], expenses: Expense[], income: Income[], employers: Employer[] = []) {
+/** Every row of the ledger spreadsheet: shifts, expenses, and payments with no shift, by date. */
+export function ledgerRows(jobs: Job[], expenses: Expense[], income: Income[], employers: Employer[] = [], payer: PayerProfile = EMPTY_PROFILE) {
   // Paid income actually received against a job, summed — separate from the
   // estimated/expected pay the calculator produces, so the two can be
   // compared side by side instead of only ever showing one number.
@@ -74,7 +46,8 @@ export function exportWeeklyToExcel(jobs: Job[], expenses: Expense[], income: In
   const jobRows = [...jobs]
     .sort((a, b) => a.date.localeCompare(b.date))
     .map(j => {
-      const { grossPay, duesAmount, taxAmount, premiumHours } = jobPayDetails(j, jobs, employers);
+      const figures = jobFigures(j, jobs, employers, payer);
+      const worked = effectiveHoursWorked(j) > 0;
       const employer = resolveEmployer(j.client, employers);
       const actualIncome = paidByJobId.get(j.id);
       return {
@@ -86,16 +59,19 @@ export function exportWeeklyToExcel(jobs: Job[], expenses: Expense[], income: In
         'Time In': j.startTime ?? '',
         'Time Out': j.endTime ?? '',
         MPs: j.mealPenalties ?? '',
-        'Premium Hours': premiumHours || '',
+        'Premium Hours': figures.nightHours || '',
         Client: j.client,
         Venue: j.venue ?? '',
         'Payroll Company': j.payrollCompany ?? '',
         Rate: j.hourlyRate ?? '',
         'Hours Worked': netHoursWorked(j) || '',
-        'Estimated Pay': effectiveHoursWorked(j) ? grossPay.toFixed(2) : '',
+        // The same Est. gross and Est. net the app shows for the shift.
+        'Estimated Gross': worked ? figures.gross.toFixed(2) : '',
+        'Estimated Net': worked ? figures.net.toFixed(2) : '',
         'Actual Income': actualIncome !== undefined ? actualIncome.toFixed(2) : '',
-        Taxes: taxAmount > 0 ? taxAmount.toFixed(2) : '',
-        Dues: duesAmount > 0 ? duesAmount.toFixed(2) : '',
+        Taxes: figures.tax > 0 ? figures.tax.toFixed(2) : '',
+        Dues: figures.dues > 0 ? figures.dues.toFixed(2) : '',
+        Vacation: figures.vacation > 0 ? figures.vacation.toFixed(2) : '',
         Status: isOverdueUpcoming(j) ? 'needs hours' : j.status,
         'Expense Amount': '',
         'Expense Category': '',
@@ -123,10 +99,12 @@ export function exportWeeklyToExcel(jobs: Job[], expenses: Expense[], income: In
       'Payroll Company': '',
       Rate: '',
       'Hours Worked': '',
-      'Estimated Pay': '',
+      'Estimated Gross': '',
+      'Estimated Net': '',
       'Actual Income': '',
       Taxes: '',
       Dues: '',
+      Vacation: '',
       Status: '',
       'Expense Amount': e.amount.toFixed(2),
       'Expense Category': e.category,
@@ -156,10 +134,12 @@ export function exportWeeklyToExcel(jobs: Job[], expenses: Expense[], income: In
       'Payroll Company': '',
       Rate: '',
       'Hours Worked': '',
-      'Estimated Pay': '',
+      'Estimated Gross': '',
+      'Estimated Net': '',
       'Actual Income': i.amount.toFixed(2),
       Taxes: '',
       Dues: '',
+      Vacation: '',
       Status: '',
       'Expense Amount': '',
       'Expense Category': '',
@@ -172,6 +152,11 @@ export function exportWeeklyToExcel(jobs: Job[], expenses: Expense[], income: In
     a.Date.localeCompare(b.Date)
   );
 
+  return allRows;
+}
+
+/** The ledger as an Excel file: see ledgerRows. */
+export function exportWeeklyToExcel(jobs: Job[], expenses: Expense[], income: Income[], employers: Employer[] = [], payer: PayerProfile = EMPTY_PROFILE) {
   const fileName = `AV-Ledger-${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
-  downloadXLSX(allRows, fileName);
+  downloadXLSX(ledgerRows(jobs, expenses, income, employers, payer), fileName);
 }

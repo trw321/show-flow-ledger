@@ -3805,7 +3805,7 @@ export default function CalendarPage() {
       </div>
 
       <button
-        onClick={() => exportWeeklyToExcel(data.jobs, data.expenses, data.income, data.employers)}
+        onClick={() => exportWeeklyToExcel(data.jobs, data.expenses, data.income, data.employers, prefs.payer)}
         className="mt-2 w-full flex items-center justify-center gap-2 rounded-md border border-border/40 bg-secondary/10 hover:bg-secondary/20 py-2.5 px-4 text-xs font-semibold text-foreground transition-colors"
       >
         <Download size={14} />

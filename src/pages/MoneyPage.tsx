@@ -745,7 +745,7 @@ export default function MoneyPage() {
         );
       })()}
 
-      <ExportButton onClick={() => exportWeeklyToExcel(data.jobs, data.expenses, data.income, data.employers)} />
+      <ExportButton onClick={() => exportWeeklyToExcel(data.jobs, data.expenses, data.income, data.employers, prefs.payer)} />
 
       {/* ── Every payment ──────────────────────────────────────────────────────
           Per project, pay is on the Calendar now. This is the plain record of
