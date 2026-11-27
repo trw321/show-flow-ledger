@@ -5,6 +5,9 @@ import StubEditor from '@/components/StubEditor';
 import MoneyRain from '@/components/MoneyRain';
 import NightBurst from '@/components/NightBurst';
 import { HOLIDAY_EMOJIS } from '@/lib/burstEmojis';
+import PickList from '@/components/PickList';
+import { isUnclearEmployer } from '@/lib/unemployment';
+import { knownEmployers, knownPayrolls, payrollFor } from '@/lib/whoSuggest';
 import LiveWorkPay from '@/components/LiveWorkPay';
 import PreampSheet, { PreampGroup } from '@/components/PreampSheet';
 import { useNavigate } from 'react-router-dom';
@@ -1266,6 +1269,53 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   const extraMealsToSave = extraMeals.filter((m): m is NonNullable<Job['extraMeals']>[number] => m.duration !== undefined);
   const extraMealsChanged = JSON.stringify(extraMealsToSave) !== JSON.stringify(job.extraMeals ?? []);
 
+  // The employer and payroll boxes at the top of the shift, changed in place:
+  // saved the moment you pick or press Save, with Undo on the toast.
+  const [whoEdit, setWhoEdit] = useState<'client' | 'payroll' | null>(null);
+  const [whoDraft, setWhoDraft] = useState('');
+  const openWho = (kind: 'client' | 'payroll') => {
+    if (whoEdit === kind) { setWhoEdit(null); return; }
+    const now = kind === 'client' ? client.trim() || job.client || '' : payrollCompany.trim();
+    setWhoDraft(kind === 'client' && isUnclearEmployer(now) ? '' : now);
+    setWhoEdit(kind);
+  };
+  const saveWho = (kind: 'client' | 'payroll', typed: string) => {
+    const value = typed.trim();
+    setWhoEdit(null);
+    const before = { client: job.client, payrollCompany: job.payrollCompany, needsReview: job.needsReview };
+    const undo = () => {
+      void updateJobDirect(job.id, before);
+      setClient(before.client ?? '');
+      setPayrollCompany(before.payrollCompany ?? '');
+      setNeedsReview(before.needsReview ?? false);
+    };
+    if (kind === 'client') {
+      if (!value || value === (job.client ?? '')) return;
+      const updates: Partial<Job> = { client: value };
+      // Someone you've worked for: the payroll company it went through last
+      // time comes with it, when this shift has none, or only the one that
+      // came with the old employer (itself, or who paid it last time). A
+      // payroll company set some other way stays.
+      const now = payrollCompany.trim().toLowerCase();
+      const oldClient = (job.client ?? '').trim();
+      const cameWithOld = !now || now === oldClient.toLowerCase() || now === (payrollFor(oldClient, data.jobs, data.employers) ?? '').toLowerCase();
+      const goesWith = cameWithOld ? payrollFor(value, data.jobs, data.employers) : undefined;
+      if (goesWith) updates.payrollCompany = goesWith;
+      void updateJobDirect(job.id, updates);
+      setClient(value);
+      if (goesWith) setPayrollCompany(goesWith);
+      toast.success(`Employer: ${value}${goesWith && goesWith.toLowerCase() !== value.toLowerCase() ? ` · paid through ${goesWith}` : ''}`, { duration: 8000, action: { label: 'Undo', onClick: undo } });
+      return;
+    }
+    if (value === (job.payrollCompany ?? '')) return;
+    const updates: Partial<Job> = { payrollCompany: value || undefined };
+    // The "check this later" the app set for an assumed payroll company is answered.
+    if (job.needsReview && reviewReason(job).kind === 'payroll') { updates.needsReview = undefined; setNeedsReview(false); }
+    void updateJobDirect(job.id, updates);
+    setPayrollCompany(value);
+    toast.success(value ? `Payroll: ${value}` : 'Payroll company cleared', { duration: 8000, action: { label: 'Undo', onClick: undo } });
+  };
+
   const employerChanged = client.trim() !== (job.client ?? '') && client.trim() !== '';
   const projectSiblings = employerChanged
     ? projectSiblingsToRelabel(job, job.client ?? '', data.jobs)
@@ -1452,18 +1502,34 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
         </div>
         {/* Who you worked for and who pays you, side by side as soon as the
             shift opens: on union work they're two companies, and the check
-            comes from the payroll one. */}
-        {(client.trim() || job.client) && (
-          <div className="grid grid-cols-2 gap-2 text-left" data-testid="shift-who">
-            <div className="min-w-0 rounded-md border border-border bg-secondary/20 px-2.5 py-1.5">
-              <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">Employer</p>
-              <p className="text-xs font-bold leading-snug break-words" data-testid="shift-employer">{client.trim() || job.client}</p>
-            </div>
-            <div className="min-w-0 rounded-md border border-[hsl(312_95%_75%/0.5)] bg-[hsl(312_95%_75%/0.08)] px-2.5 py-1.5">
-              <p className="text-[9px] font-semibold uppercase tracking-widest text-[hsl(312_95%_75%)]">Payroll</p>
-              <p className={cn('text-xs leading-snug break-words', payrollCompany.trim() ? 'font-bold' : 'text-muted-foreground')} data-testid="shift-payroll">
-                {payrollCompany.trim() || 'Not on file'}
-              </p>
+            comes from the payroll one. Tap either to change it right here:
+            it saves at once, with Undo, no scrolling down to Edit shift. */}
+        <div className="grid grid-cols-2 gap-2 text-left" data-testid="shift-who">
+          <button type="button" onClick={() => openWho('client')} aria-label="Change the employer"
+            className={cn('min-w-0 rounded-md border bg-secondary/20 px-2.5 py-1.5 text-left active:opacity-80', whoEdit === 'client' ? 'border-[hsl(188_95%_62%)]' : 'border-border')}>
+            <p className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">Employer <Pencil size={9} aria-hidden /></p>
+            <p className={cn('text-xs leading-snug break-words', isUnclearEmployer(client.trim() || job.client || '') ? 'text-warning font-semibold' : 'font-bold')} data-testid="shift-employer">
+              {isUnclearEmployer(client.trim() || job.client || '') ? 'Not set: tap to pick' : client.trim() || job.client}
+            </p>
+          </button>
+          <button type="button" onClick={() => openWho('payroll')} aria-label="Change the payroll company"
+            className={cn('min-w-0 rounded-md border bg-[hsl(312_95%_75%/0.08)] px-2.5 py-1.5 text-left active:opacity-80', whoEdit === 'payroll' ? 'border-[hsl(188_95%_62%)]' : 'border-[hsl(312_95%_75%/0.5)]')}>
+            <p className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-widest text-[hsl(312_95%_75%)]">Payroll <Pencil size={9} aria-hidden /></p>
+            <p className={cn('text-xs leading-snug break-words', payrollCompany.trim() ? 'font-bold' : 'text-muted-foreground')} data-testid="shift-payroll">
+              {payrollCompany.trim() || 'Not on file'}
+            </p>
+          </button>
+        </div>
+        {whoEdit && (
+          <div className="neon-well space-y-2 p-2.5 text-left" data-testid="who-editor">
+            <p className="neon-label text-[hsl(188_95%_72%)]">{whoEdit === 'client' ? 'Who you worked for' : 'Who paid you'}</p>
+            <PickList value={whoDraft} onChange={setWhoDraft} onPick={name => saveWho(whoEdit, name)} autoFocus testId="who-input"
+              options={whoEdit === 'client' ? knownEmployers(data.jobs, data.employers).map(k => k.name) : knownPayrolls(data.jobs, data.employers)}
+              placeholder={whoEdit === 'client' ? 'Type or pick an employer' : 'Type or pick a payroll company'} />
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setWhoEdit(null)} className="pixel-button pick-off flex-1 py-1.5 text-xs font-bold text-mono">Cancel</button>
+              <button type="button" onClick={() => saveWho(whoEdit, whoDraft)} disabled={whoEdit === 'client' && !whoDraft.trim()} data-testid="who-save"
+                className="pixel-button pick-on flex-1 py-1.5 text-xs font-bold text-mono disabled:opacity-40">Save</button>
             </div>
           </div>
         )}

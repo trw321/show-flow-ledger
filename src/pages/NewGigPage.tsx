@@ -1,5 +1,7 @@
 import { Calendar } from '@/components/ui/calendar';
 import { resolveEmployer } from '@/lib/employerMatch';
+import { isUnclearEmployer } from '@/lib/unemployment';
+import { knownEmployers, suggestWho, type WhoSuggestion } from '@/lib/whoSuggest';
 import { logParseFailure } from '@/lib/parseFailures';
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { useData } from '@/lib/DataContext';
@@ -273,6 +275,19 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
   // How long each unstated walk away actually was, answered per row. The parser
   // used to assume an hour; an hour off the clock is an hour of pay, so it asks.
   const [mealAnswers, setMealAnswers] = useState<Record<number, 30 | 45 | 60>>({});
+  // A suggested employer turned down, by the hours card it was on.
+  const [whoDeclined, setWhoDeclined] = useState<Record<number, boolean>>({});
+  /**
+   * Who a new shift from hours was for, when what you typed didn't name
+   * someone you've worked for: "ybca" is YBCA YERBA BUENA CENTER FOR THE
+   * ARTS, with the payroll company it was paid through. Null when it already
+   * names one, or nothing comes close.
+   */
+  const whoFor = (entry: HoursEntry): WhoSuggestion | null => {
+    const named = entry.client?.trim();
+    if (named && !isUnclearEmployer(named) && knownEmployers(data.jobs, data.employers).some(k => k.name.toLowerCase() === named.toLowerCase())) return null;
+    return suggestWho([entry.client, entry.payrollCompany, entry.venue], text, data.jobs, data.employers);
+  };
   const [events, setEvents] = useState<ParsedEvent[]>([]);
   const [selectedEvents, setSelectedEvents] = useState<Set<number>>(new Set());
   const [isImportingEvents, setIsImportingEvents] = useState(false);
@@ -392,6 +407,7 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
     const results = matchHourEntries(entries, data.jobs);
     setHoursResults(results);
     setHoursAccepted(new Set());
+    setWhoDeclined({});
     setVortexPhase('flash');
     setTimeout(() => {
       setVortexPhase('settling');
@@ -594,9 +610,11 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
         });
       }
     } else {
+      // Who it was for, from your past shifts, unless you said not them.
+      const who = whoDeclined[idx] ? null : whoFor(entry);
       await addJob({
         name: entry.venue || 'New shift',
-        client: entry.client || entry.payrollCompany || 'Unknown',
+        client: who?.client || entry.client || entry.payrollCompany || 'Unknown',
         venue: entry.venue || '',
         date: entry.date,
         startTime: entry.startTime,
@@ -608,7 +626,7 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
         mealOnClock: entry.mealOnClock,
         mealPenalties: entry.mealPenalties,
         minimumHours: entry.minimumHours ?? resolveEmployer(entry.client || entry.payrollCompany || '', data.employers)?.minimumCallHours,
-        payrollCompany: entry.payrollCompany,
+        payrollCompany: entry.payrollCompany || who?.payrollCompany,
         notes: entry.notes || '',
         has6th7thDayRule: false,
       });
@@ -744,7 +762,7 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
   const handleClear = () => {
     setText(''); setJobs([]); setSelected(new Set()); setStep('input');
     setVortexPhase('idle'); setManualOpen(!!prefs.aiFreeMode); setManual(EMPTY_MANUAL); setExtraDates([]);
-    setHoursResults([]); setHoursAccepted(new Set()); setMealAnswers({});
+    setHoursResults([]); setHoursAccepted(new Set()); setMealAnswers({}); setWhoDeclined({});
     setEvents([]); setSelectedEvents(new Set());
   };
 
@@ -1350,6 +1368,28 @@ export default function NewGigPage({ onComplete, startAs, forDate }: {
                 {result.entry.notes && !result.entry.startTime && (
                   <p className="text-[11px] text-muted-foreground italic">{result.entry.notes}</p>
                 )}
+
+                {/* A new shift: who it was for, matched against everyone you've worked for. */}
+                {!result.matchedJob && (() => {
+                  const who = whoFor(result.entry);
+                  if (!who) return null;
+                  const using = !whoDeclined[idx];
+                  const direct = !who.payrollCompany || who.payrollCompany.toLowerCase() === who.client.toLowerCase();
+                  return (
+                    <div className={cn('rounded-md border px-2.5 py-2 space-y-1', using ? 'border-[hsl(152_86%_56%/0.5)] bg-[hsl(152_86%_56%/0.08)]' : 'border-border')} data-testid="who-suggest">
+                      <p className="neon-label text-[hsl(188_95%_72%)]">{using ? 'Employer · from your past shifts' : 'Was it them?'}</p>
+                      <p className={cn('text-xs font-bold', !using && 'text-muted-foreground line-through')}>{who.client}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {who.payrollCompany ? (direct ? 'Paid by them directly' : `Paid through ${who.payrollCompany}`) : 'No payroll company on file'}
+                        {who.lastDate ? ` · last worked ${format(new Date(who.lastDate + 'T12:00:00'), 'MMM d')}` : ''}
+                      </p>
+                      <button type="button" onClick={() => setWhoDeclined(prev => ({ ...prev, [idx]: using }))} data-testid="who-toggle"
+                        className="text-[11px] font-bold text-[hsl(312_95%_75%)] active:opacity-70">
+                        {using ? 'Not them' : 'Use them'}
+                      </button>
+                    </div>
+                  );
+                })()}
 
                 {result.matchedJob && (
                   <div className="rounded-lg bg-secondary/30 px-2.5 py-1.5 text-[11px]">
