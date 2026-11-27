@@ -273,3 +273,27 @@ describe('a day-rate shift through the engine', () => {
     expect(expected).toBeCloseTo(perShift, 2);
   });
 });
+
+describe("a shift's local, for its dues", () => {
+  const dues: PayerProfile = { locals: [{ local: '16', unionDuesPercent: 3.5 }, { local: '8', unionDuesPercent: 4 }] };
+  const shift = (over: Partial<Job>) => ({ id: 's', name: 'X', client: 'X', venue: '', date: '2026-11-25', status: 'completed', has6th7thDayRule: false, notes: '', createdAt: 'x', ...over } as Job);
+
+  it('takes Local 16 dues on a Local 16 dispatch that names no local: the job number says it', () => {
+    expect(ratesForShift(shift({ jobNumber: '2026-4250', client: 'BGCA MANAGEMENT LLC' }), undefined, dues).unionDuesPercent).toBe(3.5);
+    expect(ratesForShift(shift({ jobNumber: '2878', client: 'YBCA' }), undefined, dues).unionDuesPercent).toBe(3.5);
+  });
+
+  it('takes Local 8 dues where "ia8" was typed as the employer, or the shift names ia8', () => {
+    expect(ratesForShift(shift({ client: 'ia8', payrollCompany: 'elliot lewis' }), undefined, dues).unionDuesPercent).toBe(4);
+    expect(ratesForShift(shift({ client: 'Elliott Lewis', local: 'ia8' }), undefined, dues).unionDuesPercent).toBe(4);
+  });
+
+  it('lets a local the shift names win over the job number', () => {
+    expect(ratesForShift(shift({ jobNumber: '2026-4250', local: 'ia8' }), undefined, dues).unionDuesPercent).toBe(4);
+  });
+
+  it('takes no dues on work for no local', () => {
+    expect(ratesForShift(shift({ client: 'odeum' }), undefined, dues).unionDuesPercent).toBeUndefined();
+    expect(ratesForShift(shift({ client: 'Live Box Digital LLC' }), undefined, dues).unionDuesPercent).toBeUndefined();
+  });
+});

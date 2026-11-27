@@ -1,5 +1,6 @@
 import type { Employer, Job } from '@/lib/store';
 import type { TaxProfile } from '@/lib/taxEstimate';
+import { isLocal16Shift } from '@/lib/local16';
 
 /**
  * Who sets which number.
@@ -68,6 +69,21 @@ export function normaliseLocal(name?: string): string {
   return digits ? digits[0] : name.trim().toLowerCase();
 }
 
+/**
+ * The local a shift's dues and vacation go to: the one it names, else its
+ * employer's, else an employer typed as a local ("ia8"), else Local 16 for
+ * a Local 16 dispatch, which shows only in its job number ("2026-4250").
+ * Most Local 16 shifts name no local, so without that last step none of
+ * them took Local 16's dues.
+ */
+export function shiftLocal(job: Pick<Job, 'local' | 'client' | 'jobNumber'>, employer?: Pick<Employer, 'unionLocal'>): string | undefined {
+  const named = job.local?.trim() || employer?.unionLocal?.trim();
+  if (named) return named;
+  const typedAsLocal = job.client?.trim().match(/^(?:ia|iatse|local)\s*#?\s*(\d+)$/i);
+  if (typedAsLocal) return typedAsLocal[1];
+  return isLocal16Shift(job) ? '16' : undefined;
+}
+
 export function findLocalRates(profile: PayerProfile, localName?: string): LocalRates | undefined {
   const key = normaliseLocal(localName);
   if (!key) return undefined;
@@ -100,7 +116,7 @@ export function ratesForShift(
   employer: Employer | undefined,
   profile: PayerProfile,
 ): { unionDuesPercent?: number; estimatedTaxPercent?: number; vacationPercent?: number } {
-  const fromLocal = findLocalRates(profile, job.local ?? employer?.unionLocal);
+  const fromLocal = findLocalRates(profile, shiftLocal(job, employer));
   const taxYear = Number(job.date.slice(0, 4));
   const employerTax = employer?.taxProfiles?.find(item => item.taxYear === taxYear);
   const exempt = withholdsNothing(employer, profile, taxYear);
