@@ -1,5 +1,6 @@
 import type { Employer, Job } from '@/lib/store';
 import type { TaxProfile } from '@/lib/taxEstimate';
+import type { HolidayKey } from '@/lib/holidays';
 import { isLocal16Shift } from '@/lib/local16';
 
 /**
@@ -50,6 +51,14 @@ export interface ContractRule {
   restHours?: number;
   /** Minimum call on each side of a split day. Unset: 4 hours a side on union work. */
   splitMinimumHours?: number;
+  /**
+   * Holidays this contract pays extra on, beyond any it comes with (the
+   * Civic Auditorium comes with Thanksgiving). Learned from a pay stub that
+   * paid holiday pay on one, or set by hand.
+   */
+  holidays?: HolidayKey[];
+  /** What a holiday hour gets on top, as a share of the straight rate: 0.5 is half time. Unset: the contract's own, if it has one. */
+  holidayExtra?: number;
 }
 
 /** Numbers that follow you rather than any employer or local. */

@@ -1,6 +1,6 @@
 import type { Job } from './store';
 import { shiftContract } from './contracts';
-import { holidayOn, type HolidayKey } from './holidays';
+import type { HolidayKey } from './holidays';
 
 /**
  * Bill Graham Civic Auditorium, "Civic Auditorium" on a dispatch, is under its
@@ -38,12 +38,3 @@ export function isBgcaShift(job: Partial<Pick<Job, 'contract' | 'notes' | 'venue
   return BGCA_VENUE.test(job.venue ?? '');
 }
 
-/**
- * What a shift's contract adds on a holiday: the share of the straight rate
- * on top of each hour, and which days are holidays. Null: nothing, which is
- * every contract but the Civic Auditorium's so far.
- */
-export function holidayTermsFor(job: Partial<Pick<Job, 'contract' | 'notes' | 'venue'>>): { extra: number; holidayOn: (date: string) => string | undefined } | null {
-  if (!isBgcaShift(job)) return null;
-  return { extra: BGCA_HOLIDAY_EXTRA, holidayOn: date => holidayOn(date, BGCA_HOLIDAYS) };
-}

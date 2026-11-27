@@ -70,6 +70,8 @@ Extract:
 - duesAmount: union/local dues deducted, if a labeled line item shows it
 - taxAmount: total tax withheld (combine federal/state/local/FICA if separately listed into one number), if shown
 - vacationAmount: vacation/fringe pay, if separately listed as an addition
+- holidayAmount: holiday pay this paycheck: the current-period amount on the earnings row(s) labelled "Holiday", "HOL", "Holiday Pay", "Holiday Premium" or "Hol Prem", summed if there are several. Null when the stub has no holiday row. Never the year-to-date column.
+- holidayHours: the hours on those holiday rows, if shown; null otherwise
 - otherDeductions: anything deducted that isn't dues or tax (e.g. benefits, garnishment), summed into one number, if any
 - netPay: the actual take-home/deposited amount
 
@@ -198,10 +200,12 @@ If you can't determine the date, use today's date. Return ONLY valid JSON.`
               duesAmount: { type: ["number", "null"] },
               taxAmount: { type: ["number", "null"] },
               vacationAmount: { type: ["number", "null"] },
+              holidayAmount: { type: ["number", "null"], description: "Current-period holiday pay (Holiday / HOL / Holiday Premium rows). Null when there's no holiday row." },
+              holidayHours: { type: ["number", "null"], description: "Hours on the holiday rows, if shown." },
               otherDeductions: { type: ["number", "null"] },
               netPay: { type: ["number", "null"] },
             },
-            required: ["employer", "payPeriodStart", "payPeriodEnd", "totalHours", "hoursBreakdown", "hourlyRate", "grossPay", "duesAmount", "taxAmount", "vacationAmount", "otherDeductions", "netPay"],
+            required: ["employer", "payPeriodStart", "payPeriodEnd", "totalHours", "hoursBreakdown", "hourlyRate", "grossPay", "duesAmount", "taxAmount", "vacationAmount", "holidayAmount", "holidayHours", "otherDeductions", "netPay"],
             additionalProperties: false,
           },
         }

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { holidayTermsFor, isBgcaShift } from './bgca';
+import { isBgcaShift } from './bgca';
+import { holidayTermsFor } from './holidayTerms';
 import { HOLIDAYS, holidayOn } from './holidays';
 import { billedHours, billingStepHours, breakTheHourLabel, breaksTheHour } from './local16';
 import { calculateDayPay, jobHoursBreakdown, jobPayBreakdown } from './payCalc';
@@ -56,7 +57,7 @@ describe('the Civic Auditorium (Bill Graham)', () => {
     expect(HOLIDAYS.thanksgiving.on(2027)).toBe('2027-11-25');
     expect(holidayTermsFor(lacy)?.holidayOn('2026-11-26')).toBe('Thanksgiving');
     expect(holidayTermsFor(lacy)?.holidayOn('2026-12-25')).toBeUndefined();
-    expect(holidayTermsFor({ venue: 'Moscone North/South', contract: '2023-2028 BASIC BREAKOUT' })).toBeNull();
+    expect(holidayTermsFor({ client: 'FREEMAN', notes: '', venue: 'Moscone North/South', contract: '2023-2028 BASIC BREAKOUT' })).toBeNull();
   });
 
   it('works out the other holidays\' dates right, for when the contract names them', () => {

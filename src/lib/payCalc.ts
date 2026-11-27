@@ -7,7 +7,7 @@ import { contractFor } from './contracts';
 import { localToday } from './today';
 import { billedHours, billingStepHours, isLocal16Shift } from './local16';
 import { callMinimum, premiumWindow, shiftPremiums, splitSideMinimum, type StartPremium } from './premiums';
-import { holidayTermsFor } from './bgca';
+import { holidayTermsFor } from './holidayTerms';
 import { callHolidayHours } from './holidays';
 import { clockSpanHours, endAfterStart } from './clock';
 import { roundHours } from './hoursFormat';
@@ -688,7 +688,7 @@ function priceSides(
   const dayNightHours = sides.reduce((sum, j) => sum + shiftNight(j, employer, payer).hours, 0)
     + (split && lastNight.hours > 0 ? Math.min(split.lastBroken, lastNight.leftAtEnd) : 0);
   const dayNightLeft = split ? 0 : lastNight.leftAtEnd;
-  const holiday = dayHoliday(sides, step);
+  const holiday = dayHoliday(sides, step, employer, payer);
 
   // On a split each side's minimum is settled as padding; applying the
   // shift's own minimum again here would floor the whole day at it.
@@ -719,6 +719,20 @@ function priceSides(
     estimatedTaxPercent: rates.estimatedTaxPercent,
   });
   return dayResult;
+}
+
+/**
+ * What a shift is paid on top for holiday hours, as the app counts it: its
+ * holiday hours (jobHoursBreakdown) at the straight rate times its contract's
+ * holiday extra (½ at the Civic Auditorium). Part of its gross already; this
+ * is that part on its own, to set beside a pay stub's holiday line.
+ */
+export function jobHolidayPay(job: Job, allJobs: Job[], employers: Employer[] = [], payer: PayerProfile = EMPTY_PROFILE): number {
+  if (job.pto || job.dayRate) return 0;
+  const hours = jobHoursBreakdown(job, allJobs, employers, payer).holiday;
+  if (!(hours > 0)) return 0;
+  const terms = holidayTermsFor(job, resolveEmployer(job.client, employers), payer);
+  return hours * (job.hourlyRate ?? 0) * (terms?.extra ?? 0);
 }
 
 /** Net pay only — see jobPayBreakdown for gross+net together. */
@@ -858,12 +872,12 @@ function splitDayHours(sides: Job[], step: number): { clocked: number; lastBroke
  * counted on its own, and what the holiday adds as a share of the straight
  * rate. Nothing for every other contract.
  */
-export function dayHoliday(sides: Job[], step: number): { hours: number; extra: number; name?: string } {
+export function dayHoliday(sides: Job[], step: number, employer?: Employer, payer?: PayerProfile): { hours: number; extra: number; name?: string } {
   let hours = 0;
   let extra = 0;
   let name: string | undefined;
   for (const j of sides) {
-    const terms = holidayTermsFor(j);
+    const terms = holidayTermsFor(j, employer, payer);
     if (!terms) continue;
     const found = callHolidayHours(j, sideWorkingHours(j, step), terms.holidayOn);
     if (found.hours <= 0) continue;
@@ -1112,7 +1126,7 @@ export function calculateExpectedPay(
     const isSplit = sides.length > 1;
     const step = overtimeOptions.billingStepHours ?? 0;
     const split = isSplit ? splitDayHours(sides, step) : null;
-    const holiday = dayHoliday(sides, step);
+    const holiday = dayHoliday(sides, step, employer, payer);
     const lastNight = shiftNight(lastCall(sides), employer, payer);
     const nightHours = sides.reduce((sum, j) => sum + shiftNight(j, employer, payer).hours, 0)
       + (split && lastNight.hours > 0 ? Math.min(split.lastBroken, lastNight.leftAtEnd) : 0);

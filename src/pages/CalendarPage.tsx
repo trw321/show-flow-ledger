@@ -48,7 +48,9 @@ import { useUserPrefs } from '@/lib/UserPrefsContext';
 import { calculateDayPay, dayInARow, dayMultiplierFor, dayPremiumLabel, compositeWeekendMultiplier, calculateWeeklyOvertimeBonus, calculateNightHours, resolveConfirmedNightHours, effectiveHoursWorked, netHoursWorked, isOverdueUpcoming, jobGross, jobPayBreakdown, jobHoursBreakdown, nightLeftAtEnd, nightWindowEnd, compareCalls, dayHoliday } from '@/lib/payCalc';
 import { resolveEmployer } from '@/lib/employerMatch';
 import { billedHours, billingStepHours, breakTheHourLabel, isLocal16Shift } from '@/lib/local16';
-import { holidayTermsFor } from '@/lib/bgca';
+import { holidayNames, holidayTermsFor } from '@/lib/holidayTerms';
+import { learnHoliday, readStubHoliday } from '@/lib/holidayLearning';
+import { isBgcaShift } from '@/lib/bgca';
 import { callHolidayHours } from '@/lib/holidays';
 import { callMinimum, isEarlyCall, premiumEndWords, premiumStartHours, premiumWindow, shiftPremiums, splitSideMinimum } from '@/lib/premiums';
 import CallPremiums from '@/components/CallPremiums';
@@ -375,13 +377,13 @@ function PremiumHoursBanner({ job, allJobs, employer, payer, onTap }: { job: Job
  * Civic Auditorium's: half time on top of every hour). Says so up top, like
  * premium hours, with the same hours the pay is worked out on.
  */
-function HolidayBanner({ job, employer }: { job: Job; employer?: Employer }) {
-  const terms = holidayTermsFor(job);
+function HolidayBanner({ job, employer, payer }: { job: Job; employer?: Employer; payer?: PayerProfile }) {
+  const terms = holidayTermsFor(job, employer, payer);
   const step = billingStepHours(job, employer);
   // Logged: exactly what the pay counts. Not yet: the call's clock times.
   const found: { hours: number; name?: string } = !terms ? { hours: 0 }
     : effectiveHoursWorked(job) > 0
-      ? dayHoliday([job], step)
+      ? dayHoliday([job], step, employer, payer)
       : callHolidayHours(job, billedHours(job.startTime && job.endTime ? calcHours(job.startTime, job.endTime) : 0, step), terms.holidayOn);
   const name = terms ? found.name ?? (found.hours > 0 ? undefined : terms.holidayOn(job.date)) : undefined;
   // A feast pops out of it, turkeys, plates, champagne and wine, when it
@@ -630,7 +632,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   onStubOpened?: () => void;
 }) {
   const { data, addJob, updateJob: updateJobDirect, updateIncome, updateEmployer, addIncome, deleteIncome, restoreIncome } = useData();
-  const { prefs } = useUserPrefs();
+  const { prefs, setPayer } = useUserPrefs();
   const { user } = useAuth();
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -1122,7 +1124,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   // How the time is counted (the hour, or the half hour at the Civic
   // Auditorium), and its hours on a holiday, as jobPayBreakdown counts them.
   const previewStep = billingStepHours(job, employer);
-  const previewHolidayTerms = holidayTermsFor(job);
+  const previewHolidayTerms = holidayTermsFor(job, employer, prefs.payer);
   const previewHoliday = previewHolidayTerms
     ? callHolidayHours({ date: job.date, startTime, endTime }, billedHours(paidHours, previewStep), previewHolidayTerms.holidayOn)
     : { hours: 0, name: undefined };
@@ -1559,7 +1561,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
         )}
         <PremiumHoursBanner job={{ ...job, startTime, endTime }} allJobs={data.jobs} employer={employer} payer={prefs.payer}
           onTap={() => document.querySelector('[data-testid=early-call]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} />
-        <HolidayBanner job={{ ...job, startTime, endTime }} employer={employer} />
+        <HolidayBanner job={{ ...job, startTime, endTime }} employer={employer} payer={prefs.payer} />
 
         <MoneyRain active={payRain} />
         {proofFor && <PaymentProof income={proofFor} onClose={() => setProofFor(null)} />}
@@ -2198,9 +2200,14 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
               <span className="text-right">
                 <span className="block font-medium text-xs">{shiftContract(job)}</span>
                 <span className="block text-[10px] text-muted-foreground">
-                  {holidayTermsFor(job)
-                    ? 'Civic Auditorium terms: breaks the half hour, and holiday hours (Thanksgiving) get ½ straight time on top.'
-                    : `No terms saved for it yet. Pay uses ${job.client}'s settings.`}
+                  {(() => {
+                    // What the app applies under this contract, in words.
+                    const terms = holidayTermsFor(job, employer, prefs.payer);
+                    const holidays = terms ? `holiday hours (${holidayNames(terms.keys)}) get ${terms.extra === 0.5 ? '½' : `${terms.extra}×`} straight time on top` : '';
+                    if (isBgcaShift(job)) return `Civic Auditorium terms: breaks the half hour${holidays ? `, and ${holidays}` : ''}.`;
+                    if (holidays) return `Holiday pay: ${holidays}. Otherwise pay uses ${job.client}'s settings.`;
+                    return `No terms saved for it yet. Pay uses ${job.client}'s settings.`;
+                  })()}
                 </span>
               </span>
             </div>
@@ -2345,6 +2352,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
               {stubParsed.duesAmount != null && <div>Dues <span className="text-foreground font-semibold">${stubParsed.duesAmount.toLocaleString()}</span></div>}
               {stubParsed.taxAmount != null && <div>Tax <span className="text-foreground font-semibold">${stubParsed.taxAmount.toLocaleString()}</span></div>}
               {stubParsed.vacationAmount != null && <div>Vacation <span className="text-foreground font-semibold">${stubParsed.vacationAmount.toLocaleString()}</span></div>}
+              {stubParsed.holidayAmount != null && stubParsed.holidayAmount > 0 && <div>Holiday <span className="text-foreground font-semibold">${stubParsed.holidayAmount.toLocaleString()}</span></div>}
               {stubParsed.netPay != null && <div className="text-success">Net <span className="font-bold">${stubParsed.netPay.toLocaleString()}</span></div>}
             </div>
           </div>
@@ -2385,6 +2393,49 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             <PayEstimateCard explanation={stubExplanation} covers={stubMatch?.jobs} />
           </div>
         )}
+
+        {/* Holiday pay on the stub, beside what the app counted, and what to
+            learn from it: a holiday the contract doesn't count yet is one tap
+            to save on the contract, with Undo (see holidayLearning). */}
+        {stubParsed && (() => {
+          const finding = readStubHoliday(stubParsed, stubMatch?.jobs.length ? stubMatch.jobs : [job], data.jobs, data.employers, prefs.payer);
+          if (!finding) return null;
+          const money = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+          const learn = () => {
+            if (finding.kind !== 'learn') return;
+            const before = prefs.payer;
+            setPayer(learnHoliday(prefs.payer, finding));
+            toast.success(`${finding.name} counts as a holiday under ${finding.ruleName} now`, { duration: 8000, action: { label: 'Undo', onClick: () => setPayer(before) } });
+          };
+          return (
+            <div className="neon-well space-y-2 p-3" data-testid="stub-holiday">
+              <p className="neon-heading text-[hsl(312_95%_75%)]">Holiday pay</p>
+              {finding.kind === 'learn' ? (
+                <>
+                  <p className="text-xs leading-snug">
+                    This stub paid <span className="font-bold">{money(finding.stubAmount)}</span> holiday pay, and {format(new Date(finding.date + 'T12:00:00'), 'MMM d')} is {finding.name}.
+                    The app doesn't count {finding.name} under {finding.ruleName} yet{finding.appAmount > 0 ? ` (it counted ${money(finding.appAmount)})` : ''}.
+                  </p>
+                  <button type="button" onClick={learn} data-testid="stub-holiday-learn"
+                    className="pixel-button pick-on w-full py-2 text-xs font-bold text-mono">
+                    Count {finding.name} as a holiday here{finding.extraKnown ? '' : ', ½ on top'}
+                  </button>
+                  {!finding.extraKnown && (
+                    <p className="text-[10px] text-muted-foreground">This contract has no holiday rate saved, so it would use the Civic Auditorium's: half the straight rate on top of every holiday hour.</p>
+                  )}
+                </>
+              ) : finding.kind === 'agrees' ? (
+                <p className="text-xs text-mono text-success">Stub {money(finding.stubAmount)} · app {money(finding.appAmount)} · they agree</p>
+              ) : finding.kind === 'differs' ? (
+                <p className="text-xs text-mono text-warning">Stub {money(finding.stubAmount)} · app {money(finding.appAmount)} · {money(Math.abs(finding.stubAmount - finding.appAmount))} apart</p>
+              ) : finding.kind === 'missing' ? (
+                <p className="text-xs leading-snug text-warning">The app counted {money(finding.appAmount)} of holiday pay for these days. This stub shows none: worth asking payroll.</p>
+              ) : (
+                <p className="text-xs leading-snug text-muted-foreground">This stub shows {money(finding.stubAmount)} of holiday pay, but none of its days is a holiday the app knows the date of.</p>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Side by side, because a total only tells you something is wrong —
             this shows which line it is. */}
@@ -3872,7 +3923,7 @@ export default function CalendarPage() {
                   <PremiumHoursBanner key={'premium-' + job.id} job={job} allJobs={data.jobs} employer={resolveEmployer(job.client, data.employers)} payer={prefs.payer} onTap={() => setSelectedJobId(job.id)} />
                 ))}
                 {selectedJobs.map(job => (
-                  <HolidayBanner key={'holiday-' + job.id} job={job} employer={resolveEmployer(job.client, data.employers)} />
+                  <HolidayBanner key={'holiday-' + job.id} job={job} employer={resolveEmployer(job.client, data.employers)} payer={prefs.payer} />
                 ))}
                 {/* A split day is one shift worked in two calls: one card, its
                     calls inside it, each a tap from its own details. */}

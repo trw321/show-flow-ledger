@@ -80,6 +80,13 @@ export interface Job {
     vacationAmount?: number;
     otherDeductions?: number;
     netPay?: number;
+    /**
+     * Holiday pay on the stub: its "Holiday" / "HOL" earnings rows. Null:
+     * the stub was read and has none. Unset: read before stubs were asked
+     * about holidays, so nothing is known either way.
+     */
+    holidayAmount?: number | null;
+    holidayHours?: number | null;
   };
   /** Figures the user accepted from a pay stub over what the app calculated.
    *  Kept so the change stays visible after the fact, and so the settings
