@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { focusPanel } from "@/lib/noKeyboard";
+import { keepOpenForToasts } from "@/lib/toastTaps";
 import { selectableRef } from "@/lib/textSelection";
 
 const Dialog = DialogPrimitive.Root;
@@ -32,7 +33,7 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & { hideClose?: boolean }
->(({ className, children, hideClose, onOpenAutoFocus, ...props }, ref) => (
+>(({ className, children, hideClose, onOpenAutoFocus, onInteractOutside, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -40,6 +41,8 @@ const DialogContent = React.forwardRef<
       ref={selectableRef(ref)}
       // Opens on the panel, not its first box, so no keyboard comes up.
       onOpenAutoFocus={e => focusPanel(e, onOpenAutoFocus)}
+      // A tap on a message's Undo isn't a tap away from the pop-out.
+      onInteractOutside={e => keepOpenForToasts(e, onInteractOutside)}
       className={cn(
         // grid items default to min-width:auto, so a long title refuses to
         // shrink and stretches the dialog past the screen edge — taking the

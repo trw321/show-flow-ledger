@@ -359,6 +359,10 @@
     .critter, .firefly { animation: none; }
   }
 
+  /* A message's Undo works with a pop-out open: the pop-out turns taps off
+     on everything behind it, and the message is behind it. See toastTaps. */
+  [data-sonner-toast] { pointer-events: auto !important; }
+
   /* The calendar key: a tiny game menu. Steps, not easing, so it pops like one. */
   .font-8bit { font-family: 'Press Start 2P', var(--font-mono), monospace; }
   .key-8bit {
