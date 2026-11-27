@@ -621,9 +621,11 @@ function periodDates({ start, end }: PayPeriod): string {
 
 // ── Job detail view ───────────────────────────────────────────────────────────
 
-function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOnMount, onStubOpened }: {
+function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOnMount, onStubOpened, onOpenCall }: {
   job: Job;
   onBack: () => void;
+  /** Open another call of the same split day in this view. */
+  onOpenCall?: (id: string) => void;
   onSave: (updates: Partial<Job>) => void;
   onDuplicated: (count: number) => void;
   onDelete: () => void;
@@ -1398,6 +1400,21 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     onSave(updates);
   };
 
+  // A split day is one shift worked in calls. The shift shows them all, as
+  // sections of one card with the one open here lit; a tap on another opens
+  // it here, saving anything changed on this one first. A shift with two
+  // meals is one call, so it never shows this.
+  const dayCalls = useMemo(() => {
+    const group = splitShifts(data.jobs.filter(j => j.date === job.date)).find(g => g.some(c => c.id === job.id));
+    return group && group.length > 1 ? [...group].sort((a, b) => compareCalls(a, b) || a.id.localeCompare(b.id)) : [];
+  }, [data.jobs, job.id, job.date]);
+  const openCall = (id: string) => {
+    if (id === job.id) return;
+    // Saving would close the shift; the other call opens straight after.
+    if (hasChanges) handleSave();
+    onOpenCall?.(id);
+  };
+
   const nightActualHoursChanged = rawNightHours > 0 && !nightPremiumConfirmed &&
     validNightActualHours !== (job.nightPremiumActualHours ?? undefined);
 
@@ -1497,7 +1514,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           </DialogClose>
         </div>
         <div className="min-w-0 flex items-center gap-2">
-          <DialogTitle className="min-w-0 flex-1 text-left text-mono text-sm leading-snug break-words">{job.name}</DialogTitle>
+          <DialogTitle className="min-w-0 flex-1 text-left text-mono text-sm leading-snug break-words">
+            {job.name}{dayCalls.length > 1 && <span className="ml-1.5" role="img" aria-label="split shift">🤸</span>}
+          </DialogTitle>
           <span className={cn("shrink-0 inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold text-mono uppercase tracking-wider border", isOverdueUpcoming(job) ? "bg-warning/20 text-warning border-warning/30" : statusColors[job.status])}>
             {isOverdueUpcoming(job) ? 'Needs Hours' : statusLabel[job.status]}
           </span>
@@ -1506,6 +1525,35 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
             shift opens: on union work they're two companies, and the check
             comes from the payroll one. Tap either to change it right here:
             it saves at once, with Undo, no scrolling down to Edit shift. */}
+        {dayCalls.length > 1 && (() => {
+          const view = prefs.calendarPay === 'gross' ? 'gross' : 'net';
+          const payOf = (c: Job) => jobPayBreakdown(c, data.jobs, data.employers, prefs.payer)[view];
+          const money = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+          const dayHours = dayCalls.reduce((sum, c) => sum + netHoursWorked(c), 0);
+          const dayPay = dayCalls.reduce((sum, c) => sum + payOf(c), 0);
+          return (
+            <div className="neon-well space-y-1.5 p-2.5 text-left" data-testid="split-day-calls">
+              <p className="neon-heading flex items-center gap-1.5 text-[hsl(312_95%_75%)]"><span aria-hidden>🤸</span> Split shift · {dayCalls.length} calls</p>
+              {dayCalls.map((c, i) => {
+                const here = c.id === job.id;
+                return (
+                  <button key={c.id} type="button" onClick={() => openCall(c.id)} aria-current={here ? 'true' : undefined} data-testid="split-day-call"
+                    className={cn('flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-left text-[11px] text-mono',
+                      here ? 'border-[hsl(188_95%_62%)] bg-[hsl(188_95%_62%/0.12)] text-foreground' : 'border-border/60 text-muted-foreground active:opacity-70')}>
+                    <span className="min-w-0">
+                      <span className="font-bold">Call {i + 1}</span> · {c.startTime ?? '?'}{c.endTime ? ` – ${c.endTime}` : ''}{c.role ? ` · ${c.role}` : ''}
+                      {here && <span className="text-[hsl(188_95%_72%)]"> · open</span>}
+                    </span>
+                    <span className="shrink-0">{roundHours(netHoursWorked(c))}h · {money(payOf(c))}</span>
+                  </button>
+                );
+              })}
+              <p className="flex justify-between border-t border-border/40 pt-1.5 text-[11px] text-mono font-bold">
+                <span>Day</span><span>{roundHours(dayHours)}h · {money(dayPay)}</span>
+              </p>
+            </div>
+          );
+        })()}
         <div className="grid grid-cols-2 gap-2 text-left" data-testid="shift-who">
           <button type="button" onClick={() => openWho('client')} aria-label="Change the employer"
             className={cn('min-w-0 rounded-md border bg-secondary/20 px-2.5 py-1.5 text-left active:opacity-80', whoEdit === 'client' ? 'border-[hsl(188_95%_62%)]' : 'border-border')}>
@@ -4147,6 +4195,7 @@ export default function CalendarPage() {
               onStubOpened={() => setOpenStubFor(null)}
               // Back goes where the shift came from: the day, or the page that opened it.
               onBack={() => (returnTo.current ? closeDialog() : setSelectedJobId(null))}
+              onOpenCall={id => setSelectedJobId(id)}
               onSave={(updates) => { updateJob(selectedJob.id, updates); setSelectedJobId(null); toast.success('Job updated'); }}
               onDuplicated={(count) => { closeDialog(); toast.success(`Created ${count} shift${count !== 1 ? 's' : ''}`); }}
               onDelete={async () => { await deleteJob(selectedJob.id); closeDialog(); toast.success('Shift deleted'); }}
