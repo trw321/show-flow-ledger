@@ -4,6 +4,7 @@ import { projectSiblingsToRelabel } from '@/lib/projectGrouping';
 import StubEditor from '@/components/StubEditor';
 import MoneyRain from '@/components/MoneyRain';
 import NightBurst from '@/components/NightBurst';
+import { HOLIDAY_EMOJIS } from '@/lib/burstEmojis';
 import LiveWorkPay from '@/components/LiveWorkPay';
 import PreampSheet, { PreampGroup } from '@/components/PreampSheet';
 import { useNavigate } from 'react-router-dom';
@@ -373,22 +374,31 @@ function PremiumHoursBanner({ job, allJobs, employer, payer, onTap }: { job: Job
  */
 function HolidayBanner({ job, employer }: { job: Job; employer?: Employer }) {
   const terms = holidayTermsFor(job);
-  if (!terms) return null;
   const step = billingStepHours(job, employer);
   // Logged: exactly what the pay counts. Not yet: the call's clock times.
-  const found = effectiveHoursWorked(job) > 0
-    ? dayHoliday([job], step)
-    : callHolidayHours(job, billedHours(job.startTime && job.endTime ? calcHours(job.startTime, job.endTime) : 0, step), terms.holidayOn);
-  const name = found.name ?? (found.hours > 0 ? undefined : terms.holidayOn(job.date));
-  if (!name) return null;
+  const found: { hours: number; name?: string } = !terms ? { hours: 0 }
+    : effectiveHoursWorked(job) > 0
+      ? dayHoliday([job], step)
+      : callHolidayHours(job, billedHours(job.startTime && job.endTime ? calcHours(job.startTime, job.endTime) : 0, step), terms.holidayOn);
+  const name = terms ? found.name ?? (found.hours > 0 ? undefined : terms.holidayOn(job.date)) : undefined;
+  // A feast pops out of it, turkeys, plates, champagne and wine, when it
+  // shows and again on a tap: the night banner's burst, for the holiday.
+  const [bannerEl, setBannerEl] = useState<HTMLElement | null>(null);
+  const [burst, setBurst] = useState(0);
+  useEffect(() => { if (name) setBurst(b => b + 1); }, [name]);
+  if (!terms || !name) return null;
   const extra = terms.extra === 0.5 ? '½' : `${terms.extra}×`;
   return (
-    <div className="block w-full rounded-lg border border-primary/50 bg-primary/15 px-3 py-2 text-center" data-testid="holiday-hours">
-      <p className="text-sm font-black tracking-tight">{name === 'Thanksgiving' ? '🦃' : '🎉'} {name.toUpperCase()} · HOLIDAY PAY</p>
-      <p className="text-xs font-semibold leading-snug">
-        {found.hours > 0 ? `${roundHours(found.hours)}h on the holiday` : 'On the holiday'} · {extra} straight time on top of every hour, so 2× pays {2 + terms.extra}×
-      </p>
-    </div>
+    <>
+      <button ref={setBannerEl} type="button" onClick={() => setBurst(b => b + 1)}
+        className="block w-full rounded-lg border border-primary/50 bg-primary/15 px-3 py-2 text-center" data-testid="holiday-hours">
+        <p className="text-sm font-black tracking-tight">{name === 'Thanksgiving' ? '🦃' : '🎉'} {name.toUpperCase()} · HOLIDAY PAY</p>
+        <p className="text-xs font-semibold leading-snug">
+          {found.hours > 0 ? `${roundHours(found.hours)}h on the holiday` : 'On the holiday'} · {extra} straight time on top of every hour, so 2× pays {2 + terms.extra}×
+        </p>
+      </button>
+      <NightBurst from={bannerEl} burst={burst} emojis={HOLIDAY_EMOJIS} testId="holiday-burst" />
+    </>
   );
 }
 

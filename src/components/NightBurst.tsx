@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { NIGHT_EMOJIS } from '@/lib/burstEmojis';
 
 // ── Night burst ──────────────────────────────────────────────────────────────
 //
@@ -7,7 +8,6 @@ import { createPortal } from 'react-dom';
 // fall away down the screen. The money rain's cousin, for the hours that pay
 // double after midnight.
 
-const NIGHT_EMOJIS = ['🌙', '💤', '💰', '⭐', '😴', '💵', '🌛', '✨', '🦉', '💸', '🌜', '🌟', '🛌', '🤑', '🌃', '💤'];
 
 interface Bit {
   id: number;
@@ -26,7 +26,13 @@ interface Bit {
  * One pop each time `burst` goes up, centred on `from`. Nothing for anyone
  * who has asked their phone for less motion.
  */
-export default function NightBurst({ from, burst }: { from: HTMLElement | null; burst: number }) {
+export default function NightBurst({ from, burst, emojis = NIGHT_EMOJIS, testId = 'night-burst' }: {
+  from: HTMLElement | null;
+  burst: number;
+  /** What pops out: the night's by default. */
+  emojis?: readonly string[];
+  testId?: string;
+}) {
   const [bits, setBits] = useState<Bit[]>([]);
   const [origin, setOrigin] = useState({ x: 0, y: 0 });
   const counter = useRef(0);
@@ -43,7 +49,7 @@ export default function NightBurst({ from, burst }: { from: HTMLElement | null; 
       const speed = 0.4 + Math.random() * 0.6;
       return {
         id: counter.current++,
-        emoji: NIGHT_EMOJIS[i % NIGHT_EMOJIS.length],
+        emoji: emojis[i % emojis.length],
         dx: Math.cos(angle) * speed * 220,
         up: 60 + Math.sin(angle) * speed * 180,
         size: 16 + Math.random() * 18,
@@ -54,13 +60,13 @@ export default function NightBurst({ from, burst }: { from: HTMLElement | null; 
     }));
     const t = setTimeout(() => setBits([]), 3000);
     return () => clearTimeout(t);
-  }, [burst, from]);
+  }, [burst, from, emojis]);
 
   if (bits.length === 0) return null;
 
   // Into the body, so a dialog's own overflow can't cut it off.
   return createPortal(
-    <div className="fixed inset-0 pointer-events-none z-[100] overflow-hidden" aria-hidden data-testid="night-burst">
+    <div className="fixed inset-0 pointer-events-none z-[100] overflow-hidden" aria-hidden data-testid={testId}>
       {bits.map(b => (
         <span
           key={b.id}
