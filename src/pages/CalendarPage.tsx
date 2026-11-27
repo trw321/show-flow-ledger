@@ -1408,12 +1408,6 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     const group = splitShifts(data.jobs.filter(j => j.date === job.date)).find(g => g.some(c => c.id === job.id));
     return group && group.length > 1 ? [...group].sort((a, b) => compareCalls(a, b) || a.id.localeCompare(b.id)) : [];
   }, [data.jobs, job.id, job.date]);
-  const openCall = (id: string) => {
-    if (id === job.id) return;
-    // Saving would close the shift; the other call opens straight after.
-    if (hasChanges) handleSave();
-    onOpenCall?.(id);
-  };
 
   const nightActualHoursChanged = rawNightHours > 0 && !nightPremiumConfirmed &&
     validNightActualHours !== (job.nightPremiumActualHours ?? undefined);
@@ -1440,6 +1434,14 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     (rawNightHours > 0 && nightPremiumConfirmed !== (job.nightPremiumConfirmed ?? true)) ||
     nightActualHoursChanged ||
     payStub !== (job.payStub ?? '');
+
+  // Another call of a split day, opened here (see dayCalls).
+  const openCall = (id: string) => {
+    if (id === job.id) return;
+    // Saving would close the shift; the other call opens straight after.
+    if (hasChanges) handleSave();
+    onOpenCall?.(id);
+  };
 
   // What the stubs imply this employer's rates really are.
   const learnedFromStubs = stubSuggestions.length > 0 && (
