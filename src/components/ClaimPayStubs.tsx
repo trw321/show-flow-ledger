@@ -126,6 +126,17 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
     setClaimStubs(stubs.map(x => (x.id === s.id ? (on ? { ...x, useEstimate: true } : (({ useEstimate: _, ...rest }) => rest)(x)) : x)));
     toast.success(on ? `${s.employer}: the calendar's estimate counts` : `${s.employer}: the stub's ${claimMoney(s.gross)} counts`);
   };
+  /**
+   * Which calendar shifts a stub paid. The ones it didn't count from the
+   * calendar. All of them again (or none named) goes back to the default.
+   */
+  const setShiftIds = (s: ClaimStub, ids: string[] | undefined, said: string) => {
+    const before = stubs;
+    setClaimStubs(stubs.map(x => (x.id === s.id ? (ids ? { ...x, shiftIds: ids } : (({ shiftIds: _, ...rest }) => rest)(x)) : x)));
+    toast.success(said, { duration: 8000, action: { label: 'Undo', onClick: () => setClaimStubs(before) } });
+  };
+  const shiftDays = (ids: string[]) => [...new Set(ids.map(id => data.jobs.find(j => j.id === id)?.date).filter((d): d is string => !!d))]
+    .sort().map(d => claimDay(d, false)).join(', ');
   const [editing, setEditing] = useState<{ id?: string; draft: StubDraft } | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
@@ -437,6 +448,45 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
                   </p>
                 );
               })()}
+              {/* Its hours fit only some of the shifts in its dates: offer to keep it to those. */}
+              {(() => {
+                const use = uses.find(u => u.stub.id === s.id);
+                if (!use?.fits?.length || !use.covered?.length) return null;
+                const others = use.covered.length - use.fits.length;
+                return (
+                  <div className="mt-1.5 space-y-1.5 border border-[hsl(46_100%_58%/0.5)] p-2" data-testid="stub-fits">
+                    <p className="text-[11px] text-mono leading-snug">
+                      The stub's {s.hours} h fit <span className="font-bold">{shiftDays(use.fits)}</span>. The other {others} shift{others === 1 ? '' : 's'} in its dates look like they were on another check, and would count from the calendar.
+                    </p>
+                    <button type="button" onClick={() => setShiftIds(s, use.fits, `${s.employer}: the stub pays ${shiftDays(use.fits!)} only`)} data-testid="stub-fits-keep"
+                      className="pixel-button pick-on w-full py-1.5 text-[11px] font-bold text-mono">
+                      Keep this stub to {shiftDays(use.fits)}
+                    </button>
+                  </div>
+                );
+              })()}
+              {/* Shifts in its dates you said it didn't pay: they count from the calendar. */}
+              {(() => {
+                const use = uses.find(u => u.stub.id === s.id);
+                if (!use?.left?.length) return null;
+                return (
+                  <div className="mt-1.5 space-y-1 border border-[hsl(188_95%_62%/0.25)] p-2" data-testid="stub-left">
+                    <p className={LABEL}>Not on this stub · count from the calendar</p>
+                    {use.left.map(c => (
+                      <div key={c.jobId} className="flex items-center justify-between gap-2 text-[12px] text-mono" data-testid="stub-left-shift">
+                        <span>{claimDay(c.date)} · {c.hours} h · est. {claimMoney(c.estimate)}</span>
+                        <button type="button" onClick={() => {
+                          const next = [...(s.shiftIds ?? []), c.jobId];
+                          const all = next.length >= (use.covered?.length ?? 0) + use.left!.length;
+                          setShiftIds(s, all ? undefined : next, `${claimDay(c.date, false)} is on the ${s.employer} stub again`);
+                        }} className="shrink-0 text-[11px] font-bold text-[hsl(312_95%_75%)] active:opacity-70" data-testid="stub-left-add">
+                          On this stub
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
               {/* On the calendar: each shift it covers, its estimate and its part of the stub, and which counts. */}
               {(() => {
                 const use = uses.find(u => u.stub.id === s.id);
@@ -476,6 +526,11 @@ export default function ClaimPayStubs({ uses, employerNames, weekEnd, colourOf, 
                             </label>
                             <span className={cn('shrink-0', use.usesPay ? 'neon-title font-bold text-[hsl(46_100%_58%)]' : 'text-[hsl(46_100%_58%)]')}>stub {claimMoney(c.share)}</span>
                           </div>
+                          <button type="button" data-testid="stub-covered-drop"
+                            onClick={() => setShiftIds(s, use.covered!.map(x => x.jobId).filter(id => id !== c.jobId), `${claimDay(c.date, false)} counts from the calendar, not the ${s.employer} stub`)}
+                            className="text-[11px] font-bold text-[hsl(312_95%_75%)] active:opacity-70">
+                            Not on this stub
+                          </button>
                         </li>
                       ))}
                     </ul>

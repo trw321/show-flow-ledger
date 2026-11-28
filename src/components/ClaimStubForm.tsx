@@ -66,6 +66,8 @@ export default function ClaimStubForm({ initial, id, employerNames, onDone, clas
       ...(d.paidOn && isClaimDay(d.paidOn) ? { paidOn: d.paidOn } : {}),
       ...(d.note?.trim() ? { note: d.note.trim() } : {}),
       ...(before?.useEstimate ? { useEstimate: true } : {}),
+      // Which shifts it paid, while its employer and dates are the same.
+      ...(before?.shiftIds && before.employer === employer && before.start === d.start && before.end === d.end ? { shiftIds: before.shiftIds } : {}),
       ...(before?.weeks && before.start === d.start && before.end === d.end ? { weeks: before.weeks } : {}),
       // Kept through an edit: its own pay for the calendar's shifts, its rate, and its days if the period is the same.
       ...(before?.usePay ? { usePay: true } : {}),

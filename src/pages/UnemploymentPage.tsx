@@ -539,6 +539,9 @@ export default function UnemploymentPage() {
                     unsplit={summary.unsplit.filter(u => u.employer === e.name).reduce((sum, u) => sum + u.gross, 0)}
                     linkChoices={[...new Set([...summary.employers.map(x => x.name), ...knownEmployers])].filter(n => n.toLowerCase() !== e.name.toLowerCase() && !(e.linked ?? []).some(l => l.toLowerCase() === n.toLowerCase()))}
                     longest={summary.longest?.byStretch === e.name ? 'stretch' : summary.longest?.byDays === e.name ? 'days' : undefined}
+                    stubFits={summary.stubs
+                      .filter(u => u.fits?.length && u.covered?.length && [e.name, ...(e.linked ?? [])].some(n => n.toLowerCase() === u.stub.employer.trim().toLowerCase()))
+                      .map(u => ({ stub: u.stub, fits: u.fits!, days: new Set(u.covered!.map(c => c.date)).size }))}
                     shifts={data.jobs.filter(j => j.status !== 'cancelled' && isClaimDay(j.date) && j.date >= range.from && j.date <= range.through
                       && claimEmployerOf(j, data.employers) === e.name)} />
                 ))}

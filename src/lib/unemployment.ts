@@ -152,6 +152,12 @@ export interface ClaimStub {
    * actually paid, and the calendar only places it and checks it.
    */
   useEstimate?: boolean;
+  /**
+   * The calendar shifts this stub paid, when you've said which. Its
+   * employer's other shifts in its dates count from the calendar, as their
+   * own pay. Unset: every one of them, as before.
+   */
+  shiftIds?: string[];
   /** The pay date (check or deposit date), beside the pay period's dates worked. */
   paidOn?: string;
   /** The stub's own weeks, when it breaks its hours or pay down by week: where it counts. */
@@ -230,6 +236,14 @@ export interface StubUse {
   check?: { gross: number; hours?: number; farOff: boolean };
   /** What put it in its weeks: its own weeks, the days it lists, the week you chose, its shifts on the calendar, or its pay period. */
   placedBy?: 'weeks' | 'days' | 'chosen' | 'shifts' | 'period';
+  /** Its employer's shifts in its dates that you said it didn't pay: they count from the calendar. */
+  left?: CoveredShift[];
+  /**
+   * When its hours fall well short of the calendar's in its dates: the shifts
+   * its hours fit, to keep it to just those. Only a suggestion, and only when
+   * one set of shifts fits clearly better than any other.
+   */
+  fits?: string[];
 }
 
 export interface ClaimSummary {
@@ -386,6 +400,7 @@ export function cleanStubs(raw: unknown): ClaimStub[] {
       ...(r.noWeeks === true ? { noWeeks: true } : {}),
       ...(r.usePay === true ? { usePay: true } : {}),
       ...(r.useEstimate === true ? { useEstimate: true } : {}),
+      ...(Array.isArray(r.shiftIds) ? { shiftIds: (r.shiftIds as unknown[]).filter((x): x is string => typeof x === 'string') } : {}),
       ...(isClaimDay(r.paidOn) ? { paidOn: r.paidOn } : {}),
       ...(stubWeeks(r.weeks, start, end) ? { weeks: stubWeeks(r.weeks, start, end) } : {}),
       ...(isClaimDay(r.week) ? { week: r.week } : {}),
@@ -466,6 +481,40 @@ export function howLongText(firstDay: string, lastDay: string): string {
 }
 /** Past this many weeks the range is a typo, not a claim. */
 const MAX_WEEKS = 600;
+
+/**
+ * The shifts a stub's hours fit, when they fall well short of the calendar's
+ * in its dates: "13 h" against Sep 19's 11.5 and Portola's 10, 9, 10 and 9 h
+ * days is Sep 19. Whole days are matched, not single calls: a check pays
+ * days, and a split day's calls go together. The set of days whose hours come
+ * closest, within 15% (at least 1.5 h), and only when no other set comes as
+ * close: otherwise it's yours to say. Undefined when the hours aren't short,
+ * or nothing fits.
+ */
+export function shiftsStubFits(stub: Pick<ClaimStub, 'hours'>, shifts: Pick<CoveredShift, 'jobId' | 'date' | 'hours'>[]): string[] | undefined {
+  const days = new Map<string, { hours: number; ids: string[] }>();
+  for (const x of shifts) {
+    const day = days.get(x.date) ?? { hours: 0, ids: [] };
+    day.hours += x.hours;
+    day.ids.push(x.jobId);
+    days.set(x.date, day);
+  }
+  const units = [...days.values()];
+  const total = units.reduce((t, d) => t + d.hours, 0);
+  if (!(stub.hours > 0) || units.length < 2 || units.length > 14) return undefined;
+  const slack = Math.max(1.5, 0.15 * stub.hours);
+  if (total - stub.hours <= slack) return undefined;
+  let best: { mask: number; off: number } | undefined;
+  let tie = false;
+  for (let mask = 1; mask < (1 << units.length) - 1; mask++) {
+    let hours = 0;
+    for (let i = 0; i < units.length; i++) if (mask & (1 << i)) hours += units[i].hours;
+    const off = Math.abs(hours - stub.hours);
+    if (!best || off < best.off - 0.01) { best = { mask, off }; tie = false; } else if (Math.abs(off - best.off) <= 0.01) tie = true;
+  }
+  if (!best || tie || best.off > slack) return undefined;
+  return units.filter((_, i) => best!.mask & (1 << i)).flatMap(d => d.ids);
+}
 
 /**
  * Everything worked from `from` through `through`, both included: every week
@@ -574,6 +623,8 @@ export function claimSummary(
   const stubUses: StubUse[] = [];
   /** Shifts a stub's pay already stands for, and that stub: another stub can't pay them again. */
   const paidByStub = new Map<string, ClaimStub>();
+  // Shifts you said a stub didn't pay, and the ones its hours fit: added to its use after.
+  const stubExtras = new Map<string, Pick<StubUse, 'left' | 'fits'>>();
   /** Stubs already counted, by employer: a later one on the same days isn't. */
   const countedStubs = new Map<string, ClaimStub[]>();
 
@@ -677,9 +728,19 @@ export function claimSummary(
     if (!isClaimDay(stub.start) || !isClaimDay(stub.end) || stub.end < from || stub.start > through) continue;
     const name = stubEmployer(stub.employer);
     const id = name.toLowerCase();
-    // The calendar first: its shifts for this employer in the stub's pay period.
-    const shifts = jobs.filter(j => j.status !== 'cancelled' && isClaimDay(j.date) && j.date >= stub.start && j.date <= stub.end
+    // The calendar first: its shifts for this employer in the stub's pay
+    // period, or just the ones you've said it paid.
+    const inDates = jobs.filter(j => j.status !== 'cancelled' && isClaimDay(j.date) && j.date >= stub.start && j.date <= stub.end
       && employerOf(j, employers).name.toLowerCase() === id);
+    const paidShift = (j: Job) => !stub.shiftIds || stub.shiftIds.includes(j.id);
+    const shifts = inDates.filter(paidShift);
+    const asCovered = (j: Job): CoveredShift => ({
+      jobId: j.id, date: j.date, hours: roundHours(j.pto ? 0 : netHoursWorked(j)), estimate: cents(jobPayBreakdown(j, jobs, employers, payer).gross), share: 0,
+      ...(Number(j.hourlyRate) > 0 ? { rate: Number(j.hourlyRate) } : {}),
+    });
+    const left = inDates.filter(j => !paidShift(j)).map(asCovered).filter(c => c.hours > 0 || c.estimate > 0);
+    const fits = stub.shiftIds ? undefined : shiftsStubFits(stub, inDates.map(asCovered).filter(c => c.hours > 0));
+    if (left.length > 0 || fits) stubExtras.set(stub.id, { ...(left.length > 0 ? { left } : {}), ...(fits ? { fits } : {}) });
     const workedAll = shifts.map(j => ({ job: j, date: j.date, hours: j.pto ? 0 : netHoursWorked(j), gross: jobPayBreakdown(j, jobs, employers, payer).gross }))
       .filter(x => x.hours > 0 || x.gross > 0)
       .sort((x, y) => x.date.localeCompare(y.date));
@@ -826,6 +887,8 @@ export function claimSummary(
     e.fromStub = true;
     byEmployer.set(id, e);
   }
+
+  for (const use of stubUses) Object.assign(use, stubExtras.get(use.stub.id) ?? {});
 
   // Every line under the employer's one spelling, the one its box shows.
   const spelling = (n: string) => byEmployer.get(n.toLowerCase())?.name ?? n;

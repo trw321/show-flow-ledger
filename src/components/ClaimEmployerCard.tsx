@@ -17,7 +17,7 @@ import { compareCalls, netHoursWorked } from '@/lib/payCalc';
 import { splitShifts } from '@/lib/projectGrouping';
 import {
   claimDay, claimEmployerKey, claimMoney, claimNameOf, howLongText, isClaimDay, isUnclearEmployer, suggestEmployer, weekEndingFor,
-  type ClaimEmployer, type ClaimEmployerInfo, type WeekEnd,
+  type ClaimEmployer, type ClaimEmployerInfo, type ClaimStub, type WeekEnd,
 } from '@/lib/unemployment';
 import { openDayAndReturn, openShiftAndReturn } from '@/lib/returnSpot';
 import { cn } from '@/lib/utils';
@@ -51,7 +51,9 @@ export interface EmployerWeek {
  * employer picked in its list (another can be picked) and the week of its
  * last day to start from.
  */
-export default function ClaimEmployerCard({ employer: e, colour, longest, shifts, weeks, knownEmployers, onCopy, unsplit = 0, linkChoices = [], weekEnd = 6, focus = 0, startOpen = false }: {
+export default function ClaimEmployerCard({ employer: e, colour, longest, shifts, weeks, knownEmployers, onCopy, unsplit = 0, linkChoices = [], weekEnd = 6, focus = 0, startOpen = false, stubFits = [] }: {
+  /** Its pay stubs standing in for more days than their hours cover, with the days each fits. */
+  stubFits?: { stub: ClaimStub; fits: string[]; days: number }[];
   /** Open from the start: coming back from one of its shifts. */
   startOpen?: boolean;
   /** Goes up when the employer is picked in the page's box: the box opens and comes into view. */
@@ -75,7 +77,16 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
 }) {
   const [open, setOpen] = useState(startOpen);
   const { updateJob } = useData();
-  const { prefs, setClaimEmployers } = useUserPrefs();
+  const { prefs, setClaimEmployers, setClaimStubs } = useUserPrefs();
+  const { data: ledger } = useData();
+  const dayList = (ids: string[]) => [...new Set(ids.map(id => ledger.jobs.find(j => j.id === id)?.date).filter((d): d is string => !!d))]
+    .sort().map(d => claimDay(d, false)).join(', ');
+  /** Keep a stub to the days its hours fit: the rest count from the calendar. */
+  const keepStubTo = (stub: ClaimStub, ids: string[]) => {
+    const before = prefs.claimStubs;
+    setClaimStubs(before.map(x => (x.id === stub.id ? { ...x, shiftIds: ids } : x)));
+    toast.success(`${stub.employer}: the stub pays ${dayList(ids)} only`, { duration: 8000, action: { label: 'Undo', onClick: () => setClaimStubs(before) } });
+  };
   const key = claimEmployerKey(e.name);
   const [draft, setDraft] = useState<ClaimEmployerInfo | null>(null);
   const [who, setWho] = useState('');
@@ -178,6 +189,18 @@ export default function ClaimEmployerCard({ employer: e, colour, longest, shifts
         {e.datesSet && <span className={cn(TAG, 'border-border text-muted-foreground')}>Days set by you</span>}
       </p>
       {e.paidBy && <p className="text-[11px] text-mono text-muted-foreground">Paid by {e.paidBy}</p>}
+      {/* A stub standing in for more days than its hours cover: its figures replace them all, so say so, and offer the days it fits. */}
+      {stubFits.map(({ stub, fits, days }) => (
+        <div key={stub.id} className="mt-2 space-y-1.5 border border-[hsl(46_100%_58%/0.55)] p-2" data-testid="employer-stub-fits">
+          <p className="text-[11px] text-mono leading-snug">
+            <span className="font-bold text-[hsl(46_100%_58%)]">Check:</span> the pay stub for {claimDay(stub.start, false)} to {claimDay(stub.end, false)} ({stub.hours} h, {claimMoney(stub.gross)}) is standing in for all {days} days of {claimNameOf(e)} in its dates. Its {stub.hours} h fit <span className="font-bold">{dayList(fits)}</span>; the other days look like another check.
+          </p>
+          <button type="button" onClick={() => keepStubTo(stub, fits)} data-testid="employer-stub-fits-keep"
+            className="pixel-button pick-on w-full py-1.5 text-[11px] font-bold text-mono">
+            Keep the stub to {dayList(fits)}
+          </button>
+        </div>
+      ))}
       {/* Other names counted here: each can be unlinked. */}
       {e.linked && e.linked.length > 0 && (
         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-mono text-muted-foreground" data-testid="employer-linked">
