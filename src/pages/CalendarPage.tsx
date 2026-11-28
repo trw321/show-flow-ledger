@@ -4,6 +4,7 @@ import { projectSiblingsToRelabel } from '@/lib/projectGrouping';
 import StubEditor from '@/components/StubEditor';
 import MoneyRain from '@/components/MoneyRain';
 import NightBurst from '@/components/NightBurst';
+import DeleteCallButton, { callLabel } from '@/components/DeleteCallButton';
 import { HOLIDAY_EMOJIS } from '@/lib/burstEmojis';
 import PickList from '@/components/PickList';
 import { isUnclearEmployer } from '@/lib/unemployment';
@@ -633,7 +634,7 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
   openStubOnMount?: boolean;
   onStubOpened?: () => void;
 }) {
-  const { data, addJob, updateJob: updateJobDirect, updateIncome, updateEmployer, addIncome, deleteIncome, restoreIncome } = useData();
+  const { data, addJob, updateJob: updateJobDirect, deleteJob: deleteJobDirect, restoreJob, updateIncome, updateEmployer, addIncome, deleteIncome, restoreIncome } = useData();
   const { prefs, setPayer } = useUserPrefs();
   const { user } = useAuth();
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -1435,6 +1436,15 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
     nightActualHoursChanged ||
     payStub !== (job.payStub ?? '');
 
+  // One call of a split day deleted, here: the day keeps the rest. When it's
+  // the call open here, the next one opens in its place. Undo puts it back.
+  const deleteCall = (call: Job) => {
+    const rest = dayCalls.filter(c => c.id !== call.id);
+    void deleteJobDirect(call.id);
+    if (call.id === job.id && rest.length > 0) onOpenCall?.(rest[0].id);
+    toast.success(`Deleted ${callLabel(call)} on ${showDay(call.date, 'MMM d')}. The rest of the day stays.`, { duration: 8000, action: { label: 'Undo', onClick: () => void restoreJob(call) } });
+  };
+
   // Another call of a split day, opened here (see dayCalls).
   const openCall = (id: string) => {
     if (id === job.id) return;
@@ -1539,15 +1549,18 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
               {dayCalls.map((c, i) => {
                 const here = c.id === job.id;
                 return (
-                  <button key={c.id} type="button" onClick={() => openCall(c.id)} aria-current={here ? 'true' : undefined} data-testid="split-day-call"
-                    className={cn('flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-left text-[11px] text-mono',
-                      here ? 'border-[hsl(188_95%_62%)] bg-[hsl(188_95%_62%/0.12)] text-foreground' : 'border-border/60 text-muted-foreground active:opacity-70')}>
-                    <span className="min-w-0">
-                      <span className="font-bold">Call {i + 1}</span> · {c.startTime ?? '?'}{c.endTime ? ` – ${c.endTime}` : ''}{c.role ? ` · ${c.role}` : ''}
-                      {here && <span className="text-[hsl(188_95%_72%)]"> · open</span>}
-                    </span>
-                    <span className="shrink-0">{roundHours(netHoursWorked(c))}h · {money(payOf(c))}</span>
-                  </button>
+                  <div key={c.id} className={cn('flex items-stretch rounded-md border', here ? 'border-[hsl(188_95%_62%)] bg-[hsl(188_95%_62%/0.12)]' : 'border-border/60')}>
+                    <button type="button" onClick={() => openCall(c.id)} aria-current={here ? 'true' : undefined} data-testid="split-day-call"
+                      className={cn('flex min-w-0 flex-1 items-center justify-between gap-2 px-2.5 py-1.5 text-left text-[11px] text-mono',
+                        here ? 'text-foreground' : 'text-muted-foreground active:opacity-70')}>
+                      <span className="min-w-0">
+                        <span className="font-bold">Call {i + 1}</span> · {c.startTime ?? '?'}{c.endTime ? ` – ${c.endTime}` : ''}{c.role ? ` · ${c.role}` : ''}
+                        {here && <span className="text-[hsl(188_95%_72%)]"> · open</span>}
+                      </span>
+                      <span className="shrink-0">{roundHours(netHoursWorked(c))}h · {money(payOf(c))}</span>
+                    </button>
+                    <DeleteCallButton call={c} others={dayCalls.length - 1} dateText={showDay(c.date, 'EEE, MMM d')} onDelete={() => deleteCall(c)} />
+                  </div>
                 );
               })}
               <p className="flex justify-between border-t border-border/40 pt-1.5 text-[11px] text-mono font-bold">
@@ -1591,7 +1604,9 @@ function JobDetailView({ job, onBack, onSave, onDuplicated, onDelete, openStubOn
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this shift?</AlertDialogTitle>
             <AlertDialogDescription>
-              "{job.name}" on {showDay(job.date, 'MMM d, yyyy')} will be permanently deleted. This cannot be undone.
+              {dayCalls.length > 1
+                ? `${callLabel(job)[0].toUpperCase()}${callLabel(job).slice(1)} of "${job.name}" on ${showDay(job.date, 'MMM d, yyyy')} will be deleted. The other ${dayCalls.length - 1} call${dayCalls.length - 1 === 1 ? '' : 's'} of the day stay${dayCalls.length - 1 === 1 ? 's' : ''}.`
+                : `"${job.name}" on ${showDay(job.date, 'MMM d, yyyy')} will be permanently deleted. This cannot be undone.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -2805,7 +2820,7 @@ function EventForm({ initial, onSave, onCancel }: {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function CalendarPage() {
-  const { data, authReady, updateJob, deleteJob, addEvent, updateEvent, deleteEvent, addJob, addIncome, updateIncome, deleteIncome } = useData();
+  const { data, authReady, updateJob, deleteJob, restoreJob, addEvent, updateEvent, deleteEvent, addJob, addIncome, updateIncome, deleteIncome } = useData();
   const { prefs, setCalendarPay } = useUserPrefs();
   const navigate = useNavigate();
   // Which estimate the calendar and the project boxes lead with.
@@ -4020,6 +4035,11 @@ export default function CalendarPage() {
                               {shownPay(c) > 0 && <span>{money(shownPay(c))}</span>}
                               {c.hoursPlanned && <span className="text-[10px] uppercase tracking-wider text-accent">planned</span>}
                               {stubButton(c)}
+                              <span className="ml-auto" />
+                              <DeleteCallButton call={c} others={calls.length - 1} dateText={showDay(c.date, 'EEE, MMM d')} onDelete={() => {
+                                void deleteJob(c.id);
+                                toast.success(`Deleted ${callLabel(c)} on ${showDay(c.date, 'MMM d')}. The rest of the day stays.`, { duration: 8000, action: { label: 'Undo', onClick: () => void restoreJob(c) } });
+                              }} />
                             </div>
                           ))}
                           <div className="flex items-center gap-3 border-t border-current/20 pt-1">
@@ -4200,7 +4220,12 @@ export default function CalendarPage() {
               onOpenCall={id => setSelectedJobId(id)}
               onSave={(updates) => { updateJob(selectedJob.id, updates); setSelectedJobId(null); toast.success('Job updated'); }}
               onDuplicated={(count) => { closeDialog(); toast.success(`Created ${count} shift${count !== 1 ? 's' : ''}`); }}
-              onDelete={async () => { await deleteJob(selectedJob.id); closeDialog(); toast.success('Shift deleted'); }}
+              onDelete={async () => {
+                const gone = selectedJob;
+                await deleteJob(gone.id);
+                closeDialog();
+                toast.success('Shift deleted', { duration: 8000, action: { label: 'Undo', onClick: () => void restoreJob(gone) } });
+              }}
             />
           )}
         </DialogContent>

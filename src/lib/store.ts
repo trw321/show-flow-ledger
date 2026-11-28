@@ -741,6 +741,11 @@ export function useAppData(key: string | null, onLocalChange?: (changes: LedgerC
     update(prev => ({ ...prev, jobs: prev.jobs.filter(j => j.id !== id) }));
   }, [update]);
 
+  /** A deleted shift back, as it was: Undo. Newer than its deletion, so it wins over it everywhere. */
+  const restoreJob = useCallback(async (job: Job) => {
+    update(prev => (prev.jobs.some(j => j.id === job.id) ? prev : { ...prev, jobs: [{ ...job, modifiedAt: new Date().toISOString() }, ...prev.jobs] }));
+  }, [update]);
+
   // ── Expenses ──────────────────────────────────────────────────────────────
 
   const addExpense = useCallback(async (expense: Omit<Expense, 'id' | 'createdAt'>) => {
@@ -906,7 +911,7 @@ export function useAppData(key: string | null, onLocalChange?: (changes: LedgerC
     data,
     loading: false,
     replaceAllData, applyRemote, readLedger,
-    addJob, updateJob, deleteJob,
+    addJob, updateJob, deleteJob, restoreJob,
     addExpense, updateExpense, deleteExpense,
     addIncome, updateIncome, deleteIncome, restoreIncome,
     addEquipment, updateEquipment, deleteEquipment,
@@ -918,7 +923,7 @@ export function useAppData(key: string | null, onLocalChange?: (changes: LedgerC
     addInvoice, updateInvoice, deleteInvoice,
   }), [
     data, replaceAllData, applyRemote, readLedger,
-    addJob, updateJob, deleteJob,
+    addJob, updateJob, deleteJob, restoreJob,
     addExpense, updateExpense, deleteExpense,
     addIncome, updateIncome, deleteIncome, restoreIncome,
     addEquipment, updateEquipment, deleteEquipment,
